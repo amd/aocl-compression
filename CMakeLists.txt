@@ -161,6 +161,7 @@ endif()
 
 #add library
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
 set (lib_name aocl_codec)
 set(SRC_FILES 
         ${UTILS_SRC_FILES}
@@ -187,7 +188,7 @@ set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
 # add executable
 set (exe_name aocl_codec_bench)
 set (BENCH_PATH test)
-add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/codec_bench.h)
+add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/ipp_codec_bench.c ${BENCH_PATH}/codec_bench.h)
 target_link_libraries(${exe_name} ${lib_name})
 
 #Install into destination path by using -DCMAKE_INSTALL_PREFIX=<path> while configuring cmake

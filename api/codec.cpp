@@ -251,7 +251,7 @@ INT64 aocl_zlib_decompress(CHAR *inbuf, UINT insize, CHAR *outbuf,
 	INT res = uncompress((UINT8*)outbuf, &zdecLen, (UINT8 *)inbuf, insize);
 	if (res != Z_OK)
 		return 0;
-	return outsize;
+	return zdecLen;
 }
 #endif
 

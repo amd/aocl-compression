@@ -31,7 +31,7 @@
  *  @brief Test bench application to test the AOCL Codec library
  *
  *  This file contains the functions to test, verify and benchmark all the
- *  all the supported compression and decompression methods.
+ *  supported compression and decompression methods.
  *
  *  @author S. Biplab Raut
  */
@@ -43,6 +43,9 @@
 #include "api/api.h"
 #include "utils/utils.h"
 #include "codec_bench.h"
+
+//Input test file name
+CHAR inFile[MAX_FILENAME_LEN];
 
 void print_user_options (void)
 {
@@ -58,7 +61,8 @@ void print_user_options (void)
     printf("-t          Verification and functional tests of the compression/decompression methods\n");
     printf("-p          Print stats like compression/decompression time, speed, ratio\n");
     printf("-o          Turn off all optimizations\n");
-    printf("-v<>        Enable verbosity. Allowed values: 1 for Error (default), 2 for Info, 3 for Debug, 4 for Trace.\n\n");
+    printf("-v<>        Enable verbosity. Allowed values: 1 for Error (default), 2 for Info, 3 for Debug, 4 for Trace.\n");
+    printf("-c          Run IPP library methods. Make sure to set the library path with LD_LIBRARY_PATH.\n\n");
 }
 
 void print_supported_compressors (void)
@@ -145,6 +149,7 @@ INT read_user_options (INT argc,
     codec_bench_handle->compPtr = NULL;
     codec_bench_handle->decompPtr = NULL;
     codec_bench_handle->optOff = 0;
+    codec_bench_handle->useIPP = 0;
     
     while (cnt < argc)
     {
@@ -206,7 +211,11 @@ INT read_user_options (INT argc,
                 case 'o':
                     codec_bench_handle->optOff = 1;
                 break;
-                
+
+                case 'c':
+                    codec_bench_handle->useIPP = 1;
+                break;
+ 
                 default:
                     ret = -1;
                 break;
@@ -596,7 +605,7 @@ INT aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
 
     return 0;
 }
-    
+
 void destroy(aocl_codec_bench_info *codec_bench_handle)
 {
     LOG(TRACE, codec_bench_handle->enable_verbosity, "Enter");
@@ -668,7 +677,10 @@ INT main (INT argc, CHAR **argv)
     }
     codec_bench_handle.fp = inFp;
 
-    result = aocl_bench_run(aocl_codec_handle, &codec_bench_handle);
+    if (codec_bench_handle.useIPP)
+        result = ipp_bench_run(aocl_codec_handle, &codec_bench_handle);
+    else
+        result = aocl_bench_run(aocl_codec_handle, &codec_bench_handle);
     if (result != 0)
     {
         LOG(ERR, aocl_codec_handle->printDebugLogs,

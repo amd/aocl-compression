@@ -41,9 +41,6 @@
 
 #define MAX_FILENAME_LEN 128
 
-//Input test file name
-CHAR inFile[MAX_FILENAME_LEN];
-
 //Number of iterations of compression/decompression operations
 #define BENCH_NUM_ITERS 10
 
@@ -98,6 +95,7 @@ typedef struct
     INT enable_verbosity;
     INT optOff;
     UINT file_size;
+    INT useIPP;
     FILE *fp;
     CHAR *fName;
     UINT64 cSize;           //size of compressed output
@@ -118,7 +116,9 @@ INT init(aocl_codec_bench_info *codec_bench_handle,
 INT read_user_options (INT argc,
                        CHAR **argv,
                        aocl_codec_bench_info *codec_bench_handle);
-INT64 aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
+INT aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
+                     aocl_codec_bench_info *codec_bench_handle);
+INT ipp_bench_run(aocl_codec_desc *aocl_codec_handle,
                      aocl_codec_bench_info *codec_bench_handle);
 VOID destroy(aocl_codec_bench_info *codec_bench_handle);
 

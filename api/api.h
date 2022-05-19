@@ -71,7 +71,7 @@ typedef struct
     size_t optVar;       //additional variables or parameters
     int numThreads;      //number of threads available for multi-threading
     int numMPIranks;     //number of available multi-core MPI ranks
-    int memLimit;        //maximum memory limit for compression/decompression
+    size_t memLimit;     //maximum memory limit for compression/decompression
     int measureStats;    //Measure speed and size of compression/decompression
     uint64_t cSize;      //size of compressed output
     uint64_t dSize;      //size of decompressed output
