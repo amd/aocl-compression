@@ -190,6 +190,7 @@ set (exe_name aocl_codec_bench)
 set (BENCH_PATH test)
 add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/ipp_codec_bench.c ${BENCH_PATH}/codec_bench.h)
 target_link_libraries(${exe_name} ${lib_name})
+target_link_libraries(${exe_name} ${CMAKE_DL_LIBS})
 
 #Install into destination path by using -DCMAKE_INSTALL_PREFIX=<path> while configuring cmake
 message(STATUS "AOCL CODEC Library, Interface header files and Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")

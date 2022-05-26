@@ -50,9 +50,9 @@ CHAR inFile[MAX_FILENAME_LEN];
 void print_user_options (void)
 {
     printf("AOCL Compression Library version: %s\n", aocl_codec_version());
-    printf("Usage: aocl_cl <options> input\n\n");
+    printf("Usage: aocl_codec_bench <options> input\n\n");
     printf("where input is the test file name and <options> can be:\n");
-    printf("-h          Print help info\n");
+    printf("-h | --help Print help info\n");
     printf("-l          List all the available compression/decompression methods\n");
     printf("-a          Use all the available compression/decompression methods\n");
     printf("-m<>        Maximum size in MBs of the input for compression and decompression. Default=MIN(filesize, 2048 MB)\n");
@@ -161,6 +161,16 @@ INT read_user_options (INT argc,
                 case 'h':
                     print_user_options();
                     ret = 2;
+                break;
+
+                case '-':
+                    if (!strcmp(&argv[cnt][2], "help"))
+                    {
+                        print_user_options();
+                        ret = 2;
+                    }
+                    else
+                        ret = -1;
                 break;
                 
                 case 'l':
@@ -648,12 +658,14 @@ INT main (INT argc, CHAR **argv)
     {
         LOG(ERR, aocl_codec_handle->printDebugLogs,
         "Invalid option passed. Use -h to know supported user options.");
+	printf("Invalid option passed. Use -h to know supported user options.\n");
         goto exit;
     }
     else if (ret == -2)
     {
         LOG(ERR, aocl_codec_handle->printDebugLogs,
         "Unsupported compression method or level specified. Use -l to know supported methods and -h for exact user options.");
+        printf("Unsupported option passed. Use -l to know supported methods and -h for exact user options.\n");
 		goto exit;
     }
     else if (ret == 2)
