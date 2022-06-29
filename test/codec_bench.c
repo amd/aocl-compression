@@ -630,7 +630,7 @@ void destroy(aocl_codec_bench_info *codec_bench_handle)
     LOG(TRACE, codec_bench_handle->enable_verbosity, "Exit");
 }
     
-INT main (INT argc, CHAR **argv)
+INT32 main (INT32 argc, CHAR **argv)
 {
     aocl_codec_bench_info codec_bench_handle;
     aocl_codec_desc aocl_codec_ds;

@@ -29,7 +29,8 @@ library and testsuite binary as explained below.
    "cmake -B \<build directory\> \<CMakeList.txt filepath\> \
    -DCMAKE_INSTALL_PREFIX=\<install path\>\
    -DCMAKE_BUILD_TYPE=\<Debug or Release\>\
-   -DBUILD_STATIC_LIBS=ON"
+   -DBUILD_STATIC_LIBS=ON"\
+   To use clang compiler for the build, specify -DCMAKE_C_COMPILER=clang as the option.
 2. Compile using the below command:\
    "cmake --build \<build directory\> --target install -j"\
    The library will be generated in the "lib" directory.\
@@ -109,7 +110,7 @@ Check the following details for the exact steps:\
            aocl_codec_bench -a -p -c \<input filename\>\
            aocl_codec_bench -elz4 -p -c \<input filename\>\
            aocl_codec_bench -elz4hc -p -c \<input filename\>\
-           aocl_codec_bench -ezlib -p -c \<input filename\>\
+           aocl_codec_bench -ezlib -p -c \<input filename\>
 
  
 CONTACTS
