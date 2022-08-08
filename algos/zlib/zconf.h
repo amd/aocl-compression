@@ -432,7 +432,9 @@ typedef uLong FAR uLongf;
 #endif
 
 #if 1    /* was set to #if 1 by ./configure */
+#ifndef _WINDOWS
 #  define Z_HAVE_UNISTD_H
+#endif
 #endif
 
 #if 1    /* was set to #if 1 by ./configure */

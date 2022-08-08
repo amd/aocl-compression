@@ -39,6 +39,12 @@
 #ifndef CODEC_BENCH_H
 #define CODEC_BENCH_H
 
+#ifdef _WINDOWS
+#include <windows.h>
+#define strtok_r strtok_s
+#define strcasecmp _stricmp
+#endif
+
 #define MAX_FILENAME_LEN 128
 
 //Number of iterations of compression/decompression operations
@@ -57,10 +63,10 @@
 typedef struct
 {
     const CHAR* codec_name;
-    INT lower_level;
-    INT upper_level;
-    INT extra_param;
-    INT max_block_size_param;
+    INTP lower_level;
+    INTP upper_level;
+    INTP extra_param;
+    INTP max_block_size_param;
 } codec_list_t;
 
 //List of supported compression methods along with their parameters
@@ -82,20 +88,20 @@ typedef struct
     CHAR *inPtr;            //buffer containing input data
     CHAR *compPtr;          //buffer containing compressed data
     CHAR *decompPtr;        //buffer containing decompressed data
-    UINT inSize;            //input data length
-    UINT outSize;           //output data length
-    UINT optVar;            //optional param used by compression method
-    INT use_all_codecs;		
-    UINT mem_limit;
-    INT codec_method;
-    INT codec_level;
-    INT iterations;
-    INT verify;
-    INT print_stats;
-    INT enable_verbosity;
-    INT optOff;
-    UINT file_size;
-    INT useIPP;
+    UINTP inSize;           //input data length
+    UINTP outSize;          //output data length
+    UINTP optVar;           //optional param used by compression method
+    INTP use_all_codecs;		
+    UINTP mem_limit;
+    INTP codec_method;
+    INTP codec_level;
+    INTP iterations;
+    INTP verify;
+    INTP print_stats;
+    INTP enable_verbosity;
+    INTP optOff;
+    UINTP file_size;
+    INTP useIPP;
     FILE *fp;
     CHAR *fName;
     UINT64 cSize;           //size of compressed output
@@ -111,14 +117,14 @@ typedef struct
 } aocl_codec_bench_info;
 
 //Function declarations
-INT init(aocl_codec_bench_info *codec_bench_handle,
+INTP init(aocl_codec_bench_info *codec_bench_handle,
          aocl_codec_desc *aocl_codec_handle);
-INT read_user_options (INT argc,
+INTP read_user_options (INTP argc,
                        CHAR **argv,
                        aocl_codec_bench_info *codec_bench_handle);
-INT aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
+INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                      aocl_codec_bench_info *codec_bench_handle);
-INT ipp_bench_run(aocl_codec_desc *aocl_codec_handle,
+INTP ipp_bench_run(aocl_codec_desc *aocl_codec_handle,
                      aocl_codec_bench_info *codec_bench_handle);
 VOID destroy(aocl_codec_bench_info *codec_bench_handle);
 

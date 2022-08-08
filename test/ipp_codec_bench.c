@@ -36,10 +36,10 @@
  *  @author S. Biplab Raut
  */
 
-#ifndef _WIN32
+#ifndef _WINDOWS
 #define _GNU_SOURCE
-#endif
 #include <dlfcn.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,15 +55,15 @@ VOID *hDL[AOCL_COMPRESSOR_ALGOS_NUM] = { NULL };
 //Internal wrapper function declarations that make calls to IPP library APIs
 INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_desc *aocl_codec_handle, VOID *hDL,
-            INT *verifyRes);
+            INTP *verifyRes);
 INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_desc *aocl_codec_handle, VOID *hDL,
-            INT *verifyRes);
+            INTP *verifyRes);
 INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_desc *aocl_codec_handle, VOID *hDL,
-            INT *verifyRes);
+            INTP *verifyRes);
 
-INT ipp_setup(aocl_codec_bench_info *codec_bench_handle,
+INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
               aocl_codec_desc *aocl_codec_handle)
 { 
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
@@ -175,17 +175,17 @@ INT ipp_setup(aocl_codec_bench_info *codec_bench_handle,
 
 INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
                   aocl_codec_desc *aocl_codec_handle, VOID *hDL,
-                  INT *verifyRes)
+                  INTP *verifyRes)
 {
     INT64 resultComp = 0;
     INT64 resultDecomp = 0;
-    UINT inSize, file_size;
-    INT j, k, l;
+    UINTP inSize, file_size;
+    INTP j, k, l;
     timer clkTick;
     timeVal startTime, endTime;
     FILE *inFp = codec_bench_handle->fp;
-    INT64 (*fCompDL) (CHAR *, CHAR *, UINT, UINT);
-    INT64 (*fDecompDL) (CHAR *, CHAR *, UINT, UINT);
+    INT64 (*fCompDL) (CHAR *, CHAR *, UINTP, UINTP);
+    INT64 (*fDecompDL) (CHAR *, CHAR *, UINTP, UINTP);
 
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
 
@@ -220,7 +220,7 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
                                  aocl_codec_handle->outSize);
             getTime(endTime);
             aocl_codec_handle->cSize = resultComp;
-            aocl_codec_handle->cTime = diffTime(timer, startTime, endTime);
+            aocl_codec_handle->cTime = diffTime(clkTick, startTime, endTime);
             aocl_codec_handle->cSpeed = (aocl_codec_handle->inSize * 1000.0) /
                                         aocl_codec_handle->cTime;
 
@@ -239,7 +239,7 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
                                      aocl_codec_handle->outSize);
             getTime(endTime);
             aocl_codec_handle->dSize = resultDecomp;
-            aocl_codec_handle->dTime = diffTime(timer, startTime, endTime);
+            aocl_codec_handle->dTime = diffTime(clkTick, startTime, endTime);
             aocl_codec_handle->dSpeed = (aocl_codec_handle->dSize * 1000.0) /
                                         aocl_codec_handle->dTime;
 
@@ -293,17 +293,17 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
 
 INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
                     aocl_codec_desc *aocl_codec_handle, VOID *hDL,
-                    INT *verifyRes)
+                    INTP *verifyRes)
 {
     INT64 resultComp = 0;
     INT64 resultDecomp = 0;
-    UINT inSize, file_size;
-    INT j, k, l;
+    UINTP inSize, file_size;
+    INTP j, k, l;
     timer clkTick;
     timeVal startTime, endTime;
     FILE *inFp = codec_bench_handle->fp;
-    INT64 (*fCompDL) (CHAR *, CHAR *, UINT, UINT, UINT);
-    INT64 (*fDecompDL) (CHAR *, CHAR *, UINT, UINT);
+    INT64 (*fCompDL) (CHAR *, CHAR *, UINTP, UINTP, UINTP);
+    INT64 (*fDecompDL) (CHAR *, CHAR *, UINTP, UINTP);
 
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
 
@@ -339,7 +339,7 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
                                  aocl_codec_handle->level);
             getTime(endTime);
             aocl_codec_handle->cSize = resultComp;
-            aocl_codec_handle->cTime = diffTime(timer, startTime, endTime);
+            aocl_codec_handle->cTime = diffTime(clkTick, startTime, endTime);
             aocl_codec_handle->cSpeed = (aocl_codec_handle->inSize * 1000.0) /
                                         aocl_codec_handle->cTime;
 
@@ -358,7 +358,7 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
                                      aocl_codec_handle->outSize);
             getTime(endTime);
             aocl_codec_handle->dSize = resultDecomp;
-            aocl_codec_handle->dTime = diffTime(timer, startTime, endTime);
+            aocl_codec_handle->dTime = diffTime(clkTick, startTime, endTime);
             aocl_codec_handle->dSpeed = (aocl_codec_handle->dSize * 1000.0) /
                                         aocl_codec_handle->dTime;
 
@@ -412,17 +412,17 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
 
 INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
                    aocl_codec_desc *aocl_codec_handle, VOID *hDL,
-                   INT *verifyRes)
+                   INTP *verifyRes)
 {
     INT64 resultComp = 0;
     INT64 resultDecomp = 0;
-    UINT inSize, file_size;
-    INT j, k, l, ret;
+    UINTP inSize, file_size;
+    INTP j, k, l, ret;
     timer clkTick;
     timeVal startTime, endTime;
     FILE *inFp = codec_bench_handle->fp;
-    INT64 (*fCompDL) (UINT8 *, uLongf *, UINT8 *, UINT, UINT);
-    INT64 (*fDecompDL) (UINT8 *, uLongf *, UINT8 *, UINT);
+    INT64 (*fCompDL) (UINT8 *, uLongf *, UINT8 *, UINTP, UINTP);
+    INT64 (*fDecompDL) (UINT8 *, uLongf *, UINT8 *, UINTP);
 
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
 
@@ -454,11 +454,11 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
             ret = fCompDL((UINT8 *)aocl_codec_handle->outBuf,
                           (uLongf *)&aocl_codec_handle->outSize,
                           (UINT8 *)aocl_codec_handle->inBuf,
-                          (UINT)aocl_codec_handle->inSize,
-                          (UINT)aocl_codec_handle->level);
+                          (UINTP)aocl_codec_handle->inSize,
+                          (UINTP)aocl_codec_handle->level);
             getTime(endTime);
             aocl_codec_handle->cSize = resultComp = aocl_codec_handle->outSize;
-            aocl_codec_handle->cTime = diffTime(timer, startTime, endTime);
+            aocl_codec_handle->cTime = diffTime(clkTick, startTime, endTime);
             aocl_codec_handle->cSpeed = (aocl_codec_handle->inSize * 1000.0) /
                                         aocl_codec_handle->cTime;
 
@@ -477,7 +477,7 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
                             aocl_codec_handle->inSize);
             getTime(endTime);
             aocl_codec_handle->dSize = resultDecomp = aocl_codec_handle->outSize;
-            aocl_codec_handle->dTime = diffTime(timer, startTime, endTime);
+            aocl_codec_handle->dTime = diffTime(clkTick, startTime, endTime);
             aocl_codec_handle->dSpeed = (aocl_codec_handle->dSize * 1000.0) /
                                         aocl_codec_handle->dTime;
 
@@ -533,7 +533,7 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
               aocl_codec_desc *aocl_codec_handle)
 {
     aocl_codec_type i; 
-    INT j, l, verifyRes, ret;
+    INTP j, l, verifyRes, ret;
 
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
 
@@ -651,8 +651,8 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
     }
     else
     {
-        INT def_level = aocl_codec_handle->level;
-        INT lower_level, upper_level;
+        INTP def_level = aocl_codec_handle->level;
+        INTP lower_level, upper_level;
 
         if (def_level == UNINIT_LEVEL)
         {
@@ -770,14 +770,14 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
     return 0;
 }
 
-INT ipp_destroy(aocl_codec_desc *aocl_codec_handle)
+INTP ipp_destroy(aocl_codec_desc *aocl_codec_handle)
 {
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
     dlclose(hDL);
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
 }
 
-INT ipp_bench_run(aocl_codec_desc *aocl_codec_handle,
+INTP ipp_bench_run(aocl_codec_desc *aocl_codec_handle,
                   aocl_codec_bench_info *codec_bench_handle)
 {
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");

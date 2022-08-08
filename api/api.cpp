@@ -41,7 +41,7 @@
 #include "api.h"
 #include "codec.h"
 
-static int enableLogs = 0;
+static INT32 enableLogs = 0;
 
 //Unified API function to compress the input
 INT64 aocl_codec_compress(aocl_codec_desc *handle,
@@ -71,7 +71,7 @@ INT64 aocl_codec_compress(aocl_codec_desc *handle,
     if (handle->measureStats == 1)
     {
         handle->cSize = ret;
-        handle->cTime = diffTime(timer, startTime, endTime);
+        handle->cTime = diffTime(clkTick, startTime, endTime);
         handle->cSpeed = (handle->inSize * 1000.0) / handle->cTime;
     }
     
@@ -108,7 +108,7 @@ INT64 aocl_codec_decompress(aocl_codec_desc *handle,
     if (handle->measureStats == 1)
     {
         handle->dSize = ret;
-        handle->dTime = diffTime(timer, startTime, endTime);
+        handle->dTime = diffTime(clkTick, startTime, endTime);
         handle->dSpeed = (handle->dSize * 1000.0) / handle->dTime;
     }
 

@@ -17,11 +17,15 @@ supports the benchmarking of IPP compression methods like lz4, lz4hc and zlib.
 INSTALLATION
 ------------
 
-Download the latest stable release from the Github.\
+Download the latest stable release from the Github repository:\
+https://github.amd.com/AOCL/aocl-codec\
 Install cmake on the machine where the sources are to be compiled.\
 Make available any one of the compilers GCC or Clang on the machine.\
-Then, use the cmake based build system to compile and generate AOCL Codec
-library and testsuite binary as explained below.
+Then, use the cmake based build system to compile and generate AOCL Codec\
+library and testsuite binary as explained below for Linux and Windows platforms.
+
+BUILDING ON LINUX
+-----------------
 1. To create a build directory and configure the build system in it,\
    run the below command:\
    "cmake -B \<build directory\> \<CMakeList.txt filepath\>"\
@@ -47,15 +51,40 @@ library and testsuite binary as explained below.
 4. To clear or delete the build folder or files, manually remove the
    build directory or its files.
 
+BUILDING ON WINDOWS
+-------------------
+1. As the prerequisites, make available Microsoft Visual Studio along with it's\
+   "Desktop development with C++" toolset that includes the Clang compiler.
+2. Launch CMake GUI and set the locations for source package and build output.\
+   Click the configure option and choose:\
+   Generator as the installed Visual Studio version,\
+   Platform as x64,\
+   Optional toolset as ClangCl.\
+   Click the Generate option.\
+   After Microsoft Visual Studio project is generated, click "Open Project".\
+   This will launch the Microsoft Visual Studio project for the source package.
+3. To build a Static library, go to project aocl\_codec -> Properties and then:\
+   General -> "Configuration Type" and set it to Static library,\
+   C/C++ -> "Code Generation" -> "Runtime Library" and set it to /MT or /MTd\
+   depending upon whether the build type is Release or Debug.
+4. To build a Dynamic library, go to project aocl\_codec -> Properties and then:\
+   General -> "Configuration Type" and set it to Dynamic library,\
+   C/C++ -> "Code Generation" -> "Runtime Library" and set it to /MD or /MDd\
+   depending upon whether the build type is Release or Debug.
+5. To build the test bench binary, go to project aocl\_codec\_bench -> Properties and then:\
+   Linker -> General -> "Additional Library Directories" and add the path to find aocl\_codec library,\
+   Linker -> General -> "Link Library Dependencies" and set it as "Yes",\
+   Linker -> Input -> "Additional Dependencies" and add the aocl\_codec library name.
+6. Build the entire solution or both the projects one by one separately.
 
-RUNNING AOCL CODEC TEST BENCH
------------------------------
+
+RUNNING AOCL CODEC TEST BENCH ON LINUX
+--------------------------------------
 
 Test bench supports several options to validate, benchmark or debug the supported
 compression methods.\
 It uses the unified API set to invoke the compression methods supported by AOCL Codec.\
-Test bench can invoke and benchmark some of the IPP's compression methods.
-
+Test bench can invoke and benchmark some of the IPP's compression methods as well.
 
 To check various options supported by the test bench, use the command:\
 	aocl_codec_bench -h\
@@ -94,23 +123,33 @@ To test and benchmark the performance of IPP's compression methods, use the
 test bench option "-c" along with other relevant options (as explained above).\
 Currently, IPP's lz4, lz4hc and zlib methods are supported by the test bench.\
 Check the following details for the exact steps:\
-        1. Set the library path environment variable (export LD_LIBRARY_PATH on
-           Linux) to point to the installed IPP library path.\
-           Alternatively, one can also run vars.sh that comes along with the
-           IPP installation to setup the environment variable.\
-        2. Download lz4-1.9.3 and zlib-1.2.11 source packages.\
-        3. Apply IPP's lz4 and zlib patch files as per below command:\
-           patch -p1 < "path to corresponding patch file"\
-        4. Build the patched IPP lz4 and zlib libraries as per the steps given
-           in IPP's readme files present in the corresponding patch file
-           locations for these compression methods.\
-        5. Set the library path environment variable (export LD_LIBRARY_PATH on
-           Linux) to point to patched IPP lz4 and zlib libraries.\
-        6. Run the test bench as given below to benchmark IPP library methods:\
-           aocl_codec_bench -a -p -c \<input filename\>\
-           aocl_codec_bench -elz4 -p -c \<input filename\>\
-           aocl_codec_bench -elz4hc -p -c \<input filename\>\
-           aocl_codec_bench -ezlib -p -c \<input filename\>
+1. Set the library path environment variable (export LD_LIBRARY_PATH on
+   Linux) to point to the installed IPP library path.\
+   Alternatively, one can also run vars.sh that comes along with the
+   IPP installation to setup the environment variable.\
+2. Download lz4-1.9.3 and zlib-1.2.11 source packages.\
+3. Apply IPP's lz4 and zlib patch files as per below command:\
+   patch -p1 < "path to corresponding patch file"\
+4. Build the patched IPP lz4 and zlib libraries as per the steps given
+   in IPP's readme files present in the corresponding patch file
+   locations for these compression methods.\
+5. Set the library path environment variable (export LD_LIBRARY_PATH on
+   Linux) to point to patched IPP lz4 and zlib libraries.\
+6. Run the test bench as given below to benchmark IPP library methods:\
+   aocl_codec_bench -a -p -c \<input filename\>\
+   aocl_codec_bench -elz4 -p -c \<input filename\>\
+   aocl_codec_bench -elz4hc -p -c \<input filename\>\
+   aocl_codec_bench -ezlib -p -c \<input filename\>
+
+RUNNING AOCL CODEC TEST BENCH ON WINDOWS
+----------------------------------------
+
+Test bench on Windows supports all the user options as supported on Linux\
+except for the "-c" option to link and test IPP's compression methods.\
+Refer the previous section on Linux to learn about the various user options.\
+To set and launch the test bench with a specific user option,\
+go to project aocl\_codec\_bench -> Properties -> Debugging and\
+specify the user options and the input test file.
 
  
 CONTACTS

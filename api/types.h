@@ -43,10 +43,10 @@
 
 typedef int64_t INT64;          //fixed signed 64 bits int
 typedef int32_t INT32;          //fixed signed 32 bits int : Use it for signed int
-typedef ptrdiff_t INT;          //portable signed int type : 4 bytes (ILP32), 8 bytes (LP64)
+typedef ptrdiff_t INTP;         //portable signed int type : 4 bytes (ILP32), 8 bytes (LP64)
 typedef uint64_t UINT64;        //fixed unsigned 64 bits int
 typedef uint32_t UINT32;        //fixed unsigned 32 bits int : Use it for unsigned int
-typedef size_t UINT;            //portable unsigned int type : 4 bytes (ILP32), 8 bytes (LP64)
+typedef size_t UINTP;           //portable unsigned int type : 4 bytes (ILP32), 8 bytes (LP64)
 typedef char CHAR;              //signed character data type : 1 byte
 typedef unsigned char UCHAR;    //unsigned character data type : 1 byte
 typedef short SHORT;            //signed short integer : 2 bytes

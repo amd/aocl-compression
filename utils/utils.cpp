@@ -40,10 +40,10 @@
 #include "api/api.h"
 #include "utils/utils.h"
 
-INT is_SSE2_supported(aocl_codec_desc *aocl_codec_handle)
+INTP is_SSE2_supported(aocl_codec_desc *aocl_codec_handle)
 {
-    INT ret;
-    INT eax, ebx, ecx, edx;
+    INTP ret;
+    INTP eax, ebx, ecx, edx;
     cpu_features_detection(0x00000001, 0, &eax, &ebx, &ecx, &edx);
     ret = ((edx & (1 << 26)) != 0);
     LOG(INFO, aocl_codec_handle->printDebugLogs,
@@ -51,10 +51,10 @@ INT is_SSE2_supported(aocl_codec_desc *aocl_codec_handle)
     return ret;
 }
 
-INT is_AVX_supported(aocl_codec_desc *aocl_codec_handle)
+INTP is_AVX_supported(aocl_codec_desc *aocl_codec_handle)
 {
-    INT ret;
-    INT eax, ebx, ecx, edx;
+    INTP ret;
+    INTP eax, ebx, ecx, edx;
     cpu_features_detection(0x00000001, 0, &eax, &ebx, &ecx, &edx);
     ret = ((ecx & 0x18000000) == 0x18000000);
     LOG(INFO, aocl_codec_handle->printDebugLogs,
@@ -62,10 +62,10 @@ INT is_AVX_supported(aocl_codec_desc *aocl_codec_handle)
     return ret;
 }
 
-INT is_AVX2_supported(aocl_codec_desc *aocl_codec_handle)
+INTP is_AVX2_supported(aocl_codec_desc *aocl_codec_handle)
 {
-    INT ret;
-    INT eax, ebx, ecx, edx;
+    INTP ret;
+    INTP eax, ebx, ecx, edx;
     cpu_features_detection(0x00000007, 0, &eax, &ebx, &ecx, &edx);
     ret = ((ebx & (1 << 5)) != 0);
     LOG(INFO, aocl_codec_handle->printDebugLogs,
@@ -73,9 +73,9 @@ INT is_AVX2_supported(aocl_codec_desc *aocl_codec_handle)
     return ret;
 }
 
-INT is_AVX512_supported(aocl_codec_desc *aocl_codec_handle)
+INTP is_AVX512_supported(aocl_codec_desc *aocl_codec_handle)
 {
-    INT ret = 0;
+    INTP ret = 0;
     LOG(INFO, aocl_codec_handle->printDebugLogs,
         "AVX512 SIMD %s supported", (ret ? "is" : "is not"));
     return ret;

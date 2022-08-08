@@ -77,19 +77,19 @@ void print_supported_compressors (void)
     printf("BZIP2\n\n");
 }
 
-VOID *allocMem(UINT size, INT zeroInit)
+VOID *allocMem(UINTP size, INTP zeroInit)
 {
     VOID *bufPtr = (zeroInit == 0) ? calloc(1, size) : malloc(size);
     return bufPtr;
 }
 
-INT get_codec_method_level(CHAR *str, 
+INTP get_codec_method_level(CHAR *str, 
                           aocl_codec_bench_info *codec_bench_handle)
 {
     CHAR *tok;
     CHAR *save = str;
-    INT i = 0;
-    INT match = 99;
+    INTP i = 0;
+    INTP match = 99;
  
     tok = strtok_r(save, ":", &save);
     tok = (tok != NULL) ? tok : str;
@@ -127,13 +127,13 @@ INT get_codec_method_level(CHAR *str,
     return 0;
 }
 
-INT read_user_options (INT argc, 
+INTP read_user_options (INTP argc, 
                        CHAR **argv, 
                        aocl_codec_bench_info *codec_bench_handle)
 {
-    INT cnt = 1;
-    INT fileIn = 0;
-    INT ret = 1;
+    INTP cnt = 1;
+    INTP fileIn = 0;
+    INTP ret = 1;
     CHAR option;
     
     codec_bench_handle->use_all_codecs = 0;
@@ -163,7 +163,7 @@ INT read_user_options (INT argc,
                     ret = 2;
                 break;
 
-                case '-':
+                case '-': 
                     if (!strcmp(&argv[cnt][2], "help"))
                     {
                         print_user_options();
@@ -237,7 +237,7 @@ INT read_user_options (INT argc,
             {
                 CHAR *tmpStr;
                 memcpy(inFile, argv[cnt], MAX_FILENAME_LEN);
-#ifdef WINDOWS
+#ifdef _WINDOWS
                 tmpStr = strrchr(inFile, '\\');
 #else
                 tmpStr = strrchr(inFile, '/');
@@ -259,7 +259,7 @@ INT read_user_options (INT argc,
     return ret;
 }
 
-INT init(aocl_codec_bench_info *codec_bench_handle,
+INTP init(aocl_codec_bench_info *codec_bench_handle,
          aocl_codec_desc *aocl_codec_handle)
 {
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
@@ -303,14 +303,14 @@ INT init(aocl_codec_bench_info *codec_bench_handle,
     }
 }
 
-INT aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
+INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                    aocl_codec_bench_info *codec_bench_handle)
 {
     INT64 resultComp = 0;
     INT64 resultDecomp = 0;
-    UINT inSize, file_size;
+    UINTP inSize, file_size;
     aocl_codec_type i; 
-    INT j, k, l;
+    INTP j, k, l;
     FILE *inFp = codec_bench_handle->fp;
 
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
@@ -463,8 +463,8 @@ INT aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
     }
     else
     {
-        INT def_level = aocl_codec_handle->level;
-        INT lower_level, upper_level;
+        INTP def_level = aocl_codec_handle->level;
+        INTP lower_level, upper_level;
 
         if (def_level == UNINIT_LEVEL)
         {
@@ -636,8 +636,8 @@ INT32 main (INT32 argc, CHAR **argv)
     aocl_codec_desc aocl_codec_ds;
     aocl_codec_desc *aocl_codec_handle = &aocl_codec_ds;
     FILE *inFp = NULL;
-    INT result;
-    INT ret;
+    INTP result;
+    INTP ret;
 
     ret = read_user_options (argc, argv, &codec_bench_handle);
 
@@ -690,7 +690,12 @@ INT32 main (INT32 argc, CHAR **argv)
     codec_bench_handle.fp = inFp;
 
     if (codec_bench_handle.useIPP)
+#ifdef _WINDOWS
+        LOG(ERR, aocl_codec_handle->printDebugLogs,
+            "IPP test execution not supported on Windows for now.");
+#else
         result = ipp_bench_run(aocl_codec_handle, &codec_bench_handle);
+#endif
     else
         result = aocl_bench_run(aocl_codec_handle, &codec_bench_handle);
     if (result != 0)

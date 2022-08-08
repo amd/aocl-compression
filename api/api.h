@@ -43,6 +43,12 @@
 extern "C" {
 #endif
 
+#ifdef _WINDOWS
+#define EXPORT_SYM_DYN __declspec(dllexport)
+#else
+#define EXPORT_SYM_DYN
+#endif
+
 #define LIBRARY_VERSION "AOCL-CODEC 3.2"
 #define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA CODEC 1.0"
 
@@ -86,23 +92,23 @@ typedef struct
 } aocl_codec_desc;
 
 //Interface API to compress data
-int64_t aocl_codec_compress(aocl_codec_desc *handle,
+EXPORT_SYM_DYN int64_t aocl_codec_compress(aocl_codec_desc *handle,
                             aocl_codec_type codec_type);
 
 //Interface API to decompress data
-int64_t aocl_codec_decompress(aocl_codec_desc *handle,
+EXPORT_SYM_DYN int64_t aocl_codec_decompress(aocl_codec_desc *handle,
                               aocl_codec_type codec_type);
 
 //Interface API to setup the codec method
-void aocl_codec_setup(aocl_codec_desc *handle,
+EXPORT_SYM_DYN void aocl_codec_setup(aocl_codec_desc *handle,
                       aocl_codec_type codec_type);
 
 //Interface API to destroy the codec method
-void aocl_codec_destroy(aocl_codec_desc *handle,
+EXPORT_SYM_DYN void aocl_codec_destroy(aocl_codec_desc *handle,
                         aocl_codec_type codec_type);
 
 //Interface API to get compression library version string
-const char *aocl_codec_version(void);
+EXPORT_SYM_DYN const char *aocl_codec_version(void);
 
 #ifdef __cplusplus
 }

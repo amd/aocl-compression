@@ -59,7 +59,7 @@
 #endif
 
 #ifdef AOCL_CL_STATS
-#ifdef WINDOWS
+#ifdef _WINDOWS
 #include <windows.h>
 typedef LARGE_INTEGER timer;
 typedef LARGE_INTEGER timeVal;
@@ -122,16 +122,15 @@ typedef struct timespec timeVal;
 
 //Timer and stats keeping
 #ifdef AOCL_CL_STATS
-#ifdef WINDOWS
-#include <windows.h>
-#define initTimer(timer) if(!QueryPerformanceFrequency(&frequency))\
+#ifdef _WINDOWS
+#define initTimer(timerClk) if(!QueryPerformanceFrequency(&timerClk))\
                          {\
-                            LOG(ERR, \
-                            "QueryPerformanceFrequency based Timer failed.");\
+                             LOG(ERR, 1, \
+                             "QueryPerformanceFrequency based Timer failed.");\
                          }
 #define getTime(timeVal) QueryPerformanceCounter(&timeVal)
-#define diffTime(timer, startTime, endTime) ((1000000000ULL * \
-                (endTime.QuadPart - startTime.QuadPart))/timer.QuadPart)
+#define diffTime(timerClk, startTime, endTime) ((1000000000ULL * \
+                (endTime.QuadPart - startTime.QuadPart))/timerClk.QuadPart)
 #else
 #include <unistd.h>
 #include <stdlib.h>
@@ -146,10 +145,10 @@ typedef struct timespec timeVal;
 
 //CPU Features detection using CPUID
 #ifdef AOCL_CL_CPUID_SIMD_DETECTION
-#ifndef _WIN32
-inline VOID cpu_features_detection(INT fn, INT optVal,
-                                   INT *eax, INT *ebx,
-                                   INT *ecx, INT *edx)
+#ifndef _WINDOWS
+inline VOID cpu_features_detection(INTP fn, INTP optVal,
+                                   INTP *eax, INTP *ebx,
+                                   INTP *ecx, INTP *edx)
 {
     *eax = fn;
     *ecx = optVal;
@@ -157,6 +156,21 @@ inline VOID cpu_features_detection(INT fn, INT optVal,
     *edx = 0;
     __asm__ ("cpuid            \n\t"
              : "+a" (*eax), "+b" (*ebx), "+c" (*ecx), "+d" (*edx));
+}
+#else
+#include <intrin.h>
+inline VOID cpu_features_detection(INTP fn, INTP optVal,
+    INTP* eax, INTP* ebx,
+    INTP* ecx, INTP* edx)
+{
+    INT32 CPUInfo[4];
+
+    __cpuid(CPUInfo, fn);
+
+    *eax = CPUInfo[0];
+    *ebx = CPUInfo[1];
+    *ecx = CPUInfo[2];
+    *edx = CPUInfo[3];
 }
 #endif
 #endif
