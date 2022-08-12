@@ -13,7 +13,6 @@ A test suite is provided for validation and performance benchmarking
 of the supported compression and decompression methods. The test suite also
 supports the benchmarking of IPP compression methods like lz4, lz4hc and zlib.
 
-
 INSTALLATION
 ------------
 
@@ -23,6 +22,8 @@ Install cmake on the machine where the sources are to be compiled.\
 Make available any one of the compilers GCC or Clang on the machine.\
 Then, use the cmake based build system to compile and generate AOCL Codec\
 library and testsuite binary as explained below for Linux and Windows platforms.
+
+
 
 BUILDING ON LINUX
 -----------------
