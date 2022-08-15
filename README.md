@@ -122,19 +122,19 @@ Here, -v can be passed with a number like v\<n\> that can take values:
 To test and benchmark the performance of IPP's compression methods, use the
 test bench option "-c" along with other relevant options (as explained above).\
 Currently, IPP's lz4, lz4hc and zlib methods are supported by the test bench.\
-Check the following details for the exact steps:\
+Check the following details for the exact steps:
 1. Set the library path environment variable (export LD_LIBRARY_PATH on
    Linux) to point to the installed IPP library path.\
    Alternatively, one can also run vars.sh that comes along with the
-   IPP installation to setup the environment variable.\
-2. Download lz4-1.9.3 and zlib-1.2.11 source packages.\
+   IPP installation to setup the environment variable.
+2. Download lz4-1.9.3 and zlib-1.2.11 source packages.
 3. Apply IPP's lz4 and zlib patch files as per below command:\
-   patch -p1 < "path to corresponding patch file"\
+   patch -p1 < "path to corresponding patch file"
 4. Build the patched IPP lz4 and zlib libraries as per the steps given
    in IPP's readme files present in the corresponding patch file
-   locations for these compression methods.\
+   locations for these compression methods.
 5. Set the library path environment variable (export LD_LIBRARY_PATH on
-   Linux) to point to patched IPP lz4 and zlib libraries.\
+   Linux) to point to patched IPP lz4 and zlib libraries.
 6. Run the test bench as given below to benchmark IPP library methods:\
    aocl_codec_bench -a -p -c \<input filename\>\
    aocl_codec_bench -elz4 -p -c \<input filename\>\
