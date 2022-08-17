@@ -67,6 +67,7 @@ set (SNAPPY_SRC_FILES 	${ALGOS_PATH}/snappy/snappy-sinksource.cc
 						${ALGOS_PATH}/snappy/snappy.cc
 						${ALGOS_PATH}/snappy/snappy.h)
 set (ZLIB_SRC_FILES	${ALGOS_PATH}/zlib/adler32.c
+					${ALGOS_PATH}/zlib/adler32_x86.c
 					${ALGOS_PATH}/zlib/compress.c
 					${ALGOS_PATH}/zlib/crc32.c
 					${ALGOS_PATH}/zlib/deflate.c
@@ -155,6 +156,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /fp:fast /
 message(STATUS "C Compiler flags used for this windows build are: ${CMAKE_C_FLAGS}")
 message(STATUS "C++ Compiler flags used for this windows build are: ${CMAKE_CXX_FLAGS}")
 elseif (UNIX)
+set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-mavx2")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing -ffast-math")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing -ffast-math")
 message(STATUS "C Compiler flags used for this Unix build are: ${CMAKE_C_FLAGS}")

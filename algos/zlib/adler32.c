@@ -6,6 +6,7 @@
 /* @(#) $Id$ */
 
 #include "zutil.h"
+#include "adler32_x86.h"
 
 local uLong adler32_combine_ OF((uLong adler1, uLong adler2, z_off64_t len2));
 
@@ -67,6 +68,10 @@ uLong ZEXPORT adler32_z(adler, buf, len)
 {
     unsigned long sum2;
     unsigned n;
+#ifdef AOCL_ZLIB_ADLER32_OPT_SIMD
+    if (buf && len >= 32)
+        return adler32_x86(adler, buf, len);
+#endif
 
     /* split Adler-32 into component sums */
     sum2 = (adler >> 16) & 0xffff;
