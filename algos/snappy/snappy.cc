@@ -91,7 +91,11 @@ using internal::LITERAL;
 // compression for compressible input, and more speed for incompressible
 // input. Of course, it doesn't hurt if the hash function is reasonably fast
 // either, as it gets called a lot.
+#ifdef AOCL_SNAPPY_OPT_FLAGS
 inline uint32_t HashBytes(uint32_t bytes, int shift) {
+#else
+static inline uint32_t HashBytes(uint32_t bytes, int shift) {
+#endif
   uint32_t kMul = 0x1e35a7bd;
   return (bytes * kMul) >> shift;
 }
@@ -421,7 +425,11 @@ static inline char* EmitCopy(char* op, size_t offset, size_t len) {
     // it's in the noise.
 
     // Emit 64 byte copies but make sure to keep at least four bytes reserved.
+#ifdef AOCL_SNAPPY_OPT_FLAGS
     while (len >= 68) {
+#else
+    while (SNAPPY_PREDICT_FALSE(len >= 68)) {
+#endif
       op = EmitCopyAtMost64</*len_less_than_12=*/false>(op, offset, 64);
       len -= 64;
     }
@@ -486,7 +494,8 @@ WorkingMemory::~WorkingMemory() {
   std::allocator<char>().deallocate(mem_, size_);
 }
 
-uint16_t* WorkingMemory::GetHashTable(size_t fragment_size, int* table_size) const {
+uint16_t* WorkingMemory::GetHashTable(size_t fragment_size,
+                                    int* table_size) const {
   const size_t htsize = CalculateTableSize(fragment_size);
   memset(table_, 0, htsize * sizeof(*table_));
   *table_size = htsize;
@@ -521,11 +530,14 @@ char* CompressFragment(const char* input,
   const char* base_ip = ip;
 
   const size_t kInputMarginBytes = 15;
+#ifdef AOCL_SNAPPY_OPT_FLAGS
   if (input_size >= kInputMarginBytes) {
+#else
+  if (SNAPPY_PREDICT_TRUE(input_size >= kInputMarginBytes)) {
+#endif  
     const char* ip_limit = input + input_size - kInputMarginBytes;
 
     for (uint32_t preload = LittleEndian::Load32(ip + 1);;) {
-      // printf("prel = %x\n", preload);
       // Bytes in [next_emit, ip) will be emitted as literal bytes.  Or
       // [next_emit, ip_end) after the main loop.
       const char* next_emit = ip++;
@@ -573,7 +585,11 @@ char* CompressFragment(const char* input,
             assert(candidate >= base_ip);
             assert(candidate < ip + i);
             table[hash] = delta + i;
+#ifdef AOCL_SNAPPY_OPT_FLAGS
             if (LittleEndian::Load32(candidate) == dword) {
+#else
+            if (SNAPPY_PREDICT_FALSE(LittleEndian::Load32(candidate) == dword)) {
+#endif
               *op = LITERAL | (i << 2);
               UnalignedCopy128(next_emit, op + 1);
               ip += i;
@@ -593,7 +609,11 @@ char* CompressFragment(const char* input,
         uint32_t bytes_between_hash_lookups = skip >> 5;
         skip += bytes_between_hash_lookups;
         const char* next_ip = ip + bytes_between_hash_lookups;
+#ifdef AOCL_SNAPPY_OPT_FLAGS
         if (next_ip > ip_limit) {
+#else
+        if (SNAPPY_PREDICT_FALSE(next_ip > ip_limit)) {
+#endif
           ip = next_emit;
           goto emit_remainder;
         }
@@ -602,7 +622,13 @@ char* CompressFragment(const char* input,
         assert(candidate < ip);
 
         table[hash] = ip - base_ip;
-        if (static_cast<uint32_t>(data) == LittleEndian::Load32(candidate)) {
+#ifdef AOCL_SNAPPY_OPT_FLAGS
+        if (static_cast<uint32_t>(data) ==
+                                LittleEndian::Load32(candidate)) {
+#else
+        if (SNAPPY_PREDICT_FALSE(static_cast<uint32_t>(data) ==
+                                LittleEndian::Load32(candidate))) {
+#endif
           break;
         }
         data = LittleEndian::Load32(next_ip);
@@ -624,31 +650,36 @@ char* CompressFragment(const char* input,
       // by proceeding to the next iteration of the main loop.  We also can exit
       // this loop via goto if we get close to exhausting the input.
     emit_match:
-      // printf("data = %lx\n", data);
       do {
         // We have a 4-byte match at ip, and no need to emit any
         // "literal bytes" prior to ip.
         const char* base = ip;
-        std::pair<size_t, bool> p = FindMatchLength(candidate + 4, ip + 4, ip_end, &data);
+        std::pair<size_t, bool> p =
+            FindMatchLength(candidate + 4, ip + 4, ip_end, &data);
         size_t matched = 4 + p.first;
         ip += matched;
         size_t offset = base - candidate;
         assert(0 == memcmp(base, candidate, matched));
-        
         if (p.second) {
           op = EmitCopy</*len_less_than_12=*/true>(op, offset, matched);
         } else {
           op = EmitCopy</*len_less_than_12=*/false>(op, offset, matched);
         }
+#ifdef AOCL_SNAPPY_OPT_FLAGS
         if (ip >= ip_limit) {
+#else
+        if (SNAPPY_PREDICT_FALSE(ip >= ip_limit)) {
+#endif
           goto emit_remainder;
         }
         // Expect 5 bytes to match
-        assert((data & 0xFFFFFFFFFF) == (LittleEndian::Load64(ip) & 0xFFFFFFFFFF));
+        assert((data & 0xFFFFFFFFFF) ==
+               (LittleEndian::Load64(ip) & 0xFFFFFFFFFF));
         // We are now looking for a 4-byte match again.  We read
         // table[Hash(ip, shift)] for that.  To improve compression,
         // we also update table[Hash(ip - 1, shift)] and table[Hash(ip, shift)].
-        table[HashBytes(LittleEndian::Load32(ip - 1), shift)] = ip - base_ip - 1;
+        table[HashBytes(LittleEndian::Load32(ip - 1), shift)] =
+            ip - base_ip - 1;
         uint32_t hash = HashBytes(data, shift);
         candidate = base_ip + table[hash];
         table[hash] = ip - base_ip;
@@ -1393,18 +1424,25 @@ class SnappyArrayWriter {
   inline void Flush() {}
 };
 
+#ifdef AOCL_SNAPPY_OPT_FLAGS
 bool RawUncompress(const char* compressed, size_t compressed_length,
                    char* uncompressed) {
   ByteArraySource reader(compressed, compressed_length);
   SnappyArrayWriter output(uncompressed);
   return InternalUncompress(&reader, &output);
-  // return RawUncompress(&reader, uncompressed);
+}
+#else
+bool RawUncompress(const char* compressed, size_t compressed_length,
+                   char* uncompressed) {
+  ByteArraySource reader(compressed, compressed_length);
+  return RawUncompress(&reader, uncompressed);
 }
 
-//bool RawUncompress(Source* compressed, char* uncompressed) {
-//  SnappyArrayWriter output(uncompressed);
-//  return InternalUncompress(compressed, &output);
-//}
+bool RawUncompress(Source* compressed, char* uncompressed) {
+  SnappyArrayWriter output(uncompressed);
+  return InternalUncompress(compressed, &output);
+}
+#endif
 
 bool Uncompress(const char* compressed, size_t compressed_length,
                 std::string* uncompressed) {
@@ -1480,9 +1518,6 @@ void RawCompress(const char* input,
                  size_t input_length,
                  char* compressed,
                  size_t* compressed_length) {
-
-  // printf("SNAPPY_HAVE_SSSE3 : %d\nSNAPPY_HAVE_BMI2 : %d\n", __SSSE3__, __BMI2__);
-
   ByteArraySource reader(input, input_length);
   UncheckedByteArraySink writer(compressed);
   Compress(&reader, &writer);

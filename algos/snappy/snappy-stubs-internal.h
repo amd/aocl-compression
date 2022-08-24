@@ -55,6 +55,8 @@
 #include <intrin.h>
 #endif  // defined(_MSC_VER)
 
+#define AOCL_SNAPPY_OPT_FLAGS
+
 #ifndef __has_feature
 #define __has_feature(x) 0
 #endif
