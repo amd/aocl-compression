@@ -194,7 +194,7 @@
 #ifdef SYS16BIT
 #  define MAXSEG_64K
 #endif
-#ifdef MSDOS
+#if defined(MSDOS) || defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
 #  define UNALIGNED_OK
 #endif
 
