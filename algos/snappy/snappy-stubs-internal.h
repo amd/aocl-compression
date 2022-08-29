@@ -174,14 +174,25 @@ class LittleEndian {
  public:
   // Functions to do unaligned loads and stores in little-endian order.
   static inline uint16_t Load16(const void *ptr) {
+#ifdef AOCL_SNAPPY_OPT_FLAGS
+    uint16_t x;
+    memcpy(&x, ptr, 2);
+    return x;
+#else
     const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
 
     // Compiles to a single mov/str on recent clang and gcc.
     return (static_cast<uint16_t>(buffer[0])) |
             (static_cast<uint16_t>(buffer[1]) << 8);
+#endif
   }
 
   static inline uint32_t Load32(const void *ptr) {
+#ifdef AOCL_SNAPPY_OPT_FLAGS
+    uint32_t x;
+    memcpy(&x, ptr, 4);
+    return x;
+#else
     const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
 
     // Compiles to a single mov/str on recent clang and gcc.
@@ -189,9 +200,15 @@ class LittleEndian {
             (static_cast<uint32_t>(buffer[1]) << 8) |
             (static_cast<uint32_t>(buffer[2]) << 16) |
             (static_cast<uint32_t>(buffer[3]) << 24);
+#endif
   }
 
   static inline uint64_t Load64(const void *ptr) {
+#ifdef AOCL_SNAPPY_OPT_FLAGS
+    uint64_t x;
+    memcpy(&x, ptr, 8);
+    return x;
+#else
     const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
 
     // Compiles to a single mov/str on recent clang and gcc.
@@ -203,6 +220,7 @@ class LittleEndian {
             (static_cast<uint64_t>(buffer[5]) << 40) |
             (static_cast<uint64_t>(buffer[6]) << 48) |
             (static_cast<uint64_t>(buffer[7]) << 56);
+#endif
   }
 
   static inline void Store16(void *dst, uint16_t value) {

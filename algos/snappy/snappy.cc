@@ -650,6 +650,9 @@ char* CompressFragment(const char* input,
       // by proceeding to the next iteration of the main loop.  We also can exit
       // this loop via goto if we get close to exhausting the input.
     emit_match:
+#ifdef AOCL_SNAPPY_OPT_FLAGS
+      uint32_t candidate_data;
+#endif
       do {
         // We have a 4-byte match at ip, and no need to emit any
         // "literal bytes" prior to ip.
@@ -682,6 +685,9 @@ char* CompressFragment(const char* input,
             ip - base_ip - 1;
         uint32_t hash = HashBytes(data, shift);
         candidate = base_ip + table[hash];
+#ifdef AOCL_SNAPPY_OPT_FLAGS
+        candidate_data = LittleEndian::Load32(candidate);
+#endif
         table[hash] = ip - base_ip;
         // Measurements on the benchmarks have shown the following probabilities
         // for the loop to exit (ie. avg. number of iterations is reciprocal).
@@ -693,7 +699,11 @@ char* CompressFragment(const char* input,
         // BM_Flat/11 gaviota p = 0.1
         // BM_Flat/12 cp      p = 0.5
         // BM_Flat/13 c       p = 0.3
+#ifdef AOCL_SNAPPY_OPT_FLAGS
+      } while (static_cast<uint32_t>(data) == candidate_data);
+#else
       } while (static_cast<uint32_t>(data) == LittleEndian::Load32(candidate));
+#endif
       // Because the least significant 5 bytes matched, we can utilize data
       // for the next iteration.
       preload = data >> 8;
