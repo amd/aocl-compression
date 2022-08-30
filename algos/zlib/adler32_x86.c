@@ -40,6 +40,30 @@
 #define DO4(buf,i)  DO2(buf,i); DO2(buf,i+2);
 #define DO8(buf)  DO4(buf,0); DO4(buf,4);
 
+// This function separation prevents compiler from generating VZEROUPPER instruction
+// because of transition from VEX to Non-VEX code resulting in performance drop
+uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_t len) {
+    uint32_t sum_A = adler & 0xffff;
+    uint32_t sum_B = adler >> 16;
+    if (len) {
+        while (len >= 8) {
+            len -= 8;
+            DO8(buf);
+            buf += 8;
+        }
+
+        while (len--) {
+            sum_B += (sum_A += *buf++);
+        }
+
+        if (sum_A >= BASE)
+            sum_A -= BASE;
+        sum_B %= BASE;
+    }
+
+    return sum_A | (sum_B << 16);
+}
+
 static inline uint32_t adler32_x86_sse(uint32_t adler, const Bytef *buf, z_size_t len) {
     uint32_t sum_A = adler & 0xffff;
     uint32_t sum_B = adler >> 16;
@@ -125,23 +149,7 @@ static inline uint32_t adler32_x86_sse(uint32_t adler, const Bytef *buf, z_size_
     }
 
 
-    if (len) {
-        while (len >= 8) {
-            len -= 8;
-            DO8(buf);
-            buf += 8;
-        }
-
-        while (len--) {
-            sum_B += (sum_A += *buf++);
-        }
-
-        if (sum_A >= BASE)
-            sum_A -= BASE;
-        sum_B %= BASE;
-    }
-
-    return sum_A | (sum_B << 16);
+    return adler32_rem_len(sum_A | (sum_B << 16), buf, len);
 }
 
 static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size_t len) {
@@ -205,25 +213,7 @@ static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size
         sum_A %= BASE;
         sum_B %= BASE;
     }
-
-
-    if (len) {
-        while (len >= 8) {
-            len -= 8;
-            DO8(buf);
-            buf += 8;
-        }
-
-        while (len--) {
-            sum_B += (sum_A += *buf++);
-        }
-
-        if (sum_A >= BASE)
-            sum_A -= BASE;
-        sum_B %= BASE;
-    }
-
-    return sum_A | (sum_B << 16);
+    return adler32_rem_len(sum_A | (sum_B << 16), buf, len);
 }
 
 uint32_t ZLIB_INTERNAL adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len) {

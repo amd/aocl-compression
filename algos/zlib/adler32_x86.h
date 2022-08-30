@@ -34,8 +34,6 @@
 #include "zconf.h"
 #include "zutil.h"
 
-#define AOCL_ZLIB_ADLER32_OPT_SIMD
-
 uint32_t ZLIB_INTERNAL adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
 
 #endif // ADLER32_X86_H

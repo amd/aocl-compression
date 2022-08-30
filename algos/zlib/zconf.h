@@ -533,4 +533,10 @@ typedef uLong FAR uLongf;
   #pragma map(inflate_copyright,"INCOPY")
 #endif
 
+/* AOCL optimization flags */
+#define AOCL_ZLIB_OPT
+#ifdef AOCL_ZLIB_OPT
+#  define AOCL_ZLIB_ADLER32_OPT_SIMD
+#endif
+
 #endif /* ZCONF_H */
