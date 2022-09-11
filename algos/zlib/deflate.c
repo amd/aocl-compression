@@ -74,7 +74,11 @@ typedef block_state (*compress_func) OF((deflate_state *s, int flush));
 /* Compression function. Returns the block state after the call. */
 
 local int deflateStateCheck      OF((z_streamp strm));
+#ifndef AOCL_ZLIB_HASHING_OPT
 local void slide_hash     OF((deflate_state *s));
+#else
+extern void slide_hash (deflate_state *s);
+#endif
 local void fill_window    OF((deflate_state *s));
 local block_state deflate_stored OF((deflate_state *s, int flush));
 local block_state deflate_fast   OF((deflate_state *s, int flush));
@@ -198,6 +202,7 @@ local const config configuration_table[10] = {
  * bit values at the expense of memory usage). We slide even when level == 0 to
  * keep the hash table consistent if we switch back to level > 0 later.
  */
+#ifndef AOCL_ZLIB_HASHING_OPT
 local void slide_hash(s)
     deflate_state *s;
 {
@@ -223,6 +228,7 @@ local void slide_hash(s)
     } while (--n);
 #endif
 }
+#endif
 
 /* ========================================================================= */
 int ZEXPORT deflateInit_(strm, level, version, stream_size)
@@ -1490,7 +1496,7 @@ local void fill_window(s)
 
     do {
         more = (unsigned)(s->window_size -(ulg)s->lookahead -(ulg)s->strstart);
-
+#ifndef AOCL_ZLIB_OPT
         /* Deal with !@#$% 64K limit: */
         if (sizeof(int) <= 2) {
             if (more == 0 && s->strstart == 0 && s->lookahead == 0) {
@@ -1503,7 +1509,7 @@ local void fill_window(s)
                 more--;
             }
         }
-
+#endif
         /* If the window is almost full and there is insufficient lookahead,
          * move the upper half to the lower one to make room in the upper half.
          */
