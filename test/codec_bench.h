@@ -51,13 +51,18 @@
 #define BENCH_NUM_ITERS 10
 
 //Size of input data to be processed in memory at a time
-#define MAX_MEM_SIZE_FOR_FILE_READ 2147483648 //(2048 MBs)
+//Few compression methods are limited by datatype upper bound (2^31 -1)
+//Output buffer needs extra space to accomodate the additional header bytes
+#define MAX_MEM_SIZE_FOR_FILE_READ 1073741824 //(1024 MBs)
 
 //Uninitialized level value
 #define UNINIT_LEVEL 999
 
 //Uninitialized optional param value
 #define UNINIT_OPT_VAR 999
+
+//Minimum compressed buffer size
+#define MIN_PAD_SIZE (16*1024)
 
 //Data structure for storing levels and other parametric details of compressors
 typedef struct

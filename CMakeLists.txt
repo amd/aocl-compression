@@ -40,6 +40,14 @@ cmake_minimum_required(VERSION 3.10.0)
 project(AOCL-CODEC-LIBRARY)
 message(STATUS "Building for AOCL CODEC LIBRARY")
 
+string(TIMESTAMP TODAY "%Y%m%d")
+add_compile_definitions(AOCL_BUILD_VERSION="Build ${TODAY}")
+
+if (WIN32)
+option (BUILD_STATIC_LIBS "Build static library (Default build type is shared library)" OFF)
+set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
+endif()
+
 #list source files to be compiled for the library
 file(GLOB API_SRC_FILES api/*.c api/*.cpp api/*.h)
 set (ALGOS_PATH algos)
@@ -120,7 +128,7 @@ include_directories(.)
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 link_directories(${ROOT_DIR}/build/)
 set(DEST_LIB_PATH aocl_codec/lib)
-set(DEST_INC_PATH aocl_codec/inc)
+set(DEST_INC_PATH aocl_codec/include)
 set(DEST_BIN_PATH aocl_codec/bin)
 
 set(INC_FILES api/api.h 
@@ -141,9 +149,11 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
-	message(STATUS "Build type selected is Release")
+    message(STATUS "Build type selected is Release")
+    add_compile_definitions(CFLAGS_SET1="${CMAKE_C_FLAGS_RELEASE}")
 else ()
-	message(STATUS "Build type selected is Debug")
+    message(STATUS "Build type selected is Debug")
+    add_compile_definitions(CFLAGS_SET1="${CMAKE_C_FLAGS_DEBUG}")
 endif()
 
 #set(USER_DEBUG_ON "-g")
@@ -165,6 +175,10 @@ message(STATUS "C++ Compiler flags used for this Unix build are: ${CMAKE_CXX_FLA
 endif()
 
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1;-DHAVE_ATTRIBUTE_ALWAYS_INLINE=1")
+
+add_compile_definitions(CCompiler="${CMAKE_C_COMPILER}")
+add_compile_definitions(CXXCompiler="${CMAKE_CXX_COMPILER}")
+add_compile_definitions(CFLAGS_SET2="${CMAKE_C_FLAGS}")
 
 #add library
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)

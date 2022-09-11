@@ -49,7 +49,11 @@ CHAR inFile[MAX_FILENAME_LEN];
 
 void print_user_options (void)
 {
-    printf("AOCL Compression Library version: %s\n", aocl_codec_version());
+    printf("\nAOCL Compression Library version: %s\n", aocl_codec_version());
+    printf("Internal Library version: %s\n", INTERNAL_LIBRARY_VERSION);
+    printf("C Compiler: %s\n", CCompiler);
+    printf("C++ Compiler: %s\n", CXXCompiler);
+    printf("Compile Options: %s%s\n\n", CFLAGS_SET1, CFLAGS_SET2);
     printf("Usage: aocl_codec_bench <options> input\n\n");
     printf("where input is the test file name and <options> can be:\n");
     printf("-h | --help Print help info\n");
@@ -259,6 +263,12 @@ INTP read_user_options (INTP argc,
     return ret;
 }
 
+UINTP compression_bound(UINTP inSize)
+{
+    UINTP outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
+    return outSize;
+}
+
 INTP init(aocl_codec_bench_info *codec_bench_handle,
          aocl_codec_desc *aocl_codec_handle)
 {
@@ -267,11 +277,11 @@ INTP init(aocl_codec_bench_info *codec_bench_handle,
     codec_bench_handle->inSize = 
          (codec_bench_handle->file_size > codec_bench_handle->mem_limit) ?
          codec_bench_handle->mem_limit : codec_bench_handle->file_size;
-    codec_bench_handle->outSize = codec_bench_handle->inSize;    
+    codec_bench_handle->outSize = compression_bound(codec_bench_handle->inSize);
     codec_bench_handle->inPtr = 
         (char *)allocMem(codec_bench_handle->inSize, 0);
     codec_bench_handle->compPtr = 
-        (char *)allocMem(codec_bench_handle->inSize, 0);
+        (char *)allocMem(codec_bench_handle->outSize, 0);
     codec_bench_handle->decompPtr = 
         (char *)allocMem(codec_bench_handle->inSize, 0);
     
@@ -311,6 +321,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
     UINTP inSize, file_size;
     aocl_codec_type i; 
     INTP j, k, l;
+    INTP status = 0, retStatus = 0;
     FILE *inFp = codec_bench_handle->fp;
 
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
@@ -336,6 +347,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                 codec_bench_handle->cBestTime = 0;
                 codec_bench_handle->dBestTime = 0;
                 aocl_codec_handle->level = l;
+                status = 0;
                 
                 //setup the codec method
                 aocl_codec_setup(aocl_codec_handle, i);
@@ -350,13 +362,19 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                                        inSize, inFp);
 
                         //compress
-                        aocl_codec_handle->inSize = aocl_codec_handle->outSize =
-                        /*aocl_codec_handle->chunk_size =*/ inSize;
+                        aocl_codec_handle->inSize = inSize;
+                        aocl_codec_handle->outSize = codec_bench_handle->outSize;
                         aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
                         aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
                         resultComp = aocl_codec_compress(aocl_codec_handle, i);
                         if (resultComp <= 0)
-                            return -1;
+                        {
+                            printf("AOCL-CODEC [%s-%ld] [Filename:%s] Compression: failed\n",
+                                codec_list[i].codec_name,
+                                l, codec_bench_handle->fName);
+                            status = -1;
+                            break;
+                        }
 
                         //decompress
                         aocl_codec_handle->inSize = resultComp;
@@ -366,7 +384,13 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                         resultDecomp = aocl_codec_decompress(aocl_codec_handle,
                                                              i);
                         if (resultDecomp <= 0)
-                            return -1;
+                        {
+                            printf("AOCL-CODEC [%s-%ld] [Filename:%s] Decompression: failed\n",
+                                codec_list[i].codec_name,
+                                l, codec_bench_handle->fName);
+                            status = -1;
+                            break;
+                        }
 
                         if (codec_bench_handle->verify)
                         {
@@ -377,7 +401,8 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                                 printf("AOCL-CODEC [%s-%ld] [Filename:%s] verification: failed\n",
                                     codec_list[i].codec_name,
                                     l, codec_bench_handle->fName);
-                                return -1;
+                                status = -1;
+                                break;
                             }
                         }
                         if (codec_bench_handle->print_stats)
@@ -409,10 +434,18 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                         inSize = (file_size > inSize) ? inSize : file_size;
                     }
                     rewind(inFp);
+                    if (status != 0)
+                        break;
                 }
 
                 //destroy the codec method
                 aocl_codec_destroy(aocl_codec_handle, i);
+
+                if (status != 0)
+                {
+                    retStatus = status;
+                    continue;
+                }
 
                 if (codec_bench_handle->verify)
                 {
@@ -490,6 +523,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
             codec_bench_handle->cBestTime = 0;
             codec_bench_handle->dBestTime = 0;
             aocl_codec_handle->level = l;
+            status = 0;
 
             //setup the codec method
             aocl_codec_setup(aocl_codec_handle, codec_bench_handle->codec_method);
@@ -503,14 +537,20 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                     inSize = fread(codec_bench_handle->inPtr, 1, inSize, inFp);
 
                     //compress
-                    aocl_codec_handle->inSize = 
-                        aocl_codec_handle->outSize = inSize;
+                    aocl_codec_handle->inSize = inSize;
+                    aocl_codec_handle->outSize = codec_bench_handle->outSize;
                     aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
                     aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
                     resultComp = aocl_codec_compress(aocl_codec_handle,
                                             codec_bench_handle->codec_method);
                     if (resultComp <= 0)
-                        return -1;
+                    {
+                        printf("AOCL-CODEC [%s-%ld] [Filename:%s] Compression: failed\n",
+                            codec_list[codec_bench_handle->codec_method].codec_name,
+                            aocl_codec_handle->level, codec_bench_handle->fName);
+                        status = -1;
+                        break;
+                    }
 
                     //decompress
                     aocl_codec_handle->inSize = resultComp;
@@ -520,7 +560,13 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                     resultDecomp = aocl_codec_decompress(aocl_codec_handle,
                                         codec_bench_handle->codec_method);
                     if (resultDecomp <= 0)
-                        return -1;
+                    {
+                        printf("AOCL-CODEC [%s-%ld] [Filename:%s] Decompression: failed\n",
+                            codec_list[codec_bench_handle->codec_method].codec_name,
+                            aocl_codec_handle->level, codec_bench_handle->fName);
+                        status = -1;
+                        break;
+                    }
 
                     if (codec_bench_handle->verify)
                     {
@@ -533,7 +579,8 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                                 codec_name,
                                 aocl_codec_handle->level,
                                 codec_bench_handle->fName);
-                            return -1;
+                            status = -1;
+                            break;
                         }
                     }
                     if (codec_bench_handle->print_stats)
@@ -561,11 +608,19 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                     inSize = (file_size > inSize) ? inSize : file_size;
                 }
                 rewind(inFp);
+                if (status != 0)
+                    break;
             }
 
             //destroy the codec method
             aocl_codec_destroy(aocl_codec_handle,
                                codec_bench_handle->codec_method);
+
+            if (status != 0)
+            {
+                retStatus = status;
+                continue;
+            }
 
             if (codec_bench_handle->verify)
             {
@@ -613,7 +668,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
     }
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
 
-    return 0;
+    return retStatus;
 }
 
 void destroy(aocl_codec_bench_info *codec_bench_handle)

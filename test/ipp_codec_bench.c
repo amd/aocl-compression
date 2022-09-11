@@ -209,8 +209,8 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
             inSize = fread(codec_bench_handle->inPtr, 1, inSize, inFp);
 
             //compress
-            aocl_codec_handle->inSize = aocl_codec_handle->outSize =
-                /*aocl_codec_handle->chunk_size =*/ inSize;
+            aocl_codec_handle->inSize = inSize;
+            aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
             getTime(startTime);
@@ -327,8 +327,8 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
             inSize = fread(codec_bench_handle->inPtr, 1, inSize, inFp);
 
             //compress
-            aocl_codec_handle->inSize = aocl_codec_handle->outSize =
-                /*aocl_codec_handle->chunk_size =*/ inSize;
+            aocl_codec_handle->inSize = inSize;
+            aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
             getTime(startTime);
@@ -446,8 +446,8 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
             inSize = fread(codec_bench_handle->inPtr, 1, inSize, inFp);
 
             //compress
-            aocl_codec_handle->inSize = aocl_codec_handle->outSize =
-                /*aocl_codec_handle->chunk_size =*/ inSize;
+            aocl_codec_handle->inSize = inSize;
+            aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
             getTime(startTime);

@@ -166,5 +166,5 @@ VOID aocl_codec_destroy(aocl_codec_desc *handle,
 //API to return the compression library version string
 const CHAR *aocl_codec_version(VOID)
 {
-    return LIBRARY_VERSION;
+    return (LIBRARY_VERSION " " AOCL_BUILD_VERSION);
 }
