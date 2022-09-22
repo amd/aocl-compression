@@ -8,7 +8,10 @@ compression and decompression methods which facilitate the applications to
 easily integrate and use them.
 AOCL codec supports lz4, zlib/deflate, lzma, zstd, bzip2, snappy, and lz4hc
 based compression and decompression methods along with their native APIs.
-AOCL Codec framework is developed in C for Unix based systems.
+It supports a dynamic dispatcher feature that executes the most optimal
+function variant implemented using Function Multi-versioning thereby offering
+a single optimized library portable across different x86 CPU architectures.
+AOCL Codec framework is developed in C for Unix and Windows based systems.
 A test suite is provided for validation and performance benchmarking
 of the supported compression and decompression methods. The test suite also
 supports the benchmarking of IPP compression methods like lz4, lz4hc and zlib.

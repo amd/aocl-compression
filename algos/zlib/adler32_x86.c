@@ -40,6 +40,89 @@
 #define DO4(buf,i)  DO2(buf,i); DO2(buf,i+2);
 #define DO8(buf)  DO4(buf,0); DO4(buf,4);
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+#define DO4_C(buf,i)  DO2(buf,i); DO2(buf,i+2);
+#define DO8_C(buf,i)  DO4_C(buf,i); DO4_C(buf,i+4);
+#define DO16(buf)   DO8_C(buf,0); DO8_C(buf,8);
+
+#  define MOD(a) a %= BASE
+#  define MOD28(a) a %= BASE
+#  define MOD63(a) a %= BASE
+
+/* Function pointer holding the optimized variant as per the detected CPU
+ * features */
+static uint32_t (*adler32_x86_fp)(uint32_t adler, const Bytef* buf, z_size_t len);
+
+/* Replicated adler32_z() function to make a plain C version that is selected when
+ * optimizations are turned off */
+static inline uint32_t adler32_x86_c(uint32_t adler, const Bytef* buf, z_size_t len) {
+    unsigned long sum_B;
+    unsigned long sum_A;
+    unsigned n;
+
+    /* split Adler-32 into component sums */
+    sum_B = (adler >> 16) & 0xffff;
+    sum_A = adler & 0xffff;
+
+    /* in case user likes doing a byte at a time, keep it fast */
+    if (len == 1) {
+        sum_A += buf[0];
+        if (sum_A >= BASE)
+            sum_A -= BASE;
+        sum_B += sum_A;
+        if (sum_B >= BASE)
+            sum_B -= BASE;
+        return sum_A | (sum_B << 16);
+    }
+
+    /* initial sum_A-32 value (deferred check for len == 1 speed) */
+    if (buf == Z_NULL)
+        return 1L;
+
+    /* in case short lengths are provided, keep it somewhat fast */
+    if (len < 16) {
+        while (len--) {
+            sum_A += *buf++;
+            sum_B += sum_A;
+        }
+        if (sum_A >= BASE)
+            sum_A -= BASE;
+        MOD28(sum_B);            /* only added so many BASE's */
+        return sum_A | (sum_B << 16);
+    }
+
+    /* do length NMAX blocks -- requires just one modulo operation */
+    while (len >= NMAX) {
+        len -= NMAX;
+        n = NMAX / 16;          /* NMAX is divisible by 16 */
+        do {
+            DO16(buf);          /* 16 sums unrolled */
+            buf += 16;
+        } while (--n);
+        MOD(sum_A);
+        MOD(sum_B);
+    }
+
+    /* do remaining bytes (less than NMAX, still just one modulo) */
+    if (len) {                  /* avoid modulos if none remaining */
+        while (len >= 16) {
+            len -= 16;
+            DO16(buf);
+            buf += 16;
+        }
+        while (len--) {
+            sum_A += *buf++;
+            sum_B += sum_A;
+        }
+        MOD(sum_A);
+        MOD(sum_B);
+    }
+
+    /* return recombined sums */
+    return sum_A | (sum_B << 16);
+}
+#endif
+
 // This function separation prevents compiler from generating VZEROUPPER instruction
 // because of transition from VEX to Non-VEX code resulting in performance drop
 uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_t len) {
@@ -203,12 +286,14 @@ static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size
 
         vbs = _mm256_add_epi32(vbs, _mm256_shuffle_epi32(vbs, _MM_SHUFFLE(1,0,3,2)));
 
-        sum_A += _mm256_cvtsi256_si32(vbs);
+        //sum_A += _mm256_cvtsi256_si32(vbs);
+        sum_A += _mm256_extract_epi32(vbs, 0);
 
         vcs = _mm256_add_epi32(vcs, _mm256_shuffle_epi32(vcs, _MM_SHUFFLE(2,3,0,1)));
         vcs = _mm256_add_epi32(vcs, _mm256_shuffle_epi32(vcs, _MM_SHUFFLE(1,0,3,2)));
 
-        sum_B = _mm256_cvtsi256_si32(vcs);
+        //sum_B = _mm256_cvtsi256_si32(vcs);
+        sum_B = _mm256_extract_epi32(vcs, 0);
 
         sum_A %= BASE;
         sum_B %= BASE;
@@ -217,9 +302,40 @@ static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size
 }
 
 uint32_t ZLIB_INTERNAL adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len) {
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    return adler32_x86_fp(adler, buf, len);
+#else
 #ifdef AOCL_AVX2_OPT
     return adler32_x86_avx2(adler, buf, len);
 #else
     return adler32_x86_sse(adler, buf, len);
 #endif
+#endif
 }
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+void aocl_setup_adler32_fmv(int optOff, int optLevel,
+                            int insize, int level, int windowLog) {
+    if (optOff)
+    {
+        adler32_x86_fp = adler32_x86_c;
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case 0:
+            adler32_x86_fp = adler32_x86_c;
+            break;
+        case 1:
+            adler32_x86_fp = adler32_x86_sse;
+            break;
+        case 2:
+        case 3:
+        default:
+            adler32_x86_fp = adler32_x86_avx2;
+            break;
+        }
+    }
+}
+#endif

@@ -346,4 +346,12 @@ void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
               flush = _tr_tally(s, distance, length)
 #endif
 
+/* AOCL-Compression defined register routine to setup the appropriate function
+ * variant out of the multiple function versions for performing the 
+ * hash sliding operation. */
+#ifdef AOCL_DYNAMIC_DISPATCHER
+void aocl_register_slide_hash_fmv(int optOff, int optLevel, 
+                                  void (*slide_hash_c_fp)(deflate_state* s));
+#endif
+
 #endif /* DEFLATE_H */

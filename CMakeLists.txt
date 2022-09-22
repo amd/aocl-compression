@@ -168,7 +168,7 @@ message(STATUS "C Compiler flags used for this windows build are: ${CMAKE_C_FLAG
 message(STATUS "C++ Compiler flags used for this windows build are: ${CMAKE_CXX_FLAGS}")
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_EXPECT=1")
 elseif (UNIX)
-set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-mavx2")
+set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_FLAGS "-mavx -mavx2")
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_FLAGS "-msse4.1 -mavx -mavx2 -mbmi2")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing -ffast-math")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing -ffast-math")
@@ -197,6 +197,7 @@ set(SRC_FILES
         ${ZLIB_SRC_FILES}
         ${ZSTD_SRC_FILES}
 	)
+set_source_files_properties(${SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
 if (BUILD_STATIC_LIBS)
 	add_library(${lib_name} STATIC ${SRC_FILES})
 	message(STATUS "Library type being built is: Static")

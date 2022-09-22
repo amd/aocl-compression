@@ -228,6 +228,47 @@ local void slide_hash(s)
     } while (--n);
 #endif
 }
+#else
+#ifdef AOCL_DYNAMIC_DISPATCHER
+local void slide_hash_c(s)
+deflate_state* s;
+{
+    unsigned n, m;
+    Posf* p;
+    uInt wsize = s->w_size;
+
+    n = s->hash_size;
+    p = &s->head[n];
+    do {
+        m = *--p;
+        *p = (Pos)(m >= wsize ? m - wsize : NIL);
+    } while (--n);
+    n = wsize;
+#ifndef FASTEST
+    p = &s->prev[n];
+    do {
+        m = *--p;
+        *p = (Pos)(m >= wsize ? m - wsize : NIL);
+        /* If n is not on any hash chain, prev[n] is garbage but
+         * its value will never be used.
+         */
+    } while (--n);
+#endif
+}
+#endif
+#endif
+
+/* AOCL-Compression defined setup function that sets up ZLIB with the right
+*  AMD optimized zlib routines depending upon the CPU features. */
+#ifdef AOCL_DYNAMIC_DISPATCHER
+ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv(int optOff, int optLevel, int insize,
+    int level, int windowLog)
+{
+#ifdef AOCL_ZLIB_HASHING_OPT
+    aocl_register_slide_hash_fmv(optOff, optLevel, slide_hash_c);
+#endif
+    return NULL;
+}
 #endif
 
 /* ========================================================================= */

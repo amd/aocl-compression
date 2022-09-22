@@ -31,6 +31,12 @@
 #include "zconf.h"
 #include "deflate.h"
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+/* Function pointer holding the optimized variant as per the detected CPU 
+ * features */
+static void (*slide_hash_fp)(deflate_state* s);
+#endif
+
 static inline void slide_hash_av(deflate_state *s) {
     const uInt wsize = s->w_size;
     const uInt hchnsz = s->hash_size;
@@ -79,10 +85,41 @@ static inline void slide_hash_avx2(deflate_state *s) {
 
 #ifdef AOCL_ZLIB_HASHING_OPT
 ZLIB_INTERNAL void slide_hash(deflate_state *s) {
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    return slide_hash_fp(s);
+#else
 #ifdef AOCL_AVX2_OPT
     return slide_hash_avx2(s);
 #else
     return slide_hash_av(s);
 #endif
+#endif
+}
+#endif
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+void aocl_register_slide_hash_fmv(int optOff, int optLevel,
+                                  void (*slide_hash_c_fp)(deflate_state* s)) {
+    if (optOff)
+    {
+        slide_hash_fp = slide_hash_c_fp;
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case 0:
+            slide_hash_fp = slide_hash_c_fp;
+            break;
+        case 1:
+            slide_hash_fp = slide_hash_av;
+            break;
+        case 2:
+        case 3:
+        default:
+            slide_hash_fp = slide_hash_avx2;
+            break;
+        }
+    }
 }
 #endif

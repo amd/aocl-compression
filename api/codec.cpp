@@ -85,23 +85,23 @@ CHAR *aocl_bzip2_setup(INTP optOff, INTP optLevel,
 INT64 aocl_bzip2_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 
 						  UINTP outsize, UINTP level, UINTP windowLog, CHAR *)
 {
-   UINT32 outSizeL = outsize;
-   if (BZ2_bzBuffToBuffCompress((CHAR *)outbuf, &outSizeL, (CHAR *)inbuf, 
+    UINT32 outSizeL = outsize;
+    if (BZ2_bzBuffToBuffCompress((CHAR *)outbuf, &outSizeL, (CHAR *)inbuf, 
 	   (UINTP)insize, level, 0, 0)==BZ_OK)
-	   return outSizeL;
-   else
-	   return -1;
+        return outSizeL;
+    else
+        return -1;
 }
 
 INT64 aocl_bzip2_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 
 							UINTP outsize, UINTP level, UINTP, CHAR *)
 {
-   UINT32 outSizeL = outsize;
-   if (BZ2_bzBuffToBuffDecompress((CHAR *)outbuf, &outSizeL, (CHAR *)inbuf, 
+    UINT32 outSizeL = outsize;
+    if (BZ2_bzBuffToBuffDecompress((CHAR *)outbuf, &outSizeL, (CHAR *)inbuf, 
 	   (UINTP)insize, 0, 0)==BZ_OK)
-	   return outSizeL;
-   else
-	   return -1;
+        return outSizeL;
+    else
+        return -1;
 }
 #endif
 
@@ -111,20 +111,23 @@ INT64 aocl_bzip2_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 CHAR *aocl_lz4_setup(INTP optOff, INTP optLevel,
                      UINTP insize, UINTP level, UINTP windowLog)
 {
-    //ToDo: Implement a new lz4 API for setup
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    return aocl_setup_lz4(optOff, optLevel, insize, level, windowLog);
+#else
     return NULL;
+#endif
 }
 
 INT64 aocl_lz4_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                         UINTP outsize, UINTP level, UINTP, CHAR *)
 {
-	return LZ4_compress_default(inbuf, outbuf, insize, outsize);
+    return LZ4_compress_default(inbuf, outbuf, insize, outsize);
 }
 
 INT64 aocl_lz4_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                           UINTP outsize, UINTP level, UINTP, CHAR *)
 {
-	return LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
+    return LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
 }
 #endif
 
@@ -141,13 +144,13 @@ CHAR *aocl_lz4hc_setup(INTP optOff, INTP optLevel,
 INT64 aocl_lz4hc_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                           UINTP outsize, UINTP level, UINTP, CHAR *)
 {
-	return LZ4_compress_HC(inbuf, outbuf, insize, outsize, level);
+    return LZ4_compress_HC(inbuf, outbuf, insize, outsize, level);
 }
 
 INT64 aocl_lz4hc_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 							UINTP outsize, UINTP, UINTP, CHAR *)
 {
-	return LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
+    return LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
 }
 #endif
 
@@ -164,37 +167,37 @@ CHAR *aocl_lzma_setup(INTP optOff, INTP optLevel,
 INT64 aocl_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                          UINTP outsize, UINTP level, UINTP, CHAR *)
 {
-	CLzmaEncProps encProps;
-	INTP res;
-        UINTP headerSize = LZMA_PROPS_SIZE;
-	SizeT outLen = outsize - LZMA_PROPS_SIZE;
+    CLzmaEncProps encProps;
+    INTP res;
+    UINTP headerSize = LZMA_PROPS_SIZE;
+    SizeT outLen = outsize - LZMA_PROPS_SIZE;
 	
-	LzmaEncProps_Init(&encProps);
-	encProps.level = level;
-	LzmaEncProps_Normalize(&encProps);
+    LzmaEncProps_Init(&encProps);
+    encProps.level = level;
+    LzmaEncProps_Normalize(&encProps);
 
-  	res = LzmaEncode((UINT8 *)outbuf+LZMA_PROPS_SIZE, &outLen, (UINT8 *)inbuf, 
-				     insize, &encProps, (UINT8 *)outbuf, &headerSize, 0, NULL, 
-					 &g_Alloc, &g_Alloc);
-	if (res != SZ_OK)
-		return 0;
+    res = LzmaEncode((UINT8 *)outbuf+LZMA_PROPS_SIZE, &outLen, (UINT8 *)inbuf, 
+                     insize, &encProps, (UINT8 *)outbuf, &headerSize, 0, NULL, 
+                     &g_Alloc, &g_Alloc);
+    if (res != SZ_OK)
+        return 0;
 	
-	return LZMA_PROPS_SIZE + outLen;
+    return LZMA_PROPS_SIZE + outLen;
 }
 
 INT64 aocl_lzma_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 						   UINTP outsize, UINTP, UINTP, CHAR *)
 {
-	INTP res;
-	SizeT outLen = outsize;
-	SizeT srcLen = insize - LZMA_PROPS_SIZE;
-	ELzmaStatus status;
+    INTP res;
+    SizeT outLen = outsize;
+    SizeT srcLen = insize - LZMA_PROPS_SIZE;
+    ELzmaStatus status;
 	
-	res = LzmaDecode((UINT8 *)outbuf, &outLen, (UINT8 *)inbuf+LZMA_PROPS_SIZE, 
-					 &srcLen, (UINT8 *)inbuf, LZMA_PROPS_SIZE, LZMA_FINISH_END,
-					 &status, &g_Alloc);
-	if (res != SZ_OK)
-		return 0;
+    res = LzmaDecode((UINT8 *)outbuf, &outLen, (UINT8 *)inbuf+LZMA_PROPS_SIZE, 
+                     &srcLen, (UINT8 *)inbuf, LZMA_PROPS_SIZE, LZMA_FINISH_END,
+                     &status, &g_Alloc);
+    if (res != SZ_OK)
+        return 0;
 
     return outLen;
 }
@@ -205,22 +208,25 @@ INT64 aocl_lzma_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 CHAR *aocl_snappy_setup(INTP optOff, INTP optLevel,
                         UINTP insize, UINTP level, UINTP windowLog)
 {
-    //ToDo: Implement a new snappy API for setup
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    return snappy::aocl_setup_snappy(optOff, optLevel, insize, level, windowLog);
+#else
     return NULL;
+#endif
 }
 
 INT64 aocl_snappy_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 
 						   UINTP outsize, UINTP, UINTP, CHAR *)
 {
-	snappy::RawCompress(inbuf, insize, outbuf, &outsize);
-	return outsize;
+    snappy::RawCompress(inbuf, insize, outbuf, &outsize);
+    return outsize;
 }
 
 INT64 aocl_snappy_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 
 							 UINTP outsize, UINTP, UINTP, CHAR *)
 {
-	snappy::RawUncompress(inbuf, insize, outbuf);
-	return outsize;
+    snappy::RawUncompress(inbuf, insize, outbuf);
+    return outsize;
 }
 #endif
 
@@ -229,29 +235,32 @@ INT64 aocl_snappy_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 CHAR *aocl_zlib_setup(INTP optOff, INTP optLevel,
                       UINTP insize, UINTP level, UINTP windowLog)
 {
-    //ToDo: Implement a new zlib API for setup
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    return aocl_setup_zlib (optOff, optLevel, insize, level, windowLog);
+#else
     return NULL;
+#endif
 }
 
 INT64 aocl_zlib_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                          UINTP outsize, UINTP level, UINTP, CHAR *)
 {
-	uLongf zencLen = outsize;
-	INTP res = compress2((UINT8 *)outbuf, &zencLen, 
-						(UINT8 *)inbuf, insize, level);
-	if (res != Z_OK)
-		return 0;
-	return zencLen;
+    uLongf zencLen = outsize;
+    INTP res = compress2((UINT8 *)outbuf, &zencLen, 
+                         (UINT8 *)inbuf, insize, level);
+    if (res != Z_OK)
+        return 0;
+    return zencLen;
 }
 
 INT64 aocl_zlib_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 
 						   UINTP outsize, UINTP, UINTP, CHAR *)
 {
-	uLongf zdecLen = outsize;
-	INTP res = uncompress((UINT8*)outbuf, &zdecLen, (UINT8 *)inbuf, insize);
-	if (res != Z_OK)
-		return 0;
-	return zdecLen;
+    uLongf zdecLen = outsize;
+    INTP res = uncompress((UINT8*)outbuf, &zdecLen, (UINT8 *)inbuf, insize);
+    if (res != Z_OK)
+        return 0;
+    return zdecLen;
 }
 #endif
 
@@ -315,10 +324,10 @@ INT64 aocl_zstd_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 			(zstd_params->zparams.cParams.strategy == ZSTD_btultra));
     }
     res = ZSTD_compress_advanced(zstd_params->cctx, outbuf, outsize, inbuf, 
-								 insize, NULL, 0, zstd_params->zparams);
+                                insize, NULL, 0, zstd_params->zparams);
 
     if (ZSTD_isError(res))
-		return res;
+        return res;
 
     return res;
 }
@@ -328,9 +337,9 @@ INT64 aocl_zstd_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 {
     zstd_params_t *zstd_params = (zstd_params_t *) workmem;
     if (!zstd_params || !zstd_params->dctx)
-		return 0;
+        return 0;
 
     return ZSTD_decompressDCtx(zstd_params->dctx, outbuf, outsize, 
-							   inbuf, insize);
+                               inbuf, insize);
 }
 #endif

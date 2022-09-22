@@ -187,6 +187,13 @@ namespace snappy {
   // unspecified prefix of *compressed.
   bool IsValidCompressed(Source* compressed);
 
+  /* AOCL-Compression defined setup function that configures with the right
+*  AMD optimized snappy routines depending upon the detected CPU features. */
+#ifdef AOCL_DYNAMIC_DISPATCHER
+  char * aocl_setup_snappy(int optOff, int optLevel, size_t insize,
+                           size_t level, size_t windowLog);
+#endif
+
   // The size of a compression block. Note that many parts of the compression
   // code assumes that kBlockSize <= 65536; in particular, the hash table
   // can only store 16-bit offsets, and EmitCopy() also assumes the offset

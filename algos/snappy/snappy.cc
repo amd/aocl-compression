@@ -1548,6 +1548,35 @@ size_t Compress(const char* input, size_t input_length,
   return compressed_length;
 }
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+static void aocl_register_snappy_fmv(int optOff, int optLevel) {
+    if (optOff)
+    {
+        //C version
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case 0://C version
+            break;
+        case 1://SSE version
+            break;
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            break;
+        }
+    }
+}
+
+char* aocl_setup_snappy(int optOff, int optLevel, size_t insize,
+    size_t level, size_t windowLog) {
+    aocl_register_snappy_fmv(optOff, optLevel);
+    return NULL;
+}
+#endif
+
 // -----------------------------------------------------------------------
 // Sink interface
 // -----------------------------------------------------------------------

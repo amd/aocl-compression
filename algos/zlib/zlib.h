@@ -1905,6 +1905,19 @@ ZEXTERN int            ZEXPORTVA gzvprintf Z_ARG((gzFile file,
 #  endif
 #endif
 
+/* AOCL-Compression defined setup functions that configure ZLIB with the right 
+*  AMD optimized zlib routines depending upon the detected CPU features. */
+#ifdef AOCL_DYNAMIC_DISPATCHER
+ZEXTERN char * ZEXPORT aocl_setup_zlib OF((int optOff, int optLevel,
+                                        int insize, int level, int windowLog));
+ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv OF((int optOff, int optLevel,
+                                        int insize, int level, int windowLog));
+/*ZEXTERN int ZEXPORT aocl_setup_inflate_fmv OF((int optOff, int optLevel,
+                                        int insize, int level, int windowLog));*/
+ZEXTERN void ZEXPORT aocl_setup_adler32_fmv OF((int optOff, int optLevel,
+                                        int insize, int level, int windowLog));
+#endif
+
 #ifdef __cplusplus
 }
 #endif

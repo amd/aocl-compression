@@ -265,6 +265,13 @@ LZ4LIB_API int LZ4_compress_destSize (const char* src, char* dst, int* srcSizePt
 LZ4LIB_API int LZ4_decompress_safe_partial (const char* src, char* dst, int srcSize, int targetOutputSize, int dstCapacity);
 
 
+/* AOCL-Compression defined setup function that configures with the right
+*  AMD optimized lz4 routines depending upon the detected CPU features. */
+#ifdef AOCL_DYNAMIC_DISPATCHER
+char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
+    size_t level, size_t windowLog);
+#endif
+
 /*-*********************************************
 *  Streaming Compression Functions
 ***********************************************/
