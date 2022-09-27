@@ -87,6 +87,7 @@ set (ZLIB_SRC_FILES	${ALGOS_PATH}/zlib/adler32.c
 					${ALGOS_PATH}/zlib/inffast.c
 					${ALGOS_PATH}/zlib/inflate.c
 					${ALGOS_PATH}/zlib/inftrees.c
+					${ALGOS_PATH}/zlib/longest_match_x86.c
 					${ALGOS_PATH}/zlib/slide_hash_x86.c
 					${ALGOS_PATH}/zlib/trees.c
 					${ALGOS_PATH}/zlib/uncompr.c

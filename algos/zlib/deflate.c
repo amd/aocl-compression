@@ -99,6 +99,10 @@ local unsigned read_buf   OF((z_streamp strm, Bytef *buf, unsigned size));
 local uInt longest_match  OF((deflate_state *s, IPos cur_match));
 #endif
 
+#ifdef AOCL_LONGEST_MATCH_OPT
+extern uInt longest_match_x86 (deflate_state *s, IPos cur_match);
+#endif
+
 #ifdef ZLIB_DEBUG
 local  void check_match OF((deflate_state *s, IPos start, IPos match,
                             int length));
@@ -266,6 +270,9 @@ ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv(int optOff, int optLevel, int insi
 {
 #ifdef AOCL_ZLIB_HASHING_OPT
     aocl_register_slide_hash_fmv(optOff, optLevel, slide_hash_c);
+#endif
+#ifdef AOCL_LONGEST_MATCH_OPT
+    aocl_register_longest_match_fmv(optOff, optLevel, longest_match);
 #endif
     return NULL;
 }
@@ -1905,7 +1912,14 @@ local block_state deflate_fast(s, flush)
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
+#ifndef AOCL_LONGEST_MATCH_OPT
             s->match_length = longest_match (s, hash_head);
+#else
+            if(s->level == 1)
+                s->match_length = longest_match (s, hash_head);
+            else
+                s->match_length = longest_match_x86 (s, hash_head);
+#endif
             /* longest_match() sets match_start */
         }
         if (s->match_length >= MIN_MATCH) {
@@ -2011,7 +2025,14 @@ local block_state deflate_slow(s, flush)
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
+#ifndef AOCL_LONGEST_MATCH_OPT
             s->match_length = longest_match (s, hash_head);
+#else
+            if(s->level == 1)
+                s->match_length = longest_match (s, hash_head);
+            else
+                s->match_length = longest_match_x86 (s, hash_head);
+#endif
             /* longest_match() sets match_start */
 
             if (s->match_length <= 5 && (s->strategy == Z_FILTERED

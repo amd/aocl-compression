@@ -538,6 +538,7 @@ typedef uLong FAR uLongf;
 #ifdef AOCL_ZLIB_OPT
 #  define AOCL_ZLIB_ADLER32_OPT_SIMD
 #  define AOCL_ZLIB_HASHING_OPT
+#  define AOCL_LONGEST_MATCH_OPT
 #endif
 
 #endif /* ZCONF_H */
