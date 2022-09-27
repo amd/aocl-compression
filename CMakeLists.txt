@@ -45,6 +45,7 @@ add_compile_definitions(AOCL_BUILD_VERSION="Build ${TODAY}")
 
 if (WIN32)
 option (BUILD_STATIC_LIBS "Build static library (Default build type is shared library)" OFF)
+option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Disabled by default)" OFF)
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
 endif()
 
@@ -176,6 +177,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -f
 message(STATUS "C Compiler flags used for this Unix build are: ${CMAKE_C_FLAGS}")
 message(STATUS "C++ Compiler flags used for this Unix build are: ${CMAKE_CXX_FLAGS}")
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
+endif()
+
+if (SNAPPY_MATCH_SKIP_OPT)
+  set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_MATCH_SKIP_OPT")
 endif()
 
 

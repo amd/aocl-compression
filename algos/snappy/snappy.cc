@@ -567,6 +567,12 @@ char* CompressFragment(const char* input,
       // The "skip" variable keeps track of how many bytes there are since the
       // last match; dividing it by 32 (ie. right-shifting by five) gives the
       // number of bytes to move ahead for each iteration.
+      //
+      // If AOCL match skipping optimization is enabled, the number of bytes
+      // skipped while checking for a match is double that as compared to regular
+      // skipping. This way, every 32 unmatched bytes, instead of skipping by
+      // (skip / 32) we skip by (skip / 32) * 2
+
       uint32_t skip = 32;
 
       const char* candidate;
@@ -606,8 +612,14 @@ char* CompressFragment(const char* input,
       while (true) {
         assert(static_cast<uint32_t>(data) == LittleEndian::Load32(ip));
         uint32_t hash = HashBytes(data, shift);
+
+#ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
+        uint32_t bytes_between_hash_lookups = (skip >> 5) << 1;
+        skip += (skip >> 5);
+#else
         uint32_t bytes_between_hash_lookups = skip >> 5;
         skip += bytes_between_hash_lookups;
+#endif
         const char* next_ip = ip + bytes_between_hash_lookups;
 #ifdef AOCL_SNAPPY_OPT_FLAGS
         if (next_ip > ip_limit) {
