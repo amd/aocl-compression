@@ -109,6 +109,133 @@ static inline std::pair<size_t, bool> FindMatchLength(const char* s1,
   // uncommon code paths that determine, without extra effort, whether the match
   // length is less than 8.  In short, we are hoping to avoid a conditional
   // branch, and perhaps get better code layout from the C++ compiler.
+  if (SNAPPY_PREDICT_TRUE(s2 <= s2_limit - 16)) {
+    uint64_t a1 = UNALIGNED_LOAD64(s1);
+    uint64_t a2 = UNALIGNED_LOAD64(s2);
+    if (SNAPPY_PREDICT_TRUE(a1 != a2)) {
+      // This code is critical for performance. The reason is that it determines
+      // how much to advance `ip` (s2). This obviously depends on both the loads
+      // from the `candidate` (s1) and `ip`. Furthermore the next `candidate`
+      // depends on the advanced `ip` calculated here through a load, hash and
+      // new candidate hash lookup (a lot of cycles). This makes s1 (ie.
+      // `candidate`) the variable that limits throughput. This is the reason we
+      // go through hoops to have this function update `data` for the next iter.
+      // The straightforward code would use *data, given by
+      //
+      // *data = UNALIGNED_LOAD64(s2 + matched_bytes) (Latency of 5 cycles),
+      //
+      // as input for the hash table lookup to find next candidate. However
+      // this forces the load on the data dependency chain of s1, because
+      // matched_bytes directly depends on s1. However matched_bytes is 0..7, so
+      // we can also calculate *data by
+      //
+      // *data = AlignRight(UNALIGNED_LOAD64(s2), UNALIGNED_LOAD64(s2 + 8),
+      //                    matched_bytes);
+      //
+      // The loads do not depend on s1 anymore and are thus off the bottleneck.
+      // The straightforward implementation on x86_64 would be to use
+      //
+      // shrd rax, rdx, cl  (cl being matched_bytes * 8)
+      //
+      // unfortunately shrd with a variable shift has a 4 cycle latency. So this
+      // only wins 1 cycle. The BMI2 shrx instruction is a 1 cycle variable
+      // shift instruction but can only shift 64 bits. If we focus on just
+      // obtaining the least significant 4 bytes, we can obtain this by
+      //
+      // *data = ConditionalMove(matched_bytes < 4, UNALIGNED_LOAD64(s2),
+      //     UNALIGNED_LOAD64(s2 + 4) >> ((matched_bytes & 3) * 8);
+      //
+      // Writen like above this is not a big win, the conditional move would be
+      // a cmp followed by a cmov (2 cycles) followed by a shift (1 cycle).
+      // However matched_bytes < 4 is equal to
+      // static_cast<uint32_t>(xorval) != 0. Writen that way, the conditional
+      // move (2 cycles) can execute in parallel with FindLSBSetNonZero64
+      // (tzcnt), which takes 3 cycles.
+      uint64_t xorval = a1 ^ a2;
+      int shift = Bits::FindLSBSetNonZero64(xorval);
+      size_t matched_bytes = shift >> 3;
+#ifndef __x86_64__
+      *data = UNALIGNED_LOAD64(s2 + matched_bytes);
+#else
+      // Ideally this would just be
+      //
+      // a2 = static_cast<uint32_t>(xorval) == 0 ? a3 : a2;
+      //
+      // However clang correctly infers that the above statement participates on
+      // a critical data dependency chain and thus, unfortunately, refuses to
+      // use a conditional move (it's tuned to cut data dependencies). In this
+      // case there is a longer parallel chain anyway AND this will be fairly
+      // unpredictable.
+      uint64_t a3 = UNALIGNED_LOAD64(s2 + 4);
+      asm("testl %k2, %k2\n\t"
+          "cmovzq %1, %0\n\t"
+          : "+r"(a2)
+          : "r"(a3), "r"(xorval));
+      *data = a2 >> (shift & (3 * 8));
+#endif
+      return std::pair<size_t, bool>(matched_bytes, true);
+    } else {
+      matched = 8;
+      s2 += 8;
+    }
+  }
+
+  // Find out how long the match is. We loop over the data 64 bits at a
+  // time until we find a 64-bit block that doesn't match; then we find
+  // the first non-matching bit and use that to calculate the total
+  // length of the match.
+  while (SNAPPY_PREDICT_TRUE(s2 <= s2_limit - 16)) {
+    uint64_t a1 = UNALIGNED_LOAD64(s1 + matched);
+    uint64_t a2 = UNALIGNED_LOAD64(s2);
+    if (a1 == a2) {
+      s2 += 8;
+      matched += 8;
+    } else {
+      uint64_t xorval = a1 ^ a2;
+      int shift = Bits::FindLSBSetNonZero64(xorval);
+      size_t matched_bytes = shift >> 3;
+#ifndef __x86_64__
+      *data = UNALIGNED_LOAD64(s2 + matched_bytes);
+#else
+      uint64_t a3 = UNALIGNED_LOAD64(s2 + 4);
+      asm("testl %k2, %k2\n\t"
+          "cmovzq %1, %0\n\t"
+          : "+r"(a2)
+          : "r"(a3), "r"(xorval));
+      *data = a2 >> (shift & (3 * 8));
+#endif
+      matched += matched_bytes;
+      assert(matched >= 8);
+      return std::pair<size_t, bool>(matched, false);
+    }
+  }
+  while (SNAPPY_PREDICT_TRUE(s2 < s2_limit)) {
+    if (s1[matched] == *s2) {
+      ++s2;
+      ++matched;
+    } else {
+      if (s2 <= s2_limit - 8) {
+        *data = UNALIGNED_LOAD64(s2);
+      }
+      return std::pair<size_t, bool>(matched, matched < 8);
+    }
+  }
+  return std::pair<size_t, bool>(matched, matched < 8);
+}
+
+
+static inline std::pair<size_t, bool> AOCL_FindMatchLength(const char* s1,
+                                                      const char* s2,
+                                                      const char* s2_limit,
+                                                      uint64_t* data) {
+  assert(s2_limit >= s2);
+  size_t matched = 0;
+
+  // This block isn't necessary for correctness; we could just start looping
+  // immediately.  As an optimization though, it is useful.  It creates some not
+  // uncommon code paths that determine, without extra effort, whether the match
+  // length is less than 8.  In short, we are hoping to avoid a conditional
+  // branch, and perhaps get better code layout from the C++ compiler.
 #ifdef AOCL_SNAPPY_OPT_FLAGS
   if (s2 <= s2_limit - 16) {
 #else

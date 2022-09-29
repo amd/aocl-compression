@@ -74,6 +74,12 @@
 #include <string>
 #include <vector>
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+static char* (*SNAPPY_compress_fragment_fp)(const char* input, 
+  size_t input_size, char* op, 
+  uint16_t* table, const int table_size);
+#endif
+
 namespace snappy {
 
 // The amount of slop bytes writers are using for unconditional copies.
@@ -425,6 +431,37 @@ static inline char* EmitCopy(char* op, size_t offset, size_t len) {
     // it's in the noise.
 
     // Emit 64 byte copies but make sure to keep at least four bytes reserved.
+    while (SNAPPY_PREDICT_FALSE(len >= 68)) {
+      op = EmitCopyAtMost64</*len_less_than_12=*/false>(op, offset, 64);
+      len -= 64;
+    }
+
+    // One or two copies will now finish the job.
+    if (len > 64) {
+      op = EmitCopyAtMost64</*len_less_than_12=*/false>(op, offset, 60);
+      len -= 60;
+    }
+
+    // Emit remainder.
+    if (len < 12) {
+      op = EmitCopyAtMost64</*len_less_than_12=*/true>(op, offset, len);
+    } else {
+      op = EmitCopyAtMost64</*len_less_than_12=*/false>(op, offset, len);
+    }
+    return op;
+  }
+}
+
+template <bool len_less_than_12>
+static inline char* AOCL_EmitCopy(char* op, size_t offset, size_t len) {
+  assert(len_less_than_12 == (len < 12));
+  if (len_less_than_12) {
+    return EmitCopyAtMost64</*len_less_than_12=*/true>(op, offset, len);
+  } else {
+    // A special case for len <= 64 might help, but so far measurements suggest
+    // it's in the noise.
+
+    // Emit 64 byte copies but make sure to keep at least four bytes reserved.
 #ifdef AOCL_SNAPPY_OPT_FLAGS
     while (len >= 68) {
 #else
@@ -530,11 +567,7 @@ char* CompressFragment(const char* input,
   const char* base_ip = ip;
 
   const size_t kInputMarginBytes = 15;
-#ifdef AOCL_SNAPPY_OPT_FLAGS
-  if (input_size >= kInputMarginBytes) {
-#else
   if (SNAPPY_PREDICT_TRUE(input_size >= kInputMarginBytes)) {
-#endif  
     const char* ip_limit = input + input_size - kInputMarginBytes;
 
     for (uint32_t preload = LittleEndian::Load32(ip + 1);;) {
@@ -542,6 +575,183 @@ char* CompressFragment(const char* input,
       // [next_emit, ip_end) after the main loop.
       const char* next_emit = ip++;
       uint64_t data = LittleEndian::Load64(ip);
+      // The body of this loop calls EmitLiteral once and then EmitCopy one or
+      // more times.  (The exception is that when we're close to exhausting
+      // the input we goto emit_remainder.)
+      //
+      // In the first iteration of this loop we're just starting, so
+      // there's nothing to copy, so calling EmitLiteral once is
+      // necessary.  And we only start a new iteration when the
+      // current iteration has determined that a call to EmitLiteral will
+      // precede the next call to EmitCopy (if any).
+      //
+      // Step 1: Scan forward in the input looking for a 4-byte-long match.
+      // If we get close to exhausting the input then goto emit_remainder.
+      //
+      // Heuristic match skipping: If 32 bytes are scanned with no matches
+      // found, start looking only at every other byte. If 32 more bytes are
+      // scanned (or skipped), look at every third byte, etc.. When a match is
+      // found, immediately go back to looking at every byte. This is a small
+      // loss (~5% performance, ~0.1% density) for compressible data due to more
+      // bookkeeping, but for non-compressible data (such as JPEG) it's a huge
+      // win since the compressor quickly "realizes" the data is incompressible
+      // and doesn't bother looking for matches everywhere.
+      //
+      // The "skip" variable keeps track of how many bytes there are since the
+      // last match; dividing it by 32 (ie. right-shifting by five) gives the
+      // number of bytes to move ahead for each iteration.
+      uint32_t skip = 32;
+
+      const char* candidate;
+      if (ip_limit - ip >= 16) {
+        auto delta = ip - base_ip;
+        for (int j = 0; j < 4; ++j) {
+          for (int k = 0; k < 4; ++k) {
+            int i = 4 * j + k;
+            // These for-loops are meant to be unrolled. So we can freely
+            // special case the first iteration to use the value already
+            // loaded in preload.
+            uint32_t dword = i == 0 ? preload : static_cast<uint32_t>(data);
+            assert(dword == LittleEndian::Load32(ip + i));
+            uint32_t hash = HashBytes(dword, shift);
+            candidate = base_ip + table[hash];
+            assert(candidate >= base_ip);
+            assert(candidate < ip + i);
+            table[hash] = delta + i;
+            if (SNAPPY_PREDICT_FALSE(LittleEndian::Load32(candidate) == dword)) {
+              *op = LITERAL | (i << 2);
+              UnalignedCopy128(next_emit, op + 1);
+              ip += i;
+              op = op + i + 2;
+              goto emit_match;
+            }
+            data >>= 8;
+          }
+          data = LittleEndian::Load64(ip + 4 * j + 4);
+        }
+        ip += 16;
+        skip += 16;
+      }
+      while (true) {
+        assert(static_cast<uint32_t>(data) == LittleEndian::Load32(ip));
+        uint32_t hash = HashBytes(data, shift);
+        uint32_t bytes_between_hash_lookups = skip >> 5;
+        skip += bytes_between_hash_lookups;
+        const char* next_ip = ip + bytes_between_hash_lookups;
+        if (SNAPPY_PREDICT_FALSE(next_ip > ip_limit)) {
+          ip = next_emit;
+          goto emit_remainder;
+        }
+        candidate = base_ip + table[hash];
+        assert(candidate >= base_ip);
+        assert(candidate < ip);
+
+        table[hash] = ip - base_ip;
+        if (SNAPPY_PREDICT_FALSE(static_cast<uint32_t>(data) ==
+                                LittleEndian::Load32(candidate))) {
+          break;
+        }
+        data = LittleEndian::Load32(next_ip);
+        ip = next_ip;
+      }
+
+      // Step 2: A 4-byte match has been found.  We'll later see if more
+      // than 4 bytes match.  But, prior to the match, input
+      // bytes [next_emit, ip) are unmatched.  Emit them as "literal bytes."
+      assert(next_emit + 16 <= ip_end);
+      op = EmitLiteral</*allow_fast_path=*/true>(op, next_emit, ip - next_emit);
+
+      // Step 3: Call EmitCopy, and then see if another EmitCopy could
+      // be our next move.  Repeat until we find no match for the
+      // input immediately after what was consumed by the last EmitCopy call.
+      //
+      // If we exit this loop normally then we need to call EmitLiteral next,
+      // though we don't yet know how big the literal will be.  We handle that
+      // by proceeding to the next iteration of the main loop.  We also can exit
+      // this loop via goto if we get close to exhausting the input.
+    emit_match:
+      do {
+        // We have a 4-byte match at ip, and no need to emit any
+        // "literal bytes" prior to ip.
+        const char* base = ip;
+        std::pair<size_t, bool> p =
+            FindMatchLength(candidate + 4, ip + 4, ip_end, &data);
+        size_t matched = 4 + p.first;
+        ip += matched;
+        size_t offset = base - candidate;
+        assert(0 == memcmp(base, candidate, matched));
+        if (p.second) {
+          op = EmitCopy</*len_less_than_12=*/true>(op, offset, matched);
+        } else {
+          op = EmitCopy</*len_less_than_12=*/false>(op, offset, matched);
+        }
+        if (SNAPPY_PREDICT_FALSE(ip >= ip_limit)) {
+          goto emit_remainder;
+        }
+        // Expect 5 bytes to match
+        assert((data & 0xFFFFFFFFFF) ==
+               (LittleEndian::Load64(ip) & 0xFFFFFFFFFF));
+        // We are now looking for a 4-byte match again.  We read
+        // table[Hash(ip, shift)] for that.  To improve compression,
+        // we also update table[Hash(ip - 1, shift)] and table[Hash(ip, shift)].
+        table[HashBytes(LittleEndian::Load32(ip - 1), shift)] =
+            ip - base_ip - 1;
+        uint32_t hash = HashBytes(data, shift);
+        candidate = base_ip + table[hash];
+        table[hash] = ip - base_ip;
+        // Measurements on the benchmarks have shown the following probabilities
+        // for the loop to exit (ie. avg. number of iterations is reciprocal).
+        // BM_Flat/6  txt1    p = 0.3-0.4
+        // BM_Flat/7  txt2    p = 0.35
+        // BM_Flat/8  txt3    p = 0.3-0.4
+        // BM_Flat/9  txt3    p = 0.34-0.4
+        // BM_Flat/10 pb      p = 0.4
+        // BM_Flat/11 gaviota p = 0.1
+        // BM_Flat/12 cp      p = 0.5
+        // BM_Flat/13 c       p = 0.3
+      } while (static_cast<uint32_t>(data) == LittleEndian::Load32(candidate));
+      // Because the least significant 5 bytes matched, we can utilize data
+      // for the next iteration.
+      preload = data >> 8;
+    }
+  }
+
+ emit_remainder:
+  // Emit the remaining bytes as a literal
+  if (ip < ip_end) {
+    op = EmitLiteral</*allow_fast_path=*/false>(op, ip, ip_end - ip);
+  }
+
+  return op;
+}
+
+char* AOCL_CompressFragment(const char* input,
+                       size_t input_size,
+                       char* op,
+                       uint16_t* table,
+                       const int table_size) {
+  // "ip" is the input pointer, and "op" is the output pointer.
+  const char* ip = input;
+  assert(input_size <= kBlockSize);
+  assert((table_size & (table_size - 1)) == 0);  // table must be power of two
+  const int shift = 32 - Bits::Log2Floor(table_size);
+  assert(static_cast<int>(kuint32max >> shift) == table_size - 1);
+  const char* ip_end = input + input_size;
+  const char* base_ip = ip;
+
+  const size_t kInputMarginBytes = 15;
+#ifdef AOCL_SNAPPY_OPT_FLAGS
+  if (input_size >= kInputMarginBytes) {
+#else
+  if (SNAPPY_PREDICT_TRUE(input_size >= kInputMarginBytes)) {
+#endif  
+    const char* ip_limit = input + input_size - kInputMarginBytes;
+
+    for (uint32_t preload = LittleEndian::AOCL_Load32(ip + 1);;) {
+      // Bytes in [next_emit, ip) will be emitted as literal bytes.  Or
+      // [next_emit, ip_end) after the main loop.
+      const char* next_emit = ip++;
+      uint64_t data = LittleEndian::AOCL_Load64(ip);
       // The body of this loop calls EmitLiteral once and then EmitCopy one or
       // more times.  (The exception is that when we're close to exhausting
       // the input we goto emit_remainder.)
@@ -585,16 +795,16 @@ char* CompressFragment(const char* input,
             // special case the first iteration to use the value already
             // loaded in preload.
             uint32_t dword = i == 0 ? preload : static_cast<uint32_t>(data);
-            assert(dword == LittleEndian::Load32(ip + i));
+            assert(dword == LittleEndian::AOCL_Load32(ip + i));
             uint32_t hash = HashBytes(dword, shift);
             candidate = base_ip + table[hash];
             assert(candidate >= base_ip);
             assert(candidate < ip + i);
             table[hash] = delta + i;
 #ifdef AOCL_SNAPPY_OPT_FLAGS
-            if (LittleEndian::Load32(candidate) == dword) {
+            if (LittleEndian::AOCL_Load32(candidate) == dword) {
 #else
-            if (SNAPPY_PREDICT_FALSE(LittleEndian::Load32(candidate) == dword)) {
+            if (SNAPPY_PREDICT_FALSE(LittleEndian::AOCL_Load32(candidate) == dword)) {
 #endif
               *op = LITERAL | (i << 2);
               UnalignedCopy128(next_emit, op + 1);
@@ -604,13 +814,13 @@ char* CompressFragment(const char* input,
             }
             data >>= 8;
           }
-          data = LittleEndian::Load64(ip + 4 * j + 4);
+          data = LittleEndian::AOCL_Load64(ip + 4 * j + 4);
         }
         ip += 16;
         skip += 16;
       }
       while (true) {
-        assert(static_cast<uint32_t>(data) == LittleEndian::Load32(ip));
+        assert(static_cast<uint32_t>(data) == LittleEndian::AOCL_Load32(ip));
         uint32_t hash = HashBytes(data, shift);
 
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
@@ -636,14 +846,14 @@ char* CompressFragment(const char* input,
         table[hash] = ip - base_ip;
 #ifdef AOCL_SNAPPY_OPT_FLAGS
         if (static_cast<uint32_t>(data) ==
-                                LittleEndian::Load32(candidate)) {
+                                LittleEndian::AOCL_Load32(candidate)) {
 #else
         if (SNAPPY_PREDICT_FALSE(static_cast<uint32_t>(data) ==
-                                LittleEndian::Load32(candidate))) {
+                                LittleEndian::AOCL_Load32(candidate))) {
 #endif
           break;
         }
-        data = LittleEndian::Load32(next_ip);
+        data = LittleEndian::AOCL_Load32(next_ip);
         ip = next_ip;
       }
 
@@ -670,15 +880,15 @@ char* CompressFragment(const char* input,
         // "literal bytes" prior to ip.
         const char* base = ip;
         std::pair<size_t, bool> p =
-            FindMatchLength(candidate + 4, ip + 4, ip_end, &data);
+            AOCL_FindMatchLength(candidate + 4, ip + 4, ip_end, &data);
         size_t matched = 4 + p.first;
         ip += matched;
         size_t offset = base - candidate;
         assert(0 == memcmp(base, candidate, matched));
         if (p.second) {
-          op = EmitCopy</*len_less_than_12=*/true>(op, offset, matched);
+          op = AOCL_EmitCopy</*len_less_than_12=*/true>(op, offset, matched);
         } else {
-          op = EmitCopy</*len_less_than_12=*/false>(op, offset, matched);
+          op = AOCL_EmitCopy</*len_less_than_12=*/false>(op, offset, matched);
         }
 #ifdef AOCL_SNAPPY_OPT_FLAGS
         if (ip >= ip_limit) {
@@ -689,16 +899,16 @@ char* CompressFragment(const char* input,
         }
         // Expect 5 bytes to match
         assert((data & 0xFFFFFFFFFF) ==
-               (LittleEndian::Load64(ip) & 0xFFFFFFFFFF));
+               (LittleEndian::AOCL_Load64(ip) & 0xFFFFFFFFFF));
         // We are now looking for a 4-byte match again.  We read
         // table[Hash(ip, shift)] for that.  To improve compression,
         // we also update table[Hash(ip - 1, shift)] and table[Hash(ip, shift)].
-        table[HashBytes(LittleEndian::Load32(ip - 1), shift)] =
+        table[HashBytes(LittleEndian::AOCL_Load32(ip - 1), shift)] =
             ip - base_ip - 1;
         uint32_t hash = HashBytes(data, shift);
         candidate = base_ip + table[hash];
 #ifdef AOCL_SNAPPY_OPT_FLAGS
-        candidate_data = LittleEndian::Load32(candidate);
+        candidate_data = LittleEndian::AOCL_Load32(candidate);
 #endif
         table[hash] = ip - base_ip;
         // Measurements on the benchmarks have shown the following probabilities
@@ -714,7 +924,7 @@ char* CompressFragment(const char* input,
 #ifdef AOCL_SNAPPY_OPT_FLAGS
       } while (static_cast<uint32_t>(data) == candidate_data);
 #else
-      } while (static_cast<uint32_t>(data) == LittleEndian::Load32(candidate));
+      } while (static_cast<uint32_t>(data) == LittleEndian::AOCL_Load32(candidate));
 #endif
       // Because the least significant 5 bytes matched, we can utilize data
       // for the next iteration.
@@ -1147,8 +1357,17 @@ size_t Compress(Source* reader, Sink* writer) {
     // which is <= kBlockSize in length, a previously allocated
     // scratch_output[] region is big enough for this iteration.
     char* dest = writer->GetAppendBuffer(max_output, wmem.GetScratchOutput());
-    char* end = internal::CompressFragment(fragment, fragment_size, dest, table,
-                                           table_size);
+
+    //SNAPPY_compress_fragment_fp
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    char* end = SNAPPY_compress_fragment_fp(fragment, fragment_size, dest, table, table_size);
+#else
+  #ifdef AOCL_SNAPPY_OPT_FLAGS
+    char* end = internal::AOCL_CompressFragment(fragment, fragment_size, dest, table, table_size);
+  #else
+    char* end = internal::CompressFragment(fragment, fragment_size, dest, table, table_size);
+  #endif
+#endif
     writer->Append(dest, end - dest);
     written += (end - dest);
 
@@ -1565,6 +1784,7 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
     if (optOff)
     {
         //C version
+        SNAPPY_compress_fragment_fp = internal::CompressFragment;
     }
     else
     {
@@ -1577,6 +1797,7 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
         case 2://AVX version
         case 3://AVX2 version
         default://AVX512 and other versions
+            SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment;
             break;
         }
     }
