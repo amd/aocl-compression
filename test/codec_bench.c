@@ -28,7 +28,7 @@
  
  /** @file codec_bench.c
  *  
- *  @brief Test bench application to test the AOCL Codec library
+ *  @brief Test bench application to test the AOCL Compression library
  *
  *  This file contains the functions to test, verify and benchmark all the
  *  supported compression and decompression methods.
@@ -49,12 +49,12 @@ CHAR inFile[MAX_FILENAME_LEN];
 
 void print_user_options (void)
 {
-    printf("\nAOCL Compression Library version: %s\n", aocl_codec_version());
+    printf("\nAOCL Compression Library version: %s\n", aocl_llc_version());
     printf("Internal Library version: %s\n", INTERNAL_LIBRARY_VERSION);
     printf("C Compiler: %s\n", CCompiler);
     printf("C++ Compiler: %s\n", CXXCompiler);
     printf("Compile Options: %s%s\n\n", CFLAGS_SET1, CFLAGS_SET2);
-    printf("Usage: aocl_codec_bench <options> input\n\n");
+    printf("Usage: aocl_compression_bench <options> input\n\n");
     printf("where input is the test file name and <options> can be:\n");
     printf("-h | --help Print help info\n");
     printf("-l          List all the available compression/decompression methods\n");
@@ -139,7 +139,13 @@ INTP read_user_options (INTP argc,
     INTP fileIn = 0;
     INTP ret = 1;
     CHAR option;
-    
+
+    if (argc <= cnt)
+    {
+        print_user_options();
+        return 2;
+    }
+
     codec_bench_handle->use_all_codecs = 0;
     codec_bench_handle->mem_limit = MAX_MEM_SIZE_FOR_FILE_READ;
     codec_bench_handle->codec_method = -1;
@@ -270,7 +276,7 @@ UINTP compression_bound(UINTP inSize)
 }
 
 INTP init(aocl_codec_bench_info *codec_bench_handle,
-         aocl_codec_desc *aocl_codec_handle)
+          aocl_compression_desc *aocl_codec_handle)
 {
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
 
@@ -313,13 +319,13 @@ INTP init(aocl_codec_bench_info *codec_bench_handle,
     }
 }
 
-INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
+INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                    aocl_codec_bench_info *codec_bench_handle)
 {
     INT64 resultComp = 0;
     INT64 resultDecomp = 0;
     UINTP inSize, file_size;
-    aocl_codec_type i; 
+    aocl_compression_type i; 
     INTP j, k, l;
     INTP status = 0, retStatus = 0;
     FILE *inFp = codec_bench_handle->fp;
@@ -350,7 +356,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                 status = 0;
                 
                 //setup the codec method
-                aocl_codec_setup(aocl_codec_handle, i);
+                aocl_llc_setup(aocl_codec_handle, i);
 
                 for (k = 0; k < codec_bench_handle->iterations; k++)
                 {
@@ -366,7 +372,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                         aocl_codec_handle->outSize = codec_bench_handle->outSize;
                         aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
                         aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
-                        resultComp = aocl_codec_compress(aocl_codec_handle, i);
+                        resultComp = aocl_llc_compress(aocl_codec_handle, i);
                         if (resultComp <= 0)
                         {
                             printf("AOCL-CODEC [%s-%ld] [Filename:%s] Compression: failed\n",
@@ -381,7 +387,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                         aocl_codec_handle->outSize = inSize;
                         aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
                         aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
-                        resultDecomp = aocl_codec_decompress(aocl_codec_handle,
+                        resultDecomp = aocl_llc_decompress(aocl_codec_handle,
                                                              i);
                         if (resultDecomp <= 0)
                         {
@@ -439,7 +445,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                 }
 
                 //destroy the codec method
-                aocl_codec_destroy(aocl_codec_handle, i);
+                aocl_llc_destroy(aocl_codec_handle, i);
 
                 if (status != 0)
                 {
@@ -526,7 +532,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
             status = 0;
 
             //setup the codec method
-            aocl_codec_setup(aocl_codec_handle, codec_bench_handle->codec_method);
+            aocl_llc_setup(aocl_codec_handle, codec_bench_handle->codec_method);
         
             for (k = 0; k < codec_bench_handle->iterations; k++)
             {
@@ -541,7 +547,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                     aocl_codec_handle->outSize = codec_bench_handle->outSize;
                     aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
                     aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
-                    resultComp = aocl_codec_compress(aocl_codec_handle,
+                    resultComp = aocl_llc_compress(aocl_codec_handle,
                                             codec_bench_handle->codec_method);
                     if (resultComp <= 0)
                     {
@@ -557,7 +563,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
                     aocl_codec_handle->outSize = inSize;
                     aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
                     aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
-                    resultDecomp = aocl_codec_decompress(aocl_codec_handle,
+                    resultDecomp = aocl_llc_decompress(aocl_codec_handle,
                                         codec_bench_handle->codec_method);
                     if (resultDecomp <= 0)
                     {
@@ -613,7 +619,7 @@ INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
             }
 
             //destroy the codec method
-            aocl_codec_destroy(aocl_codec_handle,
+            aocl_llc_destroy(aocl_codec_handle,
                                codec_bench_handle->codec_method);
 
             if (status != 0)
@@ -688,8 +694,8 @@ void destroy(aocl_codec_bench_info *codec_bench_handle)
 INT32 main (INT32 argc, CHAR **argv)
 {
     aocl_codec_bench_info codec_bench_handle;
-    aocl_codec_desc aocl_codec_ds;
-    aocl_codec_desc *aocl_codec_handle = &aocl_codec_ds;
+    aocl_compression_desc aocl_codec_ds;
+    aocl_compression_desc *aocl_codec_handle = &aocl_codec_ds;
     FILE *inFp = NULL;
     INTP result;
     INTP ret;

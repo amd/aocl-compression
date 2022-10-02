@@ -34,11 +34,11 @@
 # @author S. Biplab Raut
 
 
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.12.0)
 
 #set the project name
-project(AOCL-CODEC-LIBRARY)
-message(STATUS "Building for AOCL CODEC LIBRARY")
+project(AOCL-COMPRESSION-LIBRARY)
+message(STATUS "Building for AOCL COMPRESSION LIBRARY")
 
 string(TIMESTAMP TODAY "%Y%m%d")
 add_compile_definitions(AOCL_BUILD_VERSION="Build ${TODAY}")
@@ -172,7 +172,7 @@ message(STATUS "C++ Compiler flags used for this windows build are: ${CMAKE_CXX_
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_EXPECT=1")
 elseif (UNIX)
 set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_FLAGS "-mavx -mavx2")
-set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_FLAGS "-mbmi2")
+set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_FLAGS "-msse4.1 -mavx -mbmi2")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing -ffast-math")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing -ffast-math")
 message(STATUS "C Compiler flags used for this Unix build are: ${CMAKE_C_FLAGS}")
@@ -194,7 +194,7 @@ add_compile_definitions(CFLAGS_SET2="${CMAKE_C_FLAGS}")
 #add library
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
-set (lib_name aocl_codec)
+set (lib_name aocl_compression)
 set(SRC_FILES 
         ${UTILS_SRC_FILES}
         ${API_SRC_FILES}
@@ -219,7 +219,7 @@ set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
 
 # add executable
-set (exe_name aocl_codec_bench)
+set (exe_name aocl_compression_bench)
 set (BENCH_PATH test)
 if (WIN32)
 add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/codec_bench.h)
@@ -230,7 +230,7 @@ target_link_libraries(${exe_name} ${lib_name})
 target_link_libraries(${exe_name} ${CMAKE_DL_LIBS})
 
 #Install into destination path by using -DCMAKE_INSTALL_PREFIX=<path> while configuring cmake
-message(STATUS "AOCL CODEC Library, Interface header files and Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "AOCL COMPRESSION Library, Interface header files and Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")
 install(TARGETS ${exe_name} DESTINATION ${DEST_BIN_PATH})
 install(TARGETS ${lib_name} DESTINATION ${DEST_LIB_PATH})
 install(FILES ${INC_FILES} DESTINATION ${DEST_INC_PATH})

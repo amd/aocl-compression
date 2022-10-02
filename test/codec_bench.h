@@ -75,7 +75,7 @@ typedef struct
 } codec_list_t;
 
 //List of supported compression methods along with their parameters
-//The list is ordered as per the enum aocl_codec_type
+//The list is ordered as per the enum aocl_compression_type
 static const codec_list_t codec_list[AOCL_COMPRESSOR_ALGOS_NUM] =
 {
     {"LZ4",    0, 0,  0, 0},
@@ -123,14 +123,14 @@ typedef struct
 
 //Function declarations
 INTP init(aocl_codec_bench_info *codec_bench_handle,
-         aocl_codec_desc *aocl_codec_handle);
+          aocl_compression_desc *aocl_codec_handle);
 INTP read_user_options (INTP argc,
                        CHAR **argv,
                        aocl_codec_bench_info *codec_bench_handle);
-INTP aocl_bench_run(aocl_codec_desc *aocl_codec_handle,
-                     aocl_codec_bench_info *codec_bench_handle);
-INTP ipp_bench_run(aocl_codec_desc *aocl_codec_handle,
-                     aocl_codec_bench_info *codec_bench_handle);
+INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
+                    aocl_codec_bench_info *codec_bench_handle);
+INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
+                   aocl_codec_bench_info *codec_bench_handle);
 VOID destroy(aocl_codec_bench_info *codec_bench_handle);
 
 #endif

@@ -40,7 +40,7 @@
 #include "api/api.h"
 #include "utils/utils.h"
 
-INTP is_SSE2_supported(aocl_codec_desc *aocl_codec_handle)
+INTP is_SSE2_supported(aocl_compression_desc *aocl_codec_handle)
 {
     INTP ret;
     INTP eax, ebx, ecx, edx;
@@ -51,7 +51,7 @@ INTP is_SSE2_supported(aocl_codec_desc *aocl_codec_handle)
     return ret;
 }
 
-INTP is_AVX_supported(aocl_codec_desc *aocl_codec_handle)
+INTP is_AVX_supported(aocl_compression_desc *aocl_codec_handle)
 {
     INTP ret;
     INTP eax, ebx, ecx, edx;
@@ -62,7 +62,7 @@ INTP is_AVX_supported(aocl_codec_desc *aocl_codec_handle)
     return ret;
 }
 
-INTP is_AVX2_supported(aocl_codec_desc *aocl_codec_handle)
+INTP is_AVX2_supported(aocl_compression_desc *aocl_codec_handle)
 {
     INTP ret;
     INTP eax, ebx, ecx, edx;
@@ -73,7 +73,7 @@ INTP is_AVX2_supported(aocl_codec_desc *aocl_codec_handle)
     return ret;
 }
 
-INTP is_AVX512_supported(aocl_codec_desc *aocl_codec_handle)
+INTP is_AVX512_supported(aocl_compression_desc *aocl_codec_handle)
 {
     INTP ret = 0;
     LOG(INFO, aocl_codec_handle->printDebugLogs,
@@ -83,7 +83,7 @@ INTP is_AVX512_supported(aocl_codec_desc *aocl_codec_handle)
 
 VOID set_cpu_opt_flags(VOID *handle)
 {
-    aocl_codec_desc *aocl_codec_handle = (aocl_codec_desc *)handle;
+    aocl_compression_desc *aocl_codec_handle = (aocl_compression_desc *)handle;
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
     
     aocl_codec_handle->optLevel = is_SSE2_supported(aocl_codec_handle);
