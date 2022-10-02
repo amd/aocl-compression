@@ -54,17 +54,17 @@ VOID *hDL[AOCL_COMPRESSOR_ALGOS_NUM] = { NULL };
 
 //Internal wrapper function declarations that make calls to IPP library APIs
 INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
-            aocl_codec_desc *aocl_codec_handle, VOID *hDL,
+            aocl_compression_desc *aocl_codec_handle, VOID *hDL,
             INTP *verifyRes);
 INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
-            aocl_codec_desc *aocl_codec_handle, VOID *hDL,
+            aocl_compression_desc *aocl_codec_handle, VOID *hDL,
             INTP *verifyRes);
 INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
-            aocl_codec_desc *aocl_codec_handle, VOID *hDL,
+            aocl_compression_desc *aocl_codec_handle, VOID *hDL,
             INTP *verifyRes);
 
 INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
-              aocl_codec_desc *aocl_codec_handle)
+              aocl_compression_desc *aocl_codec_handle)
 { 
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
     
@@ -174,7 +174,7 @@ INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
 
 
 INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
-                  aocl_codec_desc *aocl_codec_handle, VOID *hDL,
+                  aocl_compression_desc *aocl_codec_handle, VOID *hDL,
                   INTP *verifyRes)
 {
     INT64 resultComp = 0;
@@ -292,7 +292,7 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
 }
 
 INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
-                    aocl_codec_desc *aocl_codec_handle, VOID *hDL,
+                    aocl_compression_desc *aocl_codec_handle, VOID *hDL,
                     INTP *verifyRes)
 {
     INT64 resultComp = 0;
@@ -411,7 +411,7 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
 }
 
 INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
-                   aocl_codec_desc *aocl_codec_handle, VOID *hDL,
+                   aocl_compression_desc *aocl_codec_handle, VOID *hDL,
                    INTP *verifyRes)
 {
     INT64 resultComp = 0;
@@ -530,9 +530,9 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
 }
 
 INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
-              aocl_codec_desc *aocl_codec_handle)
+              aocl_compression_desc *aocl_codec_handle)
 {
-    aocl_codec_type i; 
+    aocl_compression_type i; 
     INTP j, l, verifyRes, ret;
 
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
@@ -770,14 +770,14 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
     return 0;
 }
 
-INTP ipp_destroy(aocl_codec_desc *aocl_codec_handle)
+INTP ipp_destroy(aocl_compression_desc *aocl_codec_handle)
 {
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
     dlclose(hDL);
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
 }
 
-INTP ipp_bench_run(aocl_codec_desc *aocl_codec_handle,
+INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
                   aocl_codec_bench_info *codec_bench_handle)
 {
     LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");

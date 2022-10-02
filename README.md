@@ -1,17 +1,17 @@
-AOCL CODEC
-==========
+AOCL COMPRESSION
+================
 
-AOCL Codec is a software framework of various lossless compression and
+AOCL Compression is a software framework of various lossless compression and
 decompression methods tuned and optimized for AMD Zen based CPUs.
 The framework offers a single set of unified APIs for all the supported
 compression and decompression methods which facilitate the applications to
 easily integrate and use them.
-AOCL codec supports lz4, zlib/deflate, lzma, zstd, bzip2, snappy, and lz4hc
+AOCL Compression supports lz4, zlib/deflate, lzma, zstd, bzip2, snappy, and lz4hc
 based compression and decompression methods along with their native APIs.
 It supports a dynamic dispatcher feature that executes the most optimal
 function variant implemented using Function Multi-versioning thereby offering
 a single optimized library portable across different x86 CPU architectures.
-AOCL Codec framework is developed in C for Unix and Windows based systems.
+AOCL Compression framework is developed in C for Unix and Windows based systems.
 A test suite is provided for validation and performance benchmarking
 of the supported compression and decompression methods. The test suite also
 supports the benchmarking of IPP compression methods like lz4, lz4hc and zlib.
@@ -21,10 +21,10 @@ INSTALLATION
 ------------
 
 Download the latest stable release from the Github repository:\
-https://github.amd.com/AOCL/aocl-codec\
+https://github.amd.com/AOCL/aocl-compression\
 Install cmake on the machine where the sources are to be compiled.\
 Make available any one of the compilers GCC or Clang on the machine.\
-Then, use the cmake based build system to compile and generate AOCL Codec\
+Then, use the cmake based build system to compile and generate AOCL Compression\
 library and testsuite binary as explained below for Linux and Windows platforms.
 
 BUILDING ON LINUX
@@ -56,9 +56,12 @@ BUILDING ON LINUX
 
 BUILDING ON WINDOWS
 -------------------
-1. As the prerequisites, make available Microsoft Visual Studio along with it's\
+As the prerequisites, make available Microsoft Visual Studio along with it's\
    "Desktop development with C++" toolset that includes the Clang compiler.
-2. Launch CMake GUI and set the locations for source package and build output.\
+
+BUILDING WITH VISUAL STUDIO IDE (GUI)
+-------------------------------------
+1. Launch CMake GUI and set the locations for source package and build output.\
    Click the configure option and choose:\
    Generator as the installed Visual Studio version,\
    Platform as x64,\
@@ -66,59 +69,67 @@ BUILDING ON WINDOWS
    Click the Generate option.\
    After Microsoft Visual Studio project is generated, click "Open Project".\
    This will launch the Microsoft Visual Studio project for the source package.
-3. To build a Static library, go to project aocl\_codec -> Properties and then:\
+2. To build a Static library, go to project aocl\_compression -> Properties and then:\
    General -> "Configuration Type" and set it to Static library,\
    C/C++ -> "Code Generation" -> "Runtime Library" and set it to /MT or /MTd\
    depending upon whether the build type is Release or Debug.
-4. To build a Dynamic library, go to project aocl\_codec -> Properties and then:\
+3. To build a Dynamic library, go to project aocl\_compression -> Properties and then:\
    General -> "Configuration Type" and set it to Dynamic library,\
    C/C++ -> "Code Generation" -> "Runtime Library" and set it to /MD or /MDd\
    depending upon whether the build type is Release or Debug.
-5. To build the test bench binary, go to project aocl\_codec\_bench -> Properties and then:\
-   Linker -> General -> "Additional Library Directories" and add the path to find aocl\_codec library,\
+4. To build the test bench binary, go to project aocl\_compression\_bench -> Properties and then:\
+   Linker -> General -> "Additional Library Directories" and add the path to find aocl\_compression library,\
    Linker -> General -> "Link Library Dependencies" and set it as "Yes",\
-   Linker -> Input -> "Additional Dependencies" and add the aocl\_codec library name.
-6. Build the entire solution or both the projects one by one separately.
+   Linker -> Input -> "Additional Dependencies" and add the aocl\_compression library name.
+5. Build the entire solution or both the projects one by one separately.
+
+BUILDING WITH VISUAL STUDIO IDE (command line)
+----------------------------------------------
+1. Go to aocl-compression source package and create a folder named build.
+2. Go to the build folder.
+3. Use the below command to configure and build the library and test bench executable.\
+   cmake .. -T ClangCl -G \<installed Visual Studio version\> && cmake --build . --config Release\
+   Additional config and build options can be passed to the above command.
 
 
-RUNNING AOCL CODEC TEST BENCH ON LINUX
---------------------------------------
+RUNNING AOCL COMPRESSION TEST BENCH ON LINUX
+--------------------------------------------
 
 Test bench supports several options to validate, benchmark or debug the supported
 compression methods.\
-It uses the unified API set to invoke the compression methods supported by AOCL Codec.\
+It uses the unified API set to invoke the compression methods supported by AOCL Compression.\
 Test bench can invoke and benchmark some of the IPP's compression methods as well.
 
 To check various options supported by the test bench, use the command:\
-	aocl_codec_bench -h\
-   Or, aocl_codec_bench --help
+	aocl_compression_bench -h\
+   Or, aocl_compression_bench --help
 	
 To check all the supported compression methods, use the command:\
-	aocl_codec_bench -l
+	aocl_compression_bench -l
 	
 To run the test bench with requested number of iterations, use the command:\
-	aocl_codec_bench -i
+	aocl_compression_bench -i
 
 To run the test bench and check the performance of all the supported
 compression and decompression methods for a given input file, use the command:\
-	aocl_codec_bench -a -p \<input filename\>
+	aocl_compression_bench -a -p \<input filename\>
 
 To run the test bench and validate the outputs from all the supported
 compression and decompression methods for a given input file, use the command:\
-	aocl_codec_bench -a -t \<input filename\>
+	aocl_compression_bench -a -t \<input filename\>
 
 To run the test bench and check the performance of a particular
 compression and decompression method for a given input file, use the command:\
-	aocl_codec_bench -ezstd:5:0 -p \<input filename\>\
+	aocl_compression_bench -ezstd:5:0 -p \<input filename\>\
 Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
 
 To run the test bench and validate the output of a particular
 compression and decompression method for a given input file, use the command:\
-	aocl_codec_bench -ezstd:5:0 -t \<input filename\>\
+	aocl_compression_bench -ezstd:5:0 -t \<input filename\>\
 Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
 
 To run the test bench with error/debug/trace/info logs, use the command:\
-	aocl_codec_bench -a -t -v \<input filename\>\
+	aocl_compression_bench -a -t -v \<input filename\>\
 Here, -v can be passed with a number like v\<n\> that can take values: 
 	1 for Error (default), 2 for Info, 3 for Debug, 4 for Trace.
 
@@ -139,23 +150,23 @@ Check the following details for the exact steps:
 5. Set the library path environment variable (export LD_LIBRARY_PATH on
    Linux) to point to patched IPP lz4 and zlib libraries.
 6. Run the test bench as given below to benchmark IPP library methods:\
-   aocl_codec_bench -a -p -c \<input filename\>\
-   aocl_codec_bench -elz4 -p -c \<input filename\>\
-   aocl_codec_bench -elz4hc -p -c \<input filename\>\
-   aocl_codec_bench -ezlib -p -c \<input filename\>
+   aocl_compression_bench -a -p -c \<input filename\>\
+   aocl_compression_bench -elz4 -p -c \<input filename\>\
+   aocl_compression_bench -elz4hc -p -c \<input filename\>\
+   aocl_compression_bench -ezlib -p -c \<input filename\>
 
-RUNNING AOCL CODEC TEST BENCH ON WINDOWS
-----------------------------------------
+RUNNING AOCL COMPRESSION TEST BENCH ON WINDOWS
+----------------------------------------------
 
 Test bench on Windows supports all the user options as supported on Linux\
 except for the "-c" option to link and test IPP's compression methods.\
 Refer the previous section on Linux to learn about the various user options.\
 To set and launch the test bench with a specific user option,\
-go to project aocl\_codec\_bench -> Properties -> Debugging and\
+go to project aocl\_compression\_bench -> Properties -> Debugging and\
 specify the user options and the input test file.
 
  
 CONTACTS
 --------
-AOCL Codec is developed and maintained by AMD.
+AOCL Compression is developed and maintained by AMD.
 You can contact us on the email-id aoclsupport@amd.com.

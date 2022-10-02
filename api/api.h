@@ -28,7 +28,7 @@
  
  /** @file api.h
  *  
- *  @brief Interface APIs and data structures of AOCL Codec library
+ *  @brief Interface APIs and data structures of AOCL Compression library
  *
  *  This file contains the unified interface API set and associated
  *  data structure.
@@ -63,7 +63,7 @@ typedef enum
     ZLIB,
     ZSTD,
     AOCL_COMPRESSOR_ALGOS_NUM
-} aocl_codec_type;
+} aocl_compression_type;
 
 //Interface data structure
 typedef struct
@@ -89,26 +89,26 @@ typedef struct
     int optLevel;        //Optimization level:0-NA,1-SSE2,2-AVX,3-AVX2,4-AVX512
     int printDebugLogs;  //print debug logs
     //size_t chunk_size; //Unused variable
-} aocl_codec_desc;
+} aocl_compression_desc;
 
 //Interface API to compress data
-EXPORT_SYM_DYN int64_t aocl_codec_compress(aocl_codec_desc *handle,
-                            aocl_codec_type codec_type);
+EXPORT_SYM_DYN int64_t aocl_llc_compress(aocl_compression_desc *handle,
+                            aocl_compression_type codec_type);
 
 //Interface API to decompress data
-EXPORT_SYM_DYN int64_t aocl_codec_decompress(aocl_codec_desc *handle,
-                              aocl_codec_type codec_type);
+EXPORT_SYM_DYN int64_t aocl_llc_decompress(aocl_compression_desc *handle,
+                              aocl_compression_type codec_type);
 
-//Interface API to setup the codec method
-EXPORT_SYM_DYN void aocl_codec_setup(aocl_codec_desc *handle,
-                      aocl_codec_type codec_type);
+//Interface API to setup the compression method
+EXPORT_SYM_DYN void aocl_llc_setup(aocl_compression_desc *handle,
+                      aocl_compression_type codec_type);
 
-//Interface API to destroy the codec method
-EXPORT_SYM_DYN void aocl_codec_destroy(aocl_codec_desc *handle,
-                        aocl_codec_type codec_type);
+//Interface API to destroy the compression method
+EXPORT_SYM_DYN void aocl_llc_destroy(aocl_compression_desc *handle,
+                        aocl_compression_type codec_type);
 
 //Interface API to get compression library version string
-EXPORT_SYM_DYN const char *aocl_codec_version(void);
+EXPORT_SYM_DYN const char *aocl_llc_version(void);
 
 #ifdef __cplusplus
 }

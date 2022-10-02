@@ -28,7 +28,7 @@
  
  /** @file api.c
  *  
- *  @brief Interface APIs and data structures of AOCL Codec library
+ *  @brief Interface APIs and data structures of AOCL Compression library
  *
  *  This file contains the unified interface API set and associated
  *  data structure.
@@ -44,8 +44,8 @@
 static INT32 enableLogs = 0;
 
 //Unified API function to compress the input
-INT64 aocl_codec_compress(aocl_codec_desc *handle,
-                          aocl_codec_type codec_type)
+INT64 aocl_llc_compress(aocl_compression_desc *handle,
+                        aocl_compression_type codec_type)
 {
     INT64 ret;
     timer clkTick;
@@ -81,8 +81,8 @@ INT64 aocl_codec_compress(aocl_codec_desc *handle,
 }
 
 //Unified API function to decompress the input
-INT64 aocl_codec_decompress(aocl_codec_desc *handle,
-                            aocl_codec_type codec_type)
+INT64 aocl_llc_decompress(aocl_compression_desc *handle,
+                          aocl_compression_type codec_type)
 {
     INT64 ret;
     timer clkTick;
@@ -117,9 +117,9 @@ INT64 aocl_codec_decompress(aocl_codec_desc *handle,
     return ret;
 }
 
-//API to setup and initialize memory for the codec method
-VOID aocl_codec_setup(aocl_codec_desc *handle,
-                      aocl_codec_type codec_type)
+//API to setup and initialize memory for the compression method
+VOID aocl_llc_setup(aocl_compression_desc *handle,
+                    aocl_compression_type codec_type)
 {
     enableLogs = handle->printDebugLogs;
 
@@ -146,9 +146,9 @@ VOID aocl_codec_setup(aocl_codec_desc *handle,
     LOG(TRACE, enableLogs, "Exit");
 }
 
-//API to destroy memory and deinit the codec method
-VOID aocl_codec_destroy(aocl_codec_desc *handle,
-                        aocl_codec_type codec_type)
+//API to destroy memory and deinit the compression method
+VOID aocl_llc_destroy(aocl_compression_desc *handle,
+                      aocl_compression_type codec_type)
 {
     LOG(TRACE, enableLogs, "Enter");
 
@@ -164,7 +164,7 @@ VOID aocl_codec_destroy(aocl_codec_desc *handle,
 }
 
 //API to return the compression library version string
-const CHAR *aocl_codec_version(VOID)
+const CHAR *aocl_llc_version(VOID)
 {
     return (LIBRARY_VERSION " " AOCL_BUILD_VERSION);
 }
