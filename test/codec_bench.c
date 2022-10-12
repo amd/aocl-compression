@@ -59,7 +59,7 @@ void print_user_options (void)
     printf("-h | --help Print help info\n");
     printf("-l          List all the available compression/decompression methods\n");
     printf("-a          Use all the available compression/decompression methods\n");
-    printf("-m<>        Maximum size in MBs of the input for compression and decompression. Default=MIN(filesize, 2048 MB)\n");
+    printf("-m<>        Maximum size in MBs of the input for compression and decompression. Default=MIN(filesize, 1024 MB)\n");
     printf("-e<>:<>:<>  Compression/decompression method. Optional level and additional param may be specified using : separator\n");
     printf("-i<>        Number of iterations of compression/decompression\n");
     printf("-t          Verification and functional tests of the compression/decompression methods\n");
@@ -140,6 +140,8 @@ INTP read_user_options (INTP argc,
     INTP ret = 1;
     CHAR option;
 
+    codec_bench_handle->enable_verbosity = 0;
+
     if (argc <= cnt)
     {
         print_user_options();
@@ -153,7 +155,6 @@ INTP read_user_options (INTP argc,
     codec_bench_handle->iterations = BENCH_NUM_ITERS;
     codec_bench_handle->verify = 0;
     codec_bench_handle->print_stats = 0;
-    codec_bench_handle->enable_verbosity = 0;
     codec_bench_handle->optVar = UNINIT_OPT_VAR;
     codec_bench_handle->inPtr = NULL;
     codec_bench_handle->compPtr = NULL;
@@ -375,7 +376,7 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                         resultComp = aocl_llc_compress(aocl_codec_handle, i);
                         if (resultComp <= 0)
                         {
-                            printf("AOCL-CODEC [%s-%ld] [Filename:%s] Compression: failed\n",
+                            printf("AOCL-COMPRESSION [%s-%ld] [Filename:%s] Compression: failed\n",
                                 codec_list[i].codec_name,
                                 l, codec_bench_handle->fName);
                             status = -1;
@@ -391,7 +392,7 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                                                              i);
                         if (resultDecomp <= 0)
                         {
-                            printf("AOCL-CODEC [%s-%ld] [Filename:%s] Decompression: failed\n",
+                            printf("AOCL-COMPRESSION [%s-%ld] [Filename:%s] Decompression: failed\n",
                                 codec_list[i].codec_name,
                                 l, codec_bench_handle->fName);
                             status = -1;
@@ -404,7 +405,7 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                                        codec_bench_handle->decompPtr, inSize);
                             if (j != 0)
                             {
-                                printf("AOCL-CODEC [%s-%ld] [Filename:%s] verification: failed\n",
+                                printf("AOCL-COMPRESSION [%s-%ld] [Filename:%s] verification: failed\n",
                                     codec_list[i].codec_name,
                                     l, codec_bench_handle->fName);
                                 status = -1;
@@ -455,7 +456,7 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
 
                 if (codec_bench_handle->verify)
                 {
-                    printf("AOCL-CODEC [%s-%ld] [Filename:%s] verification: passed\n",
+                    printf("AOCL-COMPRESSION [%s-%ld] [Filename:%s] verification: passed\n",
                         codec_list[i].codec_name,
                         l, codec_bench_handle->fName);
 
@@ -474,7 +475,7 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                     codec_bench_handle->dBestSpeed = 
                         (codec_bench_handle->inSize * 1000.0) / 
                         codec_bench_handle->dBestTime;
-                    printf("AOCL-CODEC [%s-%ld] [Filename:%s] -------------------------------------\n",
+                    printf("AOCL-COMPRESSION [%s-%ld] [Filename:%s] -------------------------------------\n",
                         codec_list[i].codec_name,
                         l, codec_bench_handle->fName);
                     printf("Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %ld, speed(best) %.2f MB/s, time(best) %.2f ms\n",
@@ -551,7 +552,7 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                                             codec_bench_handle->codec_method);
                     if (resultComp <= 0)
                     {
-                        printf("AOCL-CODEC [%s-%ld] [Filename:%s] Compression: failed\n",
+                        printf("AOCL-COMPRESSION [%s-%ld] [Filename:%s] Compression: failed\n",
                             codec_list[codec_bench_handle->codec_method].codec_name,
                             aocl_codec_handle->level, codec_bench_handle->fName);
                         status = -1;
@@ -567,7 +568,7 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                                         codec_bench_handle->codec_method);
                     if (resultDecomp <= 0)
                     {
-                        printf("AOCL-CODEC [%s-%ld] [Filename:%s] Decompression: failed\n",
+                        printf("AOCL-COMPRESSION [%s-%ld] [Filename:%s] Decompression: failed\n",
                             codec_list[codec_bench_handle->codec_method].codec_name,
                             aocl_codec_handle->level, codec_bench_handle->fName);
                         status = -1;
@@ -580,7 +581,7 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                                 codec_bench_handle->decompPtr, inSize);
                         if (j != 0)
                         {
-                            printf("AOCL-CODEC [%s-%ld] [Filename:%s] verification: failed\n",
+                            printf("AOCL-COMPRESSION [%s-%ld] [Filename:%s] verification: failed\n",
                                 codec_list[codec_bench_handle->codec_method].
                                 codec_name,
                                 aocl_codec_handle->level,
@@ -630,7 +631,7 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
 
             if (codec_bench_handle->verify)
             {
-                printf("AOCL-CODEC [%s-%ld] [Filename:%s] verification: passed\n", 
+                printf("AOCL-COMPRESSION [%s-%ld] [Filename:%s] verification: passed\n", 
                     codec_list[codec_bench_handle->codec_method].codec_name,
                     aocl_codec_handle->level,
                     codec_bench_handle->fName);
@@ -648,7 +649,7 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                     1000.0) / codec_bench_handle->cBestTime;
                 codec_bench_handle->dBestSpeed = (codec_bench_handle->inSize * 
                     1000.0) / codec_bench_handle->dBestTime;
-                printf("AOCL-CODEC [%s-%ld] [Filename:%s] -------------------------------------\n",
+                printf("AOCL-COMPRESSION [%s-%ld] [Filename:%s] -------------------------------------\n",
                         codec_list[codec_bench_handle->codec_method].codec_name,
                         aocl_codec_handle->level, codec_bench_handle->fName);
                 printf("Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %ld, speed(best) %.2f MB/s, time(best) %.2f ms\n",
