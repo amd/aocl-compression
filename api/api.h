@@ -49,7 +49,7 @@ extern "C" {
 #define EXPORT_SYM_DYN
 #endif
 
-#define LIBRARY_VERSION "AOCL-CODEC 4.0"
+#define LIBRARY_VERSION "AOCL-COMPRESSION 4.0"
 #define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 1.0"
 
 //Types of compression methods supported

@@ -54,6 +54,10 @@ BUILDING ON LINUX
 4. To clear or delete the build folder or files, manually remove the
    build directory or its files.
 
+Note: When using cmake with version lesser than 3.15, "-B" option is not supported,\
+so the build folder needs to be created manually.\
+The option "-v" is also not supported in cmake with version lesser than 3.15.
+
 BUILDING ON WINDOWS
 -------------------
 As the prerequisites, make available Microsoft Visual Studio along with it's\
@@ -88,7 +92,7 @@ BUILDING WITH VISUAL STUDIO IDE (command line)
 1. Go to aocl-compression source package and create a folder named build.
 2. Go to the build folder.
 3. Use the below command to configure and build the library and test bench executable.\
-   cmake .. -T ClangCl -G \<installed Visual Studio version\> && cmake --build . --config Release\
+   cmake .. -T ClangCl -G \<installed Visual Studio version\> && cmake --build . --config Release --target INSTALL\
    Additional config and build options can be passed to the above command.
 
 

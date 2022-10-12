@@ -34,7 +34,7 @@
 # @author S. Biplab Raut
 
 
-cmake_minimum_required(VERSION 3.12.0)
+cmake_minimum_required(VERSION 3.10.0)
 
 #set the project name
 project(AOCL-COMPRESSION-LIBRARY)
@@ -43,10 +43,25 @@ message(STATUS "Building for AOCL COMPRESSION LIBRARY")
 string(TIMESTAMP TODAY "%Y%m%d")
 add_compile_definitions(AOCL_BUILD_VERSION="Build ${TODAY}")
 
+message(STATUS "C Compiler: ${CMAKE_C_COMPILER_ID}")
+message(STATUS "CXX Compiler: ${CMAKE_CXX_COMPILER_ID}")
+if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
+    if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 6.1)
+        message(FATAL_ERROR "Minimum GCC version supported is 6.1!")
+    endif ()
+elseif ("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
+    if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 11.0)
+        message(FATAL_ERROR "Minimum Clang version supported is 11.0! In case of AOCC, use version 2.3 and above!")
+endif ()
+else ()
+    message(FATAL_ERROR "Compiler not supported! Library has only been tested with Clang and GCC.")
+endif ()
+
 if (WIN32)
 option (BUILD_STATIC_LIBS "Build static library (Default build type is shared library)" OFF)
 option (AOCL_LZ4_OPT_PREFETCH_BACKWARDS "Enable LZ4 optimizations related to backward prefetching of data" OFF)
 option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Disabled by default)" OFF)
+option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Disabled by default)" OFF)
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
 endif()
 
@@ -131,9 +146,9 @@ file(GLOB UTILS_SRC_FILES utils/*.c utils/*.cpp utils/*.h)
 include_directories(.)
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 link_directories(${ROOT_DIR}/build/)
-set(DEST_LIB_PATH aocl_codec/lib)
-set(DEST_INC_PATH aocl_codec/include)
-set(DEST_BIN_PATH aocl_codec/bin)
+set(DEST_LIB_PATH aocl_compression/lib)
+set(DEST_INC_PATH aocl_compression/include)
+set(DEST_BIN_PATH aocl_compression/bin)
 
 set(INC_FILES api/api.h 
 	${ALGOS_PATH}/bzip2/bzlib.h
@@ -146,6 +161,24 @@ set(INC_FILES api/api.h
 	${ALGOS_PATH}/zlib/zlib.h
 	${ALGOS_PATH}/zstd/lib/zstd.h
     )
+
+if (LZ4_FRAME_FORMAT_SUPPORT)
+    set(INC_FILES ${INC_FILES}
+                  ${ALGOS_PATH}/lz4/lz4frame.h)
+    set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
+                       ${ALGOS_PATH}/lz4/lz4frame.c
+                       ${ALGOS_PATH}/lz4/lz4frame.h)
+    if (AOCL_EXCLUDE_LZ4HC)
+        set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
+                           ${ALGOS_PATH}/lz4/lz4hc.c
+                           ${ALGOS_PATH}/lz4/lz4hc.h)
+    endif()
+    if (AOCL_EXCLUDE_ZSTD)
+        set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
+                           ${ALGOS_PATH}/lz4/xxhash.c
+                           ${ALGOS_PATH}/lz4/xxhash.h)
+    endif()
+endif()
 
 if (NOT CMAKE_BUILD_TYPE)
     message(STATUS "No build type selected, defaulting to Release")
@@ -181,10 +214,10 @@ set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHA
 endif()
 
 if (AOCL_LZ4_OPT_PREFETCH_BACKWARDS)
-set_source_files_properties(${LZ4_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DAOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS")
+    set_source_files_properties(${LZ4_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DAOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS")
 endif()
 if (SNAPPY_MATCH_SKIP_OPT)
-  set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_MATCH_SKIP_OPT")
+    set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_MATCH_SKIP_OPT")
 endif()
 
 add_compile_definitions(CCompiler="${CMAKE_C_COMPILER}")
