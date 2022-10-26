@@ -76,8 +76,14 @@
 
 #ifdef AOCL_DYNAMIC_DISPATCHER
 static char* (*SNAPPY_compress_fragment_fp)(const char* input, 
-  size_t input_size, char* op, 
-  uint16_t* table, const int table_size);
+    size_t input_size, char* op, 
+    uint16_t* table, const int table_size);
+
+// function pointer to variants of the RawUncompress function, used for integration
+// with the dynamic dispatcher. "SAW" stands for "SnappyArrayWriter" as that is the
+// class used for decompression of flat buffers to flat buffers in this library.
+static bool (*SNAPPY_SAW_raw_uncompress_fp)(const char* compressed, 
+    size_t compressed_length, char* uncompressed);
 #endif
 
 namespace snappy {
@@ -131,6 +137,34 @@ size_t MaxCompressedLength(size_t source_bytes) {
 }
 
 namespace {
+
+inline void FastMemcopy64Bytes(char* dst, char* src) {
+  // assume: kSlopBytes is 64
+  // assume: there is always space to copy 64 bytes
+  // assume: copy is always from a lower address to a higher address (op - offset) to (op)
+  // assume: there is a likely overlap between the src and dst buffers
+  //
+  // The way to do this using the standard library is to use memmove.
+  // In this case however, the aim is to copy exactly 64 bytes from the
+  // buffer pointed to by src to the buffer pointed to by dst. To do this
+  // we can utilize vector intrinsics to simply load 64 bytes from src,
+  // and then copy them over to dst.
+  //
+  // Data is copied first and then written, which means that before we
+  // write anything to the dst buffer, we copy all the data that we need
+  // into registers. This way, even in cases of overlapping src and dst
+  // buffers, the data is safely copied first and then safely written.
+  __m256i* dst1 = (__m256i*)dst;
+  __m256i* src1 = (__m256i*)src;
+
+  // take snapshot of 64 bytes from src
+  __m256i s1 = _mm256_lddqu_si256(src1);
+  __m256i s2 = _mm256_lddqu_si256(src1 + 1);
+
+  // paste the 64 byte snapshot at destination
+  _mm256_storeu_si256(dst1, s1);
+  _mm256_storeu_si256(dst1 + 1, s2);
+}
 
 void UnalignedCopy64(const void* src, void* dst) {
   char tmp[8];
@@ -1580,6 +1614,97 @@ bool RawUncompressToIOVec(Source* compressed, const struct iovec* iov,
 }
 
 // -----------------------------------------------------------------------
+// Optimized Flat array interfaces
+// -----------------------------------------------------------------------
+
+// A type that writes to a flat array.
+// Note that this is not a "ByteSink", but a type that matches the
+// Writer template argument to SnappyDecompressor::DecompressAllTags().
+class AOCL_SnappyArrayWriter {
+ private:
+  char* base_;
+  char* op_;
+  char* op_limit_;
+  // If op < op_limit_min_slop_ then it's safe to unconditionally write
+  // kSlopBytes starting at op.
+  char* op_limit_min_slop_;
+
+ public:
+  inline explicit AOCL_SnappyArrayWriter(char* dst)
+      : base_(dst),
+        op_(dst),
+        op_limit_(dst),
+        op_limit_min_slop_(dst) {}  // Safe default see invariant.
+
+  inline void SetExpectedLength(size_t len) {
+    op_limit_ = op_ + len;
+    // Prevent pointer from being past the buffer.
+    op_limit_min_slop_ = op_limit_ - std::min<size_t>(kSlopBytes - 1, len);
+  }
+
+  inline bool CheckLength() const {
+    return op_ == op_limit_;
+  }
+
+  char* GetOutputPtr() { return op_; }
+  void SetOutputPtr(char* op) { op_ = op; }
+
+  inline bool Append(const char* ip, size_t len, char** op_p) {
+    char* op = *op_p;
+    const size_t space_left = op_limit_ - op;
+    if (space_left < len) return false;
+    std::memcpy(op, ip, len);
+    *op_p = op + len;
+    return true;
+  }
+
+  inline bool TryFastAppend(const char* ip, size_t available, size_t len,
+                            char** op_p) {
+    char* op = *op_p;
+    const size_t space_left = op_limit_ - op;
+    if (len <= 16 && available >= 16 + kMaximumTagLength && space_left >= 16) {
+      // Fast path, used for the majority (about 95%) of invocations.
+      UnalignedCopy128(ip, op);
+      *op_p = op + len;
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  SNAPPY_ATTRIBUTE_ALWAYS_INLINE
+  inline bool AppendFromSelf(size_t offset, size_t len, char** op_p) {
+    char* const op = *op_p;
+    assert(op >= base_);
+    char* const op_end = op + len;
+
+#ifdef __clang__
+    __builtin_prefetch(op - offset);
+#endif
+
+    // Check if we try to append from before the start of the buffer.
+    if (SNAPPY_PREDICT_FALSE(static_cast<size_t>(op - base_) < offset))
+      return false;
+
+    if (SNAPPY_PREDICT_FALSE((kSlopBytes < 64 && len > kSlopBytes) || op >= op_limit_min_slop_ || offset < len)) {
+      if (op_end > op_limit_ || offset == 0) return false;
+      *op_p = IncrementalCopy(op - offset, op, op_end, op_limit_);
+      return true;
+    }
+
+    FastMemcopy64Bytes(op, op - offset);
+    *op_p = op_end;
+    return true;
+  }
+
+  inline size_t Produced() const {
+    assert(op_ >= base_);
+    return op_ - base_;
+  }
+  inline void Flush() {}
+};
+
+// -----------------------------------------------------------------------
 // Flat array interfaces
 // -----------------------------------------------------------------------
 
@@ -1658,6 +1783,7 @@ class SnappyArrayWriter {
     *op_p = op_end;
     return true;
   }
+
   inline size_t Produced() const {
     assert(op_ >= base_);
     return op_ - base_;
@@ -1665,12 +1791,25 @@ class SnappyArrayWriter {
   inline void Flush() {}
 };
 
-#ifdef AOCL_SNAPPY_OPT_FLAGS
-bool RawUncompress(const char* compressed, size_t compressed_length,
-                   char* uncompressed) {
+bool SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
   ByteArraySource reader(compressed, compressed_length);
   SnappyArrayWriter output(uncompressed);
   return InternalUncompress(&reader, &output);
+}
+
+bool AOCL_SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
+  ByteArraySource reader(compressed, compressed_length);
+  AOCL_SnappyArrayWriter output(uncompressed);
+  return InternalUncompress(&reader, &output);
+}
+
+#ifdef AOCL_SNAPPY_OPT_FLAGS
+bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
+  #ifdef AOCL_DYNAMIC_DISPATCHER
+    return SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
+  #else
+    return AOCL_SAW_RawUncompress(compressed, compressed_length, uncompressed);
+  #endif
 }
 #else
 bool RawUncompress(const char* compressed, size_t compressed_length,
@@ -1785,6 +1924,7 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
     {
         //C version
         SNAPPY_compress_fragment_fp = internal::CompressFragment;
+        SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress;
     }
     else
     {
@@ -1798,6 +1938,7 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
         case 3://AVX2 version
         default://AVX512 and other versions
             SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp = AOCL_SAW_RawUncompress;
             break;
         }
     }
