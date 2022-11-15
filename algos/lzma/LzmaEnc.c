@@ -1,6 +1,10 @@
 /* LzmaEnc.c -- LZMA Encoder
 2019-01-10: Igor Pavlov : Public domain */
 
+/**
+ * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ */
+
 #include "Precomp.h"
 
 #include <string.h>
@@ -24,7 +28,7 @@
 static unsigned g_STAT_OFFSET = 0;
 #endif
 
-#define kLzmaMaxHistorySize ((UInt32)3 << 29)
+#define kLzmaMaxHistorySize ((UInt32)3 << 29) //1.5 GB
 /* #define kLzmaMaxHistorySize ((UInt32)7 << 29) */
 
 #define kNumTopBits 24
@@ -172,17 +176,20 @@ static void LzmaEnc_FastPosInit(Byte *g_FastPos)
 typedef UInt16 CState;
 typedef UInt16 CExtra;
 
+/* Cost and state of system if a particular choice is made for
+* encoding this packet. It is used to store the most optimal
+* choice (lowest price) for a given len */
 typedef struct
 {
-  UInt32 price;
-  CState state;
+  UInt32 price; // cost of making this choice
+  CState state; // state of system. One of kNumStates.
   CExtra extra;
       // 0   : normal
       // 1   : LIT : MATCH
       // > 1 : MATCH (extra-1) : LIT : REP0 (len)
-  UInt32 len;
-  UInt32 dist;
-  UInt32 reps[LZMA_NUM_REPS];
+  UInt32 len; // length of match
+  UInt32 dist; // distance at which match is found
+  UInt32 reps[LZMA_NUM_REPS]; // rep distances until this point
 } COptimal;
 
 
@@ -226,8 +233,8 @@ typedef
 #define kLenNumHighSymbols (1 << kLenNumHighBits)
 #define kLenNumSymbolsTotal (kLenNumLowSymbols * 2 + kLenNumHighSymbols)
 
-#define LZMA_MATCH_LEN_MIN 2
-#define LZMA_MATCH_LEN_MAX (LZMA_MATCH_LEN_MIN + kLenNumSymbolsTotal - 1)
+#define LZMA_MATCH_LEN_MIN 2 // min match len 2
+#define LZMA_MATCH_LEN_MAX (LZMA_MATCH_LEN_MIN + kLenNumSymbolsTotal - 1) // max match len 273
 
 #define kNumStates 12
 
@@ -255,14 +262,15 @@ typedef struct
     ((p)->prices2[(size_t)(len) - 2] + ((p)->prices1[posState][((len) - 2) & (kLenNumLowSymbols * 2 - 1)] & (((len) - 2 - kLenNumLowSymbols * 2) >> 9)))
 */
 
+// Range encoder struct
 typedef struct
 {
-  UInt32 range;
+  UInt32 range; // dynamically scaled integer value that provides the bound for current range
   unsigned cache;
-  UInt64 low;
+  UInt64 low; // encoded value that exists within range. Compressed bytes are extracted from this.
   UInt64 cacheSize;
-  Byte *buf;
-  Byte *bufLim;
+  Byte *buf; // buffer to hold generated compressed bytes
+  Byte *bufLim; // byte limit upon which buf is flushed to file 
   Byte *bufBase;
   ISeqOutStream *outStream;
   UInt64 processed;
@@ -300,7 +308,7 @@ typedef UInt32 CProbPrice;
 typedef struct
 {
   void *matchFinderObj;
-  IMatchFinder matchFinder;
+  IMatchFinder matchFinder; // set to hashchain or bintree based dictionary module used to find matches
 
   unsigned optCur;
   unsigned optEnd;
@@ -310,14 +318,14 @@ typedef struct
   UInt32 numAvail;
 
   unsigned state;
-  unsigned numFastBytes;
-  unsigned additionalOffset;
+  unsigned numFastBytes; // limit on len upon which we exit optimal parsing
+  unsigned additionalOffset; // offset to keep count of bytes that have already been processed via ReadMatchDistances()
   UInt32 reps[LZMA_NUM_REPS];
   unsigned lpMask, pbMask;
-  CLzmaProb *litProbs;
+  CLzmaProb *litProbs; // probability context models for literal encoding
   CRangeEnc rc;
 
-  UInt32 backRes;
+  UInt32 backRes; // final rep id or distance for current match
 
   unsigned lc, lp, pb;
   unsigned lclp;
@@ -354,14 +362,31 @@ typedef struct
   #endif
   
   // LZ thread
-  CProbPrice ProbPrices[kBitModelTotal >> kNumMoveReducingBits];
+  CProbPrice ProbPrices[kBitModelTotal >> kNumMoveReducingBits]; // price for different probability values
 
+  /* We want to find matches in dictionary for every item in input stream (after hashing)
+  * For every such cycle, we need a data structure to hold matches found
+  * Match is represented as a <len,dist> pair
+  * For a given 'len', the best match is the one with the shortest 'dist'
+  * Hence, it is sufficient to store only 1 entry per 'len' (one with shortest 'dist') 
+  * Maximum match len supported is LZMA_MATCH_LEN_MAX = 273 as per lzma standard
+  * 'matches' size is allocated to LZMA_MATCH_LEN_MAX * 2 to hold <len,dist> pairs 
+  * for all allowed 'len'
+  * matches[0]=len1, matches[1]=dist1, matches[2]=len2, matches[3]=dist2,... */
   UInt32 matches[LZMA_MATCH_LEN_MAX * 2 + 2 + 1];
 
-  UInt32 alignPrices[kAlignTableSize];
-  UInt32 posSlotPrices[kNumLenToPosStates][kDistTableSizeMax];
-  UInt32 distancesPrices[kNumLenToPosStates][kNumFullDistances];
+  UInt32 alignPrices[kAlignTableSize]; // price for different align values used to encode distance
+  UInt32 posSlotPrices[kNumLenToPosStates][kDistTableSizeMax]; // price for different slot values used to encode distance
+  UInt32 distancesPrices[kNumLenToPosStates][kNumFullDistances];  // price for different direct bits used to encode distance
 
+  /* Depending on type of packet and bit position within the packet, different
+  * contexts are used by the range encoder.
+  * Following probability contexts exist:
+  * posAlignEncoder[16] : 4 align bits in long distances
+  * isRep[12], isRepG0[12], isRepG1[12], isRepG2[12] : states = 12
+  * isMatch[12][16], isRep0Long[12][16]. 4 bits from dictionary pos used as context (2^4).
+  * posSlotEncoder[4][64] : 4 len values used in distance context * 2^6 slots 
+  * posEncoders[128] : distance direct bits */
   CLzmaProb posAlignEncoder[1 << kNumAlignBits];
   CLzmaProb isRep[kNumStates];
   CLzmaProb isRepG0[kNumStates];
@@ -382,6 +407,11 @@ typedef struct
   CLenPriceEnc lenEnc;
   CLenPriceEnc repLenEnc;
 
+  /* Record optimal prices for different len. In each GetOptimum() call,
+  * the type of packet we decide to encode as well as len and distance
+  * impacts the price. Also, multiple iterations of ReadMatchDistances() 
+  * are made which results in more price values. The optimal price for
+  * each len is maintained in opt[1 to 273] */
   COptimal opt[kNumOpts];
 
   CSaveState saveState;
@@ -574,6 +604,7 @@ static void RangeEnc_Init(CRangeEnc *p)
   p->res = SZ_OK;
 }
 
+// Flush compressed bytes to file
 MY_NO_INLINE static void RangeEnc_FlushStream(CRangeEnc *p)
 {
   size_t num;
@@ -591,15 +622,15 @@ MY_NO_INLINE static void MY_FAST_CALL RangeEnc_ShiftLow(CRangeEnc *p)
   UInt32 low = (UInt32)p->low;
   unsigned high = (unsigned)(p->low >> 32);
   p->low = (UInt32)(low << 8);
-  if (low < (UInt32)0xFF000000 || high != 0)
+  if (low < (UInt32)0xFF000000 || high != 0) 
   {
     {
       Byte *buf = p->buf;
-      *buf++ = (Byte)(p->cache + high);
+      *buf++ = (Byte)(p->cache + high); // next compressed byte is available. Save it.
       p->cache = (unsigned)(low >> 24);
       p->buf = buf;
       if (buf == p->bufLim)
-        RangeEnc_FlushStream(p);
+        RangeEnc_FlushStream(p); // flush to output file
       if (p->cacheSize == 0)
         return;
     }
@@ -607,10 +638,10 @@ MY_NO_INLINE static void MY_FAST_CALL RangeEnc_ShiftLow(CRangeEnc *p)
     for (;;)
     {
       Byte *buf = p->buf;
-      *buf++ = (Byte)(high);
+      *buf++ = (Byte)(high); // next compressed byte is available. Save it.
       p->buf = buf;
       if (buf == p->bufLim)
-        RangeEnc_FlushStream(p);
+        RangeEnc_FlushStream(p); // flush to output file
       if (--p->cacheSize == 0)
         return;
     }
@@ -625,8 +656,11 @@ static void RangeEnc_FlushData(CRangeEnc *p)
     RangeEnc_ShiftLow(p);
 }
 
+/* if range is small, i.e. < 2^24, normalize it. Also check if next 
+* compressed byte is ready to be saved and add it to p->buf */
 #define RC_NORM(p) if (range < kTopValue) { range <<= 8; RangeEnc_ShiftLow(p); }
 
+// Compute bound within range based on prob
 #define RC_BIT_PRE(p, prob) \
   ttt = *(prob); \
   newBound = (range >> kNumBitModelTotalBits) * ttt;
@@ -673,10 +707,16 @@ static void RangeEnc_FlushData(CRangeEnc *p)
 #define RC_BIT_1_BASE(p, prob) \
   range -= newBound; (p)->low += newBound; *(prob) = (CLzmaProb)(ttt - (ttt >> kNumMoveBits)); \
 
+/* Encode 0. range for next iteration becomes [0, bound). i.e. size = bound
+* Update probability model: prob + delta [Prob of 0 increased] 
+* RC_BIT_PRE must be called before this to set newBound */
 #define RC_BIT_0(p, prob) \
   RC_BIT_0_BASE(p, prob) \
   RC_NORM(p)
 
+/* Encode 1, range for next iteration becomes [bound, range). i.e. size = range-bound
+* Update probability model: prob - delta [Prob of 1 increased]
+* RC_BIT_PRE must be called before this to set newBound */
 #define RC_BIT_1(p, prob) \
   RC_BIT_1_BASE(p, prob) \
   RC_NORM(p)
@@ -974,7 +1014,8 @@ MY_NO_INLINE static void MY_FAST_CALL LenPriceEnc_UpdateTables(
   printf("\n MovePos %u", num);
   #endif
 */
-  
+ 
+// Skip moves data and dictionary pointers by num
 #define MOVE_POS(p, num) { \
     p->additionalOffset += (num); \
     p->matchFinder.Skip(p->matchFinderObj, (UInt32)(num)); }
@@ -983,9 +1024,13 @@ MY_NO_INLINE static void MY_FAST_CALL LenPriceEnc_UpdateTables(
 static unsigned ReadMatchDistances(CLzmaEnc *p, unsigned *numPairsRes)
 {
   unsigned numPairs;
-  
+
   p->additionalOffset++;
   p->numAvail = p->matchFinder.GetNumAvailableBytes(p->matchFinderObj);
+  /* Find best matches in dictionary and record those <len,dist> pairs
+  * Matches are stored in p->matches
+  * numPairs is the total number of valid match 'len's found
+  * Values in 'matches' after numPairs are ignored */
   numPairs = p->matchFinder.GetMatches(p->matchFinderObj, p->matches);
   *numPairsRes = numPairs;
   
@@ -1002,17 +1047,22 @@ static unsigned ReadMatchDistances(CLzmaEnc *p, unsigned *numPairsRes)
   if (numPairs == 0)
     return 0;
   {
-    unsigned len = p->matches[(size_t)numPairs - 2];
+    unsigned len = p->matches[(size_t)numPairs - 2]; // longest matched length
     if (len != p->numFastBytes)
       return len;
     {
       UInt32 numAvail = p->numAvail;
       if (numAvail > LZMA_MATCH_LEN_MAX)
-        numAvail = LZMA_MATCH_LEN_MAX;
+        numAvail = LZMA_MATCH_LEN_MAX; // max len limit allowed by lzma format
       {
-        const Byte *p1 = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - 1;
-        const Byte *p2 = p1 + len;
-        ptrdiff_t dif = (ptrdiff_t)-1 - p->matches[(size_t)numPairs - 1];
+        const Byte *p1 = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - 1; // cur start
+        const Byte *p2 = p1 + len; // cur end
+        ptrdiff_t dif = (ptrdiff_t)-1 - p->matches[(size_t)numPairs - 1]; // distance offset for match
+        /* GetMatches() has a limit on length of matches it looks for. This is < LZMA_MATCH_LEN_MAX, 
+        * E.g. 32 or 64. Longer lengths are not searched for, to reduce search time. Since the format allows
+        * lengths upto LZMA_MATCH_LEN_MAX, for the longest matched pair we have found in p->matches,
+        * we continue to check if further bytes also match (limited to total len LZMA_MATCH_LEN_MAX)
+        * Return this longer len. */
         const Byte *lim = p1 + numAvail;
         for (; p2 != lim && *p2 == p2[dif]; p2++)
         {}
@@ -1024,8 +1074,8 @@ static unsigned ReadMatchDistances(CLzmaEnc *p, unsigned *numPairsRes)
 
 #define MARK_LIT ((UInt32)(Int32)-1)
 
-#define MakeAs_Lit(p)       { (p)->dist = MARK_LIT; (p)->extra = 0; }
-#define MakeAs_ShortRep(p)  { (p)->dist = 0; (p)->extra = 0; }
+#define MakeAs_Lit(p)       { (p)->dist = MARK_LIT; (p)->extra = 0; } // mark COptimal as literal
+#define MakeAs_ShortRep(p)  { (p)->dist = 0; (p)->extra = 0; } // mark COptimal as ShortRep
 #define IsShortRep(p)       ((p)->dist == 0)
 
 
@@ -1064,6 +1114,7 @@ static UInt32 GetPrice_PureRep(const CLzmaEnc *p, unsigned repIndex, size_t stat
 }
 
 
+// Decide final <len,distance> from values in p->opt[i]
 static unsigned Backward(CLzmaEnc *p, unsigned cur)
 {
   unsigned wr = cur + 1;
@@ -1115,7 +1166,7 @@ static unsigned Backward(CLzmaEnc *p, unsigned cur)
 #define LIT_PROBS(pos, prevByte) \
   (p->litProbs + (UInt32)3 * (((((pos) << 8) + (prevByte)) & p->lpMask) << p->lc))
 
-
+// Optimal parsing implementation
 static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
 {
   unsigned last, cur;
@@ -1132,6 +1183,10 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
     
     p->optCur = p->optEnd = 0;
     
+    /* if additionalOffset is > 0, parsing for cur byte has already been completed
+    * in one of the previous ReadMatchDistances() calls inside optimal parsing loop. 
+    * Results are already available in p-> and can be used
+    * without having to find matches again. */
     if (p->additionalOffset == 0)
       mainLen = ReadMatchDistances(p, &numPairs);
     else
@@ -1150,8 +1205,9 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
       numAvail = LZMA_MATCH_LEN_MAX;
     
     data = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - 1;
-    repMaxIndex = 0;
+    repMaxIndex = 0; //rep with max len match
     
+    // Get match lengths at distances in each of the reps for cur data
     for (i = 0; i < LZMA_NUM_REPS; i++)
     {
       unsigned len;
@@ -1170,6 +1226,8 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
         repMaxIndex = i;
     }
     
+    /* If long enough match is found in a rep, it can be selected
+    * instead of <mainLen, mainDist> as we save on encoding mainDist */
     if (repLens[repMaxIndex] >= p->numFastBytes)
     {
       unsigned len;
@@ -1181,7 +1239,7 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
     
     matches = p->matches;
     
-    if (mainLen >= p->numFastBytes)
+    if (mainLen >= p->numFastBytes)  // if len long enough, choose mainLen
     {
       p->backRes = matches[(size_t)numPairs - 1] + LZMA_NUM_REPS;
       MOVE_POS(p, mainLen - 1)
@@ -1191,7 +1249,7 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
     curByte = *data;
     matchByte = *(data - reps[0]);
 
-    last = repLens[repMaxIndex];
+    last = repLens[repMaxIndex]; // last = longest matched length among reps and mainLen
     if (last <= mainLen)
       last = mainLen;
     
@@ -1205,6 +1263,9 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
     
     posState = (position & p->pbMask);
     
+    /* From this point onwards, cost for taking different decisions 'price'
+    * is calculated. Every decision, choosing to encode as a literal,
+    * srep, rep or match has a corresponding price. */
     {
       const CLzmaProb *probs = LIT_PROBS(position, *(data - 1));
       p->opt[1].price = GET_PRICE_0(p->isMatch[p->state][posState]) +
@@ -1280,6 +1341,9 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
           while (len > matches[offs])
             offs += 2;
     
+        /* Check prices for all len in matches as well as those in-between.
+        * In-between values are necessary as they act as base price for 
+        * optimal parsing iterations that follow */
         for (; ; len++)
         {
           COptimal *opt;
@@ -1334,7 +1398,23 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
 
   
   // ---------- Optimal Parsing ----------
-
+  /* last : longest matched length among reps and mainLen
+  * p->opt[i] : base price and system states until now
+  * cur : counter starting at 0
+  * 
+  * For cur in range [0, last) we check if skipping these many bytes (L) and
+  * coding them using the strategy in p->opt[L] is worth it, if we can 
+  * find a better matching sequence in the future that gives a better price overall.
+  * Checking for last and beyond isn't necessary as we might as well encode the
+  * current match using the best price strategy we have so far and leave the rest
+  * of the sequence for the next GetOptimum() call. 
+  * 
+  * p->opt[L] also contains state and reps values if said strategy was used. This
+  * will act as previous system state when evaluating price for byte sequence 
+  * starting at offset L.
+  * 
+  * Run ReadMatchDistances() at offsets [0, last) from current position.
+  * Update p->opt s (p->opt[i].price += newPrice, etc) for each p->opt[i]. */
   for (;;)
   {
     unsigned numAvail;
@@ -1347,8 +1427,8 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
     COptimal *curOpt, *nextOpt;
 
     if (++cur == last)
-      break;
-    
+      break; // no need to check beyond last. This can be handled in the next GetOptimum() call.
+
     // 18.06
     if (cur >= kNumOpts - 64)
     {
@@ -1375,16 +1455,16 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
       break;
     }
 
-    newLen = ReadMatchDistances(p, &numPairs);
+    newLen = ReadMatchDistances(p, &numPairs); //check matches for byte sequence starting at offset cur
     
-    if (newLen >= p->numFastBytes)
+    if (newLen >= p->numFastBytes) // break out of parsing cycle once match longer than numFastBytes is found
     {
       p->numPairs = numPairs;
       p->longestMatchLen = newLen;
       break;
     }
     
-    curOpt = &p->opt[cur];
+    curOpt = &p->opt[cur]; // state of system if p->opt[cur] was selected as strategy above
 
     position++;
 
@@ -1429,7 +1509,7 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
       prevOpt = &p->opt[prev];
       b0 = prevOpt->reps[0];
 
-      if (dist < LZMA_NUM_REPS)
+      if (dist < LZMA_NUM_REPS) //update reps as per dist in curOpt
       {
         if (dist == 0)
         {
@@ -1487,6 +1567,7 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
     */
 
     {
+      // start with base price and add to it based on strategy for new match sequence
       UInt32 curPrice = curOpt->price;
       unsigned prob = p->isMatch[state][posState];
       matchPrice = curPrice + GET_PRICE_1(prob);
@@ -1851,10 +1932,10 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
   }
 
   do
-    p->opt[last].price = kInfinityPrice;
+    p->opt[last].price = kInfinityPrice; //reset prices to max
   while (--last);
 
-  return Backward(p, cur);
+  return Backward(p, cur); // select best <len, distance> pair from values computed in p->opt[i]
 }
 
 
@@ -1862,15 +1943,20 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
 #define ChangePair(smallDist, bigDist) (((bigDist) >> 7) > (smallDist))
 
 
-
+/* Hack on optimal parsing strategy with some heuristics to provide
+* faster matches albeit not optimal */ 
 static unsigned GetOptimumFast(CLzmaEnc *p)
 {
   UInt32 numAvail, mainDist;
   unsigned mainLen, numPairs, repIndex, repLen, i;
   const Byte *data;
 
+  /* if additionalOffset is > 0, parsing for cur byte has already been completed 
+  * in one of the previous ReadMatchDistances() calls used to check matches for
+  * future sequences. Results are already available in p-> and can be used 
+  * without having to find matches again. */
   if (p->additionalOffset == 0)
-    mainLen = ReadMatchDistances(p, &numPairs);
+    mainLen = ReadMatchDistances(p, &numPairs); // find matches in dictionary. Return longest matched length.
   else
   {
     mainLen = p->longestMatchLen;
@@ -1883,10 +1969,13 @@ static unsigned GetOptimumFast(CLzmaEnc *p)
     return 1;
   // if (mainLen < 2 && p->state == 0) return 1; // 18.06.notused
   if (numAvail > LZMA_MATCH_LEN_MAX)
-    numAvail = LZMA_MATCH_LEN_MAX;
+    numAvail = LZMA_MATCH_LEN_MAX; // max len allowed by lzma format
   data = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - 1;
   repLen = repIndex = 0;
   
+  /* Find longest match at distances in any of the reps for 'data'.
+  * If long enough match is found at any of the reps, it can be used
+  * instead of <mainLen, mainDist> as we save on encoding mainDist */
   for (i = 0; i < LZMA_NUM_REPS; i++)
   {
     unsigned len;
@@ -1903,31 +1992,40 @@ static unsigned GetOptimumFast(CLzmaEnc *p)
     }
     if (len > repLen)
     {
-      repIndex = i;
-      repLen = len;
+      repIndex = i; // rep with longest match
+      repLen = len; // longest match len
     }
   }
 
-  if (mainLen >= p->numFastBytes)
+  if (mainLen >= p->numFastBytes) //if len long enough, just choose this
   {
     p->backRes = p->matches[(size_t)numPairs - 1] + LZMA_NUM_REPS;
     MOVE_POS(p, mainLen - 1)
-    return mainLen;
+    return mainLen; // choose mainLen as final match
   }
 
   mainDist = 0; /* for GCC */
   
   if (mainLen >= 2)
   {
+    /* mainLen and mainDist are the last 2 of the valid elements in p->matches
+    * mainLen: p->matches[numPairs - 2], mainDist: p->matches[numPairs - 1]
+    * As we go up the list, we will have matches with lesser len (which will also
+    * have smaller distances). Start comparing with previous entries in matches.
+    * LZ77 always chooses the largest 'len' match irrespective of the distance.
+    * In lzma, choosing a smaller <len, distance> pair can be justified if a smaller 
+    * 'len' match is available at a shorter distance.
+    * Heuristic of difference of len being > 1 or difference in distance not being
+    * large enough is used to justify which pair to choose. */
     mainDist = p->matches[(size_t)numPairs - 1];
     while (numPairs > 2)
     {
       UInt32 dist2;
-      if (mainLen != p->matches[(size_t)numPairs - 4] + 1)
-        break;
+      if (mainLen != p->matches[(size_t)numPairs - 4] + 1) // compare with previous matches len
+        break; // difference in len > 1 break
       dist2 = p->matches[(size_t)numPairs - 3];
-      if (!ChangePair(dist2, mainDist))
-        break;
+      if (!ChangePair(dist2, mainDist))  // compare with previous matches distance
+        break; // distance not large enough : dist2 > mainDist/7 break
       numPairs -= 2;
       mainLen--;
       mainDist = dist2;
@@ -1936,6 +2034,9 @@ static unsigned GetOptimumFast(CLzmaEnc *p)
       mainLen = 1;
   }
 
+  /* If any of the rep matches has repLen close to or larger than
+  * the new mainLen, then it is better to stick to that repLen as
+  * you will save on encoding distance */
   if (repLen >= 2)
     if (    repLen + 1 >= mainLen
         || (repLen + 2 >= mainLen && mainDist >= (1 << 9))
@@ -1943,29 +2044,34 @@ static unsigned GetOptimumFast(CLzmaEnc *p)
   {
     p->backRes = (UInt32)repIndex;
     MOVE_POS(p, repLen - 1)
-    return repLen;
+    return repLen; // choose repLen as final match
   }
   
   if (mainLen < 2 || numAvail <= 2)
     return 1;
 
+  /* Check if skipping a byte and coding it as a literal is worth it, i.e.
+  * if match for sequence starting at next byte is better overall */
   {
-    unsigned len1 = ReadMatchDistances(p, &p->numPairs);
+    unsigned len1 = ReadMatchDistances(p, &p->numPairs); // Find matches by skipping a byte
     p->longestMatchLen = len1;
   
     if (len1 >= 2)
     {
       UInt32 newDist = p->matches[(size_t)p->numPairs - 1];
+      // Criterion used to justify if we can skip current byte
       if (   (len1 >= mainLen && newDist < mainDist)
           || (len1 == mainLen + 1 && !ChangePair(mainDist, newDist))
           || (len1 >  mainLen + 1)
           || (len1 + 1 >= mainLen && mainLen >= 3 && ChangePair(newDist, mainDist)))
-        return 1;
+        return 1; // code current byte as literal
     }
   }
   
   data = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - 1;
   
+  /* Compare with reps for new sequence. This might still justify skipping
+  * a byte, even if criterion above is not satisfied */
   for (i = 0; i < LZMA_NUM_REPS; i++)
   {
     unsigned len, limit;
@@ -1976,12 +2082,14 @@ static unsigned GetOptimumFast(CLzmaEnc *p)
     for (len = 2;; len++)
     {
       if (len >= limit)
-        return 1;
+        return 1; // new sequence provides long enough match at this rep. Worth skipping a byte.
       if (data[len] != data2[len])
         break;
     }
   }
   
+  /* Not worth skipping byte. Return longest mainLen and mainDist from
+  * the first ReadMatchDistances call */
   p->backRes = mainDist + LZMA_NUM_REPS;
   if (mainLen != 2)
   {
@@ -2276,7 +2384,7 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
   nowPos32 = (UInt32)p->nowPos64;
   startPos32 = nowPos32;
 
-  if (p->nowPos64 == 0)
+  if (p->nowPos64 == 0) // first byte in stream
   {
     unsigned numPairs;
     Byte curByte;
@@ -2300,9 +2408,9 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
     UInt32 range, ttt, newBound;
     CLzmaProb *probs;
   
-    if (p->fastMode)
+    if (p->fastMode) // hash-chain algo
       len = GetOptimumFast(p);
-    else
+    else // bin-tree algo
     {
       unsigned oci = p->optCur;
       if (p->optEnd == oci)
@@ -2328,16 +2436,19 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
     printf("\n pos = %6X, len = %3u  pos = %6u", nowPos32, len, dist);
     #endif
 
-    if (dist == MARK_LIT)
+    /* Depending on the type of data to be saved: literal, srep, 
+    * rep or match, corresponding code is encoded. This is followed by 
+    * optionally encoding len and/or distance values */
+    if (dist == MARK_LIT) // literal
     {
       Byte curByte;
       const Byte *data;
       unsigned state;
 
-      RC_BIT_0(&p->rc, probs);
+      RC_BIT_0(&p->rc, probs); // code:0+*
       p->rc.range = range;
       data = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - p->additionalOffset;
-      probs = LIT_PROBS(nowPos32, *(data - 1));
+      probs = LIT_PROBS(nowPos32, *(data - 1)); // get appropriate context model for literal encoding 
       curByte = *data;
       state = p->state;
       p->state = kLiteralNextStates[state];
@@ -2346,83 +2457,83 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
       else
         LitEnc_EncodeMatched(&p->rc, probs, curByte, *(data - p->reps[0]));
     }
-    else
+    else // rep, srep or match
     {
-      RC_BIT_1(&p->rc, probs);
+      RC_BIT_1(&p->rc, probs); // code:1+*
       probs = &p->isRep[p->state];
       RC_BIT_PRE(&p->rc, probs)
       
-      if (dist < LZMA_NUM_REPS)
+      if (dist < LZMA_NUM_REPS) // rep or srep
       {
-        RC_BIT_1(&p->rc, probs);
+        RC_BIT_1(&p->rc, probs); // code:11+*
         probs = &p->isRepG0[p->state];
         RC_BIT_PRE(&p->rc, probs)
-        if (dist == 0)
+        if (dist == 0) // srep or rep0
         {
-          RC_BIT_0(&p->rc, probs);
+          RC_BIT_0(&p->rc, probs); // code:110+*
           probs = &p->isRep0Long[p->state][posState];
           RC_BIT_PRE(&p->rc, probs)
           if (len != 1)
           {
-            RC_BIT_1_BASE(&p->rc, probs);
+            RC_BIT_1_BASE(&p->rc, probs); //code:1101
           }
-          else
+          else // srep
           {
-            RC_BIT_0_BASE(&p->rc, probs);
+            RC_BIT_0_BASE(&p->rc, probs); // code:1100
             p->state = kShortRepNextStates[p->state];
           }
         }
-        else
+        else // rep1-3
         {
-          RC_BIT_1(&p->rc, probs);
+          RC_BIT_1(&p->rc, probs); // code:111+*
           probs = &p->isRepG1[p->state];
           RC_BIT_PRE(&p->rc, probs)
-          if (dist == 1)
+          if (dist == 1) // rep1
           {
-            RC_BIT_0_BASE(&p->rc, probs);
+            RC_BIT_0_BASE(&p->rc, probs); // code:1110
             dist = p->reps[1];
           }
-          else
+          else // rep2-3
           {
-            RC_BIT_1(&p->rc, probs);
+            RC_BIT_1(&p->rc, probs); // code:1111+*
             probs = &p->isRepG2[p->state];
             RC_BIT_PRE(&p->rc, probs)
-            if (dist == 2)
+            if (dist == 2) // rep2
             {
-              RC_BIT_0_BASE(&p->rc, probs);
+              RC_BIT_0_BASE(&p->rc, probs); // code:11110
               dist = p->reps[2];
             }
-            else
+            else // rep3
             {
-              RC_BIT_1_BASE(&p->rc, probs);
+              RC_BIT_1_BASE(&p->rc, probs); // code:11111
               dist = p->reps[3];
-              p->reps[3] = p->reps[2];
+              p->reps[3] = p->reps[2]; // move reps queue dist->0->1->2->3
             }
-            p->reps[2] = p->reps[1];
+            p->reps[2] = p->reps[1]; // move reps queue dist->0->1->2->3
           }
-          p->reps[1] = p->reps[0];
-          p->reps[0] = dist;
+          p->reps[1] = p->reps[0]; // move reps queue dist->0->1->2->3
+          p->reps[0] = dist; // move reps queue dist->0->1->2->3
         }
 
         RC_NORM(&p->rc)
 
         p->rc.range = range;
 
-        if (len != 1)
+        if (len != 1) // code saved, now encode len
         {
           LenEnc_Encode(&p->repLenProbs, &p->rc, len - LZMA_MATCH_LEN_MIN, posState);
           --p->repLenEncCounter;
           p->state = kRepNextStates[p->state];
         }
       }
-      else
+      else // match
       {
         unsigned posSlot;
         RC_BIT_0(&p->rc, probs);
         p->rc.range = range;
         p->state = kMatchNextStates[p->state];
 
-        LenEnc_Encode(&p->lenProbs, &p->rc, len - LZMA_MATCH_LEN_MIN, posState);
+        LenEnc_Encode(&p->lenProbs, &p->rc, len - LZMA_MATCH_LEN_MIN, posState); // encode len
         // --p->lenEnc.counter;
 
         dist -= LZMA_NUM_REPS;
@@ -2438,7 +2549,7 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
           UInt32 sym = (UInt32)posSlot + (1 << kNumPosSlotBits);
           range = p->rc.range;
           probs = p->posSlotEncoder[GetLenToPosState(len)];
-          do
+          do // Range code 'slot' bitwise
           {
             CLzmaProb *prob = probs + (sym >> kNumPosSlotBits);
             UInt32 bit = (sym >> (kNumPosSlotBits - 1)) & 1;
@@ -2449,18 +2560,18 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
           p->rc.range = range;
         }
         
-        if (dist >= kStartPosModelIndex)
+        if (dist >= kStartPosModelIndex) // dist > 3 (dist 0:3 no direct_bits)
         {
           unsigned footerBits = ((posSlot >> 1) - 1);
 
-          if (dist < kNumFullDistances)
+          if (dist < kNumFullDistances) // dis: 4-127, 
           {
             unsigned base = ((2 | (posSlot & 1)) << footerBits);
             RcTree_ReverseEncode(&p->rc, p->posEncoders + base, footerBits, (unsigned)(dist /* - base */));
           }
-          else
+          else // dist >= 128
           {
-            UInt32 pos2 = (dist | 0xF) << (32 - footerBits);
+            UInt32 pos2 = (dist | 0xF) << (32 - footerBits); // direct_bits-4 part
             range = p->rc.range;
             // RangeEnc_EncodeDirectBits(&p->rc, posReduced >> kNumAlignBits, footerBits - kNumAlignBits);
             /*
@@ -2472,7 +2583,7 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
             }
             while (footerBits > kNumAlignBits);
             */
-            do
+            do // fixed 0.5 prob model
             {
               range >>= 1;
               p->rc.low += range & (0 - (pos2 >> 31));
@@ -2484,7 +2595,7 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
 
             // RcTree_ReverseEncode(&p->rc, p->posAlignEncoder, kNumAlignBits, posReduced & kAlignMask);
 
-            {
+            { // remaining 4 align bits LSB to MSB
               unsigned m = 1;
               unsigned bit;
               bit = dist & 1; dist >>= 1; RC_BIT(&p->rc, p->posAlignEncoder + m, bit); m = (m << 1) + bit;
