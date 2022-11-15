@@ -1,6 +1,10 @@
 /* LzmaDec.h -- LZMA Decoder
 2018-04-21 : Igor Pavlov : Public domain */
 
+/**
+ * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ */
+
 #ifndef __LZMA_DEC_H
 #define __LZMA_DEC_H
 
@@ -29,7 +33,7 @@ typedef struct _CLzmaProps
 {
   Byte lc;
   Byte lp;
-  Byte pb;
+  Byte pb; // number of low bits of processedPos to include in posState (default 2)
   Byte _pad_;
   UInt32 dicSize;
 } CLzmaProps;
@@ -54,18 +58,18 @@ typedef struct
 {
   /* Don't change this structure. ASM code can use it. */
   CLzmaProps prop;
-  CLzmaProb *probs;
-  CLzmaProb *probs_1664;
-  Byte *dic;
-  SizeT dicBufSize;
-  SizeT dicPos;
-  const Byte *buf;
-  UInt32 range;
-  UInt32 code;
-  UInt32 processedPos;
+  CLzmaProb *probs; // all context model probabilities
+  CLzmaProb *probs_1664; // all context model probabilities
+  Byte *dic; // circular buffer of decompressed bytes. Used as reference to copy from for future matches
+  SizeT dicBufSize; // dic size
+  SizeT dicPos; // current position in dic 
+  const Byte *buf; // input stream of compressed bytes
+  UInt32 range; // range size
+  UInt32 code; // encoded point within range
+  UInt32 processedPos; // indicator of bytes decompressed until now. ++ or +=len based on type of decompress operation performed
   UInt32 checkDicSize;
-  UInt32 reps[4];
-  UInt32 state;
+  UInt32 reps[4]; // offsets  for rep0-3
+  UInt32 state; // current state machine state
   UInt32 remainLen;
 
   UInt32 numProbs;
