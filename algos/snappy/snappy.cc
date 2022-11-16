@@ -522,6 +522,7 @@ static inline char* AOCL_EmitCopy(char* op, size_t offset, size_t len) {
 }
 
 bool GetUncompressedLength(const char* start, size_t n, size_t* result) {
+  if (start == NULL || result == NULL) return false;
   uint32_t v = 0;
   const char* limit = start + n;
   if (Varint::Parse32WithLimit(start, limit, &v) != NULL) {
@@ -1331,11 +1332,13 @@ static bool InternalUncompressAllTags(SnappyDecompressor* decompressor,
 }
 
 bool GetUncompressedLength(Source* source, uint32_t* result) {
+  if (source == NULL || result == NULL) return false;
   SnappyDecompressor decompressor(source);
   return decompressor.ReadUncompressedLength(result);
 }
 
 size_t Compress(Source* reader, Sink* writer) {
+  if (reader == NULL || writer == NULL) return 0;
   size_t written = 0;
   size_t N = reader->Available();
   const size_t uncompressed_size = N;
@@ -1805,20 +1808,29 @@ bool AOCL_SAW_RawUncompress(const char* compressed, size_t compressed_length, ch
 
 #ifdef AOCL_SNAPPY_OPT_FLAGS
 bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
+  if (compressed == NULL || uncompressed == NULL) return false;
   #ifdef AOCL_DYNAMIC_DISPATCHER
     return SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
   #else
     return AOCL_SAW_RawUncompress(compressed, compressed_length, uncompressed);
   #endif
 }
+
+bool RawUncompress(Source* compressed, char* uncompressed) {
+  if (compressed == NULL || uncompressed == NULL) return false;
+  AOCL_SnappyArrayWriter output(uncompressed);
+  return InternalUncompress(compressed, &output);
+}
 #else
 bool RawUncompress(const char* compressed, size_t compressed_length,
                    char* uncompressed) {
+  if (compressed == NULL || uncompressed == NULL) return false;
   ByteArraySource reader(compressed, compressed_length);
   return RawUncompress(&reader, uncompressed);
 }
 
 bool RawUncompress(Source* compressed, char* uncompressed) {
+  if (compressed == NULL || uncompressed == NULL) return false;
   SnappyArrayWriter output(uncompressed);
   return InternalUncompress(compressed, &output);
 }
@@ -1826,6 +1838,7 @@ bool RawUncompress(Source* compressed, char* uncompressed) {
 
 bool Uncompress(const char* compressed, size_t compressed_length,
                 std::string* uncompressed) {
+  if (compressed == NULL || uncompressed == NULL) return false;
   size_t ulength;
   if (!GetUncompressedLength(compressed, compressed_length, &ulength)) {
     return false;
@@ -1884,12 +1897,14 @@ class SnappyDecompressionValidator {
 };
 
 bool IsValidCompressedBuffer(const char* compressed, size_t compressed_length) {
+  if (compressed == NULL) return false;
   ByteArraySource reader(compressed, compressed_length);
   SnappyDecompressionValidator writer;
   return InternalUncompress(&reader, &writer);
 }
 
 bool IsValidCompressed(Source* compressed) {
+  if (compressed == NULL) return false;
   SnappyDecompressionValidator writer;
   return InternalUncompress(compressed, &writer);
 }
@@ -1898,6 +1913,7 @@ void RawCompress(const char* input,
                  size_t input_length,
                  char* compressed,
                  size_t* compressed_length) {
+  if (input == NULL || compressed == NULL || compressed_length == NULL) return;
   ByteArraySource reader(input, input_length);
   UncheckedByteArraySink writer(compressed);
   Compress(&reader, &writer);
@@ -1908,6 +1924,7 @@ void RawCompress(const char* input,
 
 size_t Compress(const char* input, size_t input_length,
                 std::string* compressed) {
+  if (input == NULL || compressed == NULL) return 0;
   // Pre-grow the buffer to the max length of the compressed output
   STLStringResizeUninitialized(compressed, MaxCompressedLength(input_length));
 
@@ -2186,6 +2203,7 @@ class SnappySinkAllocator {
 };
 
 size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed) {
+  if (compressed == NULL || uncompressed == NULL) return 0;
   SnappySinkAllocator allocator(uncompressed);
   SnappyScatteredWriter<SnappySinkAllocator> writer(allocator);
   InternalUncompress(compressed, &writer);
@@ -2193,6 +2211,7 @@ size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed) {
 }
 
 bool Uncompress(Source* compressed, Sink* uncompressed) {
+  if (compressed == NULL || uncompressed == NULL) return false;
   // Read the uncompressed length from the front of the compressed input
   SnappyDecompressor decompressor(compressed);
   uint32_t uncompressed_len = 0;
