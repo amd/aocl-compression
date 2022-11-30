@@ -1395,7 +1395,6 @@ size_t Compress(Source* reader, Sink* writer) {
     // scratch_output[] region is big enough for this iteration.
     char* dest = writer->GetAppendBuffer(max_output, wmem.GetScratchOutput());
 
-    //SNAPPY_compress_fragment_fp
 #ifdef AOCL_DYNAMIC_DISPATCHER
     char* end = SNAPPY_compress_fragment_fp(fragment, fragment_size, dest, table, table_size);
 #else
@@ -1606,12 +1605,14 @@ class SnappyIOVecWriter {
 
 bool RawUncompressToIOVec(const char* compressed, size_t compressed_length,
                           const struct iovec* iov, size_t iov_cnt) {
+  if (compressed == NULL || iov == NULL) return false;
   ByteArraySource reader(compressed, compressed_length);
   return RawUncompressToIOVec(&reader, iov, iov_cnt);
 }
 
 bool RawUncompressToIOVec(Source* compressed, const struct iovec* iov,
                           size_t iov_cnt) {
+  if (compressed == NULL || iov == NULL) return false;
   SnappyIOVecWriter output(iov, iov_cnt);
   return InternalUncompress(compressed, &output);
 }
@@ -1808,7 +1809,12 @@ bool AOCL_SAW_RawUncompress(const char* compressed, size_t compressed_length, ch
 
 #ifdef AOCL_SNAPPY_OPT_FLAGS
 bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
-  if (compressed == NULL || uncompressed == NULL) return false;
+  // sanity checks ------------------------------------------------------------
+     size_t ulength;
+     if (!GetUncompressedLength(compressed, compressed_length, &ulength)) return false;
+     if (ulength != 0 && uncompressed == NULL) return false;
+  // sanity checks ------------------------------------------------------------
+
   #ifdef AOCL_DYNAMIC_DISPATCHER
     return SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
   #else
@@ -1817,20 +1823,35 @@ bool RawUncompress(const char* compressed, size_t compressed_length, char* uncom
 }
 
 bool RawUncompress(Source* compressed, char* uncompressed) {
-  if (compressed == NULL || uncompressed == NULL) return false;
+  // sanity checks ------------------------------------------------------------
+     size_t _readable_length, ulength;
+     const char* _compressed_buffer;
+     if (compressed == NULL) return false;
+     _compressed_buffer = compressed->Peek(&_readable_length);
+     if (!GetUncompressedLength(_compressed_buffer, _readable_length, &ulength)) return false;
+     if (ulength != 0 && uncompressed == NULL) return false;
+  // sanity checks ------------------------------------------------------------
+
   AOCL_SnappyArrayWriter output(uncompressed);
   return InternalUncompress(compressed, &output);
 }
 #else
 bool RawUncompress(const char* compressed, size_t compressed_length,
                    char* uncompressed) {
-  if (compressed == NULL || uncompressed == NULL) return false;
   ByteArraySource reader(compressed, compressed_length);
   return RawUncompress(&reader, uncompressed);
 }
 
 bool RawUncompress(Source* compressed, char* uncompressed) {
-  if (compressed == NULL || uncompressed == NULL) return false;
+  // sanity checks ------------------------------------------------------------
+     size_t _readable_length, ulength;
+     const char* _compressed_buffer;
+     if (compressed == NULL) return false;
+     _compressed_buffer = compressed->Peek(&_readable_length);
+     if (!GetUncompressedLength(_compressed_buffer, _readable_length, &ulength)) return false;
+     if (ulength != 0 && uncompressed == NULL) return false;
+  // sanity checks ------------------------------------------------------------
+
   SnappyArrayWriter output(uncompressed);
   return InternalUncompress(compressed, &output);
 }
@@ -1838,14 +1859,13 @@ bool RawUncompress(Source* compressed, char* uncompressed) {
 
 bool Uncompress(const char* compressed, size_t compressed_length,
                 std::string* uncompressed) {
-  if (compressed == NULL || uncompressed == NULL) return false;
   size_t ulength;
   if (!GetUncompressedLength(compressed, compressed_length, &ulength)) {
     return false;
   }
   // On 32-bit builds: max_size() < kuint32max.  Check for that instead
   // of crashing (e.g., consider externally specified compressed data).
-  if (ulength > uncompressed->max_size()) {
+  if (ulength > uncompressed->max_size() || (ulength != 0 && uncompressed == NULL)) {
     return false;
   }
   STLStringResizeUninitialized(uncompressed, ulength);
@@ -1948,8 +1968,9 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
         switch (optLevel)
         {
         case 0://C version
-            break;
         case 1://SSE version
+            SNAPPY_compress_fragment_fp = internal::CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress;
             break;
         case 2://AVX version
         case 3://AVX2 version
