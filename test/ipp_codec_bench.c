@@ -597,14 +597,14 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
             {
                 if (verifyRes != 0)
                 {
-                    printf("AOCL-CODEC [%s-%ld] [Filename:%s] verification: failed\n",
+                    printf("IPP [%s-%ld] [Filename:%s] verification: failed\n",
                            codec_list[i].codec_name,
                            l, codec_bench_handle->fName);
                     return -1;
                 }
             else
             {
-                printf("AOCL-CODEC [%s-%ld] [Filename:%s] verification: passed\n",
+                printf("IPP [%s-%ld] [Filename:%s] verification: passed\n",
                         codec_list[i].codec_name,
                         l, codec_bench_handle->fName);
             }
@@ -624,7 +624,7 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
                     codec_bench_handle->dBestSpeed = 
                         (codec_bench_handle->inSize * 1000.0) / 
                         codec_bench_handle->dBestTime;
-                    printf("AOCL-CODEC [%s-%ld] [Filename:%s] -------------------------------------\n",
+                    printf("IPP [%s-%ld] [Filename:%s] -------------------------------------\n",
                            codec_list[i].codec_name,
                            l, codec_bench_handle->fName);
                     printf("Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %ld, speed(best) %.2f MB/s, time(best) %.2f ms\n",
@@ -714,7 +714,7 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
             {
                 if (verifyRes != 0)
                 {
-                    printf("AOCL-CODEC [%s-%ld] [Filename:%s] verification: failed\n",
+                    printf("IPP [%s-%ld] [Filename:%s] verification: failed\n",
                             codec_list[codec_bench_handle->codec_method].codec_name,
                             aocl_codec_handle->level,
                             codec_bench_handle->fName);
@@ -722,7 +722,7 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
                 }
                 else
                 {
-                    printf("AOCL-CODEC [%s-%ld] [Filename:%s] verification: passed\n", 
+                    printf("IPP [%s-%ld] [Filename:%s] verification: passed\n", 
                             codec_list[codec_bench_handle->codec_method].codec_name,
                             aocl_codec_handle->level,
                             codec_bench_handle->fName);
@@ -741,7 +741,7 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
                     1000.0) / codec_bench_handle->cBestTime;
                 codec_bench_handle->dBestSpeed = (codec_bench_handle->inSize * 
                     1000.0) / codec_bench_handle->dBestTime;
-                printf("AOCL-CODEC [%s-%ld] [Filename:%s] -------------------------------------\n",
+                printf("IPP [%s-%ld] [Filename:%s] -------------------------------------\n",
                         codec_list[codec_bench_handle->codec_method].codec_name,
                         aocl_codec_handle->level, codec_bench_handle->fName);
                 printf("Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %ld, speed(best) %.2f MB/s, time(best) %.2f ms\n",
