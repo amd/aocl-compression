@@ -2,7 +2,7 @@
 2018-07-04 : Igor Pavlov : Public domain */
 
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
  */
 
 #include "Precomp.h"
