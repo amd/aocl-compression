@@ -2,7 +2,7 @@
 2022-07-15: Igor Pavlov : Public domain */
 
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
  */
 
 #include "Precomp.h"
@@ -2063,7 +2063,7 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
   return Backward(p, cur); // select best <len, distance> pair from values computed in p->opt[i]
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_LZMA_OPT
 static unsigned AOCL_GetOptimum(CLzmaEnc* p, UInt32 position) {
   return GetOptimum(p, position);
 }
@@ -2487,7 +2487,11 @@ static void LzmaEnc_Destruct(CLzmaEnc *p, ISzAllocPtr alloc, ISzAllocPtr allocBi
 #ifdef AOCL_DYNAMIC_DISPATCHER
   MatchFinder_Free_fp(&MFB, allocBig);
 #else
+#ifdef AOCL_LZMA_OPT
+  AOCL_MatchFinder_Free(&MFB, allocBig);
+#else
   MatchFinder_Free(&MFB, allocBig);
+#endif
 #endif
   LzmaEnc_FreeLits(p, alloc);
   RangeEnc_Free(&p->rc, alloc);
@@ -2550,7 +2554,11 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
 #ifdef AOCL_DYNAMIC_DISPATCHER
         len = GetOptimum_fp(p, nowPos32);
 #else
+#ifdef AOCL_LZMA_OPT
+        len = AOCL_GetOptimum(p, nowPos32);
+#else
         len = GetOptimum(p, nowPos32);
+#endif
 #endif
       else
       {
@@ -2876,16 +2884,26 @@ static SRes LzmaEnc_Alloc(CLzmaEnc *p, UInt32 keepWindowSize, ISzAllocPtr alloc,
         p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
         , allocBig))
 #else
+#ifdef AOCL_LZMA_OPT
+      if (!AOCL_MatchFinder_Create(&MFB, dictSize, beforeSize,
+          p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
+          , allocBig))
+#else
     if (!MatchFinder_Create(&MFB, dictSize, beforeSize,
       p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
       , allocBig))
+#endif
 #endif
       return SZ_ERROR_MEM;
     p->matchFinderObj = &MFB;
 #ifdef AOCL_DYNAMIC_DISPATCHER
     MatchFinder_CreateVTable_fp(&MFB, &p->matchFinder);
 #else
+#ifdef AOCL_LZMA_OPT
+    AOCL_MatchFinder_CreateVTable(&MFB, &p->matchFinder);
+#else
     MatchFinder_CreateVTable(&MFB, &p->matchFinder);
+#endif
 #endif
   }
   

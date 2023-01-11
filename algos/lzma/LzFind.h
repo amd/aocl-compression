@@ -2,13 +2,15 @@
 2021-07-13 : Igor Pavlov : Public domain */
 
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
  */
 
 #ifndef __LZ_FIND_H
 #define __LZ_FIND_H
 
 #include "7zTypes.h"
+
+#define AOCL_LZMA_OPT
 
 EXTERN_C_BEGIN
 

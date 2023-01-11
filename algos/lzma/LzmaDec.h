@@ -2,7 +2,7 @@
 2018-04-21 : Igor Pavlov : Public domain */
 
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
  */
 
 #ifndef __LZMA_DEC_H
