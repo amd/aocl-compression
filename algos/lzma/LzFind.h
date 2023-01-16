@@ -147,6 +147,17 @@ UInt32* Hc3Zip_MatchFinder_GetMatches(CMatchFinder *p, UInt32 *distances);
 void Bt3Zip_MatchFinder_Skip(CMatchFinder *p, UInt32 num);
 void Hc3Zip_MatchFinder_Skip(CMatchFinder *p, UInt32 num);
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+/* Conditions:
+     historySize <= 3 GB
+     keepAddBufferBefore + matchMaxLen + keepAddBufferAfter < 511MB
+*/
+int AOCL_MatchFinder_Create(CMatchFinder* p, UInt32 historySize,
+  UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
+  ISzAllocPtr alloc);
+void AOCL_MatchFinder_Free(CMatchFinder* p, ISzAllocPtr alloc);
+void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable);
+#endif
 EXTERN_C_END
 
 #define GetUi16(p) (*(const UInt16 *)(const void *)(p))

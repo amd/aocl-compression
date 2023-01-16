@@ -1268,3 +1268,11 @@ SRes LzmaDecode(Byte *dest, SizeT *destLen, const Byte *src, SizeT *srcLen,
   LzmaDec_FreeProbs(&p, alloc);
   return res;
 }
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
+  size_t level, size_t windowLog)
+{
+  //ToDo: Implement a new lzma decode API for setup
+}
+#endif

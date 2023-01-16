@@ -160,8 +160,13 @@ INT64 aocl_lz4hc_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 CHAR *aocl_lzma_setup(INTP optOff, INTP optLevel,
                       UINTP insize, UINTP level, UINTP windowLog)
 {
-    //ToDo: Implement a new lzma API for setup
-    return NULL;
+#ifdef AOCL_DYNAMIC_DISPATCHER
+  aocl_setup_lzma_encode(optOff, optLevel, insize, level, windowLog);
+  aocl_setup_lzma_decode(optOff, optLevel, insize, level, windowLog);
+  return NULL;
+#else
+  return NULL;
+#endif
 }
 
 INT64 aocl_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,

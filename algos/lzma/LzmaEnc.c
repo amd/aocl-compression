@@ -516,6 +516,15 @@ typedef struct
   #endif
 } CLzmaEnc;
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+// Function pointers for optimization overloads
+void (*MatchFinder_CreateVTable_fp)(CMatchFinder* p, IMatchFinder2* vTable);
+int (*MatchFinder_Create_fp)(CMatchFinder* p, UInt32 historySize,
+  UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
+  ISzAllocPtr alloc);
+void (*MatchFinder_Free_fp)(CMatchFinder* p, ISzAllocPtr alloc);
+unsigned (*GetOptimum_fp)(CLzmaEnc* p, UInt32 position);
+#endif
 
 #define MFB (p->matchFinderBase)
 /*
@@ -2054,7 +2063,11 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
   return Backward(p, cur); // select best <len, distance> pair from values computed in p->opt[i]
 }
 
-
+#ifdef AOCL_DYNAMIC_DISPATCHER
+static unsigned AOCL_GetOptimum(CLzmaEnc* p, UInt32 position) {
+  return GetOptimum(p, position);
+}
+#endif
 
 #define ChangePair(smallDist, bigDist) (((bigDist) >> 7) > (smallDist))
 
@@ -2471,7 +2484,11 @@ static void LzmaEnc_Destruct(CLzmaEnc *p, ISzAllocPtr alloc, ISzAllocPtr allocBi
   MatchFinderMt_Destruct(&p->matchFinderMt, allocBig);
   #endif
   
+#ifdef AOCL_DYNAMIC_DISPATCHER
+  MatchFinder_Free_fp(&MFB, allocBig);
+#else
   MatchFinder_Free(&MFB, allocBig);
+#endif
   LzmaEnc_FreeLits(p, alloc);
   RangeEnc_Free(&p->rc, alloc);
 }
@@ -2530,7 +2547,11 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
     {
       unsigned oci = p->optCur;
       if (p->optEnd == oci)
+#ifdef AOCL_DYNAMIC_DISPATCHER
+        len = GetOptimum_fp(p, nowPos32);
+#else
         len = GetOptimum(p, nowPos32);
+#endif
       else
       {
         const COptimal *opt = &p->opt[oci];
@@ -2850,12 +2871,22 @@ static SRes LzmaEnc_Alloc(CLzmaEnc *p, UInt32 keepWindowSize, ISzAllocPtr alloc,
   else
   #endif
   {
-    if (!MatchFinder_Create(&MFB, dictSize, beforeSize,
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    if (!MatchFinder_Create_fp(&MFB, dictSize, beforeSize,
         p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
         , allocBig))
+#else
+    if (!MatchFinder_Create(&MFB, dictSize, beforeSize,
+      p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
+      , allocBig))
+#endif
       return SZ_ERROR_MEM;
     p->matchFinderObj = &MFB;
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    MatchFinder_CreateVTable_fp(&MFB, &p->matchFinder);
+#else
     MatchFinder_CreateVTable(&MFB, &p->matchFinder);
+#endif
   }
   
   return SZ_OK;
@@ -3214,7 +3245,6 @@ SRes LzmaEnc_MemEncode(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte
   return res;
 }
 
-
 SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
@@ -3236,3 +3266,39 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
   LzmaEnc_Destroy(p, alloc, allocBig);
   return res;
 }
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
+{
+  if (optOff)
+  {
+    //C version
+    MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
+    MatchFinder_Create_fp = MatchFinder_Create;
+    MatchFinder_Free_fp = MatchFinder_Free;
+    GetOptimum_fp = GetOptimum;
+  }
+  else
+  {
+    switch (optLevel)
+    {
+    case 0://C version
+    case 1://SSE version
+    case 2://AVX version
+    case 3://AVX2 version
+    default://AVX512 and other versions
+      MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
+      MatchFinder_Create_fp = AOCL_MatchFinder_Create;
+      MatchFinder_Free_fp = AOCL_MatchFinder_Free;
+      GetOptimum_fp = AOCL_GetOptimum;
+      break;
+    }
+  }
+}
+
+void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
+  size_t level, size_t windowLog)
+{
+  aocl_register_lzma_encode_fmv(optOff, optLevel);
+}
+#endif

@@ -252,6 +252,12 @@ void MatchFinder_Free(CMatchFinder *p, ISzAllocPtr alloc)
   LzInWindow_Free(p, alloc);
 }
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+void AOCL_MatchFinder_Free(CMatchFinder* p, ISzAllocPtr alloc) {
+  MatchFinder_Free(p, alloc);
+}
+#endif
+
 static CLzRef* AllocRefs(size_t num, ISzAllocPtr alloc)
 {
   size_t sizeInBytes = (size_t)num * sizeof(CLzRef);
@@ -416,6 +422,15 @@ int MatchFinder_Create(CMatchFinder *p, UInt32 historySize,
   MatchFinder_Free(p, alloc);
   return 0;
 }
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+int AOCL_MatchFinder_Create(CMatchFinder* p, UInt32 historySize,
+  UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
+  ISzAllocPtr alloc) {
+  return MatchFinder_Create(p, historySize,
+    keepAddBufferBefore, matchMaxLen, keepAddBufferAfter, alloc);
+}
+#endif
 
 static void MatchFinder_SetLimits(CMatchFinder *p)
 {
@@ -1588,3 +1603,9 @@ void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder2 *vTable)
     vTable->Skip = (Mf_Skip_Func)Bt5_MatchFinder_Skip;
   }
 }
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable) {
+  MatchFinder_CreateVTable(p, vTable);
+}
+#endif
