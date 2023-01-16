@@ -233,6 +233,14 @@ SRes LzmaDecode(Byte *dest, SizeT *destLen, const Byte *src, SizeT *srcLen,
     const Byte *propData, unsigned propSize, ELzmaFinishMode finishMode,
     ELzmaStatus *status, ISzAllocPtr alloc);
 
+/* AOCL-Compression defined setup function that configures with the right
+ * AMD optimized lzma routines depending upon the detected CPU features.
+ */
+#ifdef AOCL_DYNAMIC_DISPATCHER
+void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
+  size_t level, size_t windowLog);
+#endif
+
 EXTERN_C_END
 
 #endif
