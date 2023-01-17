@@ -41,18 +41,49 @@
 
 #ifdef __cplusplus
 extern "C" {
+
 #endif
+/**
+ * \defgroup API Standardized/Unified API
+ * \defgroup LZ4_API
+ * \defgroup SNAPPY_API
+ * \defgroup ZLIB_API
+ */
+
+/**
+ * \addtogroup API
+ *  @brief Interface APIs and data structures of AOCL Compression library
+ *
+ *  This file contains the unified interface API set and associated data structure.
+ * @{
+ */
 
 #ifdef _WINDOWS
+/**
+ *You can export data, functions, classes, or class member functions from a DLL using the __declspec(dllexport) keyword. __declspec(dllexport) adds the export directive to the object file so you do not need to use a .def file.
+ * 
+ */
 #define EXPORT_SYM_DYN __declspec(dllexport)
 #else
+/**
+ * For Linux EXPORT_SYM_DYN is NULL, by default the symbols are publicly exposed.
+ */
 #define EXPORT_SYM_DYN
 #endif
 
 #define LIBRARY_VERSION "AOCL-COMPRESSION 4.0.1"
 #define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 1.0"
 
-//Types of compression methods supported
+
+
+/**
+ * @brief Types of compression methods supported.
+ * 
+ * Optimizations are performed for following methods
+ * @ref LZ4_API, 
+ * @ref ZLIB_API, 
+ * @ref SNAPPY_API
+ */
 typedef enum
 {
     LZ4 = 0,
@@ -65,51 +96,90 @@ typedef enum
     AOCL_COMPRESSOR_ALGOS_NUM
 } aocl_compression_type;
 
-//Interface data structure
+/**
+ * @brief This acts as a handle for compression and decompression of aocl library.
+ * 
+ */
 typedef struct
 {
-    char *inBuf;         //pointer to input buffer data
-    char *outBuf;        //pointer to output buffer data
-    char *workBuf;       //pointer to temporary work buffer
-    size_t inSize;       //input data length
-    size_t outSize;      //output data length
-    size_t level;        //requested compression level
-    size_t optVar;       //additional variables or parameters
-    int numThreads;      //number of threads available for multi-threading
-    int numMPIranks;     //number of available multi-core MPI ranks
-    size_t memLimit;     //maximum memory limit for compression/decompression
-    int measureStats;    //Measure speed and size of compression/decompression
-    uint64_t cSize;      //size of compressed output
-    uint64_t dSize;      //size of decompressed output
-    uint64_t cTime;      //time to compress input
-    uint64_t dTime;      //time to decompress input
-    float cSpeed;        //speed of compression
-    float dSpeed;        //speed of decompression
-    int optOff;          //Turn off all optimizations
-    int optLevel;        //Optimization level:0-NA,1-SSE2,2-AVX,3-AVX2,4-AVX512
-    int printDebugLogs;  //print debug logs
+    char *inBuf;         ///<pointer to input buffer data
+    char *outBuf;        ///<pointer to output buffer data
+    char *workBuf;       ///<pointer to temporary work buffer
+    size_t inSize;       ///<input data length
+    size_t outSize;      ///<output data length
+    size_t level;        ///<requested compression level
+    size_t optVar;       ///<additional variables or parameters
+    int numThreads;      ///<number of threads available for multi-threading
+    int numMPIranks;     ///<number of available multi-core MPI ranks
+    size_t memLimit;     ///<maximum memory limit for compression/decompression
+    int measureStats;    ///<Measure speed and size of compression/decompression
+    uint64_t cSize;      ///<size of compressed output
+    uint64_t dSize;      ///<size of decompressed output
+    uint64_t cTime;      ///<time to compress input
+    uint64_t dTime;      ///<time to decompress input
+    float cSpeed;        ///<speed of compression
+    float dSpeed;        ///<speed of decompression
+    int optOff;          ///<Turn off all optimizations
+    int optLevel;        ///<Optimization level:0-NA,1-SSE2,2-AVX,3-AVX2,4-AVX512
+    int printDebugLogs;  ///<print debug logs
     //size_t chunk_size; //Unused variable
 } aocl_compression_desc;
 
-//Interface API to compress data
+/**
+ * @brief Interface API to compress data.
+ * 
+ * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
+ * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
+ * 
+ * @return EXPORT_SYM_DYN 
+ */
 EXPORT_SYM_DYN int64_t aocl_llc_compress(aocl_compression_desc *handle,
                             aocl_compression_type codec_type);
 
-//Interface API to decompress data
+/**
+ * @brief Interface API to decompress data.
+ * 
+ * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
+ * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
+ * 
+ * @return EXPORT_SYM_DYN 
+ */
+
 EXPORT_SYM_DYN int64_t aocl_llc_decompress(aocl_compression_desc *handle,
                               aocl_compression_type codec_type);
 
-//Interface API to setup the compression method
+/**
+ * @brief Interface API to setup the codec method.
+ * 
+ * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
+ * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
+ * 
+ * @return EXPORT_SYM_DYN 
+ */
+
 EXPORT_SYM_DYN void aocl_llc_setup(aocl_compression_desc *handle,
                       aocl_compression_type codec_type);
 
-//Interface API to destroy the compression method
+/**
+ * @brief Interface API to destroy the codec method.
+ * 
+ * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
+ * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
+ * 
+ * @return EXPORT_SYM_DYN 
+ */
 EXPORT_SYM_DYN void aocl_llc_destroy(aocl_compression_desc *handle,
                         aocl_compression_type codec_type);
+/**
+ * @brief Interface API to get compression library version string.
+ * 
+ * @return EXPORT_SYM_DYN const* 
+ */
 
-//Interface API to get compression library version string
 EXPORT_SYM_DYN const char *aocl_llc_version(void);
-
+/**
+ * @}
+ */
 #ifdef __cplusplus
 }
 #endif

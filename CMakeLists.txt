@@ -213,6 +213,47 @@ message(STATUS "C++ Compiler flags used for this Unix build are: ${CMAKE_CXX_FLA
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
 endif()
 
+option(BUILD_DOC "BUILD_DOC" OFF)
+if (BUILD_DOC)
+	find_package(Doxygen)
+	set(W_DIR "${CMAKE_CURRENT_SOURCE_DIR}/docs")
+	if(NOT (DOXYGEN_FOUND))
+		message(STATUS "Doxygen is not installed")
+		if (WIN32)
+			set(DOXYGEN "${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen-1.9.5/doxygen.exe")
+			if(NOT (EXISTS ${DOXYGEN}))
+				message(STATUS "so downloading doxygen executables")
+				file(DOWNLOAD https://www.doxygen.nl/files/doxygen-1.9.5.windows.x64.bin.zip ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.zip
+						SHOW_PROGRESS )
+				execute_process(COMMAND powershell Expand-Archive ./doxygen.zip ./doxygen-1.9.5 -Force
+						WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/)
+				file(REMOVE ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.zip)
+			endif()
+		elseif (UNIX)
+			set(DOXYGEN "${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen-1.9.5/bin/doxygen")
+			if(NOT (EXISTS ${DOXYGEN}))
+				message(STATUS "so downloading doxygen executables")
+				file(DOWNLOAD https://www.doxygen.nl/files/doxygen-1.9.5.linux.bin.tar.gz ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.gz
+						SHOW_PROGRESS )
+				execute_process(COMMAND tar -xf doxygen.gz
+						WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
+				file(REMOVE ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.gz)
+			endif()
+		endif()
+		execute_process(COMMAND "${DOXYGEN}" Doxyfile
+				WORKING_DIRECTORY ${W_DIR})
+	else()
+		execute_process(COMMAND doxygen Doxyfile
+				WORKING_DIRECTORY ${W_DIR}
+				COMMAND_ECHO STDOUT)
+	endif()
+	if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/docs/html/index.html)
+		message(STATUS "Documentation generated successfully, to view documentation open docs/html/index.html .")
+	else()
+		message(STATUS "Document generation failed.")
+	endif()
+endif()
+
 if (AOCL_LZ4_OPT_PREFETCH_BACKWARDS)
     set_source_files_properties(${LZ4_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DAOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS")
 endif()

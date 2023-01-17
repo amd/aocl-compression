@@ -1,17 +1,77 @@
-LZ4 - Library Files
-================================
+LZ4 - Introduction
+==================
+
+LZ4 is lossless compression algorithm,
+providing compression speed > 500 MB/s per core,
+scalable with multi-cores CPU.
+It features an extremely fast decoder,
+with speed in multiple GB/s per core,
+typically reaching RAM speed limits on multi-core systems.
+
+Speed can be tuned dynamically, selecting an "acceleration" factor
+which trades compression ratio for faster speed.
+On the other end, a high compression derivative, LZ4_HC, is also provided,
+trading CPU time for improved compression ratio.
+All versions feature the same decompression speed.
+
+LZ4 is also compatible with [dictionary compression](https://github.com/facebook/zstd#the-case-for-small-data-compression),
+both at [API](https://github.com/lz4/lz4/blob/v1.8.3/lib/lz4frame.h#L481) and [CLI](https://github.com/lz4/lz4/blob/v1.8.3/programs/lz4.1.md#operation-modifiers) levels.
+It can ingest any input file as dictionary, though only the final 64KB are used.
+This capability can be combined with the [Zstandard Dictionary Builder](https://github.com/facebook/zstd/blob/v1.3.5/programs/zstd.1.md#dictionary-builder),
+in order to drastically improve compression performance on small files.
+
+
+LZ4 library is provided as open-source software using BSD 2-Clause license.
+
+
+|Branch      |Status   |
+|------------|---------|
+|dev         | [![Build Status][travisDevBadge]][travisLink]    [![Build status][AppveyorDevBadge]][AppveyorLink]                                         |
+
+[travisDevBadge]: https://travis-ci.org/lz4/lz4.svg?branch=dev "Continuous Integration test suite"
+[travisLink]: https://travis-ci.org/lz4/lz4
+[AppveyorDevBadge]: https://ci.appveyor.com/api/projects/status/github/lz4/lz4?branch=dev&svg=true "Windows test suite"
+[AppveyorLink]: https://ci.appveyor.com/project/YannCollet/lz4-1lndh
+
+
+
+Documentation
+-------------------------
+
+The raw LZ4 block compression format is detailed within [lz4_Block_format].
+
+Arbitrarily long files or data streams are compressed using multiple blocks,
+for streaming requirements. These blocks are organized into a frame,
+defined into [lz4_Frame_format].
+Interoperable versions of LZ4 must also respect the frame format.
+
+[lz4_Block_format]: https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md
+[lz4_Frame_format]: https://github.com/lz4/lz4/blob/dev/doc/lz4_Frame_format.md
+
+
+Other source versions
+-------------------------
+
+Beyond the C reference source,
+many contributors have created versions of lz4 in multiple languages
+(Java, C#, Python, Perl, Ruby, etc.).
+A list of known source ports is maintained on the [LZ4 Homepage].
+
+[LZ4 Homepage]: http://www.lz4.org
+
+# LZ4 - Library Files
 
 The `/lib` directory contains many files, but depending on project's objectives,
 not all of them are necessary.
 
-#### Minimal LZ4 build
+### Minimal LZ4 build
 
 The minimum required is **`lz4.c`** and **`lz4.h`**,
 which provides the fast compression and decompression algorithms.
 They generate and decode data using the [LZ4 block format].
 
 
-#### High Compression variant
+### High Compression variant
 
 For more compression ratio at the cost of compression speed,
 the High Compression variant called **lz4hc** is available.
@@ -20,7 +80,7 @@ This variant also compresses data using the [LZ4 block format],
 and depends on regular `lib/lz4.*` source files.
 
 
-#### Frame support, for interoperability
+### Frame support, for interoperability
 
 In order to produce compressed data compatible with `lz4` command line utility,
 it's necessary to use the [official interoperable frame format].
@@ -31,7 +91,7 @@ including, lz4 and lz4hc, and also **xxhash**.
 So it's necessary to include all `*.c` and `*.h` files present in `/lib`.
 
 
-#### Advanced / Experimental API
+### Advanced / Experimental API
 
 Definitions which are not guaranteed to remain stable in future versions,
 are protected behind macros, such as `LZ4_STATIC_LINKING_ONLY`.
@@ -44,7 +104,7 @@ by using build macros `LZ4_PUBLISH_STATIC_FUNCTIONS`
 and `LZ4F_PUBLISH_STATIC_FUNCTIONS`.
 
 
-#### Build macros
+### Build macros
 
 The following build macro can be selected to adjust source code behavior at compilation time :
 
@@ -86,7 +146,7 @@ The following build macro can be selected to adjust source code behavior at comp
   This test can be disabled if it proves flaky, by setting this value to 0.
 
 
-#### Amalgamation
+### Amalgamation
 
 lz4 source code can be amalgamated into a single file.
 One can combine all source code into `lz4_all.c` by using following command:
@@ -97,40 +157,7 @@ cat lz4.c lz4hc.c lz4frame.c > lz4_all.c
 All `*.h` files present in `/lib` remain necessary to compile `lz4_all.c`.
 
 
-#### Windows : using MinGW+MSYS to create DLL
-
-DLL can be created using MinGW+MSYS with the `make liblz4` command.
-This command creates `dll\liblz4.dll` and the import library `dll\liblz4.lib`.
-To override the `dlltool` command  when cross-compiling on Linux, just set the `DLLTOOL` variable. Example of cross compilation on Linux with mingw-w64 64 bits:
-```
-make BUILD_STATIC=no CC=x86_64-w64-mingw32-gcc DLLTOOL=x86_64-w64-mingw32-dlltool OS=Windows_NT
-```
-The import library is only required with Visual C++.
-The header files `lz4.h`, `lz4hc.h`, `lz4frame.h` and the dynamic library
-`dll\liblz4.dll` are required to compile a project using gcc/MinGW.
-The dynamic library has to be added to linking options.
-It means that if a project that uses LZ4 consists of a single `test-dll.c`
-file it should be linked with `dll\liblz4.dll`. For example:
-```
-    $(CC) $(CFLAGS) -Iinclude/ test-dll.c -o test-dll dll\liblz4.dll
-```
-The compiled executable will require LZ4 DLL which is available at `dll\liblz4.dll`.
-
-
-#### Miscellaneous
-
-Other files present in the directory are not source code. They are :
-
- - `LICENSE` : contains the BSD license text
- - `Makefile` : `make` script to compile and install lz4 library (static and dynamic)
- - `liblz4.pc.in` : for `pkg-config` (used in `make install`)
- - `README.md` : this file
-
-[official interoperable frame format]: ../doc/lz4_Frame_format.md
-[LZ4 block format]: ../doc/lz4_Block_format.md
-
-
-#### License
+### License
 
 All source material within __lib__ directory are BSD 2-Clause licensed.
 See [LICENSE](LICENSE) for details.
