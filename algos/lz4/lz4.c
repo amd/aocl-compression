@@ -2825,11 +2825,11 @@ int LZ4_freeStreamDecode (LZ4_streamDecode_t* LZ4_stream)
     return 0;
 }
 
-/*! LZ4_setStreamDecode() :
+/*  LZ4_setStreamDecode() :
  *  Use this function to instruct where to find the dictionary.
  *  This function is not necessary if previous data is still available where it was decoded.
  *  Loading a size of 0 is allowed (same effect as no dictionary).
- * @return : 1 if OK, 0 if error
+ *  @return : 1 if OK, 0 if error
  */
 int LZ4_setStreamDecode (LZ4_streamDecode_t* LZ4_streamDecode, const char* dictionary, int dictSize)
 {
@@ -2841,7 +2841,7 @@ int LZ4_setStreamDecode (LZ4_streamDecode_t* LZ4_streamDecode, const char* dicti
     return 1;
 }
 
-/*! LZ4_decoderRingBufferSize() :
+/*  LZ4_decoderRingBufferSize() :
  *  when setting a ring buffer for streaming decompression (optional scenario),
  *  provides the minimum size of this ring buffer
  *  to be compatible with any source respecting maxBlockSize condition.
@@ -2849,7 +2849,7 @@ int LZ4_setStreamDecode (LZ4_streamDecode_t* LZ4_streamDecode, const char* dicti
  *  blocks are presumed decompressed next to each other.
  *  When not enough space remains for next block (remainingSize < maxBlockSize),
  *  decoding resumes from beginning of ring buffer.
- * @return : minimum ring buffer size,
+ *  @return : minimum ring buffer size,
  *           or 0 if there is an error (invalid maxBlockSize).
  */
 int LZ4_decoderRingBufferSize(int maxBlockSize)

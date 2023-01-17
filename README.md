@@ -58,6 +58,18 @@ Note: When using cmake with version lesser than 3.15, "-B" option is not support
 so the build folder needs to be created manually.\
 The option "-v" is also not supported in cmake with version lesser than 3.15.
 
+BUILD OPTIONS
+-------------
+You can use the following additional options for configuring your build.
+
+Option                           |  Description
+---------------------------------|----------------------------------------------------------------------------------------
+AOCL_LZ4_OPT_PREFETCH_BACKWARDS  |	Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
+SNAPPY_MATCH_SKIP_OPT	         |	Enable Snappy match skipping optimization (Disabled by default)
+LZ4_FRAME_FORMAT_SUPPORT         |	Enable building LZ4 with Frame format and API support (Disabled by default)
+BUILD_DOC                        |	Build documentation for this library (Defult value is off)
+
+
 BUILDING ON WINDOWS
 -------------------
 As the prerequisites, make available Microsoft Visual Studio along with it's\
@@ -168,6 +180,12 @@ Refer the previous section on Linux to learn about the various user options.\
 To set and launch the test bench with a specific user option,\
 go to project aocl\_compression\_bench -> Properties -> Debugging and\
 specify the user options and the input test file.
+
+GENERATING DOCUMENTATION
+------------------------
+- To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
+- Documents will be generated in HTML format inside the folder __docs/html__ , you can open the index.html file with any browser to view the documentation.
+- CMake will use the existing Doxygen if available or else it will download the respective Doxygen binaries according to the OS you are using to build the documentation.
 
  
 CONTACTS
