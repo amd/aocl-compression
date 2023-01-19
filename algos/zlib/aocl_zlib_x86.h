@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,14 +26,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef ADLER32_X86_H
-#define ADLER32_X86_H
+#ifndef AOCL_X86_H
+#define AOCL_X86_H
+#include "deflate.h"
 
-#include <immintrin.h>
-#include <stdint.h>
-#include "zconf.h"
-#include "zutil.h"
+#ifdef AOCL_ZLIB_OPT
+ZEXTERN uint32_t adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
+ZEXTERN void slide_hash_x86(deflate_state *s);
+ZEXTERN uInt longest_match_x86 (deflate_state *s, IPos cur_match);
+#endif
 
-uint32_t ZLIB_INTERNAL adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
-
-#endif // ADLER32_X86_H
+#endif

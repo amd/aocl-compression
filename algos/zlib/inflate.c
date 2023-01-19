@@ -84,6 +84,7 @@
 #include "inftrees.h"
 #include "inflate.h"
 #include "inffast.h"
+#include "aocl_zlib_x86.h"
 
 #ifdef MAKEFIXED
 #  ifndef BUILDFIXED
@@ -447,10 +448,19 @@ unsigned copy;
 
 /* check function to use adler32() for zlib or crc32() for gzip */
 #ifdef GUNZIP
+#ifdef AOCL_ZLIB_OPT
+#  define UPDATE(check, buf, len) \
+    (state->flags ? crc32(check, buf, len) : adler32_x86(check, buf, len))
+#else
 #  define UPDATE(check, buf, len) \
     (state->flags ? crc32(check, buf, len) : adler32(check, buf, len))
+#endif
+#else
+#ifdef AOCL_ZLIB_OPT
+#  define UPDATE(check, buf, len) adler32_x86(check, buf, len)
 #else
 #  define UPDATE(check, buf, len) adler32(check, buf, len)
+#endif
 #endif
 
 /* check macros for header crc */
@@ -698,7 +708,11 @@ int flush;
             }
             state->dmax = 1U << len;
             Tracev((stderr, "inflate:   zlib header ok\n"));
+#ifdef AOCL_ZLIB_OPT
+            strm->adler = state->check = adler32_x86(0L, Z_NULL, 0);
+#else
             strm->adler = state->check = adler32(0L, Z_NULL, 0);
+#endif
             state->mode = hold & 0x200 ? DICTID : TYPE;
             INITBITS();
             break;
@@ -844,7 +858,11 @@ int flush;
                 RESTORE();
                 return Z_NEED_DICT;
             }
+#ifdef AOCL_ZLIB_OPT
+            strm->adler = state->check = adler32_x86(0L, Z_NULL, 0);
+#else
             strm->adler = state->check = adler32(0L, Z_NULL, 0);
+#endif
             state->mode = TYPE;
         case TYPE:
             if (flush == Z_BLOCK || flush == Z_TREES) goto inf_leave;
@@ -1328,8 +1346,13 @@ uInt dictLength;
 
     /* check for correct dictionary identifier */
     if (state->mode == DICT) {
+#ifdef AOCL_ZLIB_OPT
+        dictid = adler32_x86(0L, Z_NULL, 0);
+        dictid = adler32_x86(dictid, dictionary, dictLength);
+#else
         dictid = adler32(0L, Z_NULL, 0);
         dictid = adler32(dictid, dictionary, dictLength);
+#endif
         if (dictid != state->check)
             return Z_DATA_ERROR;
     }
