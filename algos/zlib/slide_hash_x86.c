@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -28,7 +28,6 @@
 
 #include <immintrin.h>
 #include <stdint.h>
-#include "zconf.h"
 #include "deflate.h"
 
 #ifdef AOCL_DYNAMIC_DISPATCHER
@@ -37,7 +36,9 @@
 static void (*slide_hash_fp)(deflate_state* s);
 #endif
 
-static inline void slide_hash_av(deflate_state *s) {
+#ifdef AOCL_ZLIB_OPT
+static inline void slide_hash_c_opt(deflate_state *s)
+{
     const uInt wsize = s->w_size;
     const uInt hchnsz = s->hash_size;
     uInt i;
@@ -57,7 +58,9 @@ static inline void slide_hash_av(deflate_state *s) {
 #endif
 }
 
-static inline void slide_hash_avx2(deflate_state *s) {
+#ifdef AOCL_ZLIB_AVX2_OPT
+static inline void slide_hash_avx2(deflate_state *s)
+{
     Pos *hc;
     uint16_t wsz = (uint16_t)s->w_size;
     uInt hchnsz = s->hash_size;
@@ -82,24 +85,26 @@ static inline void slide_hash_avx2(deflate_state *s) {
     }
 #endif
 }
+#endif /* AOCL_ZLIB_AVX2_OPT */
 
-#ifdef AOCL_ZLIB_HASHING_OPT
-ZLIB_INTERNAL void slide_hash(deflate_state *s) {
+/* This function intercepts non optimized code path and orchestrate 
+ * optimized code flow path */
+void ZLIB_INTERNAL slide_hash_x86(deflate_state *s)
+{
 #ifdef AOCL_DYNAMIC_DISPATCHER
-    return slide_hash_fp(s);
+    slide_hash_fp(s);
+#elif defined(AOCL_ZLIB_AVX2_OPT)
+    slide_hash_avx2(s);
 #else
-#ifdef AOCL_AVX2_OPT
-    return slide_hash_avx2(s);
-#else
-    return slide_hash_av(s);
-#endif
+    slide_hash_c_opt(s);
 #endif
 }
-#endif
+#endif /* AOCL_ZLIB_OPT */
 
 #ifdef AOCL_DYNAMIC_DISPATCHER
 void aocl_register_slide_hash_fmv(int optOff, int optLevel,
-                                  void (*slide_hash_c_fp)(deflate_state* s)) {
+                                  void (*slide_hash_c_fp)(deflate_state* s))
+{
     if (optOff)
     {
         slide_hash_fp = slide_hash_c_fp;
@@ -108,15 +113,13 @@ void aocl_register_slide_hash_fmv(int optOff, int optLevel,
     {
         switch (optLevel)
         {
-        case 0:
-            slide_hash_fp = slide_hash_c_fp;
+        case 0://C version
+        case 1://SSE version
+        case 2://AVX version
+            slide_hash_fp = slide_hash_c_opt;
             break;
-        case 1:
-            slide_hash_fp = slide_hash_av;
-            break;
-        case 2:
-        case 3:
-        default:
+        case 3://AVX2 version
+        default://AVX512 and other versions
             slide_hash_fp = slide_hash_avx2;
             break;
         }

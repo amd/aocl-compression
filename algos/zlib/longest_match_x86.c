@@ -7,7 +7,7 @@
  */
 
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -35,7 +35,6 @@
  */
 
 #include "deflate.h"
-#include "zlib.h"
 
 #define NIL 0
 
@@ -56,7 +55,9 @@ const char fast_lm_copyright[] = " Fast match finder for zlib, https://github.co
 static uInt (*longest_match_fp)(deflate_state* s, IPos cur_match);
 #endif
 
-uInt longest_match_fast(deflate_state* s, IPos cur_match) {
+#ifdef AOCL_ZLIB_OPT
+static inline uInt longest_match_c_opt(deflate_state* s, IPos cur_match)
+{
     unsigned chain_length = s->max_chain_length;/* max hash chain length */
     register Bytef *scan = s->window + s->strstart; /* current string */
     register Bytef *match;                      /* matched string */
@@ -272,19 +273,22 @@ break_matching: /* sorry for goto's, but such code is smaller and easier to view
     return s->lookahead;
 }
 
-#ifdef AOCL_LONGEST_MATCH_OPT
-ZLIB_INTERNAL uInt longest_match_x86(deflate_state *s, IPos cur_match) {
+/* This function intercepts non optimized code path and orchestrate 
+ * optimized code flow path */
+uInt ZLIB_INTERNAL longest_match_x86(deflate_state *s, IPos cur_match)
+{
 #ifdef AOCL_DYNAMIC_DISPATCHER
     return longest_match_fp(s, cur_match);
 #else
-    return longest_match_fast(s, cur_match);
+    return longest_match_c_opt(s, cur_match);
 #endif
 }
-#endif
+#endif //AOCL_ZLIB_OPT
 
 #ifdef AOCL_DYNAMIC_DISPATCHER
 void aocl_register_longest_match_fmv(int optOff, int optLevel,
-                                  uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match)) {
+                                  uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match))
+{
     if (optOff)
     {
         longest_match_fp = longest_match_c_fp;
@@ -293,14 +297,12 @@ void aocl_register_longest_match_fmv(int optOff, int optLevel,
     {
         switch (optLevel)
         {
-        case 0:
-            longest_match_fp = longest_match_c_fp;
-            break;
-        case 1:
-        case 2:
-        case 3:
-        default:
-            longest_match_fp = longest_match_fast;
+        case 0://C version
+        case 1://SSE version
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            longest_match_fp = longest_match_c_opt;
             break;
         }
     }

@@ -534,11 +534,13 @@ typedef uLong FAR uLongf;
 #endif
 
 /* AOCL optimization flags */
-#define AOCL_ZLIB_OPT
+#define AOCL_ZLIB_OPT /* Main flag to control all AOCL ZLIB optimizations */
 #ifdef AOCL_ZLIB_OPT
-#  define AOCL_ZLIB_ADLER32_OPT_SIMD
-#  define AOCL_ZLIB_HASHING_OPT
-#  define AOCL_LONGEST_MATCH_OPT
-#endif
-
+/* Note: For native compilation comment out below flags based on ISA support */
+#define AOCL_ZLIB_AVX512_OPT
+#define AOCL_ZLIB_AVX2_OPT
+#define AOCL_ZLIB_AVX_OPT
+#define AOCL_ZLIB_SSE2_OPT
+#include <stdint.h>
+#endif /* AOCL_ZLIB_OPT */
 #endif /* ZCONF_H */

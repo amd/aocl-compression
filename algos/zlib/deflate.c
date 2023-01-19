@@ -50,6 +50,7 @@
 /* @(#) $Id$ */
 
 #include "deflate.h"
+#include "aocl_zlib_x86.h"
 
 const char deflate_copyright[] =
    " deflate 1.2.11 Copyright 1995-2017 Jean-loup Gailly and Mark Adler ";
@@ -74,11 +75,7 @@ typedef block_state (*compress_func) OF((deflate_state *s, int flush));
 /* Compression function. Returns the block state after the call. */
 
 local int deflateStateCheck      OF((z_streamp strm));
-#ifndef AOCL_ZLIB_HASHING_OPT
 local void slide_hash     OF((deflate_state *s));
-#else
-extern void slide_hash (deflate_state *s);
-#endif
 local void fill_window    OF((deflate_state *s));
 local block_state deflate_stored OF((deflate_state *s, int flush));
 local block_state deflate_fast   OF((deflate_state *s, int flush));
@@ -97,10 +94,6 @@ local unsigned read_buf   OF((z_streamp strm, Bytef *buf, unsigned size));
       uInt longest_match  OF((deflate_state *s, IPos cur_match));
 #else
 local uInt longest_match  OF((deflate_state *s, IPos cur_match));
-#endif
-
-#ifdef AOCL_LONGEST_MATCH_OPT
-extern uInt longest_match_x86 (deflate_state *s, IPos cur_match);
 #endif
 
 #ifdef ZLIB_DEBUG
@@ -206,7 +199,6 @@ local const config configuration_table[10] = {
  * bit values at the expense of memory usage). We slide even when level == 0 to
  * keep the hash table consistent if we switch back to level > 0 later.
  */
-#ifndef AOCL_ZLIB_HASHING_OPT
 local void slide_hash(s)
     deflate_state *s;
 {
@@ -232,35 +224,6 @@ local void slide_hash(s)
     } while (--n);
 #endif
 }
-#else
-#ifdef AOCL_DYNAMIC_DISPATCHER
-local void slide_hash_c(s)
-deflate_state* s;
-{
-    unsigned n, m;
-    Posf* p;
-    uInt wsize = s->w_size;
-
-    n = s->hash_size;
-    p = &s->head[n];
-    do {
-        m = *--p;
-        *p = (Pos)(m >= wsize ? m - wsize : NIL);
-    } while (--n);
-    n = wsize;
-#ifndef FASTEST
-    p = &s->prev[n];
-    do {
-        m = *--p;
-        *p = (Pos)(m >= wsize ? m - wsize : NIL);
-        /* If n is not on any hash chain, prev[n] is garbage but
-         * its value will never be used.
-         */
-    } while (--n);
-#endif
-}
-#endif
-#endif
 
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
@@ -268,12 +231,8 @@ deflate_state* s;
 ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv(int optOff, int optLevel, int insize,
     int level, int windowLog)
 {
-#ifdef AOCL_ZLIB_HASHING_OPT
-    aocl_register_slide_hash_fmv(optOff, optLevel, slide_hash_c);
-#endif
-#ifdef AOCL_LONGEST_MATCH_OPT
+    aocl_register_slide_hash_fmv(optOff, optLevel, slide_hash);
     aocl_register_longest_match_fmv(optOff, optLevel, longest_match);
-#endif
     return NULL;
 }
 #endif
@@ -447,7 +406,11 @@ int ZEXPORT deflateSetDictionary (strm, dictionary, dictLength)
 
     /* when using zlib wrappers, compute Adler-32 for provided dictionary */
     if (wrap == 1)
+#ifdef AOCL_ZLIB_OPT
+        strm->adler = adler32_x86(strm->adler, dictionary, dictLength);
+#else
         strm->adler = adler32(strm->adler, dictionary, dictLength);
+#endif
     s->wrap = 0;                    /* avoid computing Adler-32 in read_buf */
 
     /* if dictionary would fill window, just replace the history */
@@ -547,7 +510,11 @@ int ZEXPORT deflateResetKeep (strm)
 #ifdef GZIP
         s->wrap == 2 ? crc32(0L, Z_NULL, 0) :
 #endif
+#ifdef AOCL_ZLIB_OPT
+        adler32_x86(0L, Z_NULL, 0);
+#else
         adler32(0L, Z_NULL, 0);
+#endif
     s->last_flush = Z_NO_FLUSH;
 
     _tr_init(s);
@@ -652,7 +619,11 @@ int ZEXPORT deflateParams(strm, level, strategy)
     if (s->level != level) {
         if (s->level == 0 && s->matches != 0) {
             if (s->matches == 1)
+#ifdef AOCL_ZLIB_OPT
+                slide_hash_x86(s);
+#else
                 slide_hash(s);
+#endif
             else
                 CLEAR_HASH(s);
             s->matches = 0;
@@ -889,7 +860,11 @@ int ZEXPORT deflate (strm, flush)
             putShortMSB(s, (uInt)(strm->adler >> 16));
             putShortMSB(s, (uInt)(strm->adler & 0xffff));
         }
+#ifdef AOCL_ZLIB_OPT
+        strm->adler = adler32_x86(0L, Z_NULL, 0);
+#else
         strm->adler = adler32(0L, Z_NULL, 0);
+#endif
         s->status = BUSY_STATE;
 
         /* Compression must start with an empty pending buffer */
@@ -1229,7 +1204,11 @@ local unsigned read_buf(strm, buf, size)
 
     zmemcpy(buf, strm->next_in, len);
     if (strm->state->wrap == 1) {
+#ifdef AOCL_ZLIB_OPT
+        strm->adler = adler32_x86(strm->adler, buf, len);
+#else
         strm->adler = adler32(strm->adler, buf, len);
+#endif
     }
 #ifdef GZIP
     else if (strm->state->wrap == 2) {
@@ -1567,7 +1546,11 @@ local void fill_window(s)
             s->match_start -= wsize;
             s->strstart    -= wsize; /* we now have strstart >= MAX_DIST */
             s->block_start -= (long) wsize;
+#ifdef AOCL_ZLIB_OPT
+            slide_hash_x86(s);
+#else
             slide_hash(s);
+#endif
             more += wsize;
         }
         if (s->strm->avail_in == 0) break;
@@ -1912,7 +1895,7 @@ local block_state deflate_fast(s, flush)
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
-#ifndef AOCL_LONGEST_MATCH_OPT
+#ifndef AOCL_ZLIB_OPT
             s->match_length = longest_match (s, hash_head);
 #else
             if(s->level == 1)
@@ -2025,7 +2008,7 @@ local block_state deflate_slow(s, flush)
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
-#ifndef AOCL_LONGEST_MATCH_OPT
+#ifndef AOCL_ZLIB_OPT
             s->match_length = longest_match (s, hash_head);
 #else
             if(s->level == 1)
