@@ -71,14 +71,17 @@ void print_user_options (void)
 
 void print_supported_compressors (void)
 {
-    printf("\nSupported compression/decompression methods are:\n");
-    printf("LZ4\n");
-    printf("LZ4HC\n");
-    printf("LZMA\n");
-    printf("SNAPPY\n");
-    printf("ZLIB\n");
-    printf("ZSTD\n");
-    printf("BZIP2\n\n");
+   printf("\nSupported compression/decompression methods along with their supported levels are:\n\n");
+   printf("===========================================\n");
+   printf("Method Name\tLower Level\tUpper Level\n");
+   printf("===========================================\n");
+   printf("LZ4\t\t %s\t\t%s\n", "NA", "NA");
+   printf("LZ4HC\t\t %d\t\t%d\n", codec_list[LZ4HC].lower_level, codec_list[LZ4HC].upper_level);
+   printf("LZMA\t\t %d\t\t%d\n", codec_list[LZMA].lower_level, codec_list[LZMA].upper_level);
+   printf("SNAPPY\t\t %s\t\t%s\n", "NA", "NA");
+   printf("ZLIB\t\t %d\t\t%d\n", codec_list[ZLIB].lower_level, codec_list[ZLIB].upper_level);
+   printf("ZSTD\t\t %d\t\t%d\n", codec_list[ZSTD].lower_level, codec_list[ZSTD].upper_level);
+   printf("BZIP2\t\t %d\t\t%d\n\n", codec_list[BZIP2].lower_level, codec_list[BZIP2].upper_level);
 }
 
 VOID *allocMem(UINTP size, INTP zeroInit)
