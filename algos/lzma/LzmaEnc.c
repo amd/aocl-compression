@@ -2064,8 +2064,885 @@ static unsigned GetOptimum(CLzmaEnc *p, UInt32 position)
 }
 
 #ifdef AOCL_LZMA_OPT
-static unsigned AOCL_GetOptimum(CLzmaEnc* p, UInt32 position) {
-  return GetOptimum(p, position);
+#define AOCL_OPT_PARSE_REP(repIndex) /* if (_maxMode) */ \
+{ \
+/*---------- REP : LIT : REP_0 ----------*/  \
+/* numFastBytes + 1 + numFastBytes*/ \
+unsigned len2 = len + 1; \
+unsigned limit = len2 + p->numFastBytes; \
+if (limit > numAvailFull) \
+    limit = numAvailFull; \
+ \
+len2 += 2; \
+if (len2 <= limit) \
+    if (data[len2 - 2] == data2[len2 - 2]) \
+        if (data[len2 - 1] == data2[len2 - 1]) \
+        { \
+            unsigned state2 = kRepNextStates[state]; \
+            unsigned posState2 = (position + len) & p->pbMask; \
+            price += GET_PRICE_LEN(&p->repLenEnc, posState, len) \
+                + GET_PRICE_0(p->isMatch[state2][posState2]) \
+                + LitEnc_Matched_GetPrice(LIT_PROBS(position + len, data[(size_t)len - 1]), \
+                    data[len], data2[len], p->ProbPrices); \
+ \
+            /* state2 = kLiteralNextStates[state2];*/  \
+            state2 = kState_LitAfterRep; \
+            posState2 = (posState2 + 1) & p->pbMask; \
+ \
+            price += GetPrice_Rep_0(p, state2, posState2); \
+ \
+            for (; len2 < limit && data[len2] == data2[len2]; len2++) \
+            {}  \
+ \
+            len2 -= len; \
+            /*if (len2 >= 3)*/ \
+            { \
+                { \
+                    unsigned offset = cur + len + len2; \
+ \
+                    if (last < offset) \
+                        last = offset; \
+                    /*do*/ \
+                    { \
+                        UInt32 price2; \
+                        COptimal* opt; \
+                        len2--; \
+                        /* price2 = price + GetPrice_Len_Rep_0(p, len2, state2, posState2);*/ \
+                        price2 = price + GET_PRICE_LEN(&p->repLenEnc, posState2, len2); \
+                         \
+                        opt = &p->opt[offset]; \
+                        /* offset--;*/ \
+                        if (price2 < opt->price) \
+                        { \
+                            opt->price = price2; \
+                            opt->len = (UInt32)len2; \
+                            opt->extra = (CExtra)(len + 1); \
+                            opt->dist = (UInt32)repIndex; \
+                        } \
+                    } \
+                    /* while (len2 >= 3); */ \
+                } \
+            } \
+        } \
+}
+
+
+#define AOCL_FIND_MATCHING_BYTES_LEN(len, limit, data1, data2) { \
+UInt32 D = 0; \
+UInt32 lenLimit4 = limit - 4; \
+while (len < lenLimit4) { \
+    UInt32 C1 = *(UInt32*)&data2[len]; \
+    UInt32 C2 = *(UInt32*)&data1[len]; \
+    D = C1 ^ C2; \
+    if (D) { \
+        int trail = __builtin_ctz(D); \
+        len += (trail >> 3); \
+        break; \
+    } \
+    len += 4; \
+} \
+while (len != limit) { \
+    if (data2[len] != data1[len]) \
+        break; \
+    len++; \
+} \
+}
+
+MY_FORCE_INLINE
+static UInt32 AOCL_GetPrice_PureRep_Non0(const CLzmaEnc* p, unsigned repIndex, size_t state, size_t posState)
+{
+    UInt32 prob = p->isRepG0[state];
+    UInt32 price = GET_PRICE_1(prob);
+    prob = p->isRepG1[state];
+    if (repIndex == 1)
+        price += GET_PRICE_0(prob);
+    else
+    {
+        price += GET_PRICE_1(prob);
+        price += GET_PRICE(p->isRepG2[state], repIndex - 2);
+    }
+    return price;
+}
+
+MY_FORCE_INLINE
+static UInt32 AOCL_GetPrice_PureRep_0(const CLzmaEnc* p, size_t state, size_t posState)
+{
+    UInt32 prob = p->isRepG0[state];
+    UInt32 price = GET_PRICE_0(prob);
+    price += GET_PRICE_1(p->isRep0Long[state][posState]);
+    return price;
+}
+
+/* @brief: Use optimal parsing to find best matches 
+*  Changes:
+*   - rep 0 loop unrolling in : for (i = 0; i < LZMA_NUM_REPS; i++)
+*   - Byte matching using AOCL_FIND_MATCHING_BYTES_LEN()
+*   - if (data[0] != data2[0] || data[1] != data2[1]) TO if (GetUi16(data) != GetUi16(data2))
+*   - p->opt[0].reps[0] = reps[0]... TO memcpy */
+static unsigned AOCL_GetOptimum(CLzmaEnc* p, UInt32 position)
+{
+    unsigned last, cur;
+    UInt32 reps[LZMA_NUM_REPS];
+    unsigned repLens[LZMA_NUM_REPS];
+    UInt32* matches;
+
+    {
+        UInt32 numAvail;
+        unsigned numPairs, mainLen, repMaxIndex, i, posState;
+        UInt32 matchPrice, repMatchPrice;
+        const Byte* data;
+        Byte curByte, matchByte;
+
+        p->optCur = p->optEnd = 0;
+
+        /* if additionalOffset is > 0, parsing for cur byte has already been completed
+        * in one of the previous ReadMatchDistances() calls inside optimal parsing loop.
+        * Results are already available in p-> and can be used
+        * without having to find matches again. */
+        if (p->additionalOffset == 0)
+            mainLen = ReadMatchDistances(p, &numPairs);
+        else
+        {
+            mainLen = p->longestMatchLen;
+            numPairs = p->numPairs;
+        }
+
+        numAvail = p->numAvail;
+        if (numAvail < 2)
+        {
+            p->backRes = MARK_LIT;
+            return 1;
+        }
+        if (numAvail > LZMA_MATCH_LEN_MAX)
+            numAvail = LZMA_MATCH_LEN_MAX;
+
+        data = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - 1;
+        repMaxIndex = 0; //rep with max len match
+
+        // Get match lengths at distances in each of the reps for cur data
+        for (i = 0; i < LZMA_NUM_REPS; i++)
+        {
+            unsigned len;
+            const Byte* data2;
+            reps[i] = p->reps[i];
+            data2 = data - reps[i];
+            if (GetUi16(data) != GetUi16(data2)) //(data[0] != data2[0] || data[1] != data2[1])
+            {
+                repLens[i] = 0;
+                continue;
+            }
+
+            len = 2;
+            AOCL_FIND_MATCHING_BYTES_LEN(len, numAvail, data, data2) //for (len = 2; len < numAvail && data[len] == data2[len]; len++){}
+            
+                repLens[i] = len;
+            if (len > repLens[repMaxIndex])
+                repMaxIndex = i;
+            if (len == LZMA_MATCH_LEN_MAX) // 21.03 : optimization
+                break;
+        }
+
+        /* If long enough match is found in a rep, it can be selected
+        * instead of <mainLen, mainDist> as we save on encoding mainDist */
+        if (repLens[repMaxIndex] >= p->numFastBytes)
+        {
+            unsigned len;
+            p->backRes = (UInt32)repMaxIndex;
+            len = repLens[repMaxIndex];
+            MOVE_POS(p, len - 1)
+                return len;
+        }
+
+        matches = p->matches;
+#define MATCHES  matches
+        // #define MATCHES  p->matches
+
+        if (mainLen >= p->numFastBytes)  // if len long enough, choose mainLen
+        {
+            p->backRes = MATCHES[(size_t)numPairs - 1] + LZMA_NUM_REPS;
+            MOVE_POS(p, mainLen - 1)
+                return mainLen;
+        }
+
+        curByte = *data;
+        matchByte = *(data - reps[0]);
+
+        last = repLens[repMaxIndex]; // last = longest matched length among reps and mainLen
+        if (last <= mainLen)
+            last = mainLen;
+
+        if (last < 2 && curByte != matchByte)
+        {
+            p->backRes = MARK_LIT;
+            return 1;
+        }
+
+        p->opt[0].state = (CState)p->state;
+
+        posState = (position & p->pbMask);
+
+        /* From this point onwards, cost for taking different decisions 'price'
+        * is calculated. Every decision, choosing to encode as a literal,
+        * srep, rep or match has a corresponding price. */
+        {
+            const CLzmaProb* probs = LIT_PROBS(position, *(data - 1));
+            p->opt[1].price = GET_PRICE_0(p->isMatch[p->state][posState]) +
+                (!IsLitState(p->state) ?
+                    LitEnc_Matched_GetPrice(probs, curByte, matchByte, p->ProbPrices) :
+                    LitEnc_GetPrice(probs, curByte, p->ProbPrices));
+        }
+
+        MakeAs_Lit(&p->opt[1]);
+
+        matchPrice = GET_PRICE_1(p->isMatch[p->state][posState]);
+        repMatchPrice = matchPrice + GET_PRICE_1(p->isRep[p->state]);
+
+        // 18.06
+        if (matchByte == curByte && repLens[0] == 0)
+        {
+            UInt32 shortRepPrice = repMatchPrice + GetPrice_ShortRep(p, p->state, posState);
+            if (shortRepPrice < p->opt[1].price)
+            {
+                p->opt[1].price = shortRepPrice;
+                MakeAs_ShortRep(&p->opt[1]);
+            }
+            if (last < 2)
+            {
+                p->backRes = p->opt[1].dist;
+                return 1;
+            }
+        }
+
+        p->opt[1].len = 1;
+
+        /*p->opt[0].reps[0] = reps[0];
+        p->opt[0].reps[1] = reps[1];
+        p->opt[0].reps[2] = reps[2];
+        p->opt[0].reps[3] = reps[3];*/
+        memcpy(p->opt[0].reps, reps, 4 * sizeof(UInt32));
+
+        // ---------- REP ----------
+        {
+            // REP 0
+            unsigned repLen = repLens[0];
+            UInt32 price;
+            if (repLen >= 2) {
+                price = repMatchPrice + AOCL_GetPrice_PureRep_0(p, p->state, posState);
+                do
+                {
+                    UInt32 price2 = price + GET_PRICE_LEN(&p->repLenEnc, posState, repLen);
+                    COptimal* opt = &p->opt[repLen];
+                    if (price2 < opt->price)
+                    {
+                        opt->price = price2;
+                        opt->len = (UInt32)repLen;
+                        opt->dist = (UInt32)0;
+                        opt->extra = 0;
+                    }
+                } while (--repLen >= 2);
+            }
+        }
+
+        // REP > 0
+        for (i = 1; i < LZMA_NUM_REPS; i++)
+        {
+            unsigned repLen = repLens[i];
+            UInt32 price;
+            if (repLen < 2)
+                continue;
+            price = repMatchPrice + AOCL_GetPrice_PureRep_Non0(p, i, p->state, posState);
+            do
+            {
+                UInt32 price2 = price + GET_PRICE_LEN(&p->repLenEnc, posState, repLen);
+                COptimal* opt = &p->opt[repLen];
+                if (price2 < opt->price)
+                {
+                    opt->price = price2;
+                    opt->len = (UInt32)repLen;
+                    opt->dist = (UInt32)i;
+                    opt->extra = 0;
+                }
+            } while (--repLen >= 2);
+        }
+
+
+        // ---------- MATCH ----------
+        {
+            unsigned len = repLens[0] + 1;
+            if (len <= mainLen)
+            {
+                unsigned offs = 0;
+                UInt32 normalMatchPrice = matchPrice + GET_PRICE_0(p->isRep[p->state]);
+
+                if (len < 2)
+                    len = 2;
+                else
+                    while (len > MATCHES[offs])
+                        offs += 2;
+
+                for (; ; len++)
+                {
+                    COptimal* opt;
+                    UInt32 dist = MATCHES[(size_t)offs + 1];
+                    UInt32 price = normalMatchPrice + GET_PRICE_LEN(&p->lenEnc, posState, len);
+                    unsigned lenToPosState = GetLenToPosState(len);
+
+                    if (dist < kNumFullDistances)
+                        price += p->distancesPrices[lenToPosState][dist & (kNumFullDistances - 1)];
+                    else
+                    {
+                        unsigned slot;
+                        GetPosSlot2(dist, slot);
+                        price += p->alignPrices[dist & kAlignMask];
+                        price += p->posSlotPrices[lenToPosState][slot];
+                    }
+
+                    opt = &p->opt[len];
+
+                    if (price < opt->price)
+                    {
+                        opt->price = price;
+                        opt->len = (UInt32)len;
+                        opt->dist = dist + LZMA_NUM_REPS;
+                        opt->extra = 0;
+                    }
+
+                    if (len == MATCHES[offs])
+                    {
+                        offs += 2;
+                        if (offs == numPairs)
+                            break;
+                    }
+                }
+            }
+        }
+
+
+        cur = 0;
+
+#ifdef SHOW_STAT2
+        /* if (position >= 0) */
+        {
+            unsigned i;
+            printf("\n pos = %4X", position);
+            for (i = cur; i <= last; i++)
+                printf("\nprice[%4X] = %u", position - cur + i, p->opt[i].price);
+        }
+#endif
+    }
+
+
+
+    // ---------- Optimal Parsing ----------
+    /* last : longest matched length among reps and mainLen
+    * p->opt[i] : base price and system states until now
+    * cur : counter starting at 0
+    *
+    * For cur in range [0, last) we check if skipping these many bytes (L) and
+    * coding them using the strategy in p->opt[L] is worth it, if we can
+    * find a better matching sequence in the future that gives a better price overall.
+    * Checking for last and beyond isn't necessary as we might as well encode the
+    * current match using the best price strategy we have so far and leave the rest
+    * of the sequence for the next GetOptimum() call.
+    *
+    * p->opt[L] also contains state and reps values if said strategy was used. This
+    * will act as previous system state when evaluating price for byte sequence
+    * starting at offset L.
+    *
+    * Run ReadMatchDistances() at offsets [0, last) from current position.
+    * Update p->opt s (p->opt[i].price += newPrice, etc) for each p->opt[i]. */
+    for (;;)
+    {
+        unsigned numAvail;
+        UInt32 numAvailFull;
+        unsigned newLen, numPairs, prev, state, posState, startLen;
+        UInt32 litPrice, matchPrice, repMatchPrice;
+        BoolInt nextIsLit;
+        Byte curByte, matchByte;
+        const Byte* data;
+        COptimal* curOpt, * nextOpt;
+
+        if (++cur == last)
+            break; // no need to check beyond last. This can be handled in the next GetOptimum() call.
+
+        // 18.06
+        if (cur >= kNumOpts - 64)
+        {
+            unsigned j, best;
+            UInt32 price = p->opt[cur].price;
+            best = cur;
+            for (j = cur + 1; j <= last; j++)
+            {
+                UInt32 price2 = p->opt[j].price;
+                if (price >= price2)
+                {
+                    price = price2;
+                    best = j;
+                }
+            }
+            {
+                unsigned delta = best - cur;
+                if (delta != 0)
+                {
+                    MOVE_POS(p, delta);
+                }
+            }
+            cur = best;
+            break;
+        }
+
+        newLen = ReadMatchDistances(p, &numPairs); //check matches for byte sequence starting at offset cur
+
+        if (newLen >= p->numFastBytes) // break out of parsing cycle once match longer than numFastBytes is found
+        {
+            p->numPairs = numPairs;
+            p->longestMatchLen = newLen;
+            break;
+        }
+
+        curOpt = &p->opt[cur]; // state of system if p->opt[cur] was selected as strategy above
+
+        position++;
+
+        // we need that check here, if skip_items in p->opt are possible
+        /*
+        if (curOpt->price >= kInfinityPrice)
+          continue;
+        */
+
+        prev = cur - curOpt->len;
+
+        if (curOpt->len == 1)
+        {
+            state = (unsigned)p->opt[prev].state;
+            if (IsShortRep(curOpt))
+                state = kShortRepNextStates[state];
+            else
+                state = kLiteralNextStates[state];
+        }
+        else
+        {
+            const COptimal* prevOpt;
+            UInt32 b0;
+            UInt32 dist = curOpt->dist;
+
+            if (curOpt->extra)
+            {
+                prev -= (unsigned)curOpt->extra;
+                state = kState_RepAfterLit;
+                if (curOpt->extra == 1)
+                    state = (dist < LZMA_NUM_REPS ? kState_RepAfterLit : kState_MatchAfterLit);
+            }
+            else
+            {
+                state = (unsigned)p->opt[prev].state;
+                if (dist < LZMA_NUM_REPS)
+                    state = kRepNextStates[state];
+                else
+                    state = kMatchNextStates[state];
+            }
+
+            prevOpt = &p->opt[prev];
+            b0 = prevOpt->reps[0];
+
+            if (dist < LZMA_NUM_REPS) //update reps as per dist in curOpt
+            {
+                if (dist == 0)
+                {
+                    reps[0] = b0;
+                    reps[1] = prevOpt->reps[1];
+                    reps[2] = prevOpt->reps[2];
+                    reps[3] = prevOpt->reps[3];
+                }
+                else
+                {
+                    reps[1] = b0;
+                    b0 = prevOpt->reps[1];
+                    if (dist == 1)
+                    {
+                        reps[0] = b0;
+                        reps[2] = prevOpt->reps[2];
+                        reps[3] = prevOpt->reps[3];
+                    }
+                    else
+                    {
+                        reps[2] = b0;
+                        reps[0] = prevOpt->reps[dist];
+                        reps[3] = prevOpt->reps[dist ^ 1];
+                    }
+                }
+            }
+            else
+            {
+                reps[0] = (dist - LZMA_NUM_REPS + 1);
+                reps[1] = b0;
+                reps[2] = prevOpt->reps[1];
+                reps[3] = prevOpt->reps[2];
+            }
+        }
+
+        curOpt->state = (CState)state;
+        memcpy(curOpt->reps, reps, 4 * sizeof(UInt32));
+        /*curOpt->reps[0] = reps[0];
+        curOpt->reps[1] = reps[1];
+        curOpt->reps[2] = reps[2];
+        curOpt->reps[3] = reps[3];*/
+
+        data = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - 1;
+        curByte = *data;
+        matchByte = *(data - reps[0]);
+
+        posState = (position & p->pbMask);
+
+        /*
+        The order of Price checks:
+           <  LIT
+           <= SHORT_REP
+           <  LIT : REP_0
+           <  REP    [ : LIT : REP_0 ]
+           <  MATCH  [ : LIT : REP_0 ]
+        */
+
+        {
+            // start with base price and add to it based on strategy for new match sequence
+            UInt32 curPrice = curOpt->price;
+            unsigned prob = p->isMatch[state][posState];
+            matchPrice = curPrice + GET_PRICE_1(prob);
+            litPrice = curPrice + GET_PRICE_0(prob);
+        }
+
+        nextOpt = &p->opt[(size_t)cur + 1];
+        nextIsLit = False;
+
+        // here we can allow skip_items in p->opt, if we don't check (nextOpt->price < kInfinityPrice)
+        // 18.new.06
+        if ((nextOpt->price < kInfinityPrice
+            // && !IsLitState(state)
+            && matchByte == curByte)
+            || litPrice > nextOpt->price
+            )
+            litPrice = 0;
+        else
+        {
+            const CLzmaProb* probs = LIT_PROBS(position, *(data - 1));
+            litPrice += (!IsLitState(state) ?
+                LitEnc_Matched_GetPrice(probs, curByte, matchByte, p->ProbPrices) :
+                LitEnc_GetPrice(probs, curByte, p->ProbPrices));
+
+            if (litPrice < nextOpt->price)
+            {
+                nextOpt->price = litPrice;
+                nextOpt->len = 1;
+                MakeAs_Lit(nextOpt);
+                nextIsLit = True;
+            }
+        }
+
+        repMatchPrice = matchPrice + GET_PRICE_1(p->isRep[state]);
+
+        numAvailFull = p->numAvail;
+        {
+            unsigned temp = kNumOpts - 1 - cur;
+            if (numAvailFull > temp)
+                numAvailFull = (UInt32)temp;
+        }
+
+        // 18.06
+        // ---------- SHORT_REP ----------
+        if (IsLitState(state)) // 18.new
+            if (matchByte == curByte)
+                if (repMatchPrice < nextOpt->price) // 18.new
+                    // if (numAvailFull < 2 || data[1] != *(data - reps[0] + 1))
+                    if (
+                        // nextOpt->price >= kInfinityPrice ||
+                        nextOpt->len < 2   // we can check nextOpt->len, if skip items are not allowed in p->opt
+                        || (nextOpt->dist != 0
+                            // && nextOpt->extra <= 1 // 17.old
+                            )
+                        )
+                    {
+                        UInt32 shortRepPrice = repMatchPrice + GetPrice_ShortRep(p, state, posState);
+                        // if (shortRepPrice <= nextOpt->price) // 17.old
+                        if (shortRepPrice < nextOpt->price)  // 18.new
+                        {
+                            nextOpt->price = shortRepPrice;
+                            nextOpt->len = 1;
+                            MakeAs_ShortRep(nextOpt);
+                            nextIsLit = False;
+                        }
+                    }
+
+        if (numAvailFull < 2)
+            continue;
+        numAvail = (numAvailFull <= p->numFastBytes ? numAvailFull : p->numFastBytes);
+
+        // numAvail <= p->numFastBytes
+
+        // ---------- LIT : REP_0 ----------
+
+        if (!nextIsLit
+            && litPrice != 0 // 18.new
+            && matchByte != curByte
+            && numAvailFull > 2)
+        {
+            const Byte* data2 = data - reps[0];
+            if (GetUi16(data + 1) == GetUi16(data2 + 1)) // if (data[1] == data2[1] && data[2] == data2[2])
+            {
+                unsigned len;
+                unsigned limit = p->numFastBytes + 1;
+                if (limit > numAvailFull)
+                    limit = numAvailFull;
+                len = 3;
+                AOCL_FIND_MATCHING_BYTES_LEN(len, limit, data, data2); //for (len = 3; len < limit && data[len] == data2[len]; len++){}
+
+                {
+                    unsigned state2 = kLiteralNextStates[state];
+                    unsigned posState2 = (position + 1) & p->pbMask;
+                    UInt32 price = litPrice + GetPrice_Rep_0(p, state2, posState2);
+                    {
+                        unsigned offset = cur + len;
+
+                        if (last < offset)
+                            last = offset;
+
+                        // do
+                        {
+                            UInt32 price2;
+                            COptimal* opt;
+                            len--;
+                            // price2 = price + GetPrice_Len_Rep_0(p, len, state2, posState2);
+                            price2 = price + GET_PRICE_LEN(&p->repLenEnc, posState2, len);
+
+                            opt = &p->opt[offset];
+                            // offset--;
+                            if (price2 < opt->price)
+                            {
+                                opt->price = price2;
+                                opt->len = (UInt32)len;
+                                opt->dist = 0;
+                                opt->extra = 1;
+                            }
+                        }
+                        // while (len >= 3);
+                    }
+                }
+            }
+        }
+
+        startLen = 2; /* speed optimization */
+
+        {
+            // ---------- REP 0 ----------
+            unsigned len;
+            UInt32 price;
+            const Byte* data2 = data - reps[0];
+            if (GetUi16(data) == GetUi16(data2)) //if (data[0] == data2[0] && data[1] == data2[1]) {
+            {
+                len = 2;
+                AOCL_FIND_MATCHING_BYTES_LEN(len, numAvail, data, data2) // for (len = 2; len < numAvail && data[len] == data2[len]; len++) {}
+                // if (len < startLen) continue; // 18.new: speed optimization
+                {
+                    unsigned offset = cur + len;
+                    if (last < offset)
+                        last = offset;
+                }
+                {
+                    unsigned len2 = len;
+                    price = repMatchPrice + AOCL_GetPrice_PureRep_0(p, state, posState);
+                    do
+                    {
+                        UInt32 price2 = price + GET_PRICE_LEN(&p->repLenEnc, posState, len2);
+                        COptimal* opt = &p->opt[cur + len2];
+                        if (price2 < opt->price)
+                        {
+                            opt->price = price2;
+                            opt->len = (UInt32)len2;
+                            opt->dist = (UInt32)0;
+                            opt->extra = 0;
+                        }
+                    } while (--len2 >= 2);
+                }
+
+                startLen = len + 1;  // 17.old
+
+                AOCL_OPT_PARSE_REP(0)
+            }
+        }
+
+        {
+            // ---------- REP > 0 ----------
+            // unsigned repIndex = IsLitState(state) ? 0 : 1; // 18.notused
+            for (unsigned repIndex = 1; repIndex < LZMA_NUM_REPS; repIndex++)
+            {
+                unsigned len;
+                UInt32 price;
+                const Byte* data2 = data - reps[repIndex];
+                if (GetUi16(data) != GetUi16(data2)) //if (data[0] != data2[0] || data[1] != data2[1])
+                    continue;
+
+                len = 2;
+                AOCL_FIND_MATCHING_BYTES_LEN(len, numAvail, data, data2) // for (len = 2; len < numAvail && data[len] == data2[len]; len++) {}
+                // if (len < startLen) continue; // 18.new: speed optimization
+                {
+                    unsigned offset = cur + len;
+                    if (last < offset)
+                        last = offset;
+                }
+                {
+                    unsigned len2 = len;
+                    price = repMatchPrice + AOCL_GetPrice_PureRep_Non0(p, repIndex, state, posState);
+                    do
+                    {
+                        UInt32 price2 = price + GET_PRICE_LEN(&p->repLenEnc, posState, len2);
+                        COptimal* opt = &p->opt[cur + len2];
+                        if (price2 < opt->price)
+                        {
+                            opt->price = price2;
+                            opt->len = (UInt32)len2;
+                            opt->dist = (UInt32)repIndex;
+                            opt->extra = 0;
+                        }
+                    } while (--len2 >= 2);
+                }
+
+                // startLen = len + 1; // 18.new
+
+                AOCL_OPT_PARSE_REP(repIndex)
+            }
+        }
+
+
+        // ---------- MATCH ----------
+        /* for (unsigned len = 2; len <= newLen; len++) */
+        if (newLen > numAvail)
+        {
+            newLen = numAvail;
+            for (numPairs = 0; newLen > MATCHES[numPairs]; numPairs += 2);
+            MATCHES[numPairs] = (UInt32)newLen;
+            numPairs += 2;
+        }
+
+        // startLen = 2; /* speed optimization */
+
+        if (newLen >= startLen)
+        {
+            UInt32 normalMatchPrice = matchPrice + GET_PRICE_0(p->isRep[state]);
+            UInt32 dist;
+            unsigned offs, posSlot, len;
+
+            {
+                unsigned offset = cur + newLen;
+                if (last < offset)
+                    last = offset;
+            }
+
+            offs = 0;
+            while (startLen > MATCHES[offs])
+                offs += 2;
+            dist = MATCHES[(size_t)offs + 1];
+
+            // if (dist >= kNumFullDistances)
+            GetPosSlot2(dist, posSlot);
+
+            for (len = /*2*/ startLen; ; len++)
+            {
+                UInt32 price = normalMatchPrice + GET_PRICE_LEN(&p->lenEnc, posState, len);
+                {
+                    COptimal* opt;
+                    unsigned lenNorm = len - 2;
+                    lenNorm = GetLenToPosState2(lenNorm);
+                    if (dist < kNumFullDistances)
+                        price += p->distancesPrices[lenNorm][dist & (kNumFullDistances - 1)];
+                    else
+                        price += p->posSlotPrices[lenNorm][posSlot] + p->alignPrices[dist & kAlignMask];
+
+                    opt = &p->opt[cur + len];
+                    if (price < opt->price)
+                    {
+                        opt->price = price;
+                        opt->len = (UInt32)len;
+                        opt->dist = dist + LZMA_NUM_REPS;
+                        opt->extra = 0;
+                    }
+                }
+
+                if (len == MATCHES[offs])
+                {
+                    // if (p->_maxMode) {
+                    // MATCH : LIT : REP_0
+
+                    const Byte* data2 = data - dist - 1;
+                    unsigned len2 = len + 1;
+                    unsigned limit = len2 + p->numFastBytes;
+                    if (limit > numAvailFull)
+                        limit = numAvailFull;
+
+                    len2 += 2;
+                    if (len2 <= limit)
+                        if (GetUi16(data + len2 - 2) == GetUi16(data2 + len2 - 2))
+                            //if (data[len2 - 2] == data2[len2 - 2]) //if (data[len2 - 1] == data2[len2 - 1])
+                        {
+                            AOCL_FIND_MATCHING_BYTES_LEN(len2, limit, data, data2) //for (; len2 < limit && data[len2] == data2[len2]; len2++){}
+
+                            len2 -= len;
+
+                            // if (len2 >= 3)
+                            {
+                                unsigned state2 = kMatchNextStates[state];
+                                unsigned posState2 = (position + len) & p->pbMask;
+                                unsigned offset;
+                                price += GET_PRICE_0(p->isMatch[state2][posState2]);
+                                price += LitEnc_Matched_GetPrice(LIT_PROBS(position + len, data[(size_t)len - 1]),
+                                    data[len], data2[len], p->ProbPrices);
+
+                                // state2 = kLiteralNextStates[state2];
+                                state2 = kState_LitAfterMatch;
+
+                                posState2 = (posState2 + 1) & p->pbMask;
+                                price += GetPrice_Rep_0(p, state2, posState2);
+
+                                offset = cur + len + len2;
+
+                                if (last < offset)
+                                    last = offset;
+                                // do
+                                {
+                                    UInt32 price2;
+                                    COptimal* opt;
+                                    len2--;
+                                    // price2 = price + GetPrice_Len_Rep_0(p, len2, state2, posState2);
+                                    price2 = price + GET_PRICE_LEN(&p->repLenEnc, posState2, len2);
+                                    opt = &p->opt[offset];
+                                    // offset--;
+                                    if (price2 < opt->price)
+                                    {
+                                        opt->price = price2;
+                                        opt->len = (UInt32)len2;
+                                        opt->extra = (CExtra)(len + 1);
+                                        opt->dist = dist + LZMA_NUM_REPS;
+                                    }
+                                }
+                                // while (len2 >= 3);
+                            }
+
+                        }
+
+                    offs += 2;
+                    if (offs == numPairs)
+                        break;
+                    dist = MATCHES[(size_t)offs + 1];
+                    // if (dist >= kNumFullDistances)
+                    GetPosSlot2(dist, posSlot);
+                }
+            }
+        }
+    }
+
+    do
+        p->opt[last].price = kInfinityPrice; //reset prices to max
+    while (--last);
+
+    return Backward(p, cur); // select best <len, distance> pair from values computed in p->opt[i]
 }
 #endif
 
