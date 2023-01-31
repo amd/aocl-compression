@@ -1,5 +1,6 @@
 /* deflate.c -- compress data using the deflation algorithm
  * Copyright (C) 1995-2017 Jean-loup Gailly and Mark Adler
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -147,6 +148,23 @@ local const config configuration_table[10] = {
 /* 9 */ {32, 258, 258, 4096, deflate_slow}}; /* max compression */
 #endif
 
+#ifdef AOCL_ZLIB_OPT
+local const config *config_table;
+local const config configuration_table_opt[10] = {
+/*      good lazy nice chain */
+/* 0 */ {0,    0,  0,    0, deflate_stored},  /* store only */
+/* 1 */ {4,    4,  8,    4, deflate_fast}, /* max speed, no lazy matches */
+/* 2 */ {4,    5, 16,    8, deflate_fast},
+/* 3 */ {4,    6, 32,   32, deflate_fast},
+
+/* 4 */ {4,    4, 16,   16, deflate_slow},  /* lazy matches */
+/* 5 */ {8,   16, 32,   32, deflate_slow},
+/* 6 */ {8,   16, 256, 128, deflate_slow},
+/* 7 */ {8,   32, 128, 256, deflate_slow},
+/* 8 */ {32, 128, 258, 1024, deflate_slow},
+/* 9 */ {32, 258, 258, 256, deflate_slow}}; /* max compression */
+#endif
+
 /* Note: the deflate() code requires max_lazy >= MIN_MATCH and max_chain >= 4
  * For deflate_fast() (levels <= 3) good is ignored and lazy has a different
  * meaning.
@@ -231,6 +249,12 @@ local void slide_hash(s)
 ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv(int optOff, int optLevel, int insize,
     int level, int windowLog)
 {
+#ifdef AOCL_ZLIB_OPT
+    if(optOff)
+        config_table = configuration_table;
+    else
+        config_table = configuration_table_opt;
+#endif
     aocl_register_slide_hash_fmv(optOff, optLevel, slide_hash);
     aocl_register_longest_match_fmv(optOff, optLevel, longest_match);
     return NULL;
@@ -605,9 +629,15 @@ int ZEXPORT deflateParams(strm, level, strategy)
     if (level < 0 || level > 9 || strategy < 0 || strategy > Z_FIXED) {
         return Z_STREAM_ERROR;
     }
+#ifndef AOCL_ZLIB_OPT
     func = configuration_table[s->level].func;
 
     if ((strategy != s->strategy || func != configuration_table[level].func) &&
+#else
+    func = config_table[s->level].func;
+
+    if ((strategy != s->strategy || func != config_table[level].func) &&
+#endif
         s->high_water) {
         /* Flush the last buffer: */
         int err = deflate(strm, Z_BLOCK);
@@ -629,10 +659,17 @@ int ZEXPORT deflateParams(strm, level, strategy)
             s->matches = 0;
         }
         s->level = level;
+#ifndef AOCL_ZLIB_OPT
         s->max_lazy_match   = configuration_table[level].max_lazy;
         s->good_match       = configuration_table[level].good_length;
         s->nice_match       = configuration_table[level].nice_length;
         s->max_chain_length = configuration_table[level].max_chain;
+#else
+        s->max_lazy_match   = config_table[level].max_lazy;
+        s->good_match       = config_table[level].good_length;
+        s->nice_match       = config_table[level].nice_length;
+        s->max_chain_length = config_table[level].max_chain;
+#endif
     }
     s->strategy = strategy;
     return Z_OK;
@@ -1029,7 +1066,11 @@ int ZEXPORT deflate (strm, flush)
         bstate = s->level == 0 ? deflate_stored(s, flush) :
                  s->strategy == Z_HUFFMAN_ONLY ? deflate_huff(s, flush) :
                  s->strategy == Z_RLE ? deflate_rle(s, flush) :
+#ifndef AOCL_ZLIB_OPT
                  (*(configuration_table[s->level].func))(s, flush);
+#else
+                 (*(config_table[s->level].func))(s, flush);
+#endif
 
         if (bstate == finish_started || bstate == finish_done) {
             s->status = FINISH_STATE;
@@ -1233,10 +1274,17 @@ local void lm_init (s)
 
     /* Set the default configuration parameters:
      */
+#ifndef AOCL_ZLIB_OPT
     s->max_lazy_match   = configuration_table[s->level].max_lazy;
     s->good_match       = configuration_table[s->level].good_length;
     s->nice_match       = configuration_table[s->level].nice_length;
     s->max_chain_length = configuration_table[s->level].max_chain;
+#else
+    s->max_lazy_match   = config_table[s->level].max_lazy;
+    s->good_match       = config_table[s->level].good_length;
+    s->nice_match       = config_table[s->level].nice_length;
+    s->max_chain_length = config_table[s->level].max_chain;
+#endif
 
     s->strstart = 0;
     s->block_start = 0L;
