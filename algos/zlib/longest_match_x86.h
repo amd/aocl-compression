@@ -1,13 +1,5 @@
-/*
- * Fast version of the longest_match function for zlib.
- * Copyright (C) 2004-2019 Konstantin Nosov
- * For details and updates please visit
- * https://github.com/gildor2/fast_zlib
- * Licensed under the BSD license. See LICENSE.txt file in the project root for full license information.
- */
-
 /**
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,34 +26,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "deflate.h"
-#include <immintrin.h>
-
-#define NIL 0
-
-/* ===========================================================================
- * Update a hash value with the given input byte
- * IN  assertion: all calls to UPDATE_HASH are made with consecutive input
- *    characters, so that a running hash key can be computed from the previous
- *    key instead of complete recalculation each time.
- */
-#define UPDATE_HASH(s,h,c) (h = (((h)<<s->hash_shift) ^ (c)) & s->hash_mask)
-
-/* Please retain this line */
-const char fast_lm_copyright[] = " Fast match finder for zlib, https://github.com/gildor2/fast_zlib ";
-
-#ifdef AOCL_DYNAMIC_DISPATCHER
-/* Function pointer holding the optimized variant as per the detected CPU 
- * features */
-static uInt (*longest_match_fp)(deflate_state* s, IPos cur_match);
-#endif
-
-#ifdef AOCL_ZLIB_OPT
-static inline uInt longest_match_c_opt(deflate_state* s, IPos cur_match)
+// This header file is an template for function multiversion, application should not use it directly
+ZLIB_INTERNAL uint32_t LONGEST_MATCH(deflate_state* s, IPos cur_match)
 {
     unsigned chain_length = s->max_chain_length;/* max hash chain length */
     register Bytef *scan = s->window + s->strstart; /* current string */
-    register Bytef *match;                      /* matched string */
     register int len;                           /* length of current match */
     int best_len = s->prev_length;              /* ignore strings, shorter or of the same length */
     int nice_match = s->nice_match;             /* stop if match long enough */
@@ -180,26 +149,11 @@ static inline uInt longest_match_c_opt(deflate_state* s, IPos cur_match)
                 NEXT_CHAIN;
             }
         }
+        /* scan is not updated in COMPARE256 , so no need to reset it at every iteration 
+           no need to match first two bytes as they are already matched above */
+        len = COMPARE256(scan + 2, match_base + cur_match + 2) + 2;
 
-        /* Skip 1 byte */
-        match = match_base + cur_match + 1;
-        scan++;
-
-        /* Found a match candidate. Compare strings to determine its length. */
-        do {
-        } while (*(ushf*)(scan+=2) == *(ushf*)(match+=2) &&
-                 *(ushf*)(scan+=2) == *(ushf*)(match+=2) &&
-                 *(ushf*)(scan+=2) == *(ushf*)(match+=2) &&
-                 *(ushf*)(scan+=2) == *(ushf*)(match+=2) &&
-                 scan < strend);
-        /* The funny "do {}" generates better code on most compilers */
-
-        /* Here, scan <= window+strstart+257 */
-        Assert(scan <= s->window+(unsigned)(s->window_size-1), "wild scan");
-        if (*scan == *match) scan++;
-
-        len = (MAX_MATCH - 1) - (int)(strend-scan);
-        scan = strend - (MAX_MATCH-1);
+        Assert(scan + len <= s->window+(unsigned)(s->window_size-1), "wild scan");
 
         if (len > best_len) {
             /* new string is longer than previous - remember it */
@@ -273,123 +227,3 @@ break_matching: /* sorry for goto's, but such code is smaller and easier to view
     if ((uInt)best_len <= s->lookahead) return (uInt)best_len;
     return s->lookahead;
 }
-
-#if defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
-static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
-{
-    uint32_t match_len = 0;
-    while(match_len < 256) {
-        __m256i buff1 = _mm256_lddqu_si256((__m256i*)src1);
-        __m256i buff2 = _mm256_lddqu_si256((__m256i*)src2);
-        __m256i buff_r = _mm256_cmpeq_epi8(buff1, buff2);
-        unsigned match_r = (unsigned)_mm256_movemask_epi8(buff_r);
-        if (match_r != 0xFFFFFFFF) {
-            uint32_t curr_match_sz = (uint32_t)__builtin_ctz(~match_r);
-            return match_len + curr_match_sz;
-        }
-        src1 += 32, src2 += 32, match_len += 32;
-
-        buff1 = _mm256_lddqu_si256((__m256i*)src1);
-        buff2 = _mm256_lddqu_si256((__m256i*)src2);
-        buff_r = _mm256_cmpeq_epi8(buff1, buff2);
-        match_r = (unsigned)_mm256_movemask_epi8(buff_r);
-        if (match_r != 0xFFFFFFFF) {
-            uint32_t curr_match_sz = (uint32_t)__builtin_ctz(~match_r);
-            return match_len + curr_match_sz;
-        }
-        src1 += 32, src2 += 32, match_len += 32;
-    }
-    return 256;
-}
-#define COMPARE256 compare256_avx2
-#define LONGEST_MATCH longest_match_avx2_opt
-/* This header file is a template to generate multiversion functions 
- * based on above defined maccros */
-#include "longest_match_x86.h"
-#undef COMPARE256
-#undef LONGEST_MATCH
-#endif
-
-#ifdef AOCL_ZLIB_SSE2_OPT
-#define control _SIDD_CMP_EQUAL_EACH | _SIDD_UBYTE_OPS | _SIDD_NEGATIVE_POLARITY
-static inline uint32_t compare256_sse(const Bytef *src1, const Bytef *src2)
-{
-    uint32_t match_len = 0;
-    while(match_len < 256) {
-        __m128i buff1 = _mm_lddqu_si128((__m128i *)src1);
-        __m128i buff2 = _mm_lddqu_si128((__m128i *)src2);
-        uint32_t res = (uint32_t)_mm_cmpestri(buff1, 16, buff2, 16, control);
-        if (_mm_cmpestrc(buff1, 16, buff2, 16, control)) {
-            return match_len + res;
-        }
-        src1 += 16, src2 += 16, match_len += 16;
-
-        buff1 = _mm_lddqu_si128((__m128i *)src1);
-        buff2 = _mm_lddqu_si128((__m128i *)src2);
-        res = (uint32_t)_mm_cmpestri(buff1, 16, buff2, 16, control);
-        if (_mm_cmpestrc(buff1, 16, buff2, 16, control)) {
-            return match_len + res;
-        }
-        src1 += 16, src2 += 16, match_len += 16;
-    }
-
-    return 256;
-}
-#define COMPARE256 compare256_sse
-#define LONGEST_MATCH longest_match_sse_opt
-/* This header file is a template to generate multiversion functions 
- * based on above defined maccros */
-#include "longest_match_x86.h"
-#undef COMPARE256
-#undef LONGEST_MATCH
-#endif
-
-/* This function intercepts non optimized code path and orchestrate 
- * optimized code flow path */
-uInt ZLIB_INTERNAL longest_match_x86(deflate_state *s, IPos cur_match)
-{
-#ifdef AOCL_DYNAMIC_DISPATCHER
-    return longest_match_fp(s, cur_match);
-#elif defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
-    return longest_match_avx2_opt(s, cur_match);
-#elif defined(AOCL_ZLIB_SSE2_OPT)
-    return longest_match_sse_opt(s, cur_match);
-#else
-    return longest_match_c_opt(s, cur_match);
-#endif
-}
-#endif //AOCL_ZLIB_OPT
-
-#ifdef AOCL_DYNAMIC_DISPATCHER
-void aocl_register_longest_match_fmv(int optOff, int optLevel,
-                                  uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match))
-{
-    if (optOff)
-    {
-        longest_match_fp = longest_match_c_fp;
-    }
-    else
-    {
-        switch (optLevel)
-        {
-        case 0://C version
-            longest_match_fp = longest_match_c_opt;
-            break;
-        case 1://SSE version
-            longest_match_fp = longest_match_sse_opt;
-            break;
-        case 2://AVX version
-        case 3://AVX2 version
-        default://AVX512 and other versions
-#ifdef HAVE_BUILTIN_CTZ
-            longest_match_fp = longest_match_avx2_opt;
-#elif defined(AOCL_ZLIB_SSE2_OPT)
-            longest_match_fp = longest_match_sse_opt;
-#else
-            longest_match_fp = longest_match_c_opt;
-#endif
-            break;
-        }
-    }
-}
-#endif
