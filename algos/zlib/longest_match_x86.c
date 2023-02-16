@@ -275,6 +275,7 @@ break_matching: /* sorry for goto's, but such code is smaller and easier to view
 }
 
 #if defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
+__attribute__((__target__("avx2")))
 static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
 {
     uint32_t match_len = 0;
@@ -312,6 +313,7 @@ static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
 
 #ifdef AOCL_ZLIB_SSE2_OPT
 #define control _SIDD_CMP_EQUAL_EACH | _SIDD_UBYTE_OPS | _SIDD_NEGATIVE_POLARITY
+__attribute__((__target__("sse4.2")))
 static inline uint32_t compare256_sse(const Bytef *src1, const Bytef *src2)
 {
     uint32_t match_len = 0;

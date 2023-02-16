@@ -59,6 +59,7 @@ static inline void slide_hash_c_opt(deflate_state *s)
 }
 
 #ifdef AOCL_ZLIB_AVX2_OPT
+__attribute__((__target__("avx2")))
 static inline void slide_hash_avx2(deflate_state *s)
 {
     Pos *hc;
@@ -69,7 +70,7 @@ static inline void slide_hash_avx2(deflate_state *s)
     hc = s->head;
     for(;hchnsz > 0;hchnsz -= 16) {
         __m256i hres, hval;
-        hval = _mm256_loadu_si256((__m256i *)hc);
+        hval = _mm256_lddqu_si256((__m256i *)hc);
         hres = _mm256_subs_epu16(hval, wsize256);
         _mm256_storeu_si256((__m256i *)hc, hres);
         hc += 16;
@@ -78,7 +79,7 @@ static inline void slide_hash_avx2(deflate_state *s)
     Pos *pc = s->prev;
     for(;wsz > 0;wsz -= 16) {
         __m256i pres, pval;
-        pval = _mm256_loadu_si256((__m256i *)pc);
+        pval = _mm256_lddqu_si256((__m256i *)pc);
         pres = _mm256_subs_epu16(pval, wsize256);
         _mm256_storeu_si256((__m256i *)pc, pres); 
         pc += 16;
