@@ -86,6 +86,7 @@ uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_t len)
 }
 
 #ifdef AOCL_ZLIB_SSE2_OPT
+__attribute__((__target__("ssse3")))
 static inline uint32_t adler32_x86_sse(uint32_t adler, const Bytef *buf, z_size_t len)
 {
     uint32_t sum_A = adler & 0xffff;
@@ -126,8 +127,8 @@ static inline uint32_t adler32_x86_sse(uint32_t adler, const Bytef *buf, z_size_
             vcs : stores sum_B's partial computation of consecutive bytes in adjacent four 32-bit numbers
             vos : accumulating vbs results per iteration for future calculation of sum_B
         */
-            batch1 = _mm_loadu_si128((__m128i*)(buf)); // batch1: B1 | B2 | ... B16
-            batch2 = _mm_loadu_si128((__m128i*)(buf + 16)); // batch1: B17 | B18 | ... B32
+            batch1 = _mm_lddqu_si128((__m128i*)(buf)); // batch1: B1 | B2 | ... B16
+            batch2 = _mm_lddqu_si128((__m128i*)(buf + 16)); // batch1: B17 | B18 | ... B32
 
             // vos: old_vos + vbs
             vos = _mm_add_epi32(vos, vbs);
@@ -142,8 +143,8 @@ static inline uint32_t adler32_x86_sse(uint32_t adler, const Bytef *buf, z_size_
             mad1 = _mm_maddubs_epi16(batch2, coeff2);
             vcs = _mm_add_epi32(vcs, _mm_madd_epi16(mad1, octa_ones));
 
-            batch1 = _mm_loadu_si128((__m128i*)(buf + 32));
-            batch2 = _mm_loadu_si128((__m128i*)(buf + 48));
+            batch1 = _mm_lddqu_si128((__m128i*)(buf + 32));
+            batch2 = _mm_lddqu_si128((__m128i*)(buf + 48));
 
             vbs = _mm_add_epi32(vbs, _mm_sad_epu8(batch1, zero));
             mad0 = _mm_maddubs_epi16(batch1, coeff3);
@@ -178,6 +179,7 @@ static inline uint32_t adler32_x86_sse(uint32_t adler, const Bytef *buf, z_size_
 #endif /* AOCL_ZLIB_SSE2_OPT */
 
 #ifdef AOCL_ZLIB_AVX2_OPT
+__attribute__((__target__("avx2")))
 static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size_t len)
 {
     uint32_t sum_A = adler & 0xffff;
@@ -205,7 +207,7 @@ static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size
 
         while(n--)
         {
-            batch1 = _mm256_loadu_si256((__m256i*)(buf)); // batch1: B1 | B2 | ... B32
+            batch1 = _mm256_lddqu_si256((__m256i*)(buf)); // batch1: B1 | B2 | ... B32
 
             // vos: old_vos + vbs
             vos = _mm256_add_epi32(vos, vbs);
@@ -216,7 +218,7 @@ static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size
             // vcs: old_vsc + ( 1*B32 + 2*B31 + 3*B30 + 4*B29| ...| ... 29*B4 + 30*B3 + 31*B2 + 32*B1 )
             vcs = _mm256_add_epi32(vcs, _mm256_madd_epi16(mad0, octa_ones));
 
-            batch1 = _mm256_loadu_si256((__m256i*)(buf + 32));
+            batch1 = _mm256_lddqu_si256((__m256i*)(buf + 32));
 
             vbs = _mm256_add_epi32(vbs, _mm256_sad_epu8(batch1, zero));
             mad0 = _mm256_maddubs_epi16(batch1, coeff2);
