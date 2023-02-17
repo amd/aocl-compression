@@ -78,8 +78,11 @@
 CHAR *aocl_bzip2_setup(INTP optOff, INTP optLevel,
                        UINTP insize, UINTP level, UINTP windowLog)
 {
-    //ToDo: Implement a new bzip2 API for setup
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    return aocl_setup_bzip2(optOff, optLevel, insize, level, windowLog);
+#else
     return NULL;
+#endif
 }
 
 INT64 aocl_bzip2_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 

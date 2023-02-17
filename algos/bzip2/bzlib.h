@@ -10,6 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
+   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -269,6 +270,18 @@ BZ_EXTERN const char * BZ_API(BZ2_bzerror) (
       BZFILE *b, 
       int    *errnum
    );
+#endif
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+
+BZ_EXTERN char * BZ_API(aocl_setup_bzip2) (
+      int optOff,
+      int optLevel,
+      size_t insize,
+      size_t level,
+      size_t windowLog
+   );
+
 #endif
 
 #ifdef __cplusplus
