@@ -10,6 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
+   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -503,6 +504,11 @@ BZ2_hbCreateDecodeTables ( Int32*, Int32*, Int32*, UChar*,
 #endif
 #endif
 
+#define AOCL_BZIP2_OPT
+
+#ifdef AOCL_BZIP2_OPT
+extern Int32 AOCL_BZ2_decompress ( DState* );
+#endif
 
 /*-------------------------------------------------------------*/
 /*--- end                                   bzlib_private.h ---*/

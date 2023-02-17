@@ -10,6 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
+   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -85,6 +86,43 @@ void BZ2_bz__AssertH__fail ( int errcode )
 }
 #endif
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+
+Int32 (*AOCL_BZ2_decompress_fp)( DState* );
+
+void aocl_register_decompress_fmv(optOff, optLevel, insize, level, windowLog)
+{
+   if (optOff)
+   {
+      AOCL_BZ2_decompress_fp = BZ2_decompress;
+   }
+   else
+   {
+      switch (optLevel)
+      {
+         case 0://C version
+         case 1://SSE version
+         case 2://AVX version
+         case 3://AVX2 version
+         default://AVX512 and other versions
+            AOCL_BZ2_decompress_fp = AOCL_BZ2_decompress;
+            break;
+      }
+   }
+}
+
+BZ_EXTERN char * BZ_API(aocl_setup_bzip2) 
+                     ( int optOff,
+                       int optLevel,
+                       size_t insize,
+                       size_t level,
+                       size_t windowLog )
+{
+   aocl_register_decompress_fmv(optOff, optLevel, insize, level, windowLog);
+   return NULL;
+}
+
+#endif
 
 /*---------------------------------------------------*/
 static
@@ -839,7 +877,17 @@ int BZ_API(BZ2_bzDecompress) ( bz_stream *strm )
          }
       }
       if (s->state >= BZ_X_MAGIC_1) {
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+         Int32 r = AOCL_BZ2_decompress_fp(s);
+#else
+#ifdef AOCL_BZIP2_OPT
+         Int32 r = AOCL_BZ2_decompress(s);
+#else
          Int32 r = BZ2_decompress ( s );
+#endif
+#endif
+
          if (r == BZ_STREAM_END) {
             if (s->verbosity >= 3)
                VPrintf2 ( "\n    combined CRCs: stored = 0x%08x, computed = 0x%08x", 
