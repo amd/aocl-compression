@@ -2126,11 +2126,12 @@ if (len2 <= limit) \
         } \
 }
 
-
+#ifdef AOCL_LZMA_OPT
+// Compare bytes in data2 and data1 using UInt32 ptrs and __builtin_ctz
 #define AOCL_FIND_MATCHING_BYTES_LEN(len, limit, data1, data2) { \
 UInt32 D = 0; \
 UInt32 lenLimit4 = limit - 4; \
-while (len < lenLimit4) { \
+while (len <= lenLimit4) { \
     UInt32 C1 = *(UInt32*)&data2[len]; \
     UInt32 C2 = *(UInt32*)&data1[len]; \
     D = C1 ^ C2; \
@@ -2147,6 +2148,7 @@ while (len != limit) { \
     len++; \
 } \
 }
+#endif
 
 MY_FORCE_INLINE
 static UInt32 AOCL_GetPrice_PureRep_Non0(const CLzmaEnc* p, unsigned repIndex, size_t state, size_t posState)
