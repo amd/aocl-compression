@@ -1026,6 +1026,28 @@ UInt32 * GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byt
 }
 
 #ifdef AOCL_LZMA_OPT
+// Compare bytes in data2 and data1 using UInt32 ptrs and __builtin_ctz
+#define AOCL_FIND_MATCHING_BYTES_LEN(len, limit, data1, data2, exit_point) \
+    UInt32 D = 0; \
+    UInt32 lenLimit4 = limit - 4; \
+    while (len <= lenLimit4) { \
+        UInt32 C1 = *(UInt32*)&data2[len]; \
+        UInt32 C2 = *(UInt32*)&data1[len]; \
+        D = C1 ^ C2; \
+        if (D) { \
+            int trail = __builtin_ctz(D); \
+            len += (trail >> 3); \
+            goto exit_point; \
+        } \
+        len += 4; \
+    } \
+    while (len != limit) { \
+    if (data2[len] != data1[len]) \
+        break; \
+    len++; \
+    } \
+exit_point:
+
 /*
 * This function is used for finding matches when hashChain mode
 * algorithm is selected. It navigates through the linked list based
@@ -1169,7 +1191,7 @@ static UInt32* AOCL_Hc_GetMatchesSpec(size_t lenLimit, UInt32 curMatch, UInt32 p
 * match longer than lenLimit is found)
 * 
 * Changes wrt GetMatchesSpec1:
-* + None: Function retained as place holder for subsequent optimization commits
+* + AOCL_FIND_MATCHING_BYTES_LEN used for matching
 */
 MY_FORCE_INLINE
 static UInt32* AOCL_GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byte* cur, CLzRef* son,
@@ -1209,10 +1231,8 @@ static UInt32* AOCL_GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos
         const UInt32 pair0 = pair[0];
         if (pb[len] == cur[len]) // bytes matched
         {
-          if (++len != lenLimit && pb[len] == cur[len])
-            while (++len != lenLimit) // keep matching until you get a mismatch byte or reach lenLimit
-              if (pb[len] != cur[len])
-                break;
+          ++len;
+          AOCL_FIND_MATCHING_BYTES_LEN(len, lenLimit, cur, pb, aocl_bt_gms_len_update)
           if (maxLen < len) // found a match longer than maxLen. save <len,dist> pair in distances
           {
             maxLen = (UInt32)len;
@@ -1251,6 +1271,63 @@ static UInt32* AOCL_GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos
 
   *ptr0 = *ptr1 = kEmptyHashValue;
   return d;
+}
+
+// Exact same code as AOCL_GetMatchesSpec1, except this does not update distances
+static void AOCL_SkipMatchesSpec(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byte* cur, CLzRef* son,
+    size_t _cyclicBufferPos, UInt32 _cyclicBufferSize, UInt32 cutValue)
+{
+    CLzRef* ptr0 = son + ((size_t)_cyclicBufferPos << 1) + 1;
+    CLzRef* ptr1 = son + ((size_t)_cyclicBufferPos << 1);
+    unsigned len0 = 0, len1 = 0;
+
+    UInt32 cmCheck;
+
+    cmCheck = (UInt32)(pos - _cyclicBufferSize);
+    if ((UInt32)pos <= _cyclicBufferSize)
+        cmCheck = 0;
+
+    if (// curMatch >= pos ||  // failure
+        cmCheck < curMatch)
+        do
+        {
+            const UInt32 delta = pos - curMatch;
+            {
+                CLzRef* pair = son + ((size_t)(_cyclicBufferPos - delta + ((delta > _cyclicBufferPos) ? _cyclicBufferSize : 0)) << 1);
+                const Byte* pb = cur - delta;
+                unsigned len = (len0 < len1 ? len0 : len1);
+                if (pb[len] == cur[len])
+                {
+                    ++len;
+                    AOCL_FIND_MATCHING_BYTES_LEN(len, lenLimit, cur, pb, aocl_bt_sms_len_update)
+                    {
+                        if (len == lenLimit)
+                        {
+                            *ptr1 = pair[0];
+                            *ptr0 = pair[1];
+                            return;
+                        }
+                    }
+                }
+                if (pb[len] < cur[len])
+                {
+                    *ptr1 = curMatch;
+                    curMatch = pair[1];
+                    ptr1 = pair + 1;
+                    len1 = len;
+                }
+                else
+                {
+                    *ptr0 = curMatch;
+                    curMatch = pair[0];
+                    ptr0 = pair;
+                    len0 = len;
+                }
+            }
+        } while (--cutValue && cmCheck < curMatch);
+
+        *ptr0 = *ptr1 = kEmptyHashValue;
+        return;
 }
 #endif
 
@@ -1352,6 +1429,8 @@ static void MatchFinder_MovePos(CMatchFinder *p)
   distances, (UInt32)_maxLen_); MOVE_POS_RET;
 
 #ifdef AOCL_LZMA_OPT
+#define AOCL_SKIP_FOOTER  AOCL_SkipMatchesSpec(MF_PARAMS(p)); MOVE_POS; } while (--num);
+
 #define AOCL_GET_MATCHES_FOOTER_BT(_maxLen_) \
   GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_GetMatchesSpec1)
 
@@ -2121,7 +2200,7 @@ static UInt32* AOCL_Bt4_MatchFinder_GetMatches(CMatchFinder* p, UInt32* distance
     * matches at d3 and curMatch offsets, as d2 will have the smallest offset */
     if (maxLen == lenLimit)
     {
-      SkipMatchesSpec(MF_PARAMS(p));
+        AOCL_SkipMatchesSpec(MF_PARAMS(p));
       MOVE_POS_RET
     }
     break;
@@ -2144,7 +2223,7 @@ static void AOCL_Bt4_MatchFinder_Skip(CMatchFinder* p, UInt32 num)
     hash[h2] =
       (hash + kFix3HashSize)[hv] = p->pos;
   }
-  SKIP_FOOTER
+  AOCL_SKIP_FOOTER
 }
 #endif
 
