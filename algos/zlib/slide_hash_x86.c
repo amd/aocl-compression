@@ -106,7 +106,7 @@ void ZLIB_INTERNAL slide_hash_x86(deflate_state *s)
 void aocl_register_slide_hash_fmv(int optOff, int optLevel,
                                   void (*slide_hash_c_fp)(deflate_state* s))
 {
-    if (optOff)
+    if (UNLIKELY(optOff==1))
     {
         slide_hash_fp = slide_hash_c_fp;
     }

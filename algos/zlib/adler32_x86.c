@@ -85,9 +85,9 @@ uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_t len)
     return sum_A | (sum_B << 16);
 }
 
-#ifdef AOCL_ZLIB_SSE2_OPT
-__attribute__((__target__("ssse3")))
-static inline uint32_t adler32_x86_sse(uint32_t adler, const Bytef *buf, z_size_t len)
+#ifdef AOCL_ZLIB_AVX_OPT
+__attribute__((__target__("avx"))) // uses SSSE3 intrinsics
+static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_t len)
 {
     uint32_t sum_A = adler & 0xffff;
     uint32_t sum_B = adler >> 16;
@@ -263,8 +263,8 @@ uint32_t ZLIB_INTERNAL adler32_x86(uint32_t sum_A, const Bytef *buf, z_size_t le
         return adler32_x86_fp(sum_A, buf, len);
 #elif defined(AOCL_ZLIB_AVX2_OPT)
         return adler32_x86_avx2(sum_A, buf, len);
-#elif defined(AOCL_ZLIB_SSE2_OPT)
-        return adler32_x86_sse(sum_A, buf, len);
+#elif defined(AOCL_ZLIB_AVX_OPT)
+        return adler32_x86_avx(sum_A, buf, len);
 #endif
     }
 
@@ -343,7 +343,7 @@ uint32_t ZLIB_INTERNAL adler32_x86(uint32_t sum_A, const Bytef *buf, z_size_t le
 void aocl_setup_adler32_fmv(int optOff, int optLevel,
                             int insize, int level, int windowLog)
 {
-    if (optOff)
+    if (UNLIKELY(optOff==1))
     {
         adler32_x86_fp = (uint32_t (*)(uint32_t, const Bytef *, z_size_t))adler32;
     }
@@ -352,12 +352,12 @@ void aocl_setup_adler32_fmv(int optOff, int optLevel,
         switch (optLevel)
         {
         case 0://C version
+        case 1://SSE version
             adler32_x86_fp = (uint32_t (*)(uint32_t, const Bytef *, z_size_t))adler32;
             break;
-        case 1://SSE version
-            adler32_x86_fp = adler32_x86_sse;
-            break;
         case 2://AVX version
+            adler32_x86_fp = adler32_x86_avx;
+            break;
         case 3://AVX2 version
         default://AVX512 and other versions
             adler32_x86_fp = adler32_x86_avx2;
