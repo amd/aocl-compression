@@ -541,6 +541,13 @@ typedef uLong FAR uLongf;
 #define AOCL_ZLIB_AVX2_OPT
 #define AOCL_ZLIB_AVX_OPT
 #define AOCL_ZLIB_SSE2_OPT
+#ifdef HAVE_BUILTIN_EXPECT
+#define LIKELY(x) (__builtin_expect((x), 1))
+#define UNLIKELY(x) (__builtin_expect((x), 0))
+#else
+#define LIKELY(x) x
+#define UNLIKELY(x) x
+#endif
 #include <stdint.h>
 #endif /* AOCL_ZLIB_OPT */
 #endif /* ZCONF_H */

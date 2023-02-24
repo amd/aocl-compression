@@ -149,7 +149,9 @@ local const config configuration_table[10] = {
 #endif
 
 #ifdef AOCL_ZLIB_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
 local const config *config_table;
+#endif
 local const config configuration_table_opt[10] = {
 /*      good lazy nice chain */
 /* 0 */ {0,    0,  0,    0, deflate_stored},  /* store only */
@@ -179,8 +181,9 @@ local const config configuration_table_opt[10] = {
  *    characters, so that a running hash key can be computed from the previous
  *    key instead of complete recalculation each time.
  */
+#ifndef AOCL_ZLIB_OPT
 #define UPDATE_HASH(s,h,c) (h = (((h)<<s->hash_shift) ^ (c)) & s->hash_mask)
-
+#endif
 
 /* ===========================================================================
  * Insert string str in the dictionary and set match_head to the previous head
@@ -192,6 +195,7 @@ local const config configuration_table_opt[10] = {
  *    characters and the first MIN_MATCH bytes of str are valid (except for
  *    the last MIN_MATCH-1 bytes of the input file).
  */
+#ifndef AOCL_ZLIB_OPT
 #ifdef FASTEST
 #define INSERT_STRING(s, str, match_head) \
    (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
@@ -202,6 +206,7 @@ local const config configuration_table_opt[10] = {
    (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
     match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
     s->head[s->ins_h] = (Pos)(str))
+#endif
 #endif
 
 /* ===========================================================================
@@ -246,15 +251,15 @@ local void slide_hash(s)
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
 #ifdef AOCL_DYNAMIC_DISPATCHER
+int deflateOptOff;
 ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv(int optOff, int optLevel, int insize,
     int level, int windowLog)
 {
-#ifdef AOCL_ZLIB_OPT
-    if(optOff)
+    deflateOptOff = optOff;
+    if(UNLIKELY(optOff==1))
         config_table = configuration_table;
     else
         config_table = configuration_table_opt;
-#endif
     aocl_register_slide_hash_fmv(optOff, optLevel, slide_hash);
     aocl_register_longest_match_fmv(optOff, optLevel, longest_match);
     return NULL;
@@ -410,11 +415,15 @@ local int deflateStateCheck (strm)
 }
 
 /* ========================================================================= */
+#if defined(AOCL_ZLIB_OPT) && defined(AOCL_ZLIB_AVX_OPT)
+__attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
+#endif
 int ZEXPORT deflateSetDictionary (strm, dictionary, dictLength)
     z_streamp strm;
     const Bytef *dictionary;
     uInt  dictLength;
 {
+#ifndef AOCL_ZLIB_OPT
     deflate_state *s;
     uInt str, n;
     int wrap;
@@ -430,11 +439,7 @@ int ZEXPORT deflateSetDictionary (strm, dictionary, dictLength)
 
     /* when using zlib wrappers, compute Adler-32 for provided dictionary */
     if (wrap == 1)
-#ifdef AOCL_ZLIB_OPT
-        strm->adler = adler32_x86(strm->adler, dictionary, dictLength);
-#else
         strm->adler = adler32(strm->adler, dictionary, dictLength);
-#endif
     s->wrap = 0;                    /* avoid computing Adler-32 in read_buf */
 
     /* if dictionary would fill window, just replace the history */
@@ -480,6 +485,78 @@ int ZEXPORT deflateSetDictionary (strm, dictionary, dictLength)
     strm->avail_in = avail;
     s->wrap = wrap;
     return Z_OK;
+#else
+    deflate_state *s;
+    uInt str, n;
+    int wrap;
+    unsigned avail;
+    z_const unsigned char *next;
+
+    if (deflateStateCheck(strm) || dictionary == Z_NULL)
+        return Z_STREAM_ERROR;
+    s = strm->state;
+    wrap = s->wrap;
+    if (wrap == 2 || (wrap == 1 && s->status != INIT_STATE) || s->lookahead)
+        return Z_STREAM_ERROR;
+
+    /* when using zlib wrappers, compute Adler-32 for provided dictionary */
+    if (wrap == 1)
+        strm->adler = adler32_x86(strm->adler, dictionary, dictLength);
+    s->wrap = 0;                    /* avoid computing Adler-32 in read_buf */
+
+    /* if dictionary would fill window, just replace the history */
+    if (dictLength >= s->w_size) {
+        if (wrap == 0) {            /* already empty otherwise */
+            CLEAR_HASH(s);
+            s->strstart = 0;
+            s->block_start = 0L;
+            s->insert = 0;
+        }
+        dictionary += dictLength - s->w_size;  /* use the tail */
+        dictLength = s->w_size;
+    }
+
+    /* insert dictionary into window and hash */
+    avail = strm->avail_in;
+    next = strm->next_in;
+    strm->avail_in = dictLength;
+    strm->next_in = (z_const Bytef *)dictionary;
+    fill_window(s);
+    while (s->lookahead >= MIN_MATCH) {
+        str = s->strstart;
+        n = s->lookahead - (MIN_MATCH-1);
+        do {
+#ifndef AOCL_ZLIB_AVX_OPT
+            UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH-1]);
+#else
+#ifdef AOCL_DYNAMIC_DISPATCHER
+            if(UNLIKELY(deflateOptOff==1))
+                UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH-1]);
+            else
+#endif
+                UPDATE_HASH_CRC(s, s->ins_h, s->window[str + MIN_MATCH-1]);
+#endif
+#ifndef FASTEST
+            s->prev[str & s->w_mask] = s->head[s->ins_h];
+#endif
+            s->head[s->ins_h] = (Pos)str;
+            str++;
+        } while (--n);
+        s->strstart = str;
+        s->lookahead = MIN_MATCH-1;
+        fill_window(s);
+    }
+    s->strstart += s->lookahead;
+    s->block_start = (long)s->strstart;
+    s->insert = s->lookahead;
+    s->lookahead = 0;
+    s->match_length = s->prev_length = MIN_MATCH-1;
+    s->match_available = 0;
+    strm->next_in = next;
+    strm->avail_in = avail;
+    s->wrap = wrap;
+    return Z_OK;
+#endif
 }
 
 /* ========================================================================= */
@@ -634,9 +711,15 @@ int ZEXPORT deflateParams(strm, level, strategy)
 
     if ((strategy != s->strategy || func != configuration_table[level].func) &&
 #else
+#ifdef AOCL_DYNAMIC_DISPATCHER
     func = config_table[s->level].func;
 
     if ((strategy != s->strategy || func != config_table[level].func) &&
+#else
+    func = configuration_table_opt[s->level].func;
+
+    if ((strategy != s->strategy || func != configuration_table_opt[level].func) &&
+#endif
 #endif
         s->high_water) {
         /* Flush the last buffer: */
@@ -665,10 +748,17 @@ int ZEXPORT deflateParams(strm, level, strategy)
         s->nice_match       = configuration_table[level].nice_length;
         s->max_chain_length = configuration_table[level].max_chain;
 #else
+#ifdef AOCL_DYNAMIC_DISPATCHER
         s->max_lazy_match   = config_table[level].max_lazy;
         s->good_match       = config_table[level].good_length;
         s->nice_match       = config_table[level].nice_length;
         s->max_chain_length = config_table[level].max_chain;
+#else
+        s->max_lazy_match   = configuration_table_opt[level].max_lazy;
+        s->good_match       = configuration_table_opt[level].good_length;
+        s->nice_match       = configuration_table_opt[level].nice_length;
+        s->max_chain_length = configuration_table_opt[level].max_chain;
+#endif
 #endif
     }
     s->strategy = strategy;
@@ -1069,7 +1159,11 @@ int ZEXPORT deflate (strm, flush)
 #ifndef AOCL_ZLIB_OPT
                  (*(configuration_table[s->level].func))(s, flush);
 #else
+#ifdef AOCL_DYNAMIC_DISPATCHER
                  (*(config_table[s->level].func))(s, flush);
+#else
+                 (*(configuration_table_opt[s->level].func))(s, flush);
+#endif
 #endif
 
         if (bstate == finish_started || bstate == finish_done) {
@@ -1280,10 +1374,17 @@ local void lm_init (s)
     s->nice_match       = configuration_table[s->level].nice_length;
     s->max_chain_length = configuration_table[s->level].max_chain;
 #else
+#ifdef AOCL_DYNAMIC_DISPATCHER
     s->max_lazy_match   = config_table[s->level].max_lazy;
     s->good_match       = config_table[s->level].good_length;
     s->nice_match       = config_table[s->level].nice_length;
     s->max_chain_length = config_table[s->level].max_chain;
+#else
+    s->max_lazy_match   = configuration_table_opt[s->level].max_lazy;
+    s->good_match       = configuration_table_opt[s->level].good_length;
+    s->nice_match       = configuration_table_opt[s->level].nice_length;
+    s->max_chain_length = configuration_table_opt[s->level].max_chain;
+#endif
 #endif
 
     s->strstart = 0;
@@ -1560,9 +1661,13 @@ local void check_match(s, start, match, length)
  *    performed for at least two bytes (required for the zip translate_eol
  *    option -- not supported here).
  */
+#if defined(AOCL_ZLIB_OPT) && defined(AOCL_ZLIB_AVX_OPT)
+__attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
+#endif
 local void fill_window(s)
     deflate_state *s;
 {
+#ifndef AOCL_ZLIB_OPT
     unsigned n;
     unsigned more;    /* Amount of free space at the end of the window. */
     uInt wsize = s->w_size;
@@ -1571,7 +1676,6 @@ local void fill_window(s)
 
     do {
         more = (unsigned)(s->window_size -(ulg)s->lookahead -(ulg)s->strstart);
-#ifndef AOCL_ZLIB_OPT
         /* Deal with !@#$% 64K limit: */
         if (sizeof(int) <= 2) {
             if (more == 0 && s->strstart == 0 && s->lookahead == 0) {
@@ -1584,7 +1688,6 @@ local void fill_window(s)
                 more--;
             }
         }
-#endif
         /* If the window is almost full and there is insufficient lookahead,
          * move the upper half to the lower one to make room in the upper half.
          */
@@ -1594,11 +1697,7 @@ local void fill_window(s)
             s->match_start -= wsize;
             s->strstart    -= wsize; /* we now have strstart >= MAX_DIST */
             s->block_start -= (long) wsize;
-#ifdef AOCL_ZLIB_OPT
-            slide_hash_x86(s);
-#else
             slide_hash(s);
-#endif
             more += wsize;
         }
         if (s->strm->avail_in == 0) break;
@@ -1681,6 +1780,143 @@ local void fill_window(s)
 
     Assert((ulg)s->strstart <= s->window_size - MIN_LOOKAHEAD,
            "not enough room for search");
+#else
+    unsigned n;
+    unsigned more;    /* Amount of free space at the end of the window. */
+    uInt wsize = s->w_size;
+
+    Assert(s->lookahead < MIN_LOOKAHEAD, "already enough lookahead");
+
+    do {
+        more = (unsigned)(s->window_size -(ulg)s->lookahead -(ulg)s->strstart);
+#ifdef AOCL_DYNAMIC_DISPATCHER
+        if(UNLIKELY(deflateOptOff==1)) {
+            /* Deal with !@#$% 64K limit: */
+            if (sizeof(int) <= 2) {
+                if (more == 0 && s->strstart == 0 && s->lookahead == 0) {
+                    more = wsize;
+
+                } else if (more == (unsigned)(-1)) {
+                    /* Very unlikely, but possible on 16 bit machine if
+                    * strstart == 0 && lookahead == 1 (input done a byte at time)
+                    */
+                    more--;
+                }
+            }
+        }
+#endif
+        /* If the window is almost full and there is insufficient lookahead,
+         * move the upper half to the lower one to make room in the upper half.
+         */
+        if (s->strstart >= wsize+MAX_DIST(s)) {
+            zmemcpy(s->window, s->window+wsize, (unsigned)wsize - more);
+            s->match_start -= wsize;
+            s->strstart    -= wsize; /* we now have strstart >= MAX_DIST */
+            s->block_start -= (long) wsize;
+            slide_hash_x86(s);
+            more += wsize;
+        }
+        if (s->strm->avail_in == 0) break;
+
+        /* If there was no sliding:
+         *    strstart <= WSIZE+MAX_DIST-1 && lookahead <= MIN_LOOKAHEAD - 1 &&
+         *    more == window_size - lookahead - strstart
+         * => more >= window_size - (MIN_LOOKAHEAD-1 + WSIZE + MAX_DIST-1)
+         * => more >= window_size - 2*WSIZE + 2
+         * In the BIG_MEM or MMAP case (not yet supported),
+         *   window_size == input_size + MIN_LOOKAHEAD  &&
+         *   strstart + s->lookahead <= input_size => more >= MIN_LOOKAHEAD.
+         * Otherwise, window_size == 2*WSIZE so more >= 2.
+         * If there was sliding, more >= WSIZE. So in all cases, more >= 2.
+         */
+        Assert(more >= 2, "more < 2");
+
+        n = read_buf(s->strm, s->window + s->strstart + s->lookahead, more);
+        s->lookahead += n;
+
+        /* Initialize the hash value now that we have some input: */
+        if (s->lookahead + s->insert >= MIN_MATCH) {
+            uInt str = s->strstart - s->insert;
+#ifndef AOCL_ZLIB_AVX_OPT
+            s->ins_h = s->window[str];
+            UPDATE_HASH(s, s->ins_h, s->window[str + 1]);
+            #if MIN_MATCH != 3
+            Call UPDATE_HASH() MIN_MATCH-3 more times
+            #endif
+#endif
+#ifdef AOCL_DYNAMIC_DISPATCHER
+            if(UNLIKELY(deflateOptOff==1)) {
+                s->ins_h = s->window[str];
+                UPDATE_HASH(s, s->ins_h, s->window[str + 1]);
+#if MIN_MATCH != 3
+                Call UPDATE_HASH() MIN_MATCH-3 more times
+#endif
+            }
+#endif
+            while (s->insert) {
+#ifndef AOCL_ZLIB_AVX_OPT
+                UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH-1]);
+#else
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                if(UNLIKELY(deflateOptOff==1))
+                    UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH-1]);
+                else
+#endif
+                    UPDATE_HASH_CRC(s, s->ins_h, s->window[str + MIN_MATCH-1]);
+#endif
+#ifndef FASTEST
+                s->prev[str & s->w_mask] = s->head[s->ins_h];
+#endif
+                s->head[s->ins_h] = (Pos)str;
+                str++;
+                s->insert--;
+                if (s->lookahead + s->insert < MIN_MATCH)
+                    break;
+            }
+        }
+        /* If the whole input has less than MIN_MATCH bytes, ins_h is garbage,
+         * but this is not important since only literal bytes will be emitted.
+         */
+
+    } while (s->lookahead < MIN_LOOKAHEAD && s->strm->avail_in != 0);
+
+    /* If the WIN_INIT bytes after the end of the current data have never been
+     * written, then zero those bytes in order to avoid memory check reports of
+     * the use of uninitialized (or uninitialised as Julian writes) bytes by
+     * the longest match routines.  Update the high water mark for the next
+     * time through here.  WIN_INIT is set to MAX_MATCH since the longest match
+     * routines allow scanning to strstart + MAX_MATCH, ignoring lookahead.
+     */
+    if (s->high_water < s->window_size) {
+        ulg curr = s->strstart + (ulg)(s->lookahead);
+        ulg init;
+
+        if (s->high_water < curr) {
+            /* Previous high water mark below current data -- zero WIN_INIT
+             * bytes or up to end of window, whichever is less.
+             */
+            init = s->window_size - curr;
+            if (init > WIN_INIT)
+                init = WIN_INIT;
+            zmemzero(s->window + curr, (unsigned)init);
+            s->high_water = curr + init;
+        }
+        else if (s->high_water < (ulg)curr + WIN_INIT) {
+            /* High water mark at or above current data, but below current data
+             * plus WIN_INIT -- zero out to current data plus WIN_INIT, or up
+             * to end of window, whichever is less.
+             */
+            init = (ulg)curr + WIN_INIT - s->high_water;
+            if (init > s->window_size - s->high_water)
+                init = s->window_size - s->high_water;
+            zmemzero(s->window + s->high_water, (unsigned)init);
+            s->high_water += init;
+        }
+    }
+
+    Assert((ulg)s->strstart <= s->window_size - MIN_LOOKAHEAD,
+           "not enough room for search");
+#endif
 }
 
 /* ===========================================================================
@@ -1906,10 +2142,14 @@ local block_state deflate_stored(s, flush)
  * new strings in the dictionary only for unmatched strings or for short
  * matches. It is used only for the fast compression options.
  */
+#if defined(AOCL_ZLIB_OPT) && defined(AOCL_ZLIB_AVX_OPT)
+__attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
+#endif
 local block_state deflate_fast(s, flush)
     deflate_state *s;
     int flush;
 {
+#ifndef AOCL_ZLIB_OPT
     IPos hash_head;       /* head of the hash chain */
     int bflush;           /* set if current block must be flushed */
 
@@ -1943,14 +2183,7 @@ local block_state deflate_fast(s, flush)
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
-#ifndef AOCL_ZLIB_OPT
             s->match_length = longest_match (s, hash_head);
-#else
-            if(s->level == 1)
-                s->match_length = longest_match (s, hash_head);
-            else
-                s->match_length = longest_match_x86 (s, hash_head);
-#endif
             /* longest_match() sets match_start */
         }
         if (s->match_length >= MIN_MATCH) {
@@ -2007,6 +2240,130 @@ local block_state deflate_fast(s, flush)
     if (s->last_lit)
         FLUSH_BLOCK(s, 0);
     return block_done;
+#else
+    IPos hash_head;       /* head of the hash chain */
+    int bflush;           /* set if current block must be flushed */
+
+    for (;;) {
+        /* Make sure that we always have enough lookahead, except
+         * at the end of the input file. We need MAX_MATCH bytes
+         * for the next match, plus MIN_MATCH bytes to insert the
+         * string following the next match.
+         */
+        if (s->lookahead < MIN_LOOKAHEAD) {
+            fill_window(s);
+            if (s->lookahead < MIN_LOOKAHEAD && flush == Z_NO_FLUSH) {
+                return need_more;
+            }
+            if (s->lookahead == 0) break; /* flush the current block */
+        }
+
+        /* Insert the string window[strstart .. strstart+2] in the
+         * dictionary, and set hash_head to the head of the hash chain:
+         */
+        hash_head = NIL;
+        if (s->lookahead >= MIN_MATCH) {
+#ifndef AOCL_ZLIB_AVX_OPT
+            INSERT_STRING(s, s->strstart, hash_head);
+#else
+#ifdef AOCL_DYNAMIC_DISPATCHER
+            if(UNLIKELY(deflateOptOff==1))
+                INSERT_STRING(s, s->strstart, hash_head);
+            else
+#endif
+                INSERT_STRING_CRC(s, s->strstart, hash_head);
+#endif
+        }
+
+        /* Find the longest match, discarding those <= prev_length.
+         * At this point we have always match_length < MIN_MATCH
+         */
+        if (hash_head != NIL && s->strstart - hash_head <= MAX_DIST(s)) {
+            /* To simplify the code, we prevent matches with the string
+             * of window index 0 (in particular we have to avoid a match
+             * of the string with itself at the start of the input file).
+             */
+            if(s->level == 1)
+                s->match_length = longest_match (s, hash_head);
+            else
+                s->match_length = longest_match_x86 (s, hash_head);
+            /* longest_match() sets match_start */
+        }
+        if (s->match_length >= MIN_MATCH) {
+            check_match(s, s->strstart, s->match_start, s->match_length);
+
+            _tr_tally_dist(s, s->strstart - s->match_start,
+                           s->match_length - MIN_MATCH, bflush);
+
+            s->lookahead -= s->match_length;
+
+            /* Insert new strings in the hash table only if the match length
+             * is not too large. This saves time but degrades compression.
+             */
+#ifndef FASTEST
+            if (s->match_length <= s->max_insert_length &&
+                s->lookahead >= MIN_MATCH) {
+                s->match_length--; /* string at strstart already in table */
+                do {
+                    s->strstart++;
+#ifndef AOCL_ZLIB_AVX_OPT
+                    INSERT_STRING(s, s->strstart, hash_head);
+#else
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                    if(UNLIKELY(deflateOptOff==1))
+                        INSERT_STRING(s, s->strstart, hash_head);
+                    else
+#endif
+                        INSERT_STRING_CRC(s, s->strstart, hash_head);
+#endif
+                    /* strstart never exceeds WSIZE-MAX_MATCH, so there are
+                     * always MIN_MATCH bytes ahead.
+                     */
+                } while (--s->match_length != 0);
+                s->strstart++;
+            } else
+#endif
+            {
+                s->strstart += s->match_length;
+                s->match_length = 0;
+#ifndef AOCL_ZLIB_AVX_OPT
+                s->ins_h = s->window[s->strstart];
+                UPDATE_HASH(s, s->ins_h, s->window[s->strstart+1]);
+#if MIN_MATCH != 3
+                Call UPDATE_HASH() MIN_MATCH-3 more times
+#endif
+#endif
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                if(UNLIKELY(deflateOptOff==1)) {
+                    s->ins_h = s->window[s->strstart];
+                    UPDATE_HASH(s, s->ins_h, s->window[s->strstart+1]);
+#if MIN_MATCH != 3
+                    Call UPDATE_HASH() MIN_MATCH-3 more times
+#endif
+                }
+#endif
+                /* If lookahead < MIN_MATCH, ins_h is garbage, but it does not
+                 * matter since it will be recomputed at next deflate call.
+                 */
+            }
+        } else {
+            /* No match, output a literal byte */
+            Tracevv((stderr,"%c", s->window[s->strstart]));
+            _tr_tally_lit (s, s->window[s->strstart], bflush);
+            s->lookahead--;
+            s->strstart++;
+        }
+        if (bflush) FLUSH_BLOCK(s, 0);
+    }
+    s->insert = s->strstart < MIN_MATCH-1 ? s->strstart : MIN_MATCH-1;
+    if (flush == Z_FINISH) {
+        FLUSH_BLOCK(s, 1);
+        return finish_done;
+    }
+    if (s->last_lit)
+        FLUSH_BLOCK(s, 0);
+    return block_done;
+#endif
 }
 
 #ifndef FASTEST
@@ -2015,10 +2372,14 @@ local block_state deflate_fast(s, flush)
  * evaluation for matches: a match is finally adopted only if there is
  * no better match at the next window position.
  */
+#if defined(AOCL_ZLIB_OPT) && defined(AOCL_ZLIB_AVX_OPT)
+__attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
+#endif
 local block_state deflate_slow(s, flush)
     deflate_state *s;
     int flush;
 {
+#ifndef AOCL_ZLIB_OPT
     IPos hash_head;          /* head of hash chain */
     int bflush;              /* set if current block must be flushed */
 
@@ -2056,14 +2417,7 @@ local block_state deflate_slow(s, flush)
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
-#ifndef AOCL_ZLIB_OPT
             s->match_length = longest_match (s, hash_head);
-#else
-            if(s->level == 1)
-                s->match_length = longest_match (s, hash_head);
-            else
-                s->match_length = longest_match_x86 (s, hash_head);
-#endif
             /* longest_match() sets match_start */
 
             if (s->match_length <= 5 && (s->strategy == Z_FILTERED
@@ -2145,6 +2499,148 @@ local block_state deflate_slow(s, flush)
     if (s->last_lit)
         FLUSH_BLOCK(s, 0);
     return block_done;
+#else
+    IPos hash_head;          /* head of hash chain */
+    int bflush;              /* set if current block must be flushed */
+
+    /* Process the input block. */
+    for (;;) {
+        /* Make sure that we always have enough lookahead, except
+         * at the end of the input file. We need MAX_MATCH bytes
+         * for the next match, plus MIN_MATCH bytes to insert the
+         * string following the next match.
+         */
+        if (s->lookahead < MIN_LOOKAHEAD) {
+            fill_window(s);
+            if (s->lookahead < MIN_LOOKAHEAD && flush == Z_NO_FLUSH) {
+                return need_more;
+            }
+            if (s->lookahead == 0) break; /* flush the current block */
+        }
+
+        /* Insert the string window[strstart .. strstart+2] in the
+         * dictionary, and set hash_head to the head of the hash chain:
+         */
+        hash_head = NIL;
+        if (s->lookahead >= MIN_MATCH) {
+#ifndef AOCL_ZLIB_AVX_OPT
+            INSERT_STRING(s, s->strstart, hash_head);
+#else
+#ifdef AOCL_DYNAMIC_DISPATCHER
+            if(UNLIKELY(deflateOptOff==1))
+                INSERT_STRING(s, s->strstart, hash_head);
+            else
+#endif
+                INSERT_STRING_CRC(s, s->strstart, hash_head);
+#endif
+        }
+
+        /* Find the longest match, discarding those <= prev_length.
+         */
+        s->prev_length = s->match_length, s->prev_match = s->match_start;
+        s->match_length = MIN_MATCH-1;
+
+        if (hash_head != NIL && s->prev_length < s->max_lazy_match &&
+            s->strstart - hash_head <= MAX_DIST(s)) {
+            /* To simplify the code, we prevent matches with the string
+             * of window index 0 (in particular we have to avoid a match
+             * of the string with itself at the start of the input file).
+             */
+            if(s->level == 1)
+                s->match_length = longest_match (s, hash_head);
+            else
+                s->match_length = longest_match_x86 (s, hash_head);
+            /* longest_match() sets match_start */
+
+            if (s->match_length <= 5 && (s->strategy == Z_FILTERED
+#if TOO_FAR <= 32767
+                || (s->match_length == MIN_MATCH &&
+                    s->strstart - s->match_start > TOO_FAR)
+#endif
+                )) {
+
+                /* If prev_match is also MIN_MATCH, match_start is garbage
+                 * but we will ignore the current match anyway.
+                 */
+                s->match_length = MIN_MATCH-1;
+            }
+        }
+        /* If there was a match at the previous step and the current
+         * match is not better, output the previous match:
+         */
+        if (s->prev_length >= MIN_MATCH && s->match_length <= s->prev_length) {
+            uInt max_insert = s->strstart + s->lookahead - MIN_MATCH;
+            /* Do not insert strings in hash table beyond this. */
+
+            check_match(s, s->strstart-1, s->prev_match, s->prev_length);
+
+            _tr_tally_dist(s, s->strstart -1 - s->prev_match,
+                           s->prev_length - MIN_MATCH, bflush);
+
+            /* Insert in hash table all strings up to the end of the match.
+             * strstart-1 and strstart are already inserted. If there is not
+             * enough lookahead, the last two strings are not inserted in
+             * the hash table.
+             */
+            s->lookahead -= s->prev_length-1;
+            s->prev_length -= 2;
+            do {
+                if (++s->strstart <= max_insert) {
+#ifndef AOCL_ZLIB_AVX_OPT
+                    INSERT_STRING(s, s->strstart, hash_head);
+#else
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                    if(UNLIKELY(deflateOptOff==1))
+                        INSERT_STRING(s, s->strstart, hash_head);
+                    else
+#endif
+                        INSERT_STRING_CRC(s, s->strstart, hash_head);
+#endif
+                }
+            } while (--s->prev_length != 0);
+            s->match_available = 0;
+            s->match_length = MIN_MATCH-1;
+            s->strstart++;
+
+            if (bflush) FLUSH_BLOCK(s, 0);
+
+        } else if (s->match_available) {
+            /* If there was no match at the previous position, output a
+             * single literal. If there was a match but the current match
+             * is longer, truncate the previous match to a single literal.
+             */
+            Tracevv((stderr,"%c", s->window[s->strstart-1]));
+            _tr_tally_lit(s, s->window[s->strstart-1], bflush);
+            if (bflush) {
+                FLUSH_BLOCK_ONLY(s, 0);
+            }
+            s->strstart++;
+            s->lookahead--;
+            if (s->strm->avail_out == 0) return need_more;
+        } else {
+            /* There is no previous match to compare with, wait for
+             * the next step to decide.
+             */
+            s->match_available = 1;
+            s->strstart++;
+            s->lookahead--;
+        }
+    }
+    Assert (flush != Z_NO_FLUSH, "no flush?");
+    if (s->match_available) {
+        Tracevv((stderr,"%c", s->window[s->strstart-1]));
+        _tr_tally_lit(s, s->window[s->strstart-1], bflush);
+        s->match_available = 0;
+    }
+    s->insert = s->strstart < MIN_MATCH-1 ? s->strstart : MIN_MATCH-1;
+    if (flush == Z_FINISH) {
+        FLUSH_BLOCK(s, 1);
+        return finish_done;
+    }
+    if (s->last_lit)
+        FLUSH_BLOCK(s, 0);
+    return block_done;
+#endif
 }
 #endif /* FASTEST */
 

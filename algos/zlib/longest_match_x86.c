@@ -39,14 +39,6 @@
 
 #define NIL 0
 
-/* ===========================================================================
- * Update a hash value with the given input byte
- * IN  assertion: all calls to UPDATE_HASH are made with consecutive input
- *    characters, so that a running hash key can be computed from the previous
- *    key instead of complete recalculation each time.
- */
-#define UPDATE_HASH(s,h,c) (h = (((h)<<s->hash_shift) ^ (c)) & s->hash_mask)
-
 /* Please retain this line */
 const char fast_lm_copyright[] = " Fast match finder for zlib, https://github.com/gildor2/fast_zlib ";
 
@@ -311,10 +303,10 @@ static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
 #undef LONGEST_MATCH
 #endif
 
-#ifdef AOCL_ZLIB_SSE2_OPT
+#ifdef AOCL_ZLIB_AVX_OPT
 #define control _SIDD_CMP_EQUAL_EACH | _SIDD_UBYTE_OPS | _SIDD_NEGATIVE_POLARITY
-__attribute__((__target__("sse4.2")))
-static inline uint32_t compare256_sse(const Bytef *src1, const Bytef *src2)
+__attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
+static inline uint32_t compare256_avx(const Bytef *src1, const Bytef *src2)
 {
     uint32_t match_len = 0;
     while(match_len < 256) {
@@ -337,8 +329,8 @@ static inline uint32_t compare256_sse(const Bytef *src1, const Bytef *src2)
 
     return 256;
 }
-#define COMPARE256 compare256_sse
-#define LONGEST_MATCH longest_match_sse_opt
+#define COMPARE256 compare256_avx
+#define LONGEST_MATCH longest_match_avx_opt
 /* This header file is a template to generate multiversion functions 
  * based on above defined maccros */
 #include "longest_match_x86.h"
@@ -354,8 +346,8 @@ uInt ZLIB_INTERNAL longest_match_x86(deflate_state *s, IPos cur_match)
     return longest_match_fp(s, cur_match);
 #elif defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
     return longest_match_avx2_opt(s, cur_match);
-#elif defined(AOCL_ZLIB_SSE2_OPT)
-    return longest_match_sse_opt(s, cur_match);
+#elif defined(AOCL_ZLIB_AVX_OPT)
+    return longest_match_avx_opt(s, cur_match);
 #else
     return longest_match_c_opt(s, cur_match);
 #endif
@@ -366,7 +358,7 @@ uInt ZLIB_INTERNAL longest_match_x86(deflate_state *s, IPos cur_match)
 void aocl_register_longest_match_fmv(int optOff, int optLevel,
                                   uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match))
 {
-    if (optOff)
+    if (UNLIKELY(optOff==1))
     {
         longest_match_fp = longest_match_c_fp;
     }
@@ -375,18 +367,18 @@ void aocl_register_longest_match_fmv(int optOff, int optLevel,
         switch (optLevel)
         {
         case 0://C version
+        case 1://SSE version
             longest_match_fp = longest_match_c_opt;
             break;
-        case 1://SSE version
-            longest_match_fp = longest_match_sse_opt;
-            break;
         case 2://AVX version
+            longest_match_fp = longest_match_avx_opt;
+            break;
         case 3://AVX2 version
         default://AVX512 and other versions
 #ifdef HAVE_BUILTIN_CTZ
             longest_match_fp = longest_match_avx2_opt;
-#elif defined(AOCL_ZLIB_SSE2_OPT)
-            longest_match_fp = longest_match_sse_opt;
+#elif defined(AOCL_ZLIB_AVX_OPT)
+            longest_match_fp = longest_match_avx_opt;
 #else
             longest_match_fp = longest_match_c_opt;
 #endif

@@ -350,10 +350,43 @@ void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
  * variant out of the multiple function versions for performing deflate
  * related tasks */
 #ifdef AOCL_DYNAMIC_DISPATCHER
+extern int deflateOptOff;
 void aocl_register_slide_hash_fmv(int optOff, int optLevel, 
                                   void (*slide_hash_c_fp)(deflate_state* s));
 void aocl_register_longest_match_fmv(int optOff, int optLevel, 
                                   uInt (*longest_match_fp)(deflate_state* s, IPos cur_match));
 #endif
+#ifdef AOCL_ZLIB_OPT
+#define UPDATE_HASH(s,h,c) (h = (((h)<<s->hash_shift) ^ (c)) & s->hash_mask)
+
+#ifdef FASTEST
+#define INSERT_STRING(s, str, match_head) \
+   (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
+    match_head = s->head[s->ins_h], \
+    s->head[s->ins_h] = (Pos)(str))
+#else
+#define INSERT_STRING(s, str, match_head) \
+   (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
+    match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
+    s->head[s->ins_h] = (Pos)(str))
+#endif
+
+#ifdef AOCL_ZLIB_AVX_OPT
+#include<nmmintrin.h>
+#define UPDATE_HASH_CRC(s,h,c) (h = _mm_crc32_u32(0, (*(unsigned *)((uintptr_t)(&c) - (MIN_MATCH-1))) & 0xFFFFFF) & s->hash_mask)
+
+#ifdef FASTEST
+#define INSERT_STRING_CRC(s, str, match_head) \
+   (UPDATE_HASH_CRC(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
+    match_head = s->head[s->ins_h], \
+    s->head[s->ins_h] = (Pos)(str))
+#else
+#define INSERT_STRING_CRC(s, str, match_head) \
+   (UPDATE_HASH_CRC(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
+    match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
+    s->head[s->ins_h] = (Pos)(str))
+#endif
+#endif
+#endif /* AOCL_ZLIB_OPT */
 
 #endif /* DEFLATE_H */
