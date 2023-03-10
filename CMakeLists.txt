@@ -281,7 +281,8 @@ set(SRC_FILES
         ${ZLIB_SRC_FILES}
         ${ZSTD_SRC_FILES}
 	)
-set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
+set (BENCH_PATH test)
+set_property(SOURCE ${SRC_FILES} ${BENCH_PATH}/codec_bench.c APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
 if (BUILD_STATIC_LIBS)
 	add_library(${lib_name} STATIC ${SRC_FILES})
 	message(STATUS "Library type being built is: Static")
@@ -295,7 +296,6 @@ set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
 
 # add executable
 set (exe_name aocl_compression_bench)
-set (BENCH_PATH test)
 if (WIN32)
 add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/codec_bench.h)
 else ()
