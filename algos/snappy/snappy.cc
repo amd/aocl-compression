@@ -74,19 +74,22 @@
 #include <string>
 #include <vector>
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-static char* (*SNAPPY_compress_fragment_fp)(const char* input, 
-    size_t input_size, char* op, 
-    uint16_t* table, const int table_size);
-
-// function pointer to variants of the RawUncompress function, used for integration
-// with the dynamic dispatcher. "SAW" stands for "SnappyArrayWriter" as that is the
-// class used for decompression of flat buffers to flat buffers in this library.
-static bool (*SNAPPY_SAW_raw_uncompress_fp)(const char* compressed, 
-    size_t compressed_length, char* uncompressed);
-#endif
-
 namespace snappy {
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    //Forward declarations to allow default pointer initializations
+    bool SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed);
+
+    static char* (*SNAPPY_compress_fragment_fp)(const char* input,
+        size_t input_size, char* op,
+        uint16_t* table, const int table_size) = internal::CompressFragment;
+
+    // function pointer to variants of the RawUncompress function, used for integration
+    // with the dynamic dispatcher. "SAW" stands for "SnappyArrayWriter" as that is the
+    // class used for decompression of flat buffers to flat buffers in this library.
+    static bool (*SNAPPY_SAW_raw_uncompress_fp)(const char* compressed,
+        size_t compressed_length, char* uncompressed) = SAW_RawUncompress;
+#endif
 
 // The amount of slop bytes writers are using for unconditional copies.
 constexpr int kSlopBytes = 64;
@@ -103,7 +106,7 @@ using internal::LITERAL;
 // compression for compressible input, and more speed for incompressible
 // input. Of course, it doesn't hurt if the hash function is reasonably fast
 // either, as it gets called a lot.
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
 inline uint32_t HashBytes(uint32_t bytes, int shift) {
 #else
 static inline uint32_t HashBytes(uint32_t bytes, int shift) {
@@ -496,7 +499,7 @@ static inline char* AOCL_EmitCopy(char* op, size_t offset, size_t len) {
     // it's in the noise.
 
     // Emit 64 byte copies but make sure to keep at least four bytes reserved.
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
     while (len >= 68) {
 #else
     while (SNAPPY_PREDICT_FALSE(len >= 68)) {
@@ -775,7 +778,7 @@ char* AOCL_CompressFragment(const char* input,
   const char* base_ip = ip;
 
   const size_t kInputMarginBytes = 15;
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
   if (input_size >= kInputMarginBytes) {
 #else
   if (SNAPPY_PREDICT_TRUE(input_size >= kInputMarginBytes)) {
@@ -836,7 +839,7 @@ char* AOCL_CompressFragment(const char* input,
             assert(candidate >= base_ip);
             assert(candidate < ip + i);
             table[hash] = delta + i;
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
             if (LittleEndian::AOCL_Load32(candidate) == dword) {
 #else
             if (SNAPPY_PREDICT_FALSE(LittleEndian::AOCL_Load32(candidate) == dword)) {
@@ -866,7 +869,7 @@ char* AOCL_CompressFragment(const char* input,
         skip += bytes_between_hash_lookups;
 #endif
         const char* next_ip = ip + bytes_between_hash_lookups;
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
         if (next_ip > ip_limit) {
 #else
         if (SNAPPY_PREDICT_FALSE(next_ip > ip_limit)) {
@@ -879,7 +882,7 @@ char* AOCL_CompressFragment(const char* input,
         assert(candidate < ip);
 
         table[hash] = ip - base_ip;
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
         if (static_cast<uint32_t>(data) ==
                                 LittleEndian::AOCL_Load32(candidate)) {
 #else
@@ -907,7 +910,7 @@ char* AOCL_CompressFragment(const char* input,
       // by proceeding to the next iteration of the main loop.  We also can exit
       // this loop via goto if we get close to exhausting the input.
     emit_match:
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
       uint32_t candidate_data;
 #endif
       do {
@@ -925,7 +928,7 @@ char* AOCL_CompressFragment(const char* input,
         } else {
           op = AOCL_EmitCopy</*len_less_than_12=*/false>(op, offset, matched);
         }
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
         if (ip >= ip_limit) {
 #else
         if (SNAPPY_PREDICT_FALSE(ip >= ip_limit)) {
@@ -942,7 +945,7 @@ char* AOCL_CompressFragment(const char* input,
             ip - base_ip - 1;
         uint32_t hash = HashBytes(data, shift);
         candidate = base_ip + table[hash];
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
         candidate_data = LittleEndian::AOCL_Load32(candidate);
 #endif
         table[hash] = ip - base_ip;
@@ -956,7 +959,7 @@ char* AOCL_CompressFragment(const char* input,
         // BM_Flat/11 gaviota p = 0.1
         // BM_Flat/12 cp      p = 0.5
         // BM_Flat/13 c       p = 0.3
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
       } while (static_cast<uint32_t>(data) == candidate_data);
 #else
       } while (static_cast<uint32_t>(data) == LittleEndian::AOCL_Load32(candidate));
@@ -1395,14 +1398,14 @@ size_t Compress(Source* reader, Sink* writer) {
     // scratch_output[] region is big enough for this iteration.
     char* dest = writer->GetAppendBuffer(max_output, wmem.GetScratchOutput());
 
+#ifdef AOCL_SNAPPY_OPT 
 #ifdef AOCL_DYNAMIC_DISPATCHER
     char* end = SNAPPY_compress_fragment_fp(fragment, fragment_size, dest, table, table_size);
 #else
-  #ifdef AOCL_SNAPPY_OPT_FLAGS
     char* end = internal::AOCL_CompressFragment(fragment, fragment_size, dest, table, table_size);
-  #else
+#endif
+#else
     char* end = internal::CompressFragment(fragment, fragment_size, dest, table, table_size);
-  #endif
 #endif
     writer->Append(dest, end - dest);
     written += (end - dest);
@@ -1807,7 +1810,7 @@ bool AOCL_SAW_RawUncompress(const char* compressed, size_t compressed_length, ch
   return InternalUncompress(&reader, &output);
 }
 
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
 bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
   // sanity checks ------------------------------------------------------------
      size_t ulength;

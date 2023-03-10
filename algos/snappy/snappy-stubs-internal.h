@@ -55,7 +55,7 @@
 #include <intrin.h>
 #endif  // defined(_MSC_VER)
 
-#define AOCL_SNAPPY_OPT_FLAGS
+#define AOCL_SNAPPY_OPT 
 
 #ifndef __has_feature
 #define __has_feature(x) 0
@@ -174,7 +174,7 @@ class LittleEndian {
  public:
   // Functions to do unaligned loads and stores in little-endian order.
     static inline uint16_t AOCL_Load16(const void *ptr) {
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
     uint16_t x;
     memcpy(&x, ptr, 2);
     return x;
@@ -188,7 +188,7 @@ class LittleEndian {
   }
 
   static inline uint32_t AOCL_Load32(const void *ptr) {
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
     uint32_t x;
     memcpy(&x, ptr, 4);
     return x;
@@ -204,7 +204,7 @@ class LittleEndian {
   }
 
   static inline uint64_t AOCL_Load64(const void *ptr) {
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
     uint64_t x;
     memcpy(&x, ptr, 8);
     return x;

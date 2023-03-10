@@ -11,9 +11,11 @@
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
 #ifdef AOCL_DYNAMIC_DISPATCHER
+int zlibOptOff = 1; // If setup is not called for dynamic dispatcher, run reference code 
 ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
     int level, int windowLog)
 {
+    zlibOptOff = optOff;
     aocl_setup_deflate_fmv(optOff, optLevel, insize, level, windowLog);
     //aocl_setup_inflate_fmv(optOff, optLevel, insize, level, windowLog);
     aocl_setup_adler32_fmv(optOff, optLevel, insize, level, windowLog);

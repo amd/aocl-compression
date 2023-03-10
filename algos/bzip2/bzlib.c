@@ -88,7 +88,7 @@ void BZ2_bz__AssertH__fail ( int errcode )
 
 #ifdef AOCL_DYNAMIC_DISPATCHER
 
-Int32 (*AOCL_BZ2_decompress_fp)( DState* );
+Int32 (*AOCL_BZ2_decompress_fp)( DState* ) = BZ2_decompress;
 
 void aocl_register_decompress_fmv(optOff, optLevel, insize, level, windowLog)
 {
@@ -877,15 +877,14 @@ int BZ_API(BZ2_bzDecompress) ( bz_stream *strm )
          }
       }
       if (s->state >= BZ_X_MAGIC_1) {
-
+#ifdef AOCL_BZIP2_OPT
 #ifdef AOCL_DYNAMIC_DISPATCHER
          Int32 r = AOCL_BZ2_decompress_fp(s);
 #else
-#ifdef AOCL_BZIP2_OPT
          Int32 r = AOCL_BZ2_decompress(s);
-#else
-         Int32 r = BZ2_decompress ( s );
 #endif
+#else
+         Int32 r = BZ2_decompress(s);
 #endif
 
          if (r == BZ_STREAM_END) {

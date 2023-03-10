@@ -150,7 +150,7 @@ local const config configuration_table[10] = {
 
 #ifdef AOCL_ZLIB_OPT
 #ifdef AOCL_DYNAMIC_DISPATCHER
-local const config *config_table;
+local const config *config_table = configuration_table;
 #endif
 local const config configuration_table_opt[10] = {
 /*      good lazy nice chain */
@@ -251,15 +251,25 @@ local void slide_hash(s)
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
 #ifdef AOCL_DYNAMIC_DISPATCHER
-int deflateOptOff;
+/* Function pointers holding the optimized variant as per the detected CPU
+ * features */
+static void (*deflate_slide_hash_fp)(deflate_state* s) = slide_hash;
+static uInt(*deflate_longest_match_fp)(deflate_state* s, IPos cur_match) = longest_match;
+
 ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv(int optOff, int optLevel, int insize,
     int level, int windowLog)
 {
-    deflateOptOff = optOff;
-    if(UNLIKELY(optOff==1))
+    if (UNLIKELY(optOff == 1)) {
         config_table = configuration_table;
-    else
+        deflate_slide_hash_fp = slide_hash;
+        deflate_longest_match_fp = longest_match;
+    }
+    else {
         config_table = configuration_table_opt;
+        deflate_slide_hash_fp = slide_hash_x86;
+        deflate_longest_match_fp = longest_match_x86;
+    }
+
     aocl_register_slide_hash_fmv(optOff, optLevel, slide_hash);
     aocl_register_longest_match_fmv(optOff, optLevel, longest_match);
     return NULL;
@@ -530,7 +540,7 @@ int ZEXPORT deflateSetDictionary (strm, dictionary, dictLength)
             UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH-1]);
 #else
 #ifdef AOCL_DYNAMIC_DISPATCHER
-            if(UNLIKELY(deflateOptOff==1))
+            if(UNLIKELY(zlibOptOff==1))
                 UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH-1]);
             else
 #endif
@@ -733,7 +743,11 @@ int ZEXPORT deflateParams(strm, level, strategy)
         if (s->level == 0 && s->matches != 0) {
             if (s->matches == 1)
 #ifdef AOCL_ZLIB_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                deflate_slide_hash_fp(s);
+#else
                 slide_hash_x86(s);
+#endif
 #else
                 slide_hash(s);
 #endif
@@ -1790,7 +1804,7 @@ local void fill_window(s)
     do {
         more = (unsigned)(s->window_size -(ulg)s->lookahead -(ulg)s->strstart);
 #ifdef AOCL_DYNAMIC_DISPATCHER
-        if(UNLIKELY(deflateOptOff==1)) {
+        if(UNLIKELY(zlibOptOff==1)) {
             /* Deal with !@#$% 64K limit: */
             if (sizeof(int) <= 2) {
                 if (more == 0 && s->strstart == 0 && s->lookahead == 0) {
@@ -1813,7 +1827,11 @@ local void fill_window(s)
             s->match_start -= wsize;
             s->strstart    -= wsize; /* we now have strstart >= MAX_DIST */
             s->block_start -= (long) wsize;
+#ifdef AOCL_DYNAMIC_DISPATCHER
+            deflate_slide_hash_fp(s);
+#else
             slide_hash_x86(s);
+#endif
             more += wsize;
         }
         if (s->strm->avail_in == 0) break;
@@ -1845,7 +1863,7 @@ local void fill_window(s)
             #endif
 #endif
 #ifdef AOCL_DYNAMIC_DISPATCHER
-            if(UNLIKELY(deflateOptOff==1)) {
+            if(UNLIKELY(zlibOptOff==1)) {
                 s->ins_h = s->window[str];
                 UPDATE_HASH(s, s->ins_h, s->window[str + 1]);
 #if MIN_MATCH != 3
@@ -1858,7 +1876,7 @@ local void fill_window(s)
                 UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH-1]);
 #else
 #ifdef AOCL_DYNAMIC_DISPATCHER
-                if(UNLIKELY(deflateOptOff==1))
+                if(UNLIKELY(zlibOptOff==1))
                     UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH-1]);
                 else
 #endif
@@ -2267,7 +2285,7 @@ local block_state deflate_fast(s, flush)
             INSERT_STRING(s, s->strstart, hash_head);
 #else
 #ifdef AOCL_DYNAMIC_DISPATCHER
-            if(UNLIKELY(deflateOptOff==1))
+            if(UNLIKELY(zlibOptOff==1))
                 INSERT_STRING(s, s->strstart, hash_head);
             else
 #endif
@@ -2285,8 +2303,13 @@ local block_state deflate_fast(s, flush)
              */
             if(s->level == 1)
                 s->match_length = longest_match (s, hash_head);
-            else
-                s->match_length = longest_match_x86 (s, hash_head);
+            else {
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                s->match_length = deflate_longest_match_fp(s, hash_head);
+#else
+                s->match_length = longest_match_x86(s, hash_head);
+#endif
+            }
             /* longest_match() sets match_start */
         }
         if (s->match_length >= MIN_MATCH) {
@@ -2310,7 +2333,7 @@ local block_state deflate_fast(s, flush)
                     INSERT_STRING(s, s->strstart, hash_head);
 #else
 #ifdef AOCL_DYNAMIC_DISPATCHER
-                    if(UNLIKELY(deflateOptOff==1))
+                    if(UNLIKELY(zlibOptOff==1))
                         INSERT_STRING(s, s->strstart, hash_head);
                     else
 #endif
@@ -2334,7 +2357,7 @@ local block_state deflate_fast(s, flush)
 #endif
 #endif
 #ifdef AOCL_DYNAMIC_DISPATCHER
-                if(UNLIKELY(deflateOptOff==1)) {
+                if(UNLIKELY(zlibOptOff==1)) {
                     s->ins_h = s->window[s->strstart];
                     UPDATE_HASH(s, s->ins_h, s->window[s->strstart+1]);
 #if MIN_MATCH != 3
@@ -2527,7 +2550,7 @@ local block_state deflate_slow(s, flush)
             INSERT_STRING(s, s->strstart, hash_head);
 #else
 #ifdef AOCL_DYNAMIC_DISPATCHER
-            if(UNLIKELY(deflateOptOff==1))
+            if(UNLIKELY(zlibOptOff==1))
                 INSERT_STRING(s, s->strstart, hash_head);
             else
 #endif
@@ -2548,8 +2571,13 @@ local block_state deflate_slow(s, flush)
              */
             if(s->level == 1)
                 s->match_length = longest_match (s, hash_head);
-            else
-                s->match_length = longest_match_x86 (s, hash_head);
+            else {
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                s->match_length = deflate_longest_match_fp(s, hash_head);
+#else
+                s->match_length = longest_match_x86(s, hash_head);
+#endif
+            }
             /* longest_match() sets match_start */
 
             if (s->match_length <= 5 && (s->strategy == Z_FILTERED
@@ -2590,7 +2618,7 @@ local block_state deflate_slow(s, flush)
                     INSERT_STRING(s, s->strstart, hash_head);
 #else
 #ifdef AOCL_DYNAMIC_DISPATCHER
-                    if(UNLIKELY(deflateOptOff==1))
+                    if(UNLIKELY(zlibOptOff==1))
                         INSERT_STRING(s, s->strstart, hash_head);
                     else
 #endif

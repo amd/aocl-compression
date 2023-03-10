@@ -350,7 +350,6 @@ void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
  * variant out of the multiple function versions for performing deflate
  * related tasks */
 #ifdef AOCL_DYNAMIC_DISPATCHER
-extern int deflateOptOff;
 void aocl_register_slide_hash_fmv(int optOff, int optLevel, 
                                   void (*slide_hash_c_fp)(deflate_state* s));
 void aocl_register_longest_match_fmv(int optOff, int optLevel, 
