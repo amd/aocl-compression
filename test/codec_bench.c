@@ -64,7 +64,9 @@ void print_user_options (void)
     printf("-i<>        Number of iterations of compression/decompression\n");
     printf("-t          Verification and functional tests of the compression/decompression methods\n");
     printf("-p          Print stats like compression/decompression time, speed, ratio\n");
+#ifdef AOCL_DYNAMIC_DISPATCHER
     printf("-o          Turn off all optimizations\n");
+#endif
     printf("-v<>        Enable verbosity. Allowed values: 1 for Error (default), 2 for Info, 3 for Debug, 4 for Trace.\n");
     printf("-c          Run IPP library methods. Make sure to set the library path with LD_LIBRARY_PATH.\n\n");
 }
@@ -76,12 +78,12 @@ void print_supported_compressors (void)
    printf("Method Name\tLower Level\tUpper Level\n");
    printf("===========================================\n");
    printf("LZ4\t\t %s\t\t%s\n", "NA", "NA");
-   printf("LZ4HC\t\t %d\t\t%d\n", codec_list[LZ4HC].lower_level, codec_list[LZ4HC].upper_level);
-   printf("LZMA\t\t %d\t\t%d\n", codec_list[LZMA].lower_level, codec_list[LZMA].upper_level);
+   printf("LZ4HC\t\t %ld\t\t%ld\n", codec_list[LZ4HC].lower_level, codec_list[LZ4HC].upper_level);
+   printf("LZMA\t\t %ld\t\t%ld\n", codec_list[LZMA].lower_level, codec_list[LZMA].upper_level);
    printf("SNAPPY\t\t %s\t\t%s\n", "NA", "NA");
-   printf("ZLIB\t\t %d\t\t%d\n", codec_list[ZLIB].lower_level, codec_list[ZLIB].upper_level);
-   printf("ZSTD\t\t %d\t\t%d\n", codec_list[ZSTD].lower_level, codec_list[ZSTD].upper_level);
-   printf("BZIP2\t\t %d\t\t%d\n\n", codec_list[BZIP2].lower_level, codec_list[BZIP2].upper_level);
+   printf("ZLIB\t\t %ld\t\t%ld\n", codec_list[ZLIB].lower_level, codec_list[ZLIB].upper_level);
+   printf("ZSTD\t\t %ld\t\t%ld\n", codec_list[ZSTD].lower_level, codec_list[ZSTD].upper_level);
+   printf("BZIP2\t\t %ld\t\t%ld\n\n", codec_list[BZIP2].lower_level, codec_list[BZIP2].upper_level);
 }
 
 VOID *allocMem(UINTP size, INTP zeroInit)
@@ -231,11 +233,11 @@ INTP read_user_options (INTP argc,
                     else
                         codec_bench_handle->enable_verbosity = ERR;
                 break;
-
+#ifdef AOCL_DYNAMIC_DISPATCHER
                 case 'o':
                     codec_bench_handle->optOff = 1;
                 break;
-
+#endif
                 case 'c':
                     codec_bench_handle->useIPP = 1;
                 break;
