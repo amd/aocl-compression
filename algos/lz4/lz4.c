@@ -309,7 +309,7 @@ typedef enum {
 #ifdef AOCL_DYNAMIC_DISPATCHER
 static int (*LZ4_compress_fast_extState_fp)(void* state, const char* source,
     char* dest, int inputSize,
-    int maxOutputSize, int acceleration);
+    int maxOutputSize, int acceleration) = LZ4_compress_fast_extState;
 #endif
 
 
@@ -1873,14 +1873,14 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
     LZ4_stream_t ctx;
     LZ4_stream_t* const ctxPtr = &ctx;
 #endif
+#ifdef AOCL_LZ4_OPT
 #ifdef AOCL_DYNAMIC_DISPATCHER
     result = LZ4_compress_fast_extState_fp(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
 #else
-#ifdef AOCL_LZ4_OPT
     result = AOCL_LZ4_compress_fast_extState(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
+#endif
 #else
     result = LZ4_compress_fast_extState(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
-#endif
 #endif
 
 #if (LZ4_HEAPMODE)

@@ -149,7 +149,7 @@ UInt32* Hc3Zip_MatchFinder_GetMatches(CMatchFinder *p, UInt32 *distances);
 void Bt3Zip_MatchFinder_Skip(CMatchFinder *p, UInt32 num);
 void Hc3Zip_MatchFinder_Skip(CMatchFinder *p, UInt32 num);
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_LZMA_OPT
 /* Conditions:
      historySize <= 3 GB
      keepAddBufferBefore + matchMaxLen + keepAddBufferAfter < 511MB

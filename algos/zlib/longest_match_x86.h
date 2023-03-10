@@ -104,7 +104,7 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH(deflate_state* s, IPos cur_match)
         UPDATE_HASH(s, hash, scan[2]);
 #endif
 #ifdef AOCL_DYNAMIC_DISPATCHER
-        if(UNLIKELY(deflateOptOff==1)) {
+        if(UNLIKELY(zlibOptOff ==1)) {
             UPDATE_HASH(s, hash, scan[1]);
             UPDATE_HASH(s, hash, scan[2]);
         }
@@ -114,7 +114,7 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH(deflate_state* s, IPos cur_match)
             UPDATE_HASH(s, hash, scan[i]);
 #else
 #ifdef AOCL_DYNAMIC_DISPATCHER
-            if(UNLIKELY(deflateOptOff==1))
+            if(UNLIKELY(zlibOptOff ==1))
                 UPDATE_HASH(s, hash, scan[i]);
             else
 #endif
@@ -223,7 +223,7 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH(deflate_state* s, IPos cur_match)
                 UPDATE_HASH(s, hash, scan_end[2]);
 #endif
 #ifdef AOCL_DYNAMIC_DISPATCHER
-                if(UNLIKELY(deflateOptOff==1)) {
+                if(UNLIKELY(zlibOptOff ==1)) {
                     UPDATE_HASH(s, hash, scan_end[0]);
                     UPDATE_HASH(s, hash, scan_end[1]);
                     UPDATE_HASH(s, hash, scan_end[2]);

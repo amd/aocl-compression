@@ -236,14 +236,14 @@ static inline std::pair<size_t, bool> AOCL_FindMatchLength(const char* s1,
   // uncommon code paths that determine, without extra effort, whether the match
   // length is less than 8.  In short, we are hoping to avoid a conditional
   // branch, and perhaps get better code layout from the C++ compiler.
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
   if (s2 <= s2_limit - 16) {
 #else
   if (SNAPPY_PREDICT_TRUE(s2 <= s2_limit - 16)) {
 #endif
     uint64_t a1 = UNALIGNED_LOAD64(s1);
     uint64_t a2 = UNALIGNED_LOAD64(s2);
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
     if (a1 != a2) {
 #else
     if (SNAPPY_PREDICT_TRUE(a1 != a2)) {
@@ -319,7 +319,7 @@ static inline std::pair<size_t, bool> AOCL_FindMatchLength(const char* s1,
   // time until we find a 64-bit block that doesn't match; then we find
   // the first non-matching bit and use that to calculate the total
   // length of the match.
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
   while (s2 <= s2_limit - 16) {
 #else
   while (SNAPPY_PREDICT_TRUE(s2 <= s2_limit - 16)) {
@@ -348,7 +348,7 @@ static inline std::pair<size_t, bool> AOCL_FindMatchLength(const char* s1,
       return std::pair<size_t, bool>(matched, false);
     }
   }
-#ifdef AOCL_SNAPPY_OPT_FLAGS
+#ifdef AOCL_SNAPPY_OPT 
   while (s2 < s2_limit) {
 #else
   while (SNAPPY_PREDICT_TRUE(s2 < s2_limit)) {

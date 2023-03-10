@@ -517,13 +517,16 @@ typedef struct
 } CLzmaEnc;
 
 #ifdef AOCL_DYNAMIC_DISPATCHER
+//Forward declarations to allow default pointer initializations
+static unsigned GetOptimum(CLzmaEnc* p, UInt32 position);
+
 // Function pointers for optimization overloads
-void (*MatchFinder_CreateVTable_fp)(CMatchFinder* p, IMatchFinder2* vTable);
+void (*MatchFinder_CreateVTable_fp)(CMatchFinder* p, IMatchFinder2* vTable) = MatchFinder_CreateVTable;
 int (*MatchFinder_Create_fp)(CMatchFinder* p, UInt32 historySize,
   UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
-  ISzAllocPtr alloc);
-void (*MatchFinder_Free_fp)(CMatchFinder* p, ISzAllocPtr alloc);
-unsigned (*GetOptimum_fp)(CLzmaEnc* p, UInt32 position);
+  ISzAllocPtr alloc) = MatchFinder_Create;
+void (*MatchFinder_Free_fp)(CMatchFinder* p, ISzAllocPtr alloc) = MatchFinder_Free;
+unsigned (*GetOptimum_fp)(CLzmaEnc* p, UInt32 position) = GetOptimum;
 #endif
 
 #define MFB (p->matchFinderBase)
@@ -3363,14 +3366,14 @@ static void LzmaEnc_Destruct(CLzmaEnc *p, ISzAllocPtr alloc, ISzAllocPtr allocBi
   MatchFinderMt_Destruct(&p->matchFinderMt, allocBig);
   #endif
   
+#ifdef AOCL_LZMA_OPT
 #ifdef AOCL_DYNAMIC_DISPATCHER
   MatchFinder_Free_fp(&MFB, allocBig);
 #else
-#ifdef AOCL_LZMA_OPT
   AOCL_MatchFinder_Free(&MFB, allocBig);
+#endif
 #else
   MatchFinder_Free(&MFB, allocBig);
-#endif
 #endif
   LzmaEnc_FreeLits(p, alloc);
   RangeEnc_Free(&p->rc, alloc);
@@ -3430,14 +3433,14 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
     {
       unsigned oci = p->optCur;
       if (p->optEnd == oci)
+#ifdef AOCL_LZMA_OPT
 #ifdef AOCL_DYNAMIC_DISPATCHER
         len = GetOptimum_fp(p, nowPos32);
 #else
-#ifdef AOCL_LZMA_OPT
         len = AOCL_GetOptimum(p, nowPos32);
+#endif
 #else
         len = GetOptimum(p, nowPos32);
-#endif
 #endif
       else
       {
@@ -3758,31 +3761,31 @@ static SRes LzmaEnc_Alloc(CLzmaEnc *p, UInt32 keepWindowSize, ISzAllocPtr alloc,
   else
   #endif
   {
+#ifdef AOCL_LZMA_OPT
 #ifdef AOCL_DYNAMIC_DISPATCHER
     if (!MatchFinder_Create_fp(&MFB, dictSize, beforeSize,
         p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
         , allocBig))
 #else
-#ifdef AOCL_LZMA_OPT
       if (!AOCL_MatchFinder_Create(&MFB, dictSize, beforeSize,
           p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
           , allocBig))
-#else
-    if (!MatchFinder_Create(&MFB, dictSize, beforeSize,
-      p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
-      , allocBig))
 #endif
+#else
+      if (!MatchFinder_Create(&MFB, dictSize, beforeSize,
+          p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
+          , allocBig))
 #endif
       return SZ_ERROR_MEM;
     p->matchFinderObj = &MFB;
+#ifdef AOCL_LZMA_OPT
 #ifdef AOCL_DYNAMIC_DISPATCHER
     MatchFinder_CreateVTable_fp(&MFB, &p->matchFinder);
 #else
-#ifdef AOCL_LZMA_OPT
     AOCL_MatchFinder_CreateVTable(&MFB, &p->matchFinder);
+#endif
 #else
     MatchFinder_CreateVTable(&MFB, &p->matchFinder);
-#endif
 #endif
   }
   
@@ -4184,10 +4187,17 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
     case 2://AVX version
     case 3://AVX2 version
     default://AVX512 and other versions
+#ifdef AOCL_LZMA_OPT //necessary here as AOCL_ methods are declared in header file under AOCL_LZMA_OPT
       MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
       MatchFinder_Create_fp = AOCL_MatchFinder_Create;
       MatchFinder_Free_fp = AOCL_MatchFinder_Free;
       GetOptimum_fp = AOCL_GetOptimum;
+#else
+      MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
+      MatchFinder_Create_fp = MatchFinder_Create;
+      MatchFinder_Free_fp = MatchFinder_Free;
+      GetOptimum_fp = GetOptimum;
+#endif
       break;
     }
   }

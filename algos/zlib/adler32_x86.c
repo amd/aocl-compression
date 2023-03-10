@@ -55,7 +55,8 @@
 #ifdef AOCL_DYNAMIC_DISPATCHER
 /* Function pointer holding the optimized variant as per the detected CPU
  * features */
-static uint32_t (*adler32_x86_fp)(uint32_t adler, const Bytef* buf, z_size_t len);
+static uint32_t (*adler32_x86_fp)(uint32_t adler, const Bytef* buf, z_size_t len) =
+(uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
 #endif
 
 // This function separation prevents compiler from generating VZEROUPPER instruction
