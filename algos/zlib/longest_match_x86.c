@@ -295,12 +295,12 @@ static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
     return 256;
 }
 #define COMPARE256 compare256_avx2
-#define LONGEST_MATCH longest_match_avx2_opt
+#define LONGEST_MATCH_AVX_FAMILY longest_match_avx2_opt
 /* This header file is a template to generate multiversion functions 
  * based on above defined maccros */
 #include "longest_match_x86.h"
 #undef COMPARE256
-#undef LONGEST_MATCH
+#undef LONGEST_MATCH_AVX_FAMILY
 #endif
 
 #ifdef AOCL_ZLIB_AVX_OPT
@@ -330,12 +330,12 @@ static inline uint32_t compare256_avx(const Bytef *src1, const Bytef *src2)
     return 256;
 }
 #define COMPARE256 compare256_avx
-#define LONGEST_MATCH longest_match_avx_opt
+#define LONGEST_MATCH_AVX_FAMILY longest_match_avx_opt
 /* This header file is a template to generate multiversion functions 
  * based on above defined maccros */
 #include "longest_match_x86.h"
 #undef COMPARE256
-#undef LONGEST_MATCH
+#undef LONGEST_MATCH_AVX_FAMILY
 #endif
 
 /* This function intercepts non optimized code path and orchestrate 
