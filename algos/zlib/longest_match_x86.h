@@ -26,11 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-// This header file is an template for function multiversion, application should not use it directly
-#if defined(AOCL_ZLIB_OPT) && defined(AOCL_ZLIB_AVX_OPT)
+// This header file is an template for avx and above function multiversion, application should not use it directly
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
-#endif
-ZLIB_INTERNAL uint32_t LONGEST_MATCH(deflate_state* s, IPos cur_match)
+ZLIB_INTERNAL uint32_t LONGEST_MATCH_AVX_FAMILY(deflate_state* s, IPos cur_match)
 {
     unsigned chain_length = s->max_chain_length;/* max hash chain length */
     register Bytef *scan = s->window + s->strstart; /* current string */
@@ -99,27 +97,8 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH(deflate_state* s, IPos cur_match)
          * to cur_match). Note: we cannot use s->prev[strstart+1,...] immediately, because
          * these strings are not yet inserted into hash table yet.
          */
-#ifndef AOCL_ZLIB_AVX_OPT
-        UPDATE_HASH(s, hash, scan[1]);
-        UPDATE_HASH(s, hash, scan[2]);
-#endif
-#ifdef AOCL_DYNAMIC_DISPATCHER
-        if(UNLIKELY(zlibOptOff ==1)) {
-            UPDATE_HASH(s, hash, scan[1]);
-            UPDATE_HASH(s, hash, scan[2]);
-        }
-#endif
         for (i = 3; i <= best_len; i++) {
-#ifndef AOCL_ZLIB_AVX_OPT
-            UPDATE_HASH(s, hash, scan[i]);
-#else
-#ifdef AOCL_DYNAMIC_DISPATCHER
-            if(UNLIKELY(zlibOptOff ==1))
-                UPDATE_HASH(s, hash, scan[i]);
-            else
-#endif
-                UPDATE_HASH_CRC(s, hash, scan[i]);
-#endif
+            UPDATE_HASH_CRC(s, hash, scan[i]);
             /* If we're starting with best_len >= 3, we can use offset search. */
             pos = s->head[hash];
             if (pos < cur_match) {
@@ -217,22 +196,7 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH(deflate_state* s, IPos cur_match)
                  */
                 hash = 0;
                 scan_end = scan + len - MIN_MATCH + 1;
-#ifndef AOCL_ZLIB_AVX_OPT
-                UPDATE_HASH(s, hash, scan_end[0]);
-                UPDATE_HASH(s, hash, scan_end[1]);
-                UPDATE_HASH(s, hash, scan_end[2]);
-#endif
-#ifdef AOCL_DYNAMIC_DISPATCHER
-                if(UNLIKELY(zlibOptOff ==1)) {
-                    UPDATE_HASH(s, hash, scan_end[0]);
-                    UPDATE_HASH(s, hash, scan_end[1]);
-                    UPDATE_HASH(s, hash, scan_end[2]);
-                }
-                else
-#endif
-#ifdef AOCL_ZLIB_AVX_OPT
-                    UPDATE_HASH_CRC(s, hash, scan_end[2]);
-#endif
+                UPDATE_HASH_CRC(s, hash, scan_end[2]);
                 pos = s->head[hash];
                 if (pos < cur_match) {
                     offset = len - MIN_MATCH + 1;

@@ -1,5 +1,6 @@
 /* deflate.h -- internal compression state
  * Copyright (C) 1995-2016 Jean-loup Gailly
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -352,10 +353,27 @@ void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
 #ifdef AOCL_DYNAMIC_DISPATCHER
 void aocl_register_slide_hash_fmv(int optOff, int optLevel, 
                                   void (*slide_hash_c_fp)(deflate_state* s));
-void aocl_register_longest_match_fmv(int optOff, int optLevel, 
+void aocl_register_longest_match_fmv(int optOff, int optLevel,
                                   uInt (*longest_match_fp)(deflate_state* s, IPos cur_match));
 #endif
 #ifdef AOCL_ZLIB_OPT
+typedef enum {
+    need_more,      /* block not completed, need more input or more output */
+    block_done,     /* block flush performed */
+    finish_started, /* finish started, need only more output at next deflate */
+    finish_done     /* finish done, accept no more input or output */
+} block_state;
+
+
+extern void (*fill_window_fp) (deflate_state *s);
+extern void (*flush_pending_fp) (z_streamp strm);
+#ifdef ZLIB_DEBUG
+extern void (*check_match_fp) (deflate_state *s, IPos start, IPos match,
+                            int length);
+#else
+#define check_match_fp(s, start, match, length)
+#endif /* ZLIB_DEBUG */
+
 #define UPDATE_HASH(s,h,c) (h = (((h)<<s->hash_shift) ^ (c)) & s->hash_mask)
 
 #ifdef FASTEST
@@ -384,8 +402,29 @@ void aocl_register_longest_match_fmv(int optOff, int optLevel,
    (UPDATE_HASH_CRC(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
     match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
     s->head[s->ins_h] = (Pos)(str))
-#endif
-#endif
+#endif /* FASTEST */
+#endif /* AOCL_ZLIB_AVX_OPT */
+
+/* ===========================================================================
+ * Flush the current block, with given end-of-file flag.
+ * IN assertion: strstart is set to the end of the current match.
+ */
+#define FLUSH_BLOCK_ONLY(s, last) { \
+   _tr_flush_block(s, (s->block_start >= 0L ? \
+                   (charf *)&s->window[(unsigned)s->block_start] : \
+                   (charf *)Z_NULL), \
+                (ulg)((long)s->strstart - s->block_start), \
+                (last)); \
+   s->block_start = s->strstart; \
+   flush_pending_fp(s->strm); \
+   Tracev((stderr,"[FLUSH]")); \
+}
+
+/* Same but force premature exit if necessary. */
+#define FLUSH_BLOCK(s, last) { \
+   FLUSH_BLOCK_ONLY(s, last); \
+   if (s->strm->avail_out == 0) return (last) ? finish_started : need_more; \
+}
 #endif /* AOCL_ZLIB_OPT */
 
 #endif /* DEFLATE_H */
