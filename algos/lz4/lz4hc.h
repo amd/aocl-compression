@@ -49,6 +49,8 @@ extern "C" {
 #define LZ4HC_CLEVEL_OPT_MIN    10
 #define LZ4HC_CLEVEL_MAX        12
 
+/**----- AOCL Optimization flags -----*/
+#define AOCL_LZ4HC_OPT
 
 /*-************************************
  *  Block Compression
@@ -93,6 +95,22 @@ LZ4LIB_API int LZ4_compress_HC_destSize(void* stateHC,
                                         int* srcSizePtr, int targetDstSize,
                                         int compressionLevel);
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+/**
+ * @brief AOCL-Compression defined setup function that configures with the right
+ * AMD optimized lz4hc routines depending upon the detected CPU features.
+ * 
+ * @param optOff Turn off all optimizations .
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * 
+ * @return \b NULL .
+ */
+char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize,
+    size_t level, size_t windowLog);
+#endif
 
 /*-************************************
  *  Streaming Compression

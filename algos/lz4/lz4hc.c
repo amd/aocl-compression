@@ -77,6 +77,7 @@ typedef enum { noDictCtx, usingDictCtxHc } dictCtx_directive;
 
 
 /*===   Macros   ===*/
+#define STEPSIZE sizeof(reg_t)
 #define MIN(a,b)   ( (a) < (b) ? (a) : (b) )
 #define MAX(a,b)   ( (a) > (b) ? (a) : (b) )
 #define HASH_FUNCTION(i)         (((i) * 2654435761U) >> ((MINMATCH*8)-LZ4HC_HASH_LOG))
@@ -135,6 +136,108 @@ LZ4_FORCE_INLINE void LZ4HC_Insert (LZ4HC_CCtx_internal* hc4, const BYTE* ip)
     hc4->nextToUpdate = target;
 }
 
+
+#ifdef AOCL_LZ4HC_OPT
+/* This function returns the number of leading zeros of the value passed.
+ * This function is similar to LZ4_NbCommonBytes() defined in lz4.c which returns
+ * the number of trailing zeros in place of leading zeros. */
+static unsigned AOCL_LZ4HC_NbCommonBytes_LeadingZeros(reg_t val)
+{
+    assert(val != 0);
+
+    if (LZ4_isLittleEndian()) {
+        if (sizeof(val) == 8) {
+#if (defined(__clang__) || (defined(__GNUC__) && ((__GNUC__ > 3) || \
+                            ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 4))))) && \
+                        !defined(__TINYC__) && !defined(LZ4_FORCE_SW_BITCOUNT)
+            return (unsigned)__builtin_clzll((U64)val) >> 3;
+#else
+#if 1
+            /* this method is probably faster,
+             * but adds a 128 bytes lookup table */
+            static const unsigned char ctz7_tab[128] = {
+                7, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
+                4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
+                5, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
+                4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
+                6, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
+                4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
+                5, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
+                4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
+            };
+            U64 const mask = 0x0101010101010101ULL;
+            U64 const t = (((val >> 8) - mask) | val) & mask;
+            return ctz7_tab[(t * 0x0080402010080402ULL) >> 57];
+#else
+            /* this method doesn't consume memory space like the previous one,
+             * but it contains several branches,
+             * that may end up slowing execution */
+            static const U32 by32 = sizeof(val) * 4;  /* 32 on 64 bits (goal), 16 on 32 bits.
+            Just to avoid some static analyzer complaining about shift by 32 on 32-bits target.
+            Note that this code path is never triggered in 32-bits mode. */
+            unsigned r;
+            if (!(val >> by32)) { r = 4; }
+            else { r = 0; val >>= by32; }
+            if (!(val >> 16)) { r += 2; val >>= 8; }
+            else { val >>= 24; }
+            r += (!val);
+            return r;
+#endif
+#endif
+        }
+        else /* 32 bits */ {
+#if (defined(__clang__) || (defined(__GNUC__) && ((__GNUC__ > 3) || \
+                            ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 4))))) && \
+                                        !defined(LZ4_FORCE_SW_BITCOUNT)
+            return (unsigned)__builtin_clz((U32)val) >> 3;
+#else
+            val >>= 8;
+            val = ((((val + 0x00FFFF00) | 0x00FFFFFF) + val) |
+                (val + 0x00FF0000)) >> 24;
+            return (unsigned)val ^ 3;
+#endif
+        }
+    }
+    else { /* Big Endian */
+        if (sizeof(val) == 8) {
+#if defined(_MSC_VER) && (_MSC_VER >= 1800) && defined(_M_AMD64) && !defined(LZ4_FORCE_SW_BITCOUNT)
+            /* x64 CPUS without BMI support interpret `TZCNT` as `REP BSF` */
+            unsigned a = (unsigned)_tzcnt_u64(val);
+            a = a >> 3;
+            return a;
+            //return (unsigned)_tzcnt_u64(val) >> 3;
+#elif defined(_MSC_VER) && defined(_WIN64) && !defined(LZ4_FORCE_SW_BITCOUNT)
+            unsigned long r = 0;
+            _BitScanForward64(&r, (U64)val);
+            return (unsigned)r >> 3;
+#elif (defined(__clang__) || (defined(__GNUC__) && ((__GNUC__ > 3) || \
+                            ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 4))))) && \
+                                        !defined(LZ4_FORCE_SW_BITCOUNT)
+            return (unsigned)__builtin_ctzll((U64)val) >> 3;
+#else
+            const U64 m = 0x0101010101010101ULL;
+            val ^= val - 1;
+            return (unsigned)(((U64)((val & (m - 1)) * m)) >> 56);
+#endif
+        }
+        else /* 32 bits */ {
+#if defined(_MSC_VER) && (_MSC_VER >= 1400) && !defined(LZ4_FORCE_SW_BITCOUNT)
+            unsigned long r;
+            _BitScanForward(&r, (U32)val);
+            return (unsigned)r >> 3;
+#elif (defined(__clang__) || (defined(__GNUC__) && ((__GNUC__ > 3) || \
+                            ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 4))))) && \
+                        !defined(__TINYC__) && !defined(LZ4_FORCE_SW_BITCOUNT)
+            return (unsigned)__builtin_ctz((U32)val) >> 3;
+#else
+            const U32 m = 0x01010101;
+            return (unsigned)((((val - 1) ^ val) & (m - 1)) * m) >> 24;
+#endif
+        }
+}
+}
+#endif
+
 /** LZ4HC_countBack() :
  * @return : negative value, nb of common bytes before ip/match */
 LZ4_FORCE_INLINE
@@ -151,6 +254,57 @@ int LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
             back--;
     return back;
 }
+
+#ifdef AOCL_LZ4HC_OPT
+/* AOCL_LZ4HC_countBack() :
+ * @return : negative value, nb of common bytes before ip/match 
+
+ * AOCL optmizied version of LZ4HC_countBack() which extends the matchlength
+ * in backward direction before ip/match. This function processes a whole word in a single
+ * step and compares 8 Byte in a single instruction. This is faster than   
+ * the original function which loads and compares byte wise.
+ */
+LZ4_FORCE_INLINE
+int AOCL_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
+                    const BYTE* const iMin, const BYTE* const mMin)
+{
+    int back = 0;
+    int const min = (int)MAX(iMin - ip, mMin - match);
+    assert(min <= 0);
+    assert(ip >= iMin); assert((size_t)(ip-iMin) < (1U<<31));
+    assert(match >= mMin); assert((size_t)(match - mMin) < (1U<<31));
+
+    const BYTE* ip2 = ip;
+    const BYTE* match2 = match;
+    const BYTE* ipMin = ip + min;
+    
+    /* 8 Byte XOR comparision to get the number of common Bytes before ip/match. */
+    while (likely(ip2 > (ipMin + STEPSIZE - 1))) {
+        ip2 -= STEPSIZE; match2 -= STEPSIZE;
+        reg_t diff = LZ4_read_ARCH(ip2) ^ LZ4_read_ARCH(match2);
+        if (!diff) { back -= STEPSIZE; continue; }
+        return back - AOCL_LZ4HC_NbCommonBytes_LeadingZeros(diff);
+    }
+
+    /* Handles the base case when the maximum number of bytes to be compared is less than STEPSIZE 
+     * and perform sequence comparision of 4 Bytes, 2 Bytes and a single Byte. */
+    if ((ip2 > (ipMin + 3)) && LZ4_read32(ip2 - 4) == LZ4_read32(match2 - 4)) { ip2 -= 4; match2 -= 4; back -= 4; }
+    if ((ip2 > (ipMin + 1)) && LZ4_read16(ip2 - 2) == LZ4_read16(match2 - 2)) { ip2 -= 2; match2 -= 2; back -= 2; }
+    if ((ip2 > ipMin) && (*(match2-1) == *(ip2-1))) back--;
+ 
+    return back;
+}
+#endif
+
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    static int (*LZ4HC_countBack_fp)(const BYTE* const ip, 
+                    const BYTE* const match, const BYTE* const iMin, 
+                    const BYTE* const mMin) = LZ4HC_countBack;
+
+// function pointer to variants of the LZ4HC_countBack() function, used for integration
+// with the dynamic dispatcher. 
+#endif
 
 #if defined(_MSC_VER)
 #  define LZ4HC_rotl32(x,r) _rotl(x,r)
@@ -284,7 +438,15 @@ LZ4HC_InsertAndGetWiderMatch (
             assert(longest >= 1);
             if (LZ4_read16(iLowLimit + longest - 1) == LZ4_read16(matchPtr - lookBackLength + longest - 1)) {
                 if (LZ4_read32(matchPtr) == pattern) {
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                    int const back = lookBackLength ? LZ4HC_countBack_fp(ip, matchPtr, iLowLimit, lowPrefixPtr) : 0;
+#else
+                    int const back = lookBackLength ? AOCL_LZ4HC_countBack(ip, matchPtr, iLowLimit, lowPrefixPtr) : 0;
+#endif
+#else
                     int const back = lookBackLength ? LZ4HC_countBack(ip, matchPtr, iLowLimit, lowPrefixPtr) : 0;
+#endif
                     matchLength = MINMATCH + (int)LZ4_count(ip+MINMATCH, matchPtr+MINMATCH, iHighLimit);
                     matchLength -= back;
                     if (matchLength > longest) {
@@ -302,7 +464,15 @@ LZ4HC_InsertAndGetWiderMatch (
                 matchLength = (int)LZ4_count(ip+MINMATCH, matchPtr+MINMATCH, vLimit) + MINMATCH;
                 if ((ip+matchLength == vLimit) && (vLimit < iHighLimit))
                     matchLength += LZ4_count(ip+matchLength, lowPrefixPtr, iHighLimit);
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                back = lookBackLength ? LZ4HC_countBack_fp(ip, matchPtr, iLowLimit, dictStart) : 0;
+#else
+                back = lookBackLength ? AOCL_LZ4HC_countBack(ip, matchPtr, iLowLimit, dictStart) : 0;
+#endif
+#else
                 back = lookBackLength ? LZ4HC_countBack(ip, matchPtr, iLowLimit, dictStart) : 0;
+#endif
                 matchLength -= back;
                 if (matchLength > longest) {
                     longest = matchLength;
@@ -426,7 +596,15 @@ LZ4HC_InsertAndGetWiderMatch (
                 const BYTE* vLimit = ip + (dictEndOffset - dictMatchIndex);
                 if (vLimit > iHighLimit) vLimit = iHighLimit;
                 mlt = (int)LZ4_count(ip+MINMATCH, matchPtr+MINMATCH, vLimit) + MINMATCH;
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                back = lookBackLength ? LZ4HC_countBack_fp(ip, matchPtr, iLowLimit, dictCtx->base + dictCtx->dictLimit) : 0;
+#else
+                back = lookBackLength ? AOCL_LZ4HC_countBack(ip, matchPtr, iLowLimit, dictCtx->base + dictCtx->dictLimit) : 0;
+#endif
+#else
                 back = lookBackLength ? LZ4HC_countBack(ip, matchPtr, iLowLimit, dictCtx->base + dictCtx->dictLimit) : 0;
+#endif
                 mlt -= back;
                 if (mlt > longest) {
                     longest = mlt;
@@ -1613,3 +1791,30 @@ _return_label:
 #endif
      return retval;
 }
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
+    if (optOff)
+    {
+        LZ4HC_countBack_fp = LZ4HC_countBack;
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case 0://C version
+        case 1://SSE version
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            LZ4HC_countBack_fp = AOCL_LZ4HC_countBack;
+            break;
+        }
+    }
+}
+
+char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog) {
+    aocl_register_lz4hc_fmv(optOff, optLevel);
+    return NULL;
+}
+#endif

@@ -140,8 +140,11 @@ INT64 aocl_lz4_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 CHAR *aocl_lz4hc_setup(INTP optOff, INTP optLevel,
                        UINTP insize, UINTP level, UINTP windowLog)
 {
-    //ToDo: Implement a new lz4hc API for setup
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    return aocl_setup_lz4hc(optOff, optLevel, insize, level, windowLog);
+#else
     return NULL;
+#endif
 }
 
 INT64 aocl_lz4hc_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
