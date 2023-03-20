@@ -1,5 +1,6 @@
 /* zutil.h -- internal interface and configuration of the compression library
  * Copyright (C) 1995-2016 Jean-loup Gailly, Mark Adler
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -231,6 +232,12 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
    void ZLIB_INTERNAL zmemcpy OF((Bytef* dest, const Bytef* source, uInt len));
    int ZLIB_INTERNAL zmemcmp OF((const Bytef* s1, const Bytef* s2, uInt len));
    void ZLIB_INTERNAL zmemzero OF((Bytef* dest, uInt len));
+#endif
+
+#if defined(AOCL_ZLIB_OPT) && (defined(__clang__) || defined(__GNUC__) || defined(__llvm__))
+#define Z_BUILTIN_MEMCPY __builtin_memcpy
+#else
+#define Z_BUILTIN_MEMCPY zmemcpy
 #endif
 
 /* Diagnostic functions */
