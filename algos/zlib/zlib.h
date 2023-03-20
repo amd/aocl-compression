@@ -2,6 +2,7 @@
   version 1.2.11, January 15th, 2017
 
   Copyright (C) 1995-2017 Jean-loup Gailly and Mark Adler
+  Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -2755,8 +2756,8 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib OF((int optOff, int optLevel,
  */
 ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv OF((int optOff, int optLevel,
                                         int insize, int level, int windowLog));
-/*ZEXTERN int ZEXPORT aocl_setup_inflate_fmv OF((int optOff, int optLevel,
-                                        int insize, int level, int windowLog));*/
+ZEXTERN char * ZEXPORT aocl_setup_inflate_fmv OF((int optOff, int optLevel,
+                                        int insize, int level, int windowLog));
 
 /**
  * @brief AOCL-Compression adler defined setup function that configures with the right

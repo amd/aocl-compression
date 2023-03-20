@@ -1,5 +1,6 @@
 /* inflate.c -- zlib decompression
  * Copyright (C) 1995-2016 Mark Adler
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -83,7 +84,13 @@
 #include "zutil.h"
 #include "inftrees.h"
 #include "inflate.h"
+
+#ifdef AOCL_ZLIB_SSE2_OPT
+#include "inffast_chunk.h"
+#include "chunkcopy.h"
+#else
 #include "inffast.h"
+#endif
 #include "aocl_zlib_x86.h"
 
 #ifdef MAKEFIXED
@@ -102,6 +109,12 @@ local int updatewindow OF((z_streamp strm, const unsigned char FAR *end,
 #endif
 local unsigned syncsearch OF((unsigned FAR *have, const unsigned char FAR *buf,
                               unsigned len));
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+static int inflateOptLevel = 0;
+static int (*updatewindow_fp)(z_streamp strm, const Bytef * end, unsigned copy) = updatewindow;
+static void (*inflate_fast_fp)(z_streamp strm, unsigned start) = inflate_fast;
+#endif
 
 local int inflateStateCheck(strm)
 z_streamp strm;
@@ -406,11 +419,11 @@ unsigned copy;
 
     /* if it hasn't been done already, allocate space for the window */
     if (state->window == Z_NULL) {
-        state->window = (unsigned char FAR *)
+            state->window = (unsigned char FAR *)
                         ZALLOC(strm, 1U << state->wbits,
                                sizeof(unsigned char));
-        if (state->window == Z_NULL) return 1;
-    }
+            if (state->window == Z_NULL) return 1;
+        }
 
     /* if window not in use yet, initialize */
     if (state->wsize == 0) {
@@ -421,17 +434,17 @@ unsigned copy;
 
     /* copy state->wsize or less output bytes into the circular window */
     if (copy >= state->wsize) {
-        zmemcpy(state->window, end - state->wsize, state->wsize);
+        Z_BUILTIN_MEMCPY(state->window, end - state->wsize, state->wsize);
         state->wnext = 0;
         state->whave = state->wsize;
     }
     else {
         dist = state->wsize - state->wnext;
         if (dist > copy) dist = copy;
-        zmemcpy(state->window + state->wnext, end - copy, dist);
+        Z_BUILTIN_MEMCPY(state->window + state->wnext, end - copy, dist);
         copy -= dist;
         if (copy) {
-            zmemcpy(state->window, end - copy, copy);
+            Z_BUILTIN_MEMCPY(state->window, end - copy, copy);
             state->wnext = copy;
             state->whave = state->wsize;
         }
@@ -444,6 +457,67 @@ unsigned copy;
     return 0;
 }
 
+#ifdef AOCL_ZLIB_SSE2_OPT
+local int aocl_updatewindow(strm, end, copy)
+z_streamp strm;
+const Bytef *end;
+unsigned copy;
+{
+    struct inflate_state FAR *state;
+    unsigned dist;
+
+    state = (struct inflate_state FAR *)strm->state;
+
+    /* if it hasn't been done already, allocate space for the window */
+    if (state->window == Z_NULL) {
+        unsigned wsize = 1U << state->wbits;
+        state->window = (unsigned char FAR *)
+                ZALLOC(strm, wsize + CHUNKCOPY_CHUNK_SIZE,
+                    sizeof(unsigned char));
+        if (state->window == Z_NULL) return 1;
+#ifdef INFLATE_CLEAR_UNUSED_UNDEFINED
+        /* Copies from the overflow portion of this buffer are undefined and
+            may cause analysis tools to raise a wraning if we don't initialize
+            it. However, this undefined data overwrites other undefined data
+            and is subsequently either overwritten or left deliberately
+            undefined at the end of decode; so there's really no point.
+        */
+        zmemzero(state->window + wsize, CHUNKCOPY_CHUNK_SIZE);
+#endif
+    }
+
+    /* if window not in use yet, initialize */
+    if (state->wsize == 0) {
+        state->wsize = 1U << state->wbits;
+        state->wnext = 0;
+        state->whave = 0;
+    }
+
+    /* copy state->wsize or less output bytes into the circular window */
+    if (copy >= state->wsize) {
+        Z_BUILTIN_MEMCPY(state->window, end - state->wsize, state->wsize);
+        state->wnext = 0;
+        state->whave = state->wsize;
+    }
+    else {
+        dist = state->wsize - state->wnext;
+        if (dist > copy) dist = copy;
+        Z_BUILTIN_MEMCPY(state->window + state->wnext, end - copy, dist);
+        copy -= dist;
+        if (copy) {
+            Z_BUILTIN_MEMCPY(state->window, end - copy, copy);
+            state->wnext = copy;
+            state->whave = state->wsize;
+        }
+        else {
+            state->wnext += dist;
+            if (state->wnext == state->wsize) state->wnext = 0;
+            if (state->whave < state->wsize) state->whave += dist;
+        }
+    }
+    return 0;
+}
+#endif /* AOCL_ZLIB_SSE2_OPT */
 /* Macros for inflate(): */
 
 /* check function to use adler32() for zlib or crc32() for gzip */
@@ -775,7 +849,7 @@ int flush;
                     if (state->head != Z_NULL &&
                         state->head->extra != Z_NULL) {
                         len = state->head->extra_len - state->length;
-                        zmemcpy(state->head->extra + len, next,
+                        Z_BUILTIN_MEMCPY(state->head->extra + len, next,
                                 len + copy > state->head->extra_max ?
                                 state->head->extra_max - len : copy);
                     }
@@ -924,7 +998,7 @@ int flush;
                 if (copy > have) copy = have;
                 if (copy > left) copy = left;
                 if (copy == 0) goto inf_leave;
-                zmemcpy(put, next, copy);
+                Z_BUILTIN_MEMCPY(put, next, copy);
                 have -= copy;
                 next += copy;
                 left -= copy;
@@ -1060,9 +1134,21 @@ int flush;
         case LEN_:
             state->mode = LEN;
         case LEN:
+#ifdef AOCL_ZLIB_SSE2_OPT
+            if (have >= INFLATE_FAST_MIN_INPUT &&
+                left >= INFLATE_FAST_MIN_OUTPUT) {
+                RESTORE();
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                inflate_fast_fp(strm, out);
+#else
+                inflate_fast_chunk_(strm, out);
+#endif
+        
+#else
             if (have >= 6 && left >= 258) {
                 RESTORE();
                 inflate_fast(strm, out);
+#endif /* AOCL_ZLIB_SSE2_OPT */
                 LOAD();
                 if (state->mode == TYPE)
                     state->back = -1;
@@ -1164,7 +1250,97 @@ int flush;
         case MATCH:
             if (left == 0) goto inf_leave;
             copy = out - left;
+#ifdef AOCL_ZLIB_SSE2_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+            if(UNLIKELY(zlibOptOff == 1 || inflateOptLevel <= 0))
+            {
+                if (state->offset > copy) {         /* copy from window */
+                    copy = state->offset - copy;
+                    if (copy > state->whave) {
+                        if (state->sane) {
+                            strm->msg = (char *)"invalid distance too far back";
+                            state->mode = BAD;
+                            break;
+                        }
+#ifdef INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR
+                        Trace((stderr, "inflate.c too far\n"));
+                        copy -= state->whave;
+                        if (copy > state->length) copy = state->length;
+                        if (copy > left) copy = left;
+                        left -= copy;
+                        state->length -= copy;
+                        do {
+                            *put++ = 0;
+                        } while (--copy);
+                        if (state->length == 0) state->mode = LEN;
+                        break;
+#endif
+                    }
+                    if (copy > state->wnext) {
+                        copy -= state->wnext;
+                        from = state->window + (state->wsize - copy);
+                    }
+                    else
+                        from = state->window + (state->wnext - copy);
+                    if (copy > state->length) copy = state->length;
+                }
+                else {                              /* copy from output */
+                    from = put - state->offset;
+                    copy = state->length;
+                }
+                if (copy > left) copy = left;
+                left -= copy;
+                state->length -= copy;
+                do {
+                    *put++ = *from++;
+                } while (--copy);
+            }
+            else {
+#endif /* AOCL_DYNAMIC_DISPATCHER */
             if (state->offset > copy) {         /* copy from window */
+                copy = state->offset - copy;
+                if (copy > state->whave) {
+                    if (state->sane) {
+                        strm->msg = (char *)"invalid distance too far back";
+                        state->mode = BAD;
+                        break;
+                    }
+#ifdef INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR
+                    Trace((stderr, "inflate.c too far\n"));
+                    copy -= state->whave;
+                    if (copy > state->length) copy = state->length;
+                    if (copy > left) copy = left;
+                    left -= copy;
+                    state->length -= copy;
+                    do {
+                        *put++ = 0;
+                    } while (--copy);
+                    if (state->length == 0) state->mode = LEN;
+                    break;
+#endif
+                }
+                if (copy > state->wnext) {
+                    copy -= state->wnext;
+                    from = state->window + (state->wsize - copy);
+                }
+                else
+                    from = state->window + (state->wnext - copy);
+                if (copy > state->length) copy = state->length;
+                if (copy > left) copy = left;
+                put = chunkcopy_safe(put, from, copy, put + left);
+            }
+            else {                              /* copy from output */
+                copy = state->length;
+                if (copy > left) copy = left;
+                put = chunkcopy_lapped_safe(put, state->offset, copy, put + left);
+            }
+            left -= copy;
+            state->length -= copy;
+#ifdef AOCL_DYNAMIC_DISPATCHER
+            }
+#endif /* AOCL_DYNAMIC_DISPATCHER */
+#else
+        if (state->offset > copy) {         /* copy from window */
                 copy = state->offset - copy;
                 if (copy > state->whave) {
                     if (state->sane) {
@@ -1204,6 +1380,7 @@ int flush;
             do {
                 *put++ = *from++;
             } while (--copy);
+#endif /* AOCL_ZLIB_SSE2_OPT */
             if (state->length == 0) state->mode = LEN;
             break;
         case LIT:
@@ -1269,10 +1446,35 @@ int flush;
        Note: a memory error from inflate() is non-recoverable.
      */
   inf_leave:
+#ifdef AOCL_ZLIB_SSE2_OPT
+    /* We write a defined value in the unused space to help mark
+     * where the stream has ended. We don't use zeros as that can
+     * mislead clients relying on undefined behavior (i.e. assuming
+     * that the data is over when the buffer has a zero/null value).
+     */
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    if(LIKELY(zlibOptOff==0 && inflateOptLevel > 0)) {
+#endif /* AOCL_DYNAMIC_DISPATCHER */
+    if (left >= CHUNKCOPY_CHUNK_SIZE)
+       memset(put, 0x55, CHUNKCOPY_CHUNK_SIZE);
+    else
+       memset(put, 0x55, left);
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    }
+#endif /* AOCL_DYNAMIC_DISPATCHER */
+#endif /* AOCL_ZLIB_SSE2_OPT */
     RESTORE();
     if (state->wsize || (out != strm->avail_out && state->mode < BAD &&
             (state->mode < CHECK || flush != Z_FINISH)))
+#ifdef AOCL_ZLIB_SSE2_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+        if (updatewindow_fp(strm, strm->next_out, out - strm->avail_out)) {
+#else
+        if (aocl_updatewindow(strm, strm->next_out, out - strm->avail_out)) {
+#endif /* AOCL_DYNAMIC_DISPATCHER */
+#else
         if (updatewindow(strm, strm->next_out, out - strm->avail_out)) {
+#endif /* AOCL_ZLIB_SSE2_OPT */
             state->mode = MEM;
             return Z_MEM_ERROR;
         }
@@ -1319,9 +1521,9 @@ uInt *dictLength;
 
     /* copy dictionary */
     if (state->whave && dictionary != Z_NULL) {
-        zmemcpy(dictionary, state->window + state->wnext,
+        Z_BUILTIN_MEMCPY(dictionary, state->window + state->wnext,
                 state->whave - state->wnext);
-        zmemcpy(dictionary + state->whave - state->wnext,
+        Z_BUILTIN_MEMCPY(dictionary + state->whave - state->wnext,
                 state->window, state->wnext);
     }
     if (dictLength != Z_NULL)
@@ -1359,7 +1561,15 @@ uInt dictLength;
 
     /* copy dictionary to window using updatewindow(), which will amend the
        existing dictionary if appropriate */
+#ifdef AOCL_ZLIB_SSE2_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    ret = updatewindow_fp(strm, dictionary + dictLength, dictLength);
+#else
+    ret = aocl_updatewindow(strm, dictionary + dictLength, dictLength);
+#endif
+#else
     ret = updatewindow(strm, dictionary + dictLength, dictLength);
+#endif /* AOCL_ZLIB_SSE2_OPT */
     if (ret) {
         state->mode = MEM;
         return Z_MEM_ERROR;
@@ -1510,8 +1720,8 @@ z_streamp source;
     }
 
     /* copy state */
-    zmemcpy((voidpf)dest, (voidpf)source, sizeof(z_stream));
-    zmemcpy((voidpf)copy, (voidpf)state, sizeof(struct inflate_state));
+    Z_BUILTIN_MEMCPY((voidpf)dest, (voidpf)source, sizeof(z_stream));
+    Z_BUILTIN_MEMCPY((voidpf)copy, (voidpf)state, sizeof(struct inflate_state));
     copy->strm = dest;
     if (state->lencode >= state->codes &&
         state->lencode <= state->codes + ENOUGH - 1) {
@@ -1521,7 +1731,7 @@ z_streamp source;
     copy->next = copy->codes + (state->next - state->codes);
     if (window != Z_NULL) {
         wsize = 1U << state->wbits;
-        zmemcpy(window, state->window, wsize);
+        Z_BUILTIN_MEMCPY(window, state->window, wsize);
     }
     copy->window = window;
     dest->state = (struct internal_state FAR *)copy;
@@ -1582,3 +1792,24 @@ z_streamp strm;
     state = (struct inflate_state FAR *)strm->state;
     return (unsigned long)(state->next - state->codes);
 }
+
+/* AOCL-Compression defined setup function that sets up ZLIB with the right
+*  AMD optimized zlib routines depending upon the CPU features. */
+#ifdef AOCL_DYNAMIC_DISPATCHER
+ZEXTERN char * ZEXPORT aocl_setup_inflate_fmv(int optOff, int optLevel, int insize,
+    int level, int windowLog)
+{
+    inflateOptLevel = optLevel;
+    if(LIKELY(optOff == 0 && optLevel > 0))
+    {
+        updatewindow_fp = aocl_updatewindow;
+        inflate_fast_fp = inflate_fast_chunk_;
+    }
+    else
+    {
+        updatewindow_fp = updatewindow;
+        inflate_fast_fp = inflate_fast;
+    }
+    return NULL;
+}
+#endif /* AOCL_DYNAMIC_DISPATCHER */
