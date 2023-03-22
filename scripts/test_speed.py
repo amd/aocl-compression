@@ -64,7 +64,7 @@ import sys
 import os
 import time
 import subprocess
-from statistics import mean
+import math
 import re
 import platform
 import shutil
@@ -89,6 +89,7 @@ def install_required_modules():
 try:
     from prettytable import PrettyTable, from_csv
     import pandas as pd
+    
 except ImportError:
     install_required_modules()
 
@@ -96,7 +97,7 @@ except ImportError:
 FILENAME_TEST_CONFIG = "pretest_config.json"
 DEFAULT_DATASETS = 'http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip'
 ITERS = 50
-pwd = os.getcwd()
+pwd = os.path.dirname(os.path.abspath(__file__)) # Get the absolute path of the current python script
 FILEPATH_TEST_CONFIG = os.path.join(
     pwd, FILENAME_TEST_CONFIG)  # /path/to/pretestconfig file
 DEFAULT_REPO = os.path.join(pwd, '..')
@@ -121,11 +122,17 @@ def remove_file_folder(path):
 # Calculate %Gain/Regression
 ## =========================
 
-def get_percentage_inc_dec(num_amd_opt_yes, num_amd_opt_no):
+def get_percentage_inc_dec(first_num, second_num):
     try:
-        return ((num_amd_opt_yes / num_amd_opt_no) - 1) * 100
+        return ((first_num / second_num) - 1) * 100
     except ZeroDivisionError:
-        return "AMD_NO_OPT is {}".format(num_amd_opt_no)
+        return "AMD_NO_OPT is {}".format(second_num)
+
+# Get Geometric mean
+def geo_mean(itr):
+    ls = list(itr)
+    return math.exp(sum(math.log(n) for n in ls) / len(ls))
+
 
 # Prints log
 def write(msg):
@@ -203,8 +210,10 @@ def proc(cmd_args, pipe=True):
 def parse_file(fileName, amd_opt):
     # create an empty list to collect the data
     data = [['method', 'dataset', 'comp', 'decomp', 'ratio'],]
-    # open the file and read through it line by line
+    # Delete old file 
     remove_file_folder('parse_out.log')
+
+    # open the file and read through it line by line
     with open(fileName, 'r') as file_object:
         line = file_object.readline()
         while line:
@@ -234,9 +243,9 @@ def testbench(args, pipe=True):
     return proc([bench_cmd] + args, pipe)
 
 
-## ================
-# Execute commands 
-## ================
+## ===================
+# Execute the command 
+## ===================
                 
 def run_command(cmd, filename='build_logs.log', print_command=True, print_output=False, print_error=True, param_shell=True):
     """
@@ -301,9 +310,9 @@ def get_results(fileName):
         words.append(dratio)
         return words
 
-## ===============================
-# Calculate and prints highlights 
-## ===============================
+## =============================
+# Calculate and print highlights 
+## =============================
 
 def compare_benchmarks_numbers(amd_opt_yes, compare, method_name, amd_opt):
     """
@@ -327,12 +336,12 @@ def compare_benchmarks_numbers(amd_opt_yes, compare, method_name, amd_opt):
         "ComprSpeed_AMD_OPT_ON",
         "ComprSpeed_{}".format(amd_opt),
         "ComprSpeed Diff(%)"]
-    comprspeed_y = round(csv3["ComprSpeed_AMD_OPT_ON"].mean(), 2)
-    comprspeed_n = round(csv3["ComprSpeed_{}".format(amd_opt)].mean(), 2)
-    dcomprspeed_y = round(csv3["DecomprSpeed_AMD_OPT_ON"].mean(), 2)
-    dcomprspeed_n = round(csv3["DecomprSpeed_{}".format(amd_opt)].mean(), 2)
-    comprRatio_y = round(csv3["ComprRatio_AMD_OPT_ON"].mean(), 2)
-    comprRatio_n = round(csv3["ComprRatio_{}".format(amd_opt)].mean(), 2)
+    comprspeed_y = round(geo_mean(csv3["ComprSpeed_AMD_OPT_ON"]), 2)
+    comprspeed_n = round(geo_mean(csv3["ComprSpeed_{}".format(amd_opt)]), 2)
+    dcomprspeed_y = round(geo_mean(csv3["DecomprSpeed_AMD_OPT_ON"]), 2)
+    dcomprspeed_n = round(geo_mean(csv3["DecomprSpeed_{}".format(amd_opt)]), 2)
+    comprRatio_y = round(geo_mean(csv3["ComprRatio_AMD_OPT_ON"]), 2)
+    comprRatio_n = round(geo_mean(csv3["ComprRatio_{}".format(amd_opt)]), 2)
 
     diffS = round(get_percentage_inc_dec(comprspeed_y, comprspeed_n), 2)
     if diffS < 0:
@@ -410,9 +419,8 @@ def create_tables(fileName, amd_opt, method_name):
     cspeed = [eval(csp) for csp in cspeed]
     dspeed = [eval(dsp) for dsp in dspeed]
     cratio = [eval(cr) for cr in cratio]
-
     tableName.add_row(["Method:", "Average", round(
-        mean(cspeed), 2), round(mean(dspeed), 2), round(mean(cratio), 2)])
+        geo_mean(cspeed), 2), round(geo_mean(dspeed), 2), round(geo_mean(cratio), 2)])
     print("\n")
 
     with open(rescsvFile, 'w', newline='') as f:
@@ -434,7 +442,7 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
     compare = comparewith
     iters = "-i{}".format(iters)
 
-    # Check and perform comparison tests if the user selects that option 
+    # Check and perform comparison tests if specified by the user 
     while run:
         print("\nCompression benchmarking started for the method {} with {} .....".format(
             method_name, amd_opt.replace("IPP", "IPP_OPT_ON")))
@@ -493,8 +501,7 @@ if __name__ == '__main__':
         help='Pass -printlogs yes to collect build logs to the file build_logs.log. By default, build logs are not collected.', default="no")
     parser.add_argument(
         '--compiler', '-c',
-        help='Specify compiler for building AOCL-Compression like "compilerName CompilerPath". Default is GCC',
-        default="gcc")
+        help='Specify custom compiler binary for building AOCL-Compression like -c compilerPath.')
     parser.add_argument(
         '--method', '-m',
         required=True, help='Pass a list of compression methods to run speed benchmark. Pass it like <method name>:<level>. For example: For zlib level 1, pass zlib:1 '
@@ -517,7 +524,7 @@ if __name__ == '__main__':
                         help='Pass a list of optional supportive flags (SNAPPY_MATCH_SKIP_OPT, AOCL_LZ4_OPT_PREFETCH_BACKWARDS, and LZ4_FRAME_FORMAT_SUPPORT) as required. For example: -flags SNAPPY_MATCH_SKIP_OPT=ON AOCL_LZ4_OPT_PREFETCH_BACKWARDS=ON LZ4_FRAME_FORMAT_SUPPORT=ON',
                         type=str, nargs="*", default=[])
     parser.add_argument('--VSVersion', '-vs',
-                        help='This is a Windows platfrom specific option. Use this option to provide installed Visual Studio version on system. Default is Visual Studio 17 2022', default="Visual Studio 17 2022")
+                        type=str, help='This is a Windows platfrom specific option. Use this option to provide installed Visual Studio version on system. Default is "Visual Studio 17 2022"', default="Visual Studio 17 2022")
     args = parser.parse_args()
 
     run_command.cwd = DEFAULT_REPO
@@ -532,13 +539,15 @@ if __name__ == '__main__':
     else:
         bench_cmd = os.path.join(
             installation_path, 'aocl_compression/bin/aocl_compression_bench')
-
+        
+    # Linux specific library configuration and installation commands with default flags
     compression_cmds = {
-        'firstCmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIBS=OFF -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
-        'secondCmd': 'cmake --build build -v -j --target uninstall --target install'}
+        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIBS=OFF -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
+        'install_cmd': 'cmake --build build -v -j --target uninstall --target install'}
+    # Windows specific library configuration and installation commands with default flags
     compression_cmds_windows = {
-        'firstCmd': 'cmake -B build . -T ClangCl -G "{}" -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
-        'secondCmd': 'cmake --build ./build --config Release --target INSTALL'
+        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
+        'install_cmd': 'cmake --build ./build --config Release --target INSTALL'
     }
                 
     def install_compression(cmds, optionalFlags):
@@ -546,33 +555,48 @@ if __name__ == '__main__':
         Install aocl-compression library. This will generate libs/bin to the specified prefix path.
 
         """
-
+        # Add all the optional flags if specified by the user
         for flag in args.optionalFlags:
-            compression_cmds["firstCmd"] = compression_cmds["firstCmd"] + \
+            compression_cmds["config_cmd"] = compression_cmds["config_cmd"] + \
                 " " + "-D{}".format(flag)
-
+        print("\nConfiguring AOCL-Compression for the installation .....\n")
         for k, val in cmds.items():
-            if args.compiler.split()[0] == "aocc":
-                if args.ipp != "off":
-                    print(error + "IPP comparision does not supports for AOCC compiler")
-                    exit()
-                clang = args.compiler.split()[1]
-                if k == 'firstCmd':
-                    print("\nConfiguring AOCL-Compression for the installation .....\n")
-                    val = val + " " + "-DCMAKE_C_COMPILER={}".format(clang)
+            # Check if the user passed a custom compiler path 
+            if args.compiler:
+                if os.path.exists(args.compiler):
+                    # Check if compiler is clang/aocc
+                    if "clang" in args.compiler:
+                        # Get Clang C++ compiler path 
+                        cxx_compiler = "{}++".format(args.compiler) 
+                    # Check if compiler is gcc
+                    elif args.compiler.endswith('gcc'):
+                        # Get gcc C++ compiler path 
+                        cxx_compiler = args.compiler[:-3] + 'g++'
                 else:
-                    print("Installing AOCL-Compression using AOCC Compiler ..... \n")
+                    # Check compiler path is not a valid path
+                    print(error, "{} is not a valid compiler path.".format(args.compiler))
+                    exit()
+
+                # Get C compiler path
+                c_compiler = args.compiler
+                
+                if k == 'config_cmd':
+                    val = val + " " + "-DCMAKE_C_COMPILER={}".format(c_compiler) + " " + "-DCMAKE_CXX_COMPILER={}".format(cxx_compiler)
+                else:
+                    # If installation command running, Print the compiler name with library installing
+                    print(
+                            "Installing AOCL-Compression using {} Compiler..... \n".format(args.compiler.split("/")[-1]))
             else:
-                if k != 'firstCmd':
+                # If installation command running, Print the compiler name with library installing
+                if k == 'install_cmd':
                     if which_platform == 'Windows':
                         print(
                             "Installing AOCL-Compression using Clang Compiler ..... \n")
                     else:
                         print(
-                            "Installing AOCL-Compression using GCC Compiler ..... \n")
-                else:
-                    print("\nConfiguring AOCL-Compression for the installation .....\n")
-
+                            "Installing AOCL-Compression using gcc Compiler..... \n")
+                        
+            # Check if the user wanted to collect build log
             if args.collectBuildlogs == "yes":
                 run_command(val, 'build_logs.log', True, True)
             else:
@@ -587,7 +611,7 @@ if __name__ == '__main__':
 
     # Make list of the datasets that are available in the directory 
     datasetFile_lst = sorted(os.listdir("{}".format(args.dataset)))
-    ipp_supports_methods = ['lz4', 'lz4hc', 'zlib']
+    ipp_supports_methods = ['lz4', 'lz4hc', 'zlib', "bzip2"]
 
     # Sets the IPP enviroment variable before running IPP patched method
     if args.ipp != "off" or args.comparewith == "ipp":
