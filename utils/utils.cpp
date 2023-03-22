@@ -73,9 +73,35 @@ INTP is_AVX2_supported(aocl_compression_desc *aocl_codec_handle)
     return ret;
 }
 
+static inline INTP xgetbv(INTP opt)
+{
+    int eax, edx;
+    __asm__(".byte 0x0f, 0x01, 0xd0" : "=a"(eax), "=d"(edx) : "c" (opt));
+    return eax;
+}
+
 INTP is_AVX512_supported(aocl_compression_desc *aocl_codec_handle)
 {
     INTP ret = 0;
+    INTP eax, ebx, ecx, edx;
+    //Below is the set of checks for AVX512 detection
+    //1. Check CPU support for ZMM state management using OSXSAVE 
+    //Its support also implies that XGETBV is enabled for application use
+    cpu_features_detection(0x1, 0, &eax, &ebx, &ecx, &edx);
+    if ((ecx & 0x08000000) == 0x08000000)
+    {
+        //2. Check OS support for XGETBV instruction and ZMM register state
+        INTP reg_support_bits = (7 << 5) | (1 << 2) | (1 << 1);
+        if ((xgetbv(0) & reg_support_bits) == reg_support_bits)
+        {
+            //3. Check CPU support for AVX-512 Foundation instructions
+            cpu_features_detection(7, 0, &eax, &ebx, &ecx, &edx);
+            if (ebx & (1 << 16))
+            {
+                ret = 1;
+            }
+        }
+    }
     LOG(INFO, aocl_codec_handle->printDebugLogs,
         "AVX512 SIMD %s supported", (ret ? "is" : "is not"));
     return ret;
