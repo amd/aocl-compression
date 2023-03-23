@@ -10,6 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
+   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -468,6 +469,135 @@ Bool mainGtU ( UInt32  i1,
    return False;
 }
 
+#ifdef AOCL_BZIP2_OPT
+
+// Reverse the bytes in a UInt32
+#define AOCL_REV(num)              \
+   (((num & 0x000000ff) << 24)   | \
+   ((num & 0x0000ff00) << 8)     | \
+   ((num & 0x00ff0000) >> 8)     | \
+   ((num & 0xff000000) >> 24))
+
+// Reverse the bytes in a UInt64
+#define AOCL_REV2(num)                    \
+   (((num & 0x00000000000000ff) << 56) |  \
+   ((num & 0x000000000000ff00) << 40)  |  \
+   ((num & 0x0000000000ff0000) << 24)  |  \
+   ((num & 0x00000000ff000000) << 8)   |  \
+   ((num & 0x000000ff00000000) >> 8)   |  \
+   ((num & 0x0000ff0000000000) >> 24)  |  \
+   ((num & 0x00ff000000000000) >> 40)  |  \
+   ((num & 0xff00000000000000) >> 56))
+
+/*
+   The original function loads data bytes individually and then does
+   comparision, this function clubs and loads data into 8 bytes and 
+   4 bytes at once and then does comparision in two simple lines.
+*/
+static
+__inline__
+Bool AOCL_mainGtU ( UInt32  i1, 
+               UInt32  i2,
+               UChar*  block, 
+               UInt16* quadrant,
+               UInt32  nblock,
+               Int32*  budget )
+{
+/*
+   even if i1 or i2 crosses nblock block is populated such that
+   the value at (nblock + i)th index = (i)th index,
+   this is done in mainSort function.
+*/
+   Int32  k;
+   UChar  c1, c2;
+   UInt16 s1, s2;
+   ULong64 C1, C2;
+
+   AssertD ( i1 != i2, "mainGtU" );
+
+   // 8 bytes of data are loaded at once, in a big endian format.
+   C1 = (*(ULong64*)&block[i1]);
+   C2 = (*(ULong64*)&block[i2]);
+   if (C1 ^ C2) {
+      return AOCL_REV2(C1) > AOCL_REV2(C2);
+   }
+   i1 += 8;
+   i2 += 8;
+
+   // 4 bytes of data are loaded at once, in a big endian format.
+   C1 = (*(UInt32*)&block[i1]);
+   C2 = (*(UInt32*)&block[i2]);
+   if (C1 ^ C2) {
+      return AOCL_REV(C1) > AOCL_REV(C2);
+   }
+   i1 += 4;
+   i2 += 4;
+
+   k = nblock + 8;
+
+   // `quadrant` acts as cache for storing previous comparisions.
+   do {
+      /* 1 */
+      c1 = block[i1]; c2 = block[i2];
+      if (c1 != c2) return (c1 > c2);
+      s1 = quadrant[i1]; s2 = quadrant[i2];
+      if (s1 != s2) return (s1 > s2);
+      i1++; i2++;
+      /* 2 */
+      c1 = block[i1]; c2 = block[i2];
+      if (c1 != c2) return (c1 > c2);
+      s1 = quadrant[i1]; s2 = quadrant[i2];
+      if (s1 != s2) return (s1 > s2);
+      i1++; i2++;
+      /* 3 */
+      c1 = block[i1]; c2 = block[i2];
+      if (c1 != c2) return (c1 > c2);
+      s1 = quadrant[i1]; s2 = quadrant[i2];
+      if (s1 != s2) return (s1 > s2);
+      i1++; i2++;
+      /* 4 */
+      c1 = block[i1]; c2 = block[i2];
+      if (c1 != c2) return (c1 > c2);
+      s1 = quadrant[i1]; s2 = quadrant[i2];
+      if (s1 != s2) return (s1 > s2);
+      i1++; i2++;
+      /* 5 */
+      c1 = block[i1]; c2 = block[i2];
+      if (c1 != c2) return (c1 > c2);
+      s1 = quadrant[i1]; s2 = quadrant[i2];
+      if (s1 != s2) return (s1 > s2);
+      i1++; i2++;
+      /* 6 */
+      c1 = block[i1]; c2 = block[i2];
+      if (c1 != c2) return (c1 > c2);
+      s1 = quadrant[i1]; s2 = quadrant[i2];
+      if (s1 != s2) return (s1 > s2);
+      i1++; i2++;
+      /* 7 */
+      c1 = block[i1]; c2 = block[i2];
+      if (c1 != c2) return (c1 > c2);
+      s1 = quadrant[i1]; s2 = quadrant[i2];
+      if (s1 != s2) return (s1 > s2);
+      i1++; i2++;
+      /* 8 */
+      c1 = block[i1]; c2 = block[i2];
+      if (c1 != c2) return (c1 > c2);
+      s1 = quadrant[i1]; s2 = quadrant[i2];
+      if (s1 != s2) return (s1 > s2);
+      i1++; i2++;
+
+      if (i1 >= nblock) i1 -= nblock;
+      if (i2 >= nblock) i2 -= nblock;
+
+      k -= 8;
+      (*budget)--;
+   }
+   while (k >= 0);
+
+   return False;
+}
+
+#endif
 
 /*---------------------------------------------*/
 /*--
@@ -554,6 +684,117 @@ void mainSimpleSort ( UInt32* ptr,
    }
 }
 
+#ifdef AOCL_BZIP2_OPT
+/*
+   This function uses the optimized `mainGtU` version i.e `AOCL_mainGtU`,
+   because `mainGtU` is an inline function we can't create function pointer
+   to that function.
+*/
+static
+void AOCL_mainSimpleSort ( UInt32* ptr,
+                      UChar*  block,
+                      UInt16* quadrant,
+                      Int32   nblock,
+                      Int32   lo, 
+                      Int32   hi, 
+                      Int32   d,
+                      Int32*  budget )
+{
+   Int32 i, j, h, bigN, hp;
+   UInt32 v;
+
+   bigN = hi - lo + 1;
+   if (bigN < 2) return;
+
+   hp = 0;
+   while (incs[hp] < bigN) hp++;
+   hp--;
+
+   for (; hp >= 0; hp--) {
+      h = incs[hp];
+
+      i = lo + h;
+      while (True) {
+
+         /*-- copy 1 --*/
+         if (i > hi) break;
+         v = ptr[i];
+         j = i;
+         while (AOCL_mainGtU(ptr[j-h]+d, v+d, block, quadrant, nblock, budget))
+         {
+            ptr[j] = ptr[j-h];
+            j = j - h;
+            if (j <= (lo + h - 1)) break;
+         }
+         ptr[j] = v;
+         i++;
+
+         /*-- copy 2 --*/
+         if (i > hi) break;
+         v = ptr[i];
+         j = i;
+         while (AOCL_mainGtU(ptr[j-h]+d, v+d, block, quadrant, nblock, budget))
+         {
+            ptr[j] = ptr[j-h];
+            j = j - h;
+            if (j <= (lo + h - 1)) break;
+         }
+         ptr[j] = v;
+         i++;
+
+         /*-- copy 3 --*/
+         if (i > hi) break;
+         v = ptr[i];
+         j = i;
+         while (AOCL_mainGtU(ptr[j-h]+d, v+d, block, quadrant, nblock, budget))
+         {
+            ptr[j] = ptr[j-h];
+            j = j - h;
+            if (j <= (lo + h - 1)) break;
+         }
+         ptr[j] = v;
+         i++;
+
+         if (*budget < 0) return;
+      }
+   }
+}
+
+#endif
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+
+void (*AOCL_mainSimpleSort_fp) ( UInt32* ptr,
+                      UChar*  block,
+                      UInt16* quadrant,
+                      Int32   nblock,
+                      Int32   lo, 
+                      Int32   hi, 
+                      Int32   d,
+                      Int32*  budget ) = mainSimpleSort;
+
+void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog)
+{
+   if (optOff)
+   {
+      AOCL_mainSimpleSort_fp = mainSimpleSort;
+   }
+   else
+   {
+      switch (optLevel)
+      {
+         case 0://C version
+         case 1://SSE version
+         case 2://AVX version
+         case 3://AVX2 version
+         default://AVX512 and other versions
+            AOCL_mainSimpleSort_fp = AOCL_mainSimpleSort;
+            break;
+      }
+   }
+}
+
+#endif
 
 /*---------------------------------------------*/
 /*--
@@ -648,7 +889,15 @@ void mainQSort3 ( UInt32* ptr,
       mpop ( lo, hi, d );
       if (hi - lo < MAIN_QSORT_SMALL_THRESH || 
           d > MAIN_QSORT_DEPTH_THRESH) {
+#ifdef AOCL_BZIP2_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+         AOCL_mainSimpleSort_fp ( ptr, block, quadrant, nblock, lo, hi, d, budget );
+#else
+         AOCL_mainSimpleSort ( ptr, block, quadrant, nblock, lo, hi, d, budget );
+#endif
+#else
          mainSimpleSort ( ptr, block, quadrant, nblock, lo, hi, d, budget );
+#endif
          if (*budget < 0) return;
          continue;
       }

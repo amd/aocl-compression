@@ -46,6 +46,7 @@ typedef int             Int32;
 typedef unsigned int    UInt32;
 typedef short           Int16;
 typedef unsigned short  UInt16;
+typedef unsigned long long ULong64;
 
 #define True  ((Bool)1)
 #define False ((Bool)0)
@@ -505,9 +506,13 @@ BZ2_hbCreateDecodeTables ( Int32*, Int32*, Int32*, UChar*,
 #endif
 
 #define AOCL_BZIP2_OPT
+#define AOCL_BZIP2_AVX2_OPT
 
 #ifdef AOCL_BZIP2_OPT
 extern Int32 AOCL_BZ2_decompress ( DState* );
+#ifdef AOCL_DYNAMIC_DISPATCHER
+extern void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog);
+#endif
 #endif
 
 /*-------------------------------------------------------------*/
