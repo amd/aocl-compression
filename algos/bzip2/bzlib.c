@@ -88,9 +88,17 @@ void BZ2_bz__AssertH__fail ( int errcode )
 
 #ifdef AOCL_DYNAMIC_DISPATCHER
 
-Int32 (*AOCL_BZ2_decompress_fp)( DState* ) = BZ2_decompress;
+static Bool copy_input_until_stop ( EState* s );
+static Bool copy_output_until_stop ( EState* s );
+static Bool AOCL_copy_input_until_stop ( EState* s );
+static Bool AOCL_copy_output_until_stop ( EState* s );
+static Bool AOCL_copy_output_until_stop_avx2 ( EState* s );
 
-void aocl_register_decompress_fmv(optOff, optLevel, insize, level, windowLog)
+Int32 (*AOCL_BZ2_decompress_fp) ( DState* ) = BZ2_decompress;
+Bool  (*AOCL_copy_input_until_stop_fp) ( EState* s) = copy_input_until_stop;
+Bool  (*AOCL_copy_output_until_stop_fp) ( EState* s) = copy_output_until_stop;
+
+void aocl_register_decompress_fmv(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog)
 {
    if (optOff)
    {
@@ -111,6 +119,32 @@ void aocl_register_decompress_fmv(optOff, optLevel, insize, level, windowLog)
    }
 }
 
+void aocl_register_copy_fmv(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog)
+{
+   if (optOff)
+   {
+      AOCL_copy_input_until_stop_fp = copy_input_until_stop;
+      AOCL_copy_output_until_stop_fp = copy_output_until_stop;
+   }
+   else
+   {
+      switch (optLevel)
+      {
+         case 0://C version
+         case 1://SSE version
+         case 2://AVX version
+            AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
+            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop;
+            break;
+         case 3://AVX2 version
+         default://AVX512 and other versions
+            AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
+            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop_avx2;
+            break;
+      }
+   }
+}
+
 BZ_EXTERN char * BZ_API(aocl_setup_bzip2) 
                      ( int optOff,
                        int optLevel,
@@ -119,6 +153,8 @@ BZ_EXTERN char * BZ_API(aocl_setup_bzip2)
                        size_t windowLog )
 {
    aocl_register_decompress_fmv(optOff, optLevel, insize, level, windowLog);
+   aocl_register_copy_fmv(optOff, optLevel, insize, level, windowLog);
+   aocl_register_mainSimpleSort_fmv(optOff, optLevel, insize, level, windowLog);
    return NULL;
 }
 
@@ -366,6 +402,57 @@ Bool copy_input_until_stop ( EState* s )
    return progress_in;
 }
 
+#ifdef AOCL_BZIP2_OPT
+/*
+   In this optimized function, if condititions and variable incr/decr are
+   removed from the while loop, and loop limit is pre-calculated before
+   executing the loop and variables are modified accordingly.
+*/
+static
+Bool AOCL_copy_input_until_stop ( EState* s )
+{
+   Bool progress_in = False;
+
+   // The variable `chars_to_copy` stores the number of times the loop is going to get iterated
+   // and suitably it modifies the values of other variables at one go.
+   UInt32 chars_to_copy = s->strm->avail_in;
+
+   if(s->mode != BZ_M_RUNNING && chars_to_copy > s->avail_in_expect)
+      chars_to_copy = s->avail_in_expect;
+
+   // This condition is to check if the while loop is executed atleast once.
+   if(chars_to_copy && s->nblock < s->nblockMAX)
+      progress_in = True;
+
+   if(s->strm->total_in_lo32 + chars_to_copy < s->strm->total_in_lo32)
+      s->strm->total_in_hi32++;
+
+   s->strm->total_in_lo32 += chars_to_copy;
+   s->strm->avail_in -= chars_to_copy;
+
+   if(s->mode != BZ_M_RUNNING)
+      s->avail_in_expect-=chars_to_copy;
+
+   while (s->nblock < s->nblockMAX && chars_to_copy) {
+      chars_to_copy--;
+      ADD_CHAR_TO_BLOCK ( s, (UInt32)(*((UChar*)(s->strm->next_in)))); 
+      s->strm->next_in++;
+   }
+   
+   // If the loop quits before `chars_to_copy` becomes zero, i.e, s->nblock >= s->nblockMAX
+   // then those values will be corrected accordingly.
+   if(s->strm->total_in_lo32 - chars_to_copy > s->strm->total_in_lo32)
+      s->strm->total_in_hi32--;
+
+   s->strm->total_in_lo32 -= chars_to_copy;
+   s->strm->avail_in += chars_to_copy;
+
+   if(s->mode != BZ_M_RUNNING)
+      s->avail_in_expect+=chars_to_copy;
+   
+   return progress_in;
+}
+#endif
 
 /*---------------------------------------------------*/
 static
@@ -393,6 +480,84 @@ Bool copy_output_until_stop ( EState* s )
    return progress_out;
 }
 
+#ifdef AOCL_BZIP2_OPT
+
+#include <immintrin.h>
+__attribute__((__target__("avx2")))
+static inline void FastMemcopy64Bytes(UChar* dst, UChar* src) {
+   __m256i* dst1 = (__m256i*)dst;
+   __m256i* src1 = (__m256i*)src;
+   __m256i s1 = _mm256_lddqu_si256(src1);
+   __m256i s2 = _mm256_lddqu_si256(src1 + 1);
+   _mm256_storeu_si256(dst1, s1);
+   _mm256_storeu_si256(dst1 + 1, s2);
+}
+
+static inline void memcpy_ (UChar* dst, UChar* src, UInt32 length) {
+   UInt32 fastLen = length - (length % 64);
+   UInt32 i=0;
+
+   for (i=0; i < fastLen; i += 64)
+      FastMemcopy64Bytes(dst + i, src + i);
+
+   memcpy(dst + fastLen, src + fastLen, length-fastLen);
+}
+
+static Bool AOCL_copy_output_until_stop_avx2 ( EState* s ) {
+   Bool progress_out = False;
+   UInt32 chars_to_copy = 0;
+
+   if (s->strm->avail_out == 0 || s->state_out_pos >= s->numZ) return False;
+
+   progress_out = True;
+
+   chars_to_copy = s->strm->avail_out;
+   if((s->numZ - s->state_out_pos) < chars_to_copy)
+   {
+      chars_to_copy = (s->numZ - s->state_out_pos);
+   }
+
+   memcpy_((UChar*)s->strm->next_out, &s->zbits[s->state_out_pos], chars_to_copy);
+
+   s->strm->total_out_hi32 += (unsigned int)(s->strm->total_out_lo32 + chars_to_copy) < s->strm->total_out_lo32 ? 1 : 0;
+   s->strm->total_out_lo32 += chars_to_copy;
+   s->strm->next_out += chars_to_copy;
+   s->strm->avail_out -= chars_to_copy;
+   s->state_out_pos += chars_to_copy;
+   
+   return progress_out;
+}
+
+static Bool AOCL_copy_output_until_stop ( EState* s ) {
+   Bool progress_out = False;
+   
+   // This variable stores the number of characters (loop iterations) that are to be copied
+   // from `s->zbits` to `s->strm->next_out`.
+   UInt32 chars_to_copy = 0;
+
+   if (s->strm->avail_out == 0 || s->state_out_pos >= s->numZ) return False;
+
+   progress_out = True;
+
+   chars_to_copy = s->strm->avail_out;
+   if((s->numZ - s->state_out_pos) < chars_to_copy)
+   {
+      chars_to_copy = (s->numZ - s->state_out_pos);
+   }
+
+   memcpy((UChar*)s->strm->next_out, &s->zbits[s->state_out_pos], chars_to_copy);
+
+   // Instead of incrementing/decrementing all the variable values at each iteration,
+   // `chars_to_copy` is used to change the values of other variables at one go.
+   s->strm->total_out_hi32 += (s->strm->total_out_lo32 + chars_to_copy) < s->strm->total_out_lo32 ? 1 : 0;
+   s->strm->total_out_lo32 += chars_to_copy;
+   s->strm->next_out += chars_to_copy;
+   s->strm->avail_out -= chars_to_copy;
+   s->state_out_pos += chars_to_copy;
+
+   return progress_out;
+}
+#endif
 
 /*---------------------------------------------------*/
 static
@@ -405,7 +570,19 @@ Bool handle_compress ( bz_stream* strm )
    while (True) {
 
       if (s->state == BZ_S_OUTPUT) {
+#ifdef AOCL_BZIP2_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+         progress_out |= AOCL_copy_output_until_stop_fp ( s );
+#else
+#ifdef AOCL_BZIP2_AVX2_OPT
+         progress_out |= AOCL_copy_output_until_stop_avx2 ( s );
+#else
+         progress_out |= AOCL_copy_output_until_stop ( s );
+#endif
+#endif
+#else
          progress_out |= copy_output_until_stop ( s );
+#endif
          if (s->state_out_pos < s->numZ) break;
          if (s->mode == BZ_M_FINISHING && 
              s->avail_in_expect == 0 &&
@@ -418,7 +595,15 @@ Bool handle_compress ( bz_stream* strm )
       }
 
       if (s->state == BZ_S_INPUT) {
+#ifdef AOCL_BZIP2_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+         progress_in |= AOCL_copy_input_until_stop_fp ( s );
+#else
+         progress_in |= AOCL_copy_input_until_stop ( s );
+#endif
+#else
          progress_in |= copy_input_until_stop ( s );
+#endif
          if (s->mode != BZ_M_RUNNING && s->avail_in_expect == 0) {
             flush_RL ( s );
             BZ2_compressBlock ( s, (Bool)(s->mode == BZ_M_FINISHING) );
