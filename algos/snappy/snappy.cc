@@ -1868,7 +1868,7 @@ bool Uncompress(const char* compressed, size_t compressed_length,
   }
   // On 32-bit builds: max_size() < kuint32max.  Check for that instead
   // of crashing (e.g., consider externally specified compressed data).
-  if (ulength > uncompressed->max_size() || (ulength != 0 && uncompressed == NULL)) {
+  if (uncompressed == NULL || ulength > uncompressed->max_size()) {
     return false;
   }
   STLStringResizeUninitialized(uncompressed, ulength);
@@ -2263,6 +2263,28 @@ bool Uncompress(Source* compressed, Sink* uncompressed) {
     return InternalUncompressAllTags(&decompressor, &writer, compressed_len,
                                      uncompressed_len);
   }
+}
+
+// This method is used by snappy_test.cc for creating an instance of
+// ByteArraySource class, the constructor of this class can't be
+// accessed by snappy_test.cc.
+Source * SNAPPY_Gtest_Util::ByteArraySource_ext(const char *p, size_t n)
+{
+  return new ByteArraySource(p,n);
+}
+
+// This method is used by snappy_test.cc for creating an instance of
+// UncheckedByteArraySink class, the constructor of this class can't be
+// accessed by snappy_test.cc.
+Sink * SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(char *dest)
+{
+  return new UncheckedByteArraySink(dest);
+}
+
+// For making Varint::Append32 available for snappy_test.cc.
+void SNAPPY_Gtest_Util::Append32(std::string* s, uint32_t value)
+{
+  return Varint::Append32(s,value);
 }
 
 }  // namespace snappy

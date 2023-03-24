@@ -46,6 +46,21 @@
 
 #include "snappy-stubs-public.h"
 
+#ifndef SNAPPYLIB_VISIBILITY
+#  if defined(__GNUC__) && (__GNUC__ >= 4)
+#    define SNAPPYLIB_VISIBILITY __attribute__ ((visibility ("default")))
+#  else
+#    define SNAPPYLIB_VISIBILITY
+#  endif
+#endif
+#if defined(SNAPPY_DLL_EXPORT) && (SNAPPY_DLL_EXPORT==1)
+#  define SNAPPYLIB_API __declspec(dllexport) SNAPPYLIB_VISIBILITY
+#elif defined(SNAPPY_DLL_IMPORT) && (SNAPPY_DLL_IMPORT==1)
+#  define SNAPPYLIB_API __declspec(dllimport) SNAPPYLIB_VISIBILITY /* It isn't required but allows to generate better code, saving a function pointer load from the IAT and an indirect jump.*/
+#else
+#  define SNAPPYLIB_API SNAPPYLIB_VISIBILITY
+#endif
+
 /**
  * 
  * \addtogroup SNAPPY_API
@@ -84,7 +99,7 @@ namespace snappy {
  * @return Return the number of bytes written.
  */
 
-  size_t Compress(Source* source, Sink* sink);
+ SNAPPYLIB_API size_t Compress(Source* source, Sink* sink);
 
 /**
  * @brief
@@ -105,7 +120,7 @@ namespace snappy {
  * @return If the data inside the source is uncorrupted it will return \b true.
  */
 
-  bool GetUncompressedLength(Source* source, uint32_t* result);
+ SNAPPYLIB_API bool GetUncompressedLength(Source* source, uint32_t* result);
 
   // ------------------------------------------------------------------------
   // Higher-level string based routines (should be sufficient for most users)
@@ -125,7 +140,7 @@ namespace snappy {
  * @return Return the number of bytes written.
  */
 
-  size_t Compress(const char* input, size_t input_length,
+ SNAPPYLIB_API size_t Compress(const char* input, size_t input_length,
                   std::string* compressed);
 /**
  * @brief
@@ -142,7 +157,7 @@ namespace snappy {
  * 
  */
 
-  bool Uncompress(const char* compressed, size_t compressed_length,
+ SNAPPYLIB_API bool Uncompress(const char* compressed, size_t compressed_length,
                   std::string* uncompressed);
   /**
    * @brief Decompresses "compressed" to "*uncompressed".
@@ -157,7 +172,7 @@ namespace snappy {
    * @return \b false if the message is corrupted and could not be decompressed.
    */
 
-  bool Uncompress(Source* compressed, Sink* uncompressed);
+ SNAPPYLIB_API bool Uncompress(Source* compressed, Sink* uncompressed);
 
   /**
    * @brief 
@@ -179,7 +194,7 @@ namespace snappy {
    * should ignore those).
    */
 
-  size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed);
+ SNAPPYLIB_API size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed);
 
   // ------------------------------------------------------------------------
   // Lower-level character array based routines.  May be useful for
@@ -213,7 +228,7 @@ namespace snappy {
    * @return \b  void
    */
 
-  void RawCompress(const char* input,
+ SNAPPYLIB_API void RawCompress(const char* input,
                    size_t input_length,
                    char* compressed,
                    size_t* compressed_length);
@@ -233,7 +248,7 @@ namespace snappy {
    * @return \b false if the message is corrupted and could not be decrypted.
    */
 
-  bool RawUncompress(const char* compressed, size_t compressed_length,
+ SNAPPYLIB_API bool RawUncompress(const char* compressed, size_t compressed_length,
                      char* uncompressed);
 
   /**
@@ -252,7 +267,7 @@ namespace snappy {
    * @return \b false if the message is corrupted and could not be decrypted.
    */
 
-  bool RawUncompress(Source* compressed, char* uncompressed);
+ SNAPPYLIB_API bool RawUncompress(Source* compressed, char* uncompressed);
 
   /**
    * @brief 
@@ -273,7 +288,7 @@ namespace snappy {
    * @return \b false if the message is corrupted and could not be decrypted.
    */
 
-  bool RawUncompressToIOVec(const char* compressed, size_t compressed_length,
+ SNAPPYLIB_API bool RawUncompressToIOVec(const char* compressed, size_t compressed_length,
                             const struct iovec* iov, size_t iov_cnt);
 
   /**
@@ -295,7 +310,7 @@ namespace snappy {
    * @return \b false if the message is corrupted and could not be decrypted.
    */
 
-  bool RawUncompressToIOVec(Source* compressed, const struct iovec* iov,
+ SNAPPYLIB_API bool RawUncompressToIOVec(Source* compressed, const struct iovec* iov,
                             size_t iov_cnt);
 
   /**
@@ -308,7 +323,7 @@ namespace snappy {
    * input data that is "source_bytes" bytes in length.
    */
 
-  size_t MaxCompressedLength(size_t source_bytes);
+ SNAPPYLIB_API size_t MaxCompressedLength(size_t source_bytes);
 
   /**
    * @brief Get the Uncompressed Length object.
@@ -325,7 +340,7 @@ namespace snappy {
    * @return \b false on parsing error.
    */
 
-  bool GetUncompressedLength(const char* compressed, size_t compressed_length,
+ SNAPPYLIB_API bool GetUncompressedLength(const char* compressed, size_t compressed_length,
                              size_t* result);
 
   /**
@@ -342,7 +357,7 @@ namespace snappy {
    * @return \b false if error.
    */
 
-  bool IsValidCompressedBuffer(const char* compressed,
+ SNAPPYLIB_API bool IsValidCompressedBuffer(const char* compressed,
                                size_t compressed_length);
 
   /**
@@ -361,7 +376,7 @@ namespace snappy {
    * @return \b true iff the contents of "compressed" can be uncompressed successfully.
    * @return \b false if error.
    */
-  bool IsValidCompressed(Source* compressed);
+ SNAPPYLIB_API bool IsValidCompressed(Source* compressed);
 
   /* AOCL-Compression defined setup function that configures with the right
 *  AMD optimized snappy routines depending upon the detected CPU features. */
@@ -380,9 +395,23 @@ namespace snappy {
  * @return NULL .
  */
 
-  char * aocl_setup_snappy(int optOff, int optLevel, size_t insize,
+ SNAPPYLIB_API char * aocl_setup_snappy(int optOff, int optLevel, size_t insize,
                            size_t level, size_t windowLog);
 #endif
+
+/**
+ * @brief This class is created to expose internal functions which are not available external to this method.
+ * 
+ * The test cases written for API level testing needed these internal functions, but can't access them directly
+ * so a seperate class was needed for calling those internal functions.
+ */
+ class SNAPPYLIB_API SNAPPY_Gtest_Util
+ {
+  public:
+    static Source * ByteArraySource_ext(const char *p, size_t n);
+    static Sink * UncheckedByteArraySink_ext(char *dest);
+    static void Append32(std::string* s, uint32_t value);
+ };
 
   // The size of a compression block. Note that many parts of the compression
   // code assumes that kBlockSize <= 65536; in particular, the hash table

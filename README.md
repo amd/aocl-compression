@@ -68,6 +68,7 @@ AOCL_LZ4_OPT_PREFETCH_BACKWARDS  |	Enable LZ4 optimizations related to backward 
 SNAPPY_MATCH_SKIP_OPT	         |	Enable Snappy match skipping optimization (Disabled by default)
 LZ4_FRAME_FORMAT_SUPPORT         |	Enable building LZ4 with Frame format and API support (Disabled by default)
 BUILD_DOC                        |	Build documentation for this library (Defult value is off)
+GTEST_ENABLE                     |	Enable gtest based test suite (Disabled by default)
 
 
 BUILDING ON WINDOWS
@@ -187,7 +188,16 @@ GENERATING DOCUMENTATION
 - Documents will be generated in HTML format inside the folder __docs/html__ , you can open the index.html file with any browser to view the documentation.
 - CMake will use the existing Doxygen if available or else it will download the respective Doxygen binaries according to the OS you are using to build the documentation.
 
- 
+TEST SUITE FOR INDIVIDUAL ALGORITHM API's
+-----------------------------------------
+- To build test suite for individual algorithm level API's for supported libraries:
+   1. SNAPPY
+   2. LZ4
+   3. ZLIB (with partial support)
+   , specify `-DGTEST_ENABLE=ON` option while building.
+- An executable will be generated in build folder named gtest_combined_test.
+- You can run individual libraries by specifying respective library names. For example, to run snappy you can run `./build/gtest_combined_test --snappy`.
+
 CONTACTS
 --------
 AOCL Compression is developed and maintained by AMD.

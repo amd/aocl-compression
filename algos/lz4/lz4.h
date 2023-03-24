@@ -381,7 +381,7 @@ LZ4LIB_API int LZ4_decompress_safe_partial (const char* src, char* dst, int srcS
  * 
  * @return \b NULL .
  */
-char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
+LZ4LIB_API char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 #endif
 /**
