@@ -43,6 +43,11 @@ int ZEXPORT compress2 (dest, destLen, source, sourceLen, level)
     uLong sourceLen;
     int level;
 {
+    if(destLen == NULL)
+    {
+        return Z_STREAM_ERROR;
+    }
+    
     z_stream stream;
     int err;
     const uInt max = (uInt)-1;

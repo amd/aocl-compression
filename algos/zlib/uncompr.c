@@ -30,6 +30,11 @@ int ZEXPORT uncompress2 (dest, destLen, source, sourceLen)
     const Bytef *source;
     uLong *sourceLen;
 {
+    if(destLen == NULL || sourceLen == NULL)
+    {
+        return Z_STREAM_ERROR;
+    }
+    
     z_stream stream;
     int err;
     const uInt max = (uInt)-1;

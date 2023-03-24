@@ -64,6 +64,8 @@ option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Disabl
 option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Disabled by default)" OFF)
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
 endif()
+option(GTEST_ENABLE "Enable gtest based test suite (Disabled by default)" OFF)
+option(BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)
 
 #list source files to be compiled for the library
 file(GLOB API_SRC_FILES api/*.c api/*.cpp api/*.h)
@@ -214,7 +216,6 @@ message(STATUS "C++ Compiler flags used for this Unix build are: ${CMAKE_CXX_FLA
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
 endif()
 
-option(BUILD_DOC "BUILD_DOC" OFF)
 if (BUILD_DOC)
 	find_package(Doxygen)
 	set(W_DIR "${CMAKE_CURRENT_SOURCE_DIR}/docs")
@@ -303,6 +304,30 @@ add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/ipp_codec_b
 endif()
 target_link_libraries(${exe_name} ${lib_name})
 target_link_libraries(${exe_name} ${CMAKE_DL_LIBS})
+
+if (GTEST_ENABLE)
+	include(FetchContent)
+	FetchContent_Declare(
+	    googletest
+	    # Specify the commit you depend on and update it regularly.
+	    URL https://github.com/google/googletest/archive/refs/tags/v1.13.0.zip
+	)
+	# For Windows: Prevent overriding the parent project's compiler/linker settings
+	set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+	FetchContent_GetProperties(googletest)
+	if(NOT googletest_POPULATED)
+  		FetchContent_Populate(googletest)
+  		add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
+	endif()
+    if(NOT BUILD_STATIC_LIBS AND WIN32)
+		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")
+		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DSNAPPY_DLL_EXPORT=1")
+		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DLL=1")
+    endif()
+	# gtest_combined_test is an executable generated inside build folder
+	add_executable(gtest_combined_test gtest/gtest_combined_test.cc)
+	target_link_libraries(gtest_combined_test gtest_main ${lib_name})
+endif()
 
 #Install into destination path by using -DCMAKE_INSTALL_PREFIX=<path> while configuring cmake
 message(STATUS "AOCL COMPRESSION Library, Interface header files and Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")
