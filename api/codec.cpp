@@ -185,7 +185,6 @@ INT64 aocl_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 	
     LzmaEncProps_Init(&encProps);
     encProps.level = level;
-    LzmaEncProps_Normalize(&encProps);
 
     res = LzmaEncode((UINT8 *)outbuf+LZMA_PROPS_SIZE, &outLen, (UINT8 *)inbuf, 
                      insize, &encProps, (UINT8 *)outbuf, &headerSize, 0, NULL, 

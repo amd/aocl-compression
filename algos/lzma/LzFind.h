@@ -12,6 +12,40 @@
 
 #define AOCL_LZMA_OPT
 
+//#define AOCL_LZMA_UNIT_TEST //DO NOT ENABLE THIS IN PRODUCTION CODE! 
+#ifdef AOCL_LZMA_UNIT_TEST
+// Enabling this will allow code paths to reach some of the hard to reach sections in the code
+#define AOCL_EXTEND_CODE_COVERAGE //DO NOT ENABLE THIS IN PRODUCTION CODE! 
+// Enables asserts for debugging
+//#define AOCL_LZMA_DEBUG 1 //DO NOT ENABLE THIS IN PRODUCTION CODE! 
+#endif
+
+#if defined(AOCL_LZMA_DEBUG) && (AOCL_LZMA_DEBUG>=1)
+#  include <assert.h>
+#else
+#  ifndef assert
+#    define assert(condition) ((void)0)
+#  endif
+#endif
+
+#ifdef AOCL_LZMA_OPT
+#include "LzHash.h"
+
+#define kHashGuarentee (1 << 16) // Minimum number of blocks required in dictionary for cache efficient hash chains
+
+/* Hash chain blocks are implemented using circular buffers. Format is as follows:    
+* [hcHead | hcChain................]
+*           <----HASH_CHAIN_MAX--->
+*  <-------HASH_CHAIN_SLOT_SZ----->
+hcChain part is a circular buffer */
+#define HASH_CHAIN_MAX_8 7 // max length of hash-chain in a block
+#define HASH_CHAIN_SLOT_SZ_8 (HASH_CHAIN_MAX_8+1) // head_ptr and hash-chain
+#define HASH_CHAIN_16_LEVEL 2 //for levels < this use HASH_CHAIN_SLOT_SZ_8, rest HASH_CHAIN_SLOT_SZ_16
+
+#define HASH_CHAIN_MAX_16 15 // max length of hash-chain in a block
+#define HASH_CHAIN_SLOT_SZ_16 (HASH_CHAIN_MAX_16+1) // head_ptr and hash-chain
+#endif
+
 EXTERN_C_BEGIN
 
 typedef UInt32 CLzRef;
@@ -47,11 +81,13 @@ typedef struct _CMatchFinder
 * numSons = cyclicBufferSize [for HC] and 2*cyclicBufferSize [for BT] algos
 * numSons can be of fixed size, as max number of nodes that can be
 * present in the dictionary at any given point = historySize */
-  CLzRef *hash; // Initialized to all 0s. As and when matches are found, it is set to 'pos' of match
-  CLzRef *son;
+  CLzRef *hash; // table with heads of hash-chains or roots of BSTs in the dictionary
+  CLzRef *son; // dictionary
   UInt32 hashMask; // determines the max number of bits in the hash
   UInt32 cutValue; // hard limit on number of nodes to look at in BT/HC when searching for matches
-
+#ifdef AOCL_LZMA_OPT
+  int level; // 0 <= level <= 9
+#endif
   Byte *bufferBase;
   ISeqInStream *stream;
   
@@ -66,7 +102,7 @@ typedef struct _CMatchFinder
   UInt32 hashSizeSum; // size for all hash tables combined (2-byte, 3-byte, 4-byte)
   SRes result;
   UInt32 crc[256]; // crc used in hash calculation
-  size_t numRefs;
+  size_t numRefs; // total size of memory allocated for all hash tables and dictionary
 
   UInt64 expectedDataSize;
 } CMatchFinder;
@@ -158,6 +194,7 @@ int AOCL_MatchFinder_Create(CMatchFinder* p, UInt32 historySize,
   UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
   ISzAllocPtr alloc);
 void AOCL_MatchFinder_Free(CMatchFinder* p, ISzAllocPtr alloc);
+void AOCL_MatchFinder_Init(CMatchFinder* p);
 void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable);
 #endif
 EXTERN_C_END
@@ -167,4 +204,30 @@ EXTERN_C_END
 #define SetUi16(p, v) { *(UInt16 *)(void *)(p) = (v); }
 #define SetUi32(p, v) { *(UInt32 *)(void *)(p) = (v); }
 
+#ifdef AOCL_LZMA_UNIT_TEST
+/* Move these APIs within the scope of gtest once the framework is ready */
+EXTERN_C_BEGIN
+void Test_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
+    Byte btMode, UInt32 fixedHashSize, UInt32 cyclicBufferSize, UInt32 hashSizeSum,
+    size_t numRefs, UInt32 hashMask, int level);
+
+void Test_AOCL_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
+    Byte btMode, UInt32 fixedHashSize, UInt32 cyclicBufferSize, UInt32 hashSizeSum,
+    size_t numRefs, UInt32 hashMask, int level);
+
+int Test_AOCL_Find_Matching_Bytes_Len(int startLen, Byte* data1, Byte* data2, int limit);
+
+UInt32 Test_Compute_Hash_Mask(UInt32 sz, UInt32 block_cnt);
+
+UInt32 Test_Compute_Hash(Byte* cur, CMatchFinder* p);
+
+UInt32 Test_Circular_Inc(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX);
+
+UInt32 Test_Circular_Dec(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX);
+
+UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 pos,
+    const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
+    UInt32 cutValue, UInt32* d, unsigned maxLen, int blockSz);
+EXTERN_C_END
+#endif
 #endif

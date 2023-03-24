@@ -18,8 +18,13 @@
 
 #define kEmptyHashValue 0
 
-#define kMaxValForNormalize ((UInt32)0)
-// #define kMaxValForNormalize ((UInt32)(1 << 20) + 0xFFF) // for debug
+#ifdef AOCL_EXTEND_CODE_COVERAGE
+    /* Set smaller limit for pos roll over. If not it happens only at UINT_MAX.
+    This allows testing of Normalize functions which are not hit otherwise */
+    #define kMaxValForNormalize ((UInt32)(1 << 20) + 0xFFF) // for debug
+#else
+    #define kMaxValForNormalize ((UInt32)0) // UInt32 pos overflows beyond capacity (upon UINT_MAX++)
+#endif
 
 // #define kNormalizeAlign (1 << 7) // alignment for speculated accesses
 
@@ -56,11 +61,35 @@
   hv = (temp ^ (p->crc[cur[3]] << kLzHash_CrcShift_1)) & p->hashMask; }
 
 #ifdef AOCL_LZMA_OPT
+#define kEmptySonValue 0
+
+#if (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__)
+#  define expect(expr,value) (__builtin_expect ((expr),(value)) )
+#else
+#  define expect(expr,value) (expr)
+#endif
+
+#ifndef likely
+#define likely(expr)     expect((expr) != 0, 1)
+#endif
+#ifndef unlikely
+#define unlikely(expr)   expect((expr) != 0, 0)
+#endif
+
+// Change wrt HASH4_CALC: 3-byte fixed table not used. h3 not computed.
 #define AOCL_HASH4_CALC { \
   UInt32 temp = p->crc[cur[0]] ^ cur[1]; \
   h2 = temp & (kHash2Size - 1); \
   temp ^= ((UInt32)cur[2] << 8); \
   hv = (temp ^ (p->crc[cur[3]] << kLzHash_CrcShift_1)) & p->hashMask; }
+
+// Change wrt HASH5_CALC 3-byte fixed table not used. h3 not computed.
+#define AOCL_HASH5_CALC { \
+  UInt32 temp = p->crc[cur[0]] ^ cur[1]; \
+  h2 = temp & (kHash2Size - 1); \
+  temp ^= ((UInt32)cur[2] << 8); \
+  temp ^= (p->crc[cur[3]] << kLzHash_CrcShift_1); \
+  hv = (temp ^ (p->crc[cur[4]] << kLzHash_CrcShift_2)) & p->hashMask; }
 #endif
 
 #define HASH5_CALC { \
@@ -432,124 +461,196 @@ int MatchFinder_Create(CMatchFinder *p, UInt32 historySize,
 }
 
 #ifdef AOCL_LZMA_OPT
+#define AOCL_HC_COMPUTE_HASH_MASK(hs) \
+/* Hash mask computation for use with cache efficient hash chain dictionary.
+* Hc4 and Hc5 are the only configurations supported for hash chain mode.
+* Hence, p->numHashBytes = 2,3 are not accounted for here. 
+* 2-byte hash table uses 10-bits: minimum mask required for this = (1 << 10) - 1.
+* 4 and 5 byte hashes guarantee byte-1 and byte-2 are the same, provided
+* mask of (1 << 16) - 1 or higher is used. This assumption is used in
+* *_GetMatches_* functions. So, we need to guarantee this. */ \
+if (hs != 0) \
+    hs--; \
+hs |= (hs >> 1); \
+hs |= (hs >> 2); \
+hs |= (hs >> 4); \
+hs |= (hs >> 8); \
+/* lower 16-bits accounted for in (|= kHashGuarentee - 1) */ \
+/* When block_cnt is not a power of 2, hs can be > block_cnt-1. 
+* If not hash can produce values > (block_cnt - 1), which is out of range. 
+* Adjust this, as we want mask to be the largest 2^N - 1 not greater than block_cnt-1.*/ \
+while (hs > (block_cnt - 1)) \
+    hs >>= 1; \
+ \
+hs |= kHashGuarentee - 1; /* don't remove this. Guarentees minimum mask size. */
+
+#define AOCL_SET_NUM_SONS(numSons) \
+if (p->level < HASH_CHAIN_16_LEVEL) \
+    numSons = (size_t)(p->hashMask + 1) * HASH_CHAIN_SLOT_SZ_8; \
+else \
+    numSons = (size_t)(p->hashMask + 1) * HASH_CHAIN_SLOT_SZ_16; \
+
+#define AOCL_SET_NUM_SONS_SZ(numSons, HASH_CHAIN_SLOT_SZ) \
+numSons = (size_t)(p->hashMask + 1) * HASH_CHAIN_SLOT_SZ; \
+
+/*
+* @brief: Allocate all data structures for hash tables, dictionary, etc
+* 
+* Changes wrt MatchFinder_Create:
+* + For hc-mode: hash table size derived from historySize.
+    Block sizes set based on level. 3-byte fixed hash table not used.
+* + For bt-mode: 3-byte fixed hash table not used.
+*/
 int AOCL_MatchFinder_Create(CMatchFinder* p, UInt32 historySize,
-  UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
-  ISzAllocPtr alloc) {
-  /* we need one additional byte in (p->keepSizeBefore),
-     since we use MoveBlock() after (p->pos++) and before dictionary using */
-     // keepAddBufferBefore = (UInt32)0xFFFFFFFF - (1 << 22); // for debug
-  p->keepSizeBefore = historySize + keepAddBufferBefore + 1;
+    UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
+    ISzAllocPtr alloc) {
+    /* we need one additional byte in (p->keepSizeBefore),
+       since we use MoveBlock() after (p->pos++) and before dictionary using */
+       // keepAddBufferBefore = (UInt32)0xFFFFFFFF - (1 << 22); // for debug
+    p->keepSizeBefore = historySize + keepAddBufferBefore + 1;
 
-  keepAddBufferAfter += matchMaxLen;
-  /* we need (p->keepSizeAfter >= p->numHashBytes) */
-  if (keepAddBufferAfter < p->numHashBytes)
-    keepAddBufferAfter = p->numHashBytes;
-  // keepAddBufferAfter -= 2; // for debug
-  p->keepSizeAfter = keepAddBufferAfter;
+    keepAddBufferAfter += matchMaxLen;
+    /* we need (p->keepSizeAfter >= p->numHashBytes) */
+    if (keepAddBufferAfter < p->numHashBytes)
+        keepAddBufferAfter = p->numHashBytes;
+    // keepAddBufferAfter -= 2; // for debug
+    p->keepSizeAfter = keepAddBufferAfter;
 
-  if (p->directInput)
-    p->blockSize = 0;
-  if (p->directInput || LzInWindow_Create2(p, GetBlockSize(p, historySize), alloc))
-  {
-    const UInt32 newCyclicBufferSize = historySize + 1; // do not change it
-    UInt32 hs;
-    p->matchMaxLen = matchMaxLen;
+    if (p->directInput)
+        p->blockSize = 0;
+    if (p->directInput || LzInWindow_Create2(p, GetBlockSize(p, historySize), alloc))
     {
-      // UInt32 hs4;
-      p->fixedHashSize = 0;
-      hs = (1 << 16) - 1;
-      if (p->numHashBytes != 2)
-      {
-        hs = historySize;
-        if (hs > p->expectedDataSize)
-          hs = (UInt32)p->expectedDataSize;
-        if (hs != 0)
-          hs--;
-        hs |= (hs >> 1);
-        hs |= (hs >> 2);
-        hs |= (hs >> 4);
-        hs |= (hs >> 8);
-        // we propagated 16 bits in (hs). Low 16 bits must be set later
-        hs >>= 1;
-        if (hs >= (1 << 24))
+        const UInt32 newCyclicBufferSize = historySize + 1; // do not change it
+        UInt32 hs;
+        size_t newSize;
+        size_t numSons;
+        p->matchMaxLen = matchMaxLen;
+
+        if (!p->btMode) { // for hash-chain mode, set sizes to support cache efficient dictionary
+            UInt32 block_cnt; // size of hash table required
+            hs = historySize;
+            if (hs > p->expectedDataSize)
+                hs = (UInt32)p->expectedDataSize;
+            if (p->level < HASH_CHAIN_16_LEVEL) {
+                block_cnt = hs = hs / HASH_CHAIN_SLOT_SZ_8;
+            }
+            else {
+                block_cnt = hs = hs / HASH_CHAIN_SLOT_SZ_16;
+            }
+
+            AOCL_HC_COMPUTE_HASH_MASK(hs)
+            p->hashMask = hs;
+
+            assert(block_cnt >= kHashGuarentee);
+            assert((p->hashMask + 1) <= block_cnt);
+
+            /* Fixed tables to use based on p->numHashBytes
+            * If numHashBytes = 3/4/5: 2-byte fixed table only */
+            p->fixedHashSize = 0;
+            if (p->numHashBytes > 2) p->fixedHashSize += kHash2Size; // space for additional hash tables : 2-byte hash
+            // if (p->numHashBytes > 3) p->fixedHashSize += kHash3Size;
+            // if (p->numHashBytes > 4) p->fixedHashSize += hs4; // kHash4Size;
+
+            p->historySize = historySize;
+            p->cyclicBufferSize = newCyclicBufferSize; // it must be = (historySize + 1). This limit goes into compressed stream header.
+            p->hashSizeSum = p->fixedHashSize; // fixed tables only. Hash heads for numHashBytes-table are stored as part of dictionary.
+            AOCL_SET_NUM_SONS(numSons)
+            newSize = p->hashSizeSum + numSons;
+        }
+        else // for binary-tree mode, same as reference except when numHashBytes==4, 3-byte fixed table is not used
         {
-          if (p->numHashBytes == 3)
-            hs = (1 << 24) - 1;
-          else
-            hs >>= 1;
-          /* if (bigHash) mode, GetHeads4b() in LzFindMt.c needs (hs >= ((1 << 24) - 1))) */
+            // UInt32 hs4;
+            p->fixedHashSize = 0;
+            hs = (1 << 16) - 1;
+            if (p->numHashBytes != 2)
+            {
+                hs = historySize;
+                if (hs > p->expectedDataSize)
+                    hs = (UInt32)p->expectedDataSize;
+                if (hs != 0)
+                    hs--;
+                hs |= (hs >> 1);
+                hs |= (hs >> 2);
+                hs |= (hs >> 4);
+                hs |= (hs >> 8);
+                // we propagated 16 bits in (hs). Low 16 bits must be set later
+                hs >>= 1;
+                if (hs >= (1 << 24))
+                {
+                    if (p->numHashBytes == 3)
+                        hs = (1 << 24) - 1;
+                    else
+                        hs >>= 1;
+                    /* if (bigHash) mode, GetHeads4b() in LzFindMt.c needs (hs >= ((1 << 24) - 1))) */
+                }
+
+                // hs = ((UInt32)1 << 25) - 1; // for test
+
+                // (hash_size >= (1 << 16)) : Required for (numHashBytes > 2)
+                hs |= (1 << 16) - 1; /* don't change it! */
+
+                // bt5: we adjust the size with recommended minimum size
+                if (p->numHashBytes >= 5)
+                    hs |= (256 << kLzHash_CrcShift_2) - 1;
+            }
+            /* p->hashMask is set based on dictionary size
+            * which is inturn set based on level and input data size
+            * This determines the max number of bits up to which a value can be stored in the hash
+            * E.g: historySize (4MB)  : hashMask (0x1F FFFF)
+            * E.g: historySize (16MB) : hashMask (0x7F FFFF)
+            * E.g: historySize (64MB) : hashMask (0xFF FFFF)
+            */
+            p->hashMask = hs;
+            hs++; // size of hash table required
+
+            /*
+            hs4 = (1 << 20);
+            if (hs4 > hs)
+              hs4 = hs;
+            // hs4 = (1 << 16); // for test
+            p->hash4Mask = hs4 - 1;
+            */
+
+            /* Fixed tables to use based on p->numHashBytes
+            * If numHashBytes = 3: 2-byte table
+            * If numHashBytes = 4: 2-byte table
+            * If numHashBytes = 5: 2-byte, 3-byte tables
+            */
+            if (p->numHashBytes > 2) p->fixedHashSize += kHash2Size; // space for additional hash tables : 2-byte hash
+            if (p->numHashBytes > 4) p->fixedHashSize += kHash3Size; // space for additional hash tables : 3-byte hash
+            hs += p->fixedHashSize; // space for all hash tables combined
+
+            p->historySize = historySize;
+            p->hashSizeSum = hs;
+            p->cyclicBufferSize = newCyclicBufferSize;  // it must be = (historySize + 1). This limit goes into compressed stream header.
+
+            numSons = newCyclicBufferSize;
+            numSons <<= 1; //for bt, son is : <leftNode0> <rightNode0> <leftNode1> <rightNode1>... Hence 2x size.
+            newSize = hs + numSons;
         }
 
-        // hs = ((UInt32)1 << 25) - 1; // for test
-
-        // (hash_size >= (1 << 16)) : Required for (numHashBytes > 2)
-        hs |= (1 << 16) - 1; /* don't change it! */
-
-        // bt5: we adjust the size with recommended minimum size
-        if (p->numHashBytes >= 5)
-          hs |= (256 << kLzHash_CrcShift_2) - 1;
-      }
-      /* p->hashMask is set based on dictionary size
-      * which is inturn set based on level and input data size
-      * This determines the max number of bits up to which a value can be stored in the hash
-      * E.g: historySize (4MB)  : hashMask (0x1F FFFF)
-      * E.g: historySize (16MB) : hashMask (0x7F FFFF)
-      * E.g: historySize (64MB) : hashMask (0xFF FFFF)
-      */
-      p->hashMask = hs;
-      hs++; // size of hash table required
-
-      /*
-      hs4 = (1 << 20);
-      if (hs4 > hs)
-        hs4 = hs;
-      // hs4 = (1 << 16); // for test
-      p->hash4Mask = hs4 - 1;
-      */
-
-      /* Fixed tables to use based on p->numHashBytes
-      * If numHashBytes = 3: 2-byte table
-      * If numHashBytes = 4: 2-byte table
-      * If numHashBytes = 5: 2-byte, 3-byte tables
-      */
-      if (p->numHashBytes > 2) p->fixedHashSize += kHash2Size; // space for additional hash tables : 2-byte hash
-      if (p->numHashBytes > 4) p->fixedHashSize += kHash3Size; // space for additional hash tables : 3-byte hash
-      hs += p->fixedHashSize; // space for all hash tables combined
-    }
-
-    {
-      size_t newSize;
-      size_t numSons;
-      p->historySize = historySize;
-      p->hashSizeSum = hs;
-      p->cyclicBufferSize = newCyclicBufferSize; // it must be = (historySize + 1)
-
-      numSons = newCyclicBufferSize;
-      if (p->btMode)
-        numSons <<= 1; //for bt, son is : <leftNode0> <rightNode0> <leftNode1> <rightNode1>... Hence 2x size.
-      newSize = hs + numSons;
-
-      // aligned size is not required here, but it can be better for some loops
+        {
+            // aligned size is not required here, but it can be better for some loops
 #define NUM_REFS_ALIGN_MASK 0xF
-      newSize = (newSize + NUM_REFS_ALIGN_MASK) & ~(size_t)NUM_REFS_ALIGN_MASK;
+            newSize = (newSize + NUM_REFS_ALIGN_MASK) & ~(size_t)NUM_REFS_ALIGN_MASK;
 
-      if (p->hash && p->numRefs == newSize)
-        return 1;
+            if (p->hash && p->numRefs == newSize)
+                return 1;
 
-      MatchFinder_FreeThisClassMemory(p, alloc);
-      p->numRefs = newSize;
-      p->hash = AllocRefs(newSize, alloc);
+            MatchFinder_FreeThisClassMemory(p, alloc);
+            p->numRefs = newSize;
+            p->hash = AllocRefs(newSize, alloc);
 
-      if (p->hash)
-      {
-        p->son = p->hash + p->hashSizeSum;
-        return 1;
-      }
+            if (p->hash)
+            {
+                p->son = p->hash + p->hashSizeSum;
+                return 1;
+            }
+        }
     }
-  }
 
-  AOCL_MatchFinder_Free(p, alloc);
-  return 0;
+    AOCL_MatchFinder_Free(p, alloc);
+    return 0;
 }
 #endif
 
@@ -634,8 +735,8 @@ void MatchFinder_Init_4(CMatchFinder *p)
 
 void MatchFinder_Init(CMatchFinder *p)
 {
-  MatchFinder_Init_HighHash(p);
-  MatchFinder_Init_LowHash(p);
+  MatchFinder_Init_HighHash(p); //Init hash head table
+  MatchFinder_Init_LowHash(p); //Init fixed hash tables
   MatchFinder_Init_4(p);
   // if (readData)
   MatchFinder_ReadBlock(p);
@@ -648,6 +749,38 @@ void MatchFinder_Init(CMatchFinder *p)
   MatchFinder_SetLimits(p);
 }
 
+#ifdef AOCL_LZMA_OPT
+/* 
+* @brief: Initialize dictionary and hash tables
+*
+* Changes wrt MatchFinder_Init:
+* + For hc-mode, initialize hash-chains and chain head pointers.
+* + For bt-mode, call reference */
+void AOCL_MatchFinder_Init(CMatchFinder* p)
+{
+    if (!p->btMode) { // for hash-chain mode, init to support cache efficient dictionary
+        // Init son: hash-chains and chain head pointers
+        size_t numSons;
+        AOCL_SET_NUM_SONS(numSons)
+        memset(p->son, 0, sizeof(CLzRef) * numSons); //kEmptySonValue
+
+        MatchFinder_Init_LowHash(p); //Init fixed hash tables
+        MatchFinder_Init_4(p);
+        // if (readData)
+        MatchFinder_ReadBlock(p);
+
+        /* if we init (cyclicBufferPos = pos), then we can use one variable
+           instead of both (cyclicBufferPos) and (pos) : only before (cyclicBufferPos) wrapping */
+        p->cyclicBufferPos = (p->pos - CYC_TO_POS_OFFSET); // init with relation to (pos)
+        // p->cyclicBufferPos = 0; // smallest value
+        // p->son[0] = p->son[1] = 0; // unused: we can init skipped record for speculated accesses.
+        MatchFinder_SetLimits(p);
+    }
+    else { // same as reference
+        MatchFinder_Init(p);
+    }
+}
+#endif
 
 // #define _SHOW_HW_STATUS
 
@@ -732,10 +865,123 @@ void MatchFinder_Normalize3(UInt32 subValue, CLzRef *items, size_t numItems)
   }
 }
 
+#ifdef AOCL_LZMA_OPT
+/* Reduce the pointer values for all nodes in hash-chains. 
+* kEmptySonValue must be 0 */
+#define AOCL_SASUB_32(i) \
+v = items[i]; \
+if (v == kEmptySonValue || v < subValue) \
+    v = subValue; /* empty nodes and out of bound nodes are reset to 0 */ \
+items[i] = v - subValue;
 
+#define AOCL_NORMALIZE_HASH_CHAIN_TABLE(HASH_CHAIN_SLOT_SZ) { \
+CLzRef* items = p->son; \
+size_t numSons; \
+AOCL_SET_NUM_SONS_SZ(numSons, HASH_CHAIN_SLOT_SZ) \
+for (size_t i = 0; i < numSons; i += HASH_CHAIN_SLOT_SZ, items += HASH_CHAIN_SLOT_SZ) \
+{ \
+    UInt32 v; \
+    /* First node of each block in son contains the hash head reference.
+     * Do not modify this.*/ \
+    v = items[0]; \
+    if (v == kEmptySonValue) continue; /* if hash head is empty, there is no hash-chain */ \
+    \
+    /* For nodes 1 to N, normalize */ \
+    for (int j = 1; j < HASH_CHAIN_SLOT_SZ; ++j) { \
+        AOCL_SASUB_32(j) \
+    } \
+} \
+}
+
+/*
+* @brief Normalize nodes in hash table and hash chains.
+* 
+* This functions gets called only when p->pos rolls over from UINT_MAX.
+* Since this is only possible when input stream is >4GB, aocl_compression_bench
+* will never call this (as input buffer is limited to 1GB).
+*
+* For functionality testing, enable AOCL_EXTEND_CODE_COVERAGE flag. This
+* will force Normalize calls before pos reaches UINT_MAX
+* 
+* Changes wrt MatchFinder_Normalize3
+* + In hc-mode, modified to suit cache efficient data structures
+* + In bt-mode calls MatchFinder_Normalize3 with same parameters as reference 
+*/
+MY_NO_INLINE
+void AOCL_MatchFinder_Normalize3(UInt32 subValue, CMatchFinder* p)
+{
+    if (!p->btMode) { // cache efficient data structures for hc-mode
+        {
+            // normalize fixed hash tables
+            CLzRef* items = p->hash;
+            MatchFinder_Normalize3(subValue, items, (size_t)p->fixedHashSize);
+        }
+
+        // normalize hash chain table
+        if (p->level < HASH_CHAIN_16_LEVEL)
+        {
+            AOCL_NORMALIZE_HASH_CHAIN_TABLE(HASH_CHAIN_SLOT_SZ_8)
+        }
+        else {
+            AOCL_NORMALIZE_HASH_CHAIN_TABLE(HASH_CHAIN_SLOT_SZ_16)
+        }
+    }
+    else { // reference data structures for bt-mode
+        size_t numSonRefs = p->cyclicBufferSize;
+        numSonRefs <<= 1; //bt-mode, 2 values per node <l,r>
+        MatchFinder_Normalize3(subValue, p->hash, (size_t)p->hashSizeSum + numSonRefs);
+    }
+}
+
+/*
+* @brief Handles overflow checks
+* 
+* call AOCL_MatchFinder_CheckLimits() only after (p->pos++) update. 
+* It handles the case where p->pos rolls over to 0 from UINT_MAX
+* 
+* Changes wrt MatchFinder_CheckLimits:
+* + AOCL_MatchFinder_Normalize3() called in place of MatchFinder_Normalize3()
+* + numSonRefs obtained inside AOCL_MatchFinder_Normalize3()
+*/
+MY_NO_INLINE
+static void AOCL_MatchFinder_CheckLimits(CMatchFinder* p)
+{
+    if (// !p->streamEndWasReached && p->result == SZ_OK &&
+        p->keepSizeAfter == GET_AVAIL_BYTES(p))
+    {
+        // we try to read only in exact state (p->keepSizeAfter == GET_AVAIL_BYTES(p))
+        if (MatchFinder_NeedMove(p))
+            MatchFinder_MoveBlock(p);
+        MatchFinder_ReadBlock(p);
+    }
+
+    if (p->pos == kMaxValForNormalize)
+        if (GET_AVAIL_BYTES(p) >= p->numHashBytes) // optional optimization for last bytes of data.
+            /*
+               if we disable normalization for last bytes of data, and
+               if (data_size == 4 GiB), we don't call wastfull normalization,
+               but (pos) will be wrapped over Zero (0) in that case.
+               And we cannot resume later to normal operation
+            */
+        {
+            // MatchFinder_Normalize(p);
+            /* after normalization we need (p->pos >= p->historySize + 1); */
+            /* we can reduce subValue to aligned value, if want to keep alignment
+               of (p->pos) and (p->buffer) for speculated accesses. */
+            const UInt32 subValue = (p->pos - p->historySize - 1) /* & ~(UInt32)(kNormalizeAlign - 1) */;
+            // const UInt32 subValue = (1 << 15); // for debug
+            // printf("\nMatchFinder_Normalize() subValue == 0x%x\n", subValue);
+            Inline_MatchFinder_ReduceOffsets(p, subValue);
+            AOCL_MatchFinder_Normalize3(subValue, p);
+        }
+
+    if (p->cyclicBufferPos == p->cyclicBufferSize)
+        p->cyclicBufferPos = 0;
+    MatchFinder_SetLimits(p);
+}
+#endif
 
 // call MatchFinder_CheckLimits() only after (p->pos++) update
-
 MY_NO_INLINE
 static void MatchFinder_CheckLimits(CMatchFinder *p)
 {
@@ -858,12 +1104,7 @@ static UInt32 * Hc_GetMatchesSpec(size_t lenLimit, UInt32 curMatch, UInt32 pos, 
       break;
     // if (curMatch2 >= curMatch) return NULL;
     delta = pos - curMatch;
-    /* range of pos [_cyclicBufferSize, _cyclicBufferSize+N)
-    * when no link exists at a particular position, it will have value 0
-    * by default. When we reach such a node, curMatch become 0
-    * delta becomes >= _cyclicBufferSize
-    * return at this point. search completed.*/
-    if (delta >= _cyclicBufferSize)
+    if (delta >= _cyclicBufferSize) // Return if delta is beyond search buffer
       break;
     {
       ptrdiff_t diff;
@@ -1026,6 +1267,14 @@ UInt32 * GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byt
 }
 
 #ifdef AOCL_LZMA_OPT
+// circular buffer pos inc. hcHead range must be: 1 <= hcHead <= HASH_CHAIN_MAX.
+#define CIRC_INC_HEAD(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) \
+((((hcHead + 1) % HASH_CHAIN_SLOT_SZ) != 0) ? (hcHead + 1) : (hcHead + 1 - HASH_CHAIN_MAX))
+
+// circular buffer pos dec. hcHead range must be: 1 <= hcHead <= HASH_CHAIN_MAX.
+#define CIRC_DEC_HEAD(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) \
+((((hcHead - 1) % HASH_CHAIN_SLOT_SZ) != 0) ? (hcHead - 1) : (hcHead + HASH_CHAIN_MAX - 1))
+
 // Compare bytes in data2 and data1 using UInt32 ptrs and __builtin_ctz
 #define AOCL_FIND_MATCHING_BYTES_LEN(len, limit, data1, data2, exit_point) \
     UInt32 D = 0; \
@@ -1048,6 +1297,72 @@ UInt32 * GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byt
     } \
 exit_point:
 
+#define AOCL_HC_GETMATCHES_SPEC(HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) { \
+    UInt32 hcInsert = hcHead; /* ptr where pos must be inserted after search is completed. Next head of chain */ \
+    hcHead = CIRC_INC_HEAD(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX); \
+    UInt32 hcStart = hcHead; /* current head of chain */ \
+    UInt32 curMatch = son[hcHead]; \
+    UInt32 delta = (pos - curMatch); \
+    \
+    if (curMatch > 0 && delta < _cyclicBufferSize) { \
+        __builtin_prefetch(cur, 0, 2); \
+        do \
+        { \
+            { \
+                ptrdiff_t diff; \
+                diff = (ptrdiff_t)0 - delta; \
+                /* We need a match of at least maxLen bytes.
+                * Speed up comparison by checking 2 bytes at maxLen,
+                * followed by first 4 bytes. Proceed to match rest of
+                * the bytes only if above two match.
+                *
+                * Checking 2 bytes instead of 1 at maxLen results in
+                * slight increase in compression ratio */ \
+                if (GetUi16(cur + maxLen) == GetUi16(cur + maxLen + diff) && \
+                    GetUi32(cur) == GetUi32(cur + diff)) \
+                { \
+                    const Byte* c = cur; \
+                    const Byte* cd = c + diff; \
+                    unsigned len = 4; /* first 4 bytes already matched */ \
+                    \
+                    AOCL_FIND_MATCHING_BYTES_LEN(len, lenLimit, c, cd, check_len) \
+                    \
+                    { \
+                        if (maxLen < len) /* found a match longer than maxLen. Save <len, dist> pair in distances */ \
+                        { \
+                            d[0] = (UInt32)len; \
+                            d[1] = delta - 1; \
+                            d += 2; \
+                            if (len == lenLimit) /* length of match reached lenlimit, no need to match further */ \
+                            { \
+                                son[hcInsert] = pos; /* add pos to beginning of hash chain */ \
+                                return d; /* return <len, dist> pairs found */ \
+                            } \
+                            maxLen = len; \
+                        } \
+                    } \
+                } \
+            } \
+            \
+            /* move to next node in chain. Next match position is consecutive */ \
+            hcHead = CIRC_INC_HEAD(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX); \
+            if (hcHead == hcStart) \
+                break; /* finished one loop */ \
+            \
+            curMatch = son[hcHead]; \
+            if (curMatch == kEmptySonValue) \
+                break; /* empty node. i.e. end of chain */ \
+            \
+            delta = pos - curMatch; \
+            if (delta >= _cyclicBufferSize) \
+                break;  /* match offset further than max dictionary size allowed */ \
+            \
+        } while (--cutValue); /* limit number of nodes in hash chain to check */ \
+    } \
+    son[hcInsert] = pos; /* add pos to beginning of hash chain */ \
+    return d; /* return <len, dist> pairs found */ \
+}
+
 /*
 * This function is used for finding matches when hashChain mode
 * algorithm is selected. It navigates through the linked list based
@@ -1059,94 +1374,47 @@ exit_point:
 *
 * @inputs:
 * lenLimit: max length match we are looking for
-* curMatch: position value from hash table for Hash(cur[0-4])
-*           we expect to find matching bytes at this offset from cur
+* hcHead: position within block where current head of the chain exists for respective hash
 * pos : position value of cur
 * *cur: pointer to current byte in stream
 * *son: pointer to dictionary
-* _cyclicBufferPos: current position in cyclic buffer
 * _cyclicBufferSize: size of cyclic buffer
 * cutValue: hard limit on number of nodes to look at when searching for matches
-* *distances: output array to store <len,dist> pairs that are found
-* maxLen: minimum length of match we should be able to find in
+* *d: output array to store <len,dist> pairs that are found
+* maxLen: minimum length of match we are looking to find in
 * dictionary (maxLen is previously set by searching for match in UPDATE_maxLen)
 *
 * 'son' holds the dictionary
-* The dictionary is made up of multiple linked lists (hash chains)
-* son[x] either has 0, if no link exists, or a link to next ()
-* item in the linked list (pointers themselves are not stored in the
-* dictionary. Instead UInt32 values that map to position are stored)
-* E.g:
-* abcdef...1234....abcdexy...123...abcd....
-* <----------------<---------------
-*          <-----------------
-* root node of each of hash chains is an entry from hash table (curMatch)
-* Every call to Hc_GetMatchesSpec, adds curMatch to the dictionary
+* The dictionary is made up of multiple blocks.
+* Each block contains [hcHead | hcChain ....]
+* hcChain is a circular linked lists
+* hcHead indicates where in hcChain hash head exists
+* 
+* Each element in the block, son[x] either has kEmptySonValue, if no link exists,
+* or a link to some point in the input stream where other colliding matches exist
+* (pointers themselves are not stored in the dictionary. 
+* Instead UInt32 values that map to position are stored)
+* 
+* Every call to AOCL_Hc_GetMatchesSpec, adds pos to the dictionary
 * 
 * Changes wrt Hc_GetMatchesSpec: 
 * + if (curMatch > 0 && delta < _cyclicBufferSize) check before entering loop
-* + __builtin_prefetch(cur)
+* + cache efficient hash-chain blocks
 */
-MY_FORCE_INLINE
-static UInt32* AOCL_Hc_GetMatchesSpec(size_t lenLimit, UInt32 curMatch, UInt32 pos, const Byte* cur, CLzRef* son,
-    size_t _cyclicBufferPos, UInt32 _cyclicBufferSize, UInt32 cutValue,
-    UInt32* d, unsigned maxLen)
+//MY_FORCE_INLINE
+static UInt32* AOCL_Hc_GetMatchesSpec_8(size_t lenLimit, UInt32 hcHead, UInt32 pos,
+    const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
+    UInt32 cutValue, UInt32* d, unsigned maxLen)
 {
-    const Byte* lim = cur + lenLimit; // do not check for length beyond this
-    son[_cyclicBufferPos] = curMatch; // add curMatch to dictionary
+    AOCL_HC_GETMATCHES_SPEC(HASH_CHAIN_SLOT_SZ_8, HASH_CHAIN_MAX_8)
+}
 
-    UInt32 delta = (pos - curMatch);
-    if (curMatch > 0 && delta < _cyclicBufferSize) {
-        __builtin_prefetch(cur, 0, 2);
-        do
-        {
-            {
-                ptrdiff_t diff;
-                curMatch = son[_cyclicBufferPos - delta + ((delta > _cyclicBufferPos) ? _cyclicBufferSize : 0)];  // offset where you expect to find a match
-                diff = (ptrdiff_t)0 - (ptrdiff_t)delta;
-                /* We have match of length maxlen already. We want to find a longer match than this.
-                Check at cur[maxLen]. If it doesn't match, no need to compare entire string.*/
-                if (cur[maxLen] == cur[(ptrdiff_t)maxLen + diff])
-                {
-                    const Byte* c = cur;
-                    while (*c == c[diff]) // compare bytes cur wrt previous match
-                    {
-                        if (++c == lim) // length of match reached lenlimit, no need to match further
-                        {
-                            d[0] = (UInt32)(lim - cur);
-                            d[1] = delta - 1;
-                            return d + 2; // return <len,dist> pairs found
-                        }
-                    }
-                    {
-                        const unsigned len = (unsigned)(c - cur);
-                        if (maxLen < len) // found a match longer than maxLen. save <len,dist> pair in distances
-                        {
-                            maxLen = len;
-                            d[0] = (UInt32)len;
-                            d[1] = delta - 1;
-                            d += 2;
-                        }
-                    }
-                }
-            }
-
-
-            if (curMatch == 0)
-                break;
-            // if (curMatch2 >= curMatch) return NULL;
-            delta = pos - curMatch;
-            /* range of pos [_cyclicBufferSize, _cyclicBufferSize+N)
-            * when no link exists at a particular position, it will have value 0
-            * by default. When we reach such a node, curMatch become 0
-            * delta becomes >= _cyclicBufferSize
-            * return at this point. search completed.*/
-            if (delta >= _cyclicBufferSize)
-                break;
-
-        } while (--cutValue); // limit number of nodes in hash chain to look at for matches
-    }
-    return d;
+//MY_FORCE_INLINE
+static UInt32* AOCL_Hc_GetMatchesSpec_16(size_t lenLimit, UInt32 hcHead, UInt32 pos, 
+    const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
+    UInt32 cutValue, UInt32* d, unsigned maxLen)
+{
+    AOCL_HC_GETMATCHES_SPEC(HASH_CHAIN_SLOT_SZ_16, HASH_CHAIN_MAX_16)
 }
 
 /*
@@ -1288,7 +1556,7 @@ static void AOCL_SkipMatchesSpec(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, c
         cmCheck = 0;
 
     if (// curMatch >= pos ||  // failure
-        cmCheck < curMatch)
+        cmCheck < curMatch) {
         do
         {
             const UInt32 delta = pos - curMatch;
@@ -1325,9 +1593,9 @@ static void AOCL_SkipMatchesSpec(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, c
                 }
             }
         } while (--cutValue && cmCheck < curMatch);
-
-        *ptr0 = *ptr1 = kEmptyHashValue;
-        return;
+    }
+    *ptr0 = *ptr1 = kEmptyHashValue;
+    return;
 }
 #endif
 
@@ -1428,16 +1696,6 @@ static void MatchFinder_MovePos(CMatchFinder *p)
   distances = func(MF_PARAMS(p), \
   distances, (UInt32)_maxLen_); MOVE_POS_RET;
 
-#ifdef AOCL_LZMA_OPT
-#define AOCL_SKIP_FOOTER  AOCL_SkipMatchesSpec(MF_PARAMS(p)); MOVE_POS; } while (--num);
-
-#define AOCL_GET_MATCHES_FOOTER_BT(_maxLen_) \
-  GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_GetMatchesSpec1)
-
-#define AOCL_GET_MATCHES_FOOTER_HC(_maxLen_) \
-  GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_Hc_GetMatchesSpec)
-#endif
-
 #define GET_MATCHES_FOOTER_BT(_maxLen_) \
   GET_MATCHES_FOOTER_BASE(_maxLen_, GetMatchesSpec1)
 
@@ -1452,6 +1710,52 @@ static void MatchFinder_MovePos(CMatchFinder *p)
     const Byte *lim = cur + lenLimit; \
     for (; c != lim; c++) if (*(c + diff) != *c) break; \
     maxLen = (unsigned)(c - cur); }
+
+#ifdef AOCL_LZMA_OPT
+#define AOCL_MOVE_POS \
+  ++p->cyclicBufferPos; \
+  p->buffer++; \
+  { const UInt32 pos1 = p->pos + 1; p->pos = pos1; if (pos1 == p->posLimit) AOCL_MatchFinder_CheckLimits(p); }
+
+#define AOCL_MOVE_POS_RET AOCL_MOVE_POS return distances;
+
+MY_NO_INLINE
+static void AOCL_MatchFinder_MovePos(CMatchFinder* p)
+{
+    /* we go here at the end of stream data, when (avail < num_hash_bytes)
+       We don't update sons[cyclicBufferPos << btMode].
+       So (sons) record will contain junk. And we cannot resume match searching
+       to normal operation, even if we will provide more input data in buffer.
+       p->sons[p->cyclicBufferPos << p->btMode] = 0;  // kEmptyHashValue
+       if (p->btMode)
+          p->sons[(p->cyclicBufferPos << p->btMode) + 1] = 0;  // kEmptyHashValue
+    */
+    AOCL_MOVE_POS;
+}
+
+#define AOCL_GET_MATCHES_HEADER2(minLen, ret_op) \
+  unsigned lenLimit; UInt32 hv; Byte *cur; UInt32 curMatch; \
+  lenLimit = (unsigned)p->lenLimit; { if (lenLimit < minLen) { AOCL_MatchFinder_MovePos(p); ret_op; }} \
+  cur = p->buffer;
+
+#define AOCL_GET_MATCHES_HEADER(minLen) AOCL_GET_MATCHES_HEADER2(minLen, return distances)
+#define AOCL_SKIP_HEADER(minLen)   do { AOCL_GET_MATCHES_HEADER2(minLen, continue)
+
+#define AOCL_SKIP_FOOTER  AOCL_SkipMatchesSpec(MF_PARAMS(p)); AOCL_MOVE_POS; } while (--num);
+
+#define AOCL_GET_MATCHES_FOOTER_BASE(_maxLen_, func) \
+  distances = func(MF_PARAMS(p), \
+  distances, (UInt32)_maxLen_); AOCL_MOVE_POS_RET;
+
+#define AOCL_GET_MATCHES_FOOTER_BT(_maxLen_) \
+  AOCL_GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_GetMatchesSpec1)
+
+#define AOCL_GET_MATCHES_FOOTER_HC_8(_maxLen_) \
+  AOCL_GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_Hc_GetMatchesSpec_8)
+
+#define AOCL_GET_MATCHES_FOOTER_HC_16(_maxLen_) \
+  AOCL_GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_Hc_GetMatchesSpec_16)
+#endif
 
 static UInt32* Bt2_MatchFinder_GetMatches(CMatchFinder *p, UInt32 *distances)
 {
@@ -1559,7 +1863,7 @@ static UInt32* Bt4_MatchFinder_GetMatches(CMatchFinder *p, UInt32 *distances)
 *                                   <-------------------d3------------------>
 *                 <---------------------------delta------------------------->
 *
-* How does hash guarentee 2/3/4 bytes are same?
+* How does hash guarantee 2/3/4 bytes are same?
 * Can't we have 2 sequences e.g. abcd, uvwx map to the same hash? */
   d2 = pos - hash                  [h2]; // dist to last 2 byte match
   d3 = pos - (hash + kFix3HashSize)[h3]; // dist to last 3 byte match
@@ -2042,9 +2346,110 @@ void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder2 *vTable)
 }
 
 #ifdef AOCL_LZMA_OPT
+#define AOCL_HC_SKIP_HEADER(minLen) \
+    do { if (unlikely(p->lenLimit < minLen)) { AOCL_MatchFinder_MovePos(p); num--; continue; } { \
+    Byte *cur; \
+    UInt32 *hash; \
+    UInt32 *son; \
+    UInt32 pos = p->pos; \
+    UInt32 num2 = num; \
+    /* (p->pos == p->posLimit) is not allowed here !!! */ \
+    { const UInt32 rem = p->posLimit - pos; if (num2 > rem) num2 = rem; } \
+    num -= num2; \
+    p->cyclicBufferPos += num2; \
+    cur = p->buffer; \
+    hash = p->hash; \
+    son = p->son; \
+    do { \
+    UInt32 curMatch; \
+    UInt32 hv;
+
+#define AOCL_HC_SKIP_FOOTER \
+    cur++;  pos++; \
+    } while (--num2); \
+    p->buffer = cur; \
+    p->pos = pos; \
+    if (pos == p->posLimit) AOCL_MatchFinder_CheckLimits(p); \
+    }} while(num);
+
+#define ASSIGN_SLOT_HC { \
+    if (curMatch == kEmptyHashValue) /* Hash does not have a slot assigned yet */ { \
+      curMatch = bucket+1; /* no circ inc here. At least 1 node for head and 1 for dict must exist */ \
+      p->son[curMatch] = 0; \
+    } \
+}
+
+#define AOCL_HC_MF_GETMATCHES(N, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX, AOCL_HASH_CALC, AOCL_GET_MATCHES_FOOTER_HC) \
+    UInt32 mmm; \
+    UInt32 h2, d2, pos; \
+    unsigned maxLen; \
+    UInt32* hash, * son; \
+    AOCL_GET_MATCHES_HEADER(N) \
+    \
+    AOCL_HASH_CALC; \
+    \
+    hash = p->hash; \
+    pos = p->pos; \
+    son = p->son; \
+    \
+    d2 = pos - hash[h2]; \
+    UInt32 bucket = hv * HASH_CHAIN_SLOT_SZ; \
+    curMatch = son[bucket]; /* 1st pos of bucket points to head of 
+                            hash chain within respective block */  \
+    \
+    ASSIGN_SLOT_HC; /* handle 1st assignment to a block */ \
+    \
+    hash[h2] = pos; \
+    son[bucket] = CIRC_DEC_HEAD(curMatch, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX); /* set to next head position */ \
+    \
+    SET_mmm \
+    \
+    maxLen = 3; \
+    \
+    for (;;) \
+    { \
+        if (d2 < mmm && *(cur - d2) == *cur) \
+        { \
+            distances[0] = 2; \
+            distances[1] = d2 - 1; \
+            distances += 2; \
+            if (*(cur - d2 + 2) != cur[2]) \
+                break; \
+        } \
+        else \
+            break; \
+        \
+        UPDATE_maxLen \
+        distances[-2] = (UInt32)maxLen; \
+        if (maxLen == lenLimit) \
+        { \
+            p->son[curMatch] = pos; \
+            AOCL_MOVE_POS_RET; \
+        } \
+        break; \
+    } \
+    \
+    AOCL_GET_MATCHES_FOOTER_HC(maxLen); \
+
+#define AOCL_HC_MF_SKIP(N, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX, AOCL_HASH_CALC) \
+    AOCL_HC_SKIP_HEADER(N) \
+    \
+    UInt32 h2; \
+    AOCL_HASH_CALC; \
+    UInt32 bucket = hv * HASH_CHAIN_SLOT_SZ; \
+    curMatch = son[bucket]; \
+    \
+    ASSIGN_SLOT_HC; /* handle 1st assignment to a block */ \
+    \
+    hash[h2] = pos; \
+    son[bucket] = CIRC_DEC_HEAD(curMatch, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX); /* set to next head position */ \
+    son[curMatch] = pos; /* set pos at current head */ \
+    \
+    AOCL_HC_SKIP_FOOTER
+
 /* Compute hash, locate node in hashChian and find matches at these positions.
 * Hash is computed on 4 bytes: Hash(p->buffer[0-4]).
-* Hc_GetMatchesSpec() is called to find matches in hashChain.
+* AOCL_Hc_GetMatchesSpec() is called to find matches in hashChain.
 *
 * @outputs:
 * return: distances: matches saved as <len,dist> pairs
@@ -2055,68 +2460,62 @@ void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder2 *vTable)
 *
 * Changes wrt Hc4_MatchFinder_GetMatches:
 * + h3 hash table not used. Simplified if conditions to suit this.*/
-static UInt32* AOCL_Hc4_MatchFinder_GetMatches(CMatchFinder* p, UInt32* distances)
+static UInt32* AOCL_Hc4_MatchFinder_GetMatches_8(CMatchFinder* p, UInt32* distances)
 {
-  UInt32 mmm;
-  UInt32 h2, d2, pos;
-  unsigned maxLen;
-  UInt32* hash;
-  GET_MATCHES_HEADER(4)
-
-    AOCL_HASH4_CALC;
-
-  hash = p->hash;
-  pos = p->pos;
-
-  d2 = pos - hash[h2];
-  curMatch = (hash + kFix3HashSize)[hv];
-
-  hash[h2] = pos;
-  (hash + kFix3HashSize)[hv] = pos;
-
-  SET_mmm
-
-    maxLen = 3;
-
-  for (;;)
-  {
-    if (d2 < mmm && *(cur - d2) == *cur)
-    {
-      distances[0] = 2;
-      distances[1] = d2 - 1;
-      distances += 2;
-      if (*(cur - d2 + 2) != cur[2])
-        break;
-    }
-    else
-      break;
-
-    UPDATE_maxLen
-      distances[-2] = (UInt32)maxLen;
-    if (maxLen == lenLimit)
-    {
-      p->son[p->cyclicBufferPos] = curMatch;
-      MOVE_POS_RET;
-    }
-    break;
-  }
-
-  AOCL_GET_MATCHES_FOOTER_HC(maxLen);
+    AOCL_HC_MF_GETMATCHES(4, HASH_CHAIN_SLOT_SZ_8, HASH_CHAIN_MAX_8,
+        AOCL_HASH4_CALC, AOCL_GET_MATCHES_FOOTER_HC_8)
 }
 
-/* Changes wrt Hc4_MatchFinder_Skip:
+/* 
+* @brief: Skip is called after a match of certain length is found. 
+*         Skip bytes based on this. While skipping,
+*         nodes need to be added to the dictionary
+* 
+* Changes wrt Hc4_MatchFinder_Skip:
 * + h3 hash table not used.*/
-static void AOCL_Hc4_MatchFinder_Skip(CMatchFinder* p, UInt32 num)
+static void AOCL_Hc4_MatchFinder_Skip_8(CMatchFinder* p, UInt32 num)
 {
-  HC_SKIP_HEADER(4)
+    AOCL_HC_MF_SKIP(4, HASH_CHAIN_SLOT_SZ_8, HASH_CHAIN_MAX_8, AOCL_HASH4_CALC)
+}
 
-    UInt32 h2;
-  AOCL_HASH4_CALC;
-  curMatch = (hash + kFix3HashSize)[hv];
-  hash[h2] =
-    (hash + kFix3HashSize)[hv] = pos;
+/* 16-node block equivalent of AOCL_Hc4_MatchFinder_GetMatches_8 */
+static UInt32* AOCL_Hc4_MatchFinder_GetMatches_16(CMatchFinder* p, UInt32* distances)
+{
+    AOCL_HC_MF_GETMATCHES(4, HASH_CHAIN_SLOT_SZ_16, HASH_CHAIN_MAX_16,
+        AOCL_HASH4_CALC, AOCL_GET_MATCHES_FOOTER_HC_16)
+}
 
-  HC_SKIP_FOOTER
+
+/* 16-node block equivalent of AOCL_Hc4_MatchFinder_Skip_8 */
+static void AOCL_Hc4_MatchFinder_Skip_16(CMatchFinder* p, UInt32 num)
+{
+    AOCL_HC_MF_SKIP(4, HASH_CHAIN_SLOT_SZ_16, HASH_CHAIN_MAX_16, AOCL_HASH4_CALC)
+}
+
+/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_GetMatches_8 */
+static UInt32* AOCL_Hc5_MatchFinder_GetMatches_8(CMatchFinder* p, UInt32* distances)
+{
+    AOCL_HC_MF_GETMATCHES(5, HASH_CHAIN_SLOT_SZ_8, HASH_CHAIN_MAX_8,
+        AOCL_HASH5_CALC, AOCL_GET_MATCHES_FOOTER_HC_8)
+}
+
+/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_Skip_8 */
+static void AOCL_Hc5_MatchFinder_Skip_8(CMatchFinder* p, UInt32 num)
+{
+    AOCL_HC_MF_SKIP(5, HASH_CHAIN_SLOT_SZ_8, HASH_CHAIN_MAX_8, AOCL_HASH5_CALC)
+}
+
+/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_GetMatches_16 */
+static UInt32* AOCL_Hc5_MatchFinder_GetMatches_16(CMatchFinder* p, UInt32* distances)
+{
+    AOCL_HC_MF_GETMATCHES(5, HASH_CHAIN_SLOT_SZ_16, HASH_CHAIN_MAX_16,
+        AOCL_HASH5_CALC, AOCL_GET_MATCHES_FOOTER_HC_16)
+}
+
+/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_Skip_16 */
+static void AOCL_Hc5_MatchFinder_Skip_16(CMatchFinder* p, UInt32 num)
+{
+    AOCL_HC_MF_SKIP(5, HASH_CHAIN_SLOT_SZ_16, HASH_CHAIN_MAX_16, AOCL_HASH5_CALC)
 }
 
 /* Compute hash, locate node in binTree and find matches at these positions.
@@ -2139,7 +2538,7 @@ static UInt32* AOCL_Bt4_MatchFinder_GetMatches(CMatchFinder* p, UInt32* distance
   UInt32 h2, d2, pos;
   unsigned maxLen;
   UInt32* hash;
-  GET_MATCHES_HEADER(4)
+  AOCL_GET_MATCHES_HEADER(4)
 
     /* read 4 bytes from input stream p->buffer and compute hash for it
     * cur = p->buffer
@@ -2162,7 +2561,7 @@ static UInt32* AOCL_Bt4_MatchFinder_GetMatches(CMatchFinder* p, UInt32* distance
 *                                   <-------------------d3------------------>
 *                 <---------------------------delta------------------------->
 *
-* How does hash guarentee 2/3/4 bytes are same?
+* How does hash guarantee 2/3/4 bytes are same?
 * Can't we have 2 sequences e.g. abcd, uvwx map to the same hash? */
   d2 = pos - hash[h2]; // dist to last 2 byte match
   curMatch = (hash + kFix3HashSize)[hv]; // dist to last 4 byte match
@@ -2201,7 +2600,7 @@ static UInt32* AOCL_Bt4_MatchFinder_GetMatches(CMatchFinder* p, UInt32* distance
     if (maxLen == lenLimit)
     {
         AOCL_SkipMatchesSpec(MF_PARAMS(p));
-      MOVE_POS_RET
+        AOCL_MOVE_POS_RET
     }
     break;
   }
@@ -2213,7 +2612,7 @@ static UInt32* AOCL_Bt4_MatchFinder_GetMatches(CMatchFinder* p, UInt32* distance
 * + h3 hash table not used.*/
 static void AOCL_Bt4_MatchFinder_Skip(CMatchFinder* p, UInt32 num)
 {
-  SKIP_HEADER(4)
+    AOCL_SKIP_HEADER(4)
   {
     UInt32 h2;
     UInt32* hash;
@@ -2223,31 +2622,44 @@ static void AOCL_Bt4_MatchFinder_Skip(CMatchFinder* p, UInt32 num)
     hash[h2] =
       (hash + kFix3HashSize)[hv] = p->pos;
   }
-  AOCL_SKIP_FOOTER
+    AOCL_SKIP_FOOTER
 }
+
 #endif
 
 #ifdef AOCL_LZMA_OPT
 /* Changes wrt MatchFinder_CreateVTable:
 * + GetMatches and Skip function pointers directed to AOCL_ optimized
-*   routines for p->numHashBytes = 4 [Default hash bytes used for all levels].
+*   routines for p->numHashBytes = 4, 5 [Default hash bytes used based on level].
 .*/
 void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable) {
-  vTable->Init = (Mf_Init_Func)MatchFinder_Init;
+  vTable->Init = (Mf_Init_Func)AOCL_MatchFinder_Init;
   vTable->GetNumAvailableBytes = (Mf_GetNumAvailableBytes_Func)MatchFinder_GetNumAvailableBytes;
   vTable->GetPointerToCurrentPos = (Mf_GetPointerToCurrentPos_Func)MatchFinder_GetPointerToCurrentPos;
   if (!p->btMode)
   {
-    if (p->numHashBytes <= 4)  /* Default setting. */
-    {
-      vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches;
-      vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip;
-    }
-    else
-    {
-      vTable->GetMatches = (Mf_GetMatches_Func)Hc5_MatchFinder_GetMatches;
-      vTable->Skip = (Mf_Skip_Func)Hc5_MatchFinder_Skip;
-    }
+      if (p->numHashBytes <= 4)
+      {
+          if (p->level < HASH_CHAIN_16_LEVEL) {
+              vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches_8;
+              vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip_8;
+          }
+          else {
+              vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches_16;
+              vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip_16;
+          }
+      }
+      else
+      {
+          if (p->level < HASH_CHAIN_16_LEVEL) {
+              vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc5_MatchFinder_GetMatches_8;
+              vTable->Skip = (Mf_Skip_Func)AOCL_Hc5_MatchFinder_Skip_8;
+          }
+          else {
+              vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc5_MatchFinder_GetMatches_16;
+              vTable->Skip = (Mf_Skip_Func)AOCL_Hc5_MatchFinder_Skip_16;
+          }
+      }
   }
   else if (p->numHashBytes == 2)
   {
@@ -2269,5 +2681,88 @@ void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable) {
     vTable->GetMatches = (Mf_GetMatches_Func)Bt5_MatchFinder_GetMatches;
     vTable->Skip = (Mf_Skip_Func)Bt5_MatchFinder_Skip;
   }
+}
+#endif
+
+#ifdef AOCL_LZMA_UNIT_TEST
+/* Move these APIs within the scope of gtest once the framework is ready */
+void Test_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
+    Byte btMode, UInt32 fixedHashSize, UInt32 cyclicBufferSize, UInt32 hashSizeSum,
+    size_t numRefs, UInt32 hashMask, int level) {
+    CMatchFinder p;
+    p.hash = hash;
+    p.son = son;
+    p.btMode = btMode;
+    p.fixedHashSize = fixedHashSize;
+    p.cyclicBufferSize = cyclicBufferSize;
+    p.hashSizeSum = hashSizeSum;
+    p.numRefs = numRefs;
+    p.hashMask = hashMask;
+    p.level = level;
+
+    size_t numSonRefs = p.cyclicBufferSize;
+    if (p.btMode)
+        numSonRefs <<= 1;
+    MatchFinder_Normalize3(subValue, p.hash, (size_t)p.hashSizeSum + numSonRefs);
+}
+
+void Test_AOCL_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
+    Byte btMode, UInt32 fixedHashSize, UInt32 cyclicBufferSize, UInt32 hashSizeSum,
+    size_t numRefs, UInt32 hashMask, int level) {
+    CMatchFinder p;
+    p.hash = hash;
+    p.son = son;
+    p.btMode = btMode;
+    p.fixedHashSize = fixedHashSize;
+    p.cyclicBufferSize = cyclicBufferSize;
+    p.hashSizeSum = hashSizeSum;
+    p.numRefs = numRefs;
+    p.hashMask = hashMask;
+    p.level = level;
+
+    AOCL_MatchFinder_Normalize3(subValue, &p);
+}
+
+int Test_AOCL_Find_Matching_Bytes_Len(int startLen, Byte* data1, Byte* data2, int limit) {
+    int len = startLen;
+    AOCL_FIND_MATCHING_BYTES_LEN(len, limit, data1, data2, exit_point_test)
+    return len;
+}
+
+UInt32 Test_Compute_Hash_Mask(UInt32 sz, UInt32 block_cnt) {
+    UInt32 hs = sz;
+    AOCL_HC_COMPUTE_HASH_MASK(hs)
+    return hs;
+}
+
+UInt32 Test_Compute_Hash(Byte* cur, CMatchFinder* p) {
+    UInt32 h2, h3, hv;
+    AOCL_HASH5_CALC
+    return hv;
+}
+
+UInt32 Test_Circular_Inc(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX) {
+    hcHead = CIRC_INC_HEAD(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX);
+    return hcHead;
+}
+
+UInt32 Test_Circular_Dec(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX) {
+    hcHead = CIRC_DEC_HEAD(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX);
+    return hcHead;
+}
+
+UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 pos,
+    const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
+    UInt32 cutValue, UInt32* d, unsigned maxLen, int blockSz) {
+    if (blockSz == 8) {
+        UInt32* du = AOCL_Hc_GetMatchesSpec_8(lenLimit, hcHead, pos, cur, son,
+            _cyclicBufferPos, _cyclicBufferSize, cutValue, d, maxLen);
+        return du - d;
+    }
+    else {
+        UInt32* du = AOCL_Hc_GetMatchesSpec_16(lenLimit, hcHead, pos, cur, son,
+            _cyclicBufferPos, _cyclicBufferSize, cutValue, d, maxLen);
+        return du - d;
+    }
 }
 #endif
