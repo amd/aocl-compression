@@ -60,6 +60,12 @@ static unsigned g_STAT_OFFSET = 0;
 
 #define REP_LEN_COUNT 64
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+//Forward declarations to allow default pointer initializations
+// Function pointers for optimization overloads
+void (*LzmaEncProps_Normalize_fp)(CLzmaEncProps* p) = LzmaEncProps_Normalize;
+#endif
+
 void LzmaEncProps_Init(CLzmaEncProps *p)
 {
   p->level = 5;
@@ -70,6 +76,7 @@ void LzmaEncProps_Init(CLzmaEncProps *p)
   p->affinity = 0;
 }
 
+// Default settings as per LZMA SDK 22.01
 void LzmaEncProps_Normalize(CLzmaEncProps *p)
 {
   int level = p->level;
@@ -77,12 +84,11 @@ void LzmaEncProps_Normalize(CLzmaEncProps *p)
   p->level = level;
   
   if (p->dictSize == 0)
-    /*p->dictSize =
+    p->dictSize =
       ( level <= 3 ? ((UInt32)1 << (level * 2 + 16)) :
       ( level <= 6 ? ((UInt32)1 << (level + 19)) :
       ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
-      )));*/
-    if (p->dictSize == 0) p->dictSize = (level <= 5 ? (1 << (level * 2 + 14)) : (level <= 7 ? (1 << 25) : (1 << 26)));
+      )));
   if (p->dictSize > p->reduceSize)
   {
     UInt32 v = (UInt32)p->reduceSize;
@@ -100,7 +106,7 @@ void LzmaEncProps_Normalize(CLzmaEncProps *p)
   if (p->algo < 0) p->algo = (level < 5 ? 0 : 1);
   if (p->fb < 0) p->fb = (level < 7 ? 32 : 64);
   if (p->btMode < 0) p->btMode = (p->algo == 0 ? 0 : 1);
-  if (p->numHashBytes < 0) p->numHashBytes = 4; //if (p->numHashBytes < 0) p->numHashBytes = (p->btMode ? 4 : 5);
+  if (p->numHashBytes < 0) p->numHashBytes = (p->btMode ? 4 : 5);
   if (p->mc == 0) p->mc = (16 + ((unsigned)p->fb >> 1)) >> (p->btMode ? 0 : 1);
   
   if (p->numThreads < 0)
@@ -112,10 +118,87 @@ void LzmaEncProps_Normalize(CLzmaEncProps *p)
       #endif
 }
 
+#ifdef AOCL_LZMA_OPT
+/*
+* @brief: Set parameters based on user inputs and level
+* 
+* Changes wrt LzmaEncProps_Normalize:
+* + Dictionary sizes to suit cache efficient hash chains for lower levels
+*/
+void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
+{
+  int level = p->level;
+  if (level < 0) level = 5;
+  p->level = level;
+  
+  /* Using larger dictionaries for level <= 4 to compensate for compression drop 
+   * due to unused slots in cache efficient dictionary blocks */
+  if (p->dictSize == 0) 
+      p->dictSize =
+      ( level <= 2 ? ((UInt32)1 << (level + 19)) :
+      ( level <= 4 ? ((UInt32)1 << (level + 20)) :
+      ( level <= 6 ? ((UInt32)1 << (level + 19)) :
+      ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
+      ))));
+  if (p->dictSize > p->reduceSize)
+  {
+    UInt32 v = (UInt32)p->reduceSize;
+    const UInt32 kReduceMin = ((UInt32)1 << 12);
+    if (v < kReduceMin)
+      v = kReduceMin;
+    if (p->dictSize > v)
+      p->dictSize = v;
+  }
+
+  if (p->lc < 0) p->lc = 3;
+  if (p->lp < 0) p->lp = 0;
+  if (p->pb < 0) p->pb = 2;
+
+  if (p->algo < 0) p->algo = (level < 5 ? 0 : 1);
+  if (p->fb < 0) p->fb = (level < 7 ? 32 : 64);
+  if (p->btMode < 0) p->btMode = (p->algo == 0 ? 0 : 1);
+  if (p->numHashBytes < 0) p->numHashBytes = (p->btMode ? 4 : 5);
+  if (p->mc == 0) p->mc = (16 + ((unsigned)p->fb >> 1)) >> (p->btMode ? 0 : 1);
+
+  if (!p->btMode) {
+      /* For hash chain algo, cache efficient hash chains with direct mapping
+      * from hash to blocks are used. Size of the hash table is derived from dictSize.
+      * Due to certain assumptions on the hashes, a minimum hash table size of 
+      * 'kHashGuarentee' is required. Hence, we need to impose a minimum dictSize  
+      * to ensure derived hash table sizes are valid. */
+      if (level < HASH_CHAIN_16_LEVEL) {
+          if ((p->dictSize / HASH_CHAIN_SLOT_SZ_8) < kHashGuarentee)
+              p->dictSize = kHashGuarentee * HASH_CHAIN_SLOT_SZ_8;
+
+      }
+      else {
+          if ((p->dictSize / HASH_CHAIN_SLOT_SZ_16) < kHashGuarentee)
+              p->dictSize = kHashGuarentee * HASH_CHAIN_SLOT_SZ_16;
+      }
+  }
+
+  if (p->numThreads < 0)
+    p->numThreads =
+      #ifndef _7ZIP_ST
+      ((p->btMode && p->algo) ? 2 : 1);
+      #else
+      1;
+      #endif
+}
+#endif
+
 UInt32 LzmaEncProps_GetDictSize(const CLzmaEncProps *props2)
 {
   CLzmaEncProps props = *props2;
+#ifdef AOCL_LZMA_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+  LzmaEncProps_Normalize_fp(&props);
+#else
+  AOCL_LzmaEncProps_Normalize(&props);
+#endif
+#else
   LzmaEncProps_Normalize(&props);
+#endif
   return props.dictSize;
 }
 
@@ -527,6 +610,7 @@ int (*MatchFinder_Create_fp)(CMatchFinder* p, UInt32 historySize,
   ISzAllocPtr alloc) = MatchFinder_Create;
 void (*MatchFinder_Free_fp)(CMatchFinder* p, ISzAllocPtr alloc) = MatchFinder_Free;
 unsigned (*GetOptimum_fp)(CLzmaEnc* p, UInt32 position) = GetOptimum;
+SRes(*LzmaEnc_SetProps_fp)(CLzmaEncHandle pp, const CLzmaEncProps* props2) = LzmaEnc_SetProps;
 #endif
 
 #define MFB (p->matchFinderBase)
@@ -660,6 +744,86 @@ SRes LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps *props2)
 
   return SZ_OK;
 }
+
+#ifdef AOCL_LZMA_OPT
+/*
+* @brief: Update encode handle with user settings
+* 
+* Changes wrt LzmaEnc_SetProps:
+* + pass level information to MFB 
+* + call AOCL_LzmaEncProps_Normalize 
+*/
+SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* props2)
+{
+    CLzmaEnc* p = (CLzmaEnc*)pp;
+    CLzmaEncProps props = *props2;
+    AOCL_LzmaEncProps_Normalize(&props);
+
+    if (props.lc > LZMA_LC_MAX
+        || props.lp > LZMA_LP_MAX
+        || props.pb > LZMA_PB_MAX)
+        return SZ_ERROR_PARAM;
+
+
+    if (props.dictSize > kLzmaMaxHistorySize)
+        props.dictSize = kLzmaMaxHistorySize;
+
+#ifndef LZMA_LOG_BSR
+    {
+        const UInt64 dict64 = props.dictSize;
+        if (dict64 > ((UInt64)1 << kDicLogSizeMaxCompress))
+            return SZ_ERROR_PARAM;
+    }
+#endif
+
+    p->dictSize = props.dictSize;
+    {
+        unsigned fb = (unsigned)props.fb;
+        if (fb < 5)
+            fb = 5;
+        if (fb > LZMA_MATCH_LEN_MAX)
+            fb = LZMA_MATCH_LEN_MAX;
+        p->numFastBytes = fb;
+    }
+    p->lc = (unsigned)props.lc;
+    p->lp = (unsigned)props.lp;
+    p->pb = (unsigned)props.pb;
+    p->fastMode = (props.algo == 0);
+    // p->_maxMode = True;
+    MFB.btMode = (Byte)(props.btMode ? 1 : 0);
+    {
+        unsigned numHashBytes = 4;
+        if (props.btMode)
+        {
+            if (props.numHashBytes < 2) numHashBytes = 2;
+            else if (props.numHashBytes < 4) numHashBytes = (unsigned)props.numHashBytes;
+        }
+        if (props.numHashBytes >= 5) numHashBytes = 5;
+
+        MFB.numHashBytes = numHashBytes;
+    }
+
+    MFB.cutValue = props.mc;
+    MFB.level = props.level; // pass level to MFB
+
+    p->writeEndMark = (BoolInt)props.writeEndMark;
+
+#ifndef _7ZIP_ST
+    /*
+    if (newMultiThread != _multiThread)
+    {
+      ReleaseMatchFinder();
+      _multiThread = newMultiThread;
+    }
+    */
+    p->multiThread = (props.numThreads > 1);
+    p->matchFinderMt.btSync.affinity =
+        p->matchFinderMt.hashSync.affinity = props.affinity;
+#endif
+
+    return SZ_OK;
+}
+#endif
 
 
 void LzmaEnc_SetDataSize(CLzmaEncHandle pp, UInt64 expectedDataSiize)
@@ -3331,7 +3495,15 @@ static void LzmaEnc_Construct(CLzmaEnc *p)
   {
     CLzmaEncProps props;
     LzmaEncProps_Init(&props);
+#ifdef AOCL_LZMA_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    LzmaEnc_SetProps_fp(p, &props);
+#else
+    AOCL_LzmaEnc_SetProps(p, &props);
+#endif
+#else
     LzmaEnc_SetProps(p, &props);
+#endif
   }
 
   #ifndef LZMA_LOG_BSR
@@ -4154,7 +4326,16 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
   if (!p)
     return SZ_ERROR_MEM;
 
+#ifdef AOCL_LZMA_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+  res = LzmaEnc_SetProps_fp(p, props);
+#else
+  res = AOCL_LzmaEnc_SetProps(p, props);
+#endif
+#else
   res = LzmaEnc_SetProps(p, props);
+#endif
+
   if (res == SZ_OK)
   {
     res = LzmaEnc_WriteProperties(p, propsEncoded, propsSize);
@@ -4177,6 +4358,8 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
     MatchFinder_Create_fp = MatchFinder_Create;
     MatchFinder_Free_fp = MatchFinder_Free;
     GetOptimum_fp = GetOptimum;
+    LzmaEncProps_Normalize_fp = LzmaEncProps_Normalize;
+    LzmaEnc_SetProps_fp = LzmaEnc_SetProps;
   }
   else
   {
@@ -4192,11 +4375,15 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
       MatchFinder_Create_fp = AOCL_MatchFinder_Create;
       MatchFinder_Free_fp = AOCL_MatchFinder_Free;
       GetOptimum_fp = AOCL_GetOptimum;
+      LzmaEncProps_Normalize_fp = AOCL_LzmaEncProps_Normalize;
+      LzmaEnc_SetProps_fp = AOCL_LzmaEnc_SetProps;
 #else
       MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
       MatchFinder_Create_fp = MatchFinder_Create;
       MatchFinder_Free_fp = MatchFinder_Free;
       GetOptimum_fp = GetOptimum;
+      LzmaEncProps_Normalize_fp = LzmaEncProps_Normalize;
+      LzmaEnc_SetProps_fp = LzmaEnc_SetProps;
 #endif
       break;
     }
