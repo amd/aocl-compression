@@ -1,6 +1,7 @@
 /*
     LZ4 HC - High Compression Mode of LZ4
     Copyright (C) 2011-2017, Yann Collet.
+    Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
 
     BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -962,6 +963,273 @@ _dest_overflow:
 }
 
 
+#ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4HC_compress_hashchain() which disables the Pattern Analysis for level 9 */
+LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
+    LZ4HC_CCtx_internal* const ctx,
+    const char* const source,
+    char* const dest,
+    int* srcSizePtr,
+    int const maxOutputSize,
+    int maxNbAttempts,
+    const limitedOutput_directive limit,
+    const dictCtx_directive dict
+)
+{
+    const int inputSize = *srcSizePtr;
+#ifdef AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS
+    const int patternAnalysis = 0;   /* Disabling for level 9 */
+#else
+    const int patternAnalysis = (maxNbAttempts > 128);   /* levels 9+ */
+#endif
+
+    const BYTE* ip = (const BYTE*)source;
+    const BYTE* anchor = ip;
+    const BYTE* const iend = ip + inputSize;
+    const BYTE* const mflimit = iend - MFLIMIT;
+    const BYTE* const matchlimit = (iend - LASTLITERALS);
+
+    BYTE* optr = (BYTE*)dest;
+    BYTE* op = (BYTE*)dest;
+    BYTE* oend = op + maxOutputSize;
+
+    int   ml0, ml, ml2, ml3;
+    const BYTE* start0;
+    const BYTE* ref0;
+    const BYTE* ref = NULL;
+    const BYTE* start2 = NULL;
+    const BYTE* ref2 = NULL;
+    const BYTE* start3 = NULL;
+    const BYTE* ref3 = NULL;
+
+    /* init */
+    *srcSizePtr = 0;
+    if (limit == fillOutput) oend -= LASTLITERALS;                  /* Hack for support LZ4 format restriction */
+    if (inputSize < LZ4_minLength) goto _last_literals;             /* Input too small, no compression (all literals) */
+
+    /* Main Loop */
+    while (ip <= mflimit) {
+        ml = LZ4HC_InsertAndFindBestMatch(ctx, ip, matchlimit, &ref, maxNbAttempts, patternAnalysis, dict);
+        if (ml < MINMATCH) { ip++; continue; }
+
+        /* saved, in case we would skip too much */
+        start0 = ip; ref0 = ref; ml0 = ml;
+
+    _Search2:
+        if (ip + ml <= mflimit) {
+            ml2 = LZ4HC_InsertAndGetWiderMatch(ctx,
+                ip + ml - 2, ip + 0, matchlimit, ml, &ref2, &start2,
+                maxNbAttempts, patternAnalysis, 0, dict, favorCompressionRatio);
+        }
+        else {
+            ml2 = ml;
+        }
+
+        if (ml2 == ml) { /* No better match => encode ML1 */
+            optr = op;
+            if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ref, limit, oend)) goto _dest_overflow;
+            continue;
+        }
+
+        if (start0 < ip) {   /* first match was skipped at least once */
+            if (start2 < ip + ml0) {  /* squeezing ML1 between ML0(original ML1) and ML2 */
+                ip = start0; ref = ref0; ml = ml0;  /* restore initial ML1 */
+            }
+        }
+
+        /* Here, start0==ip */
+        if ((start2 - ip) < 3) {  /* First Match too small : removed */
+            ml = ml2;
+            ip = start2;
+            ref = ref2;
+            goto _Search2;
+        }
+
+    _Search3:
+        /* At this stage, we have :
+        *  ml2 > ml1, and
+        *  ip1+3 <= ip2 (usually < ip1+ml1) */
+        if ((start2 - ip) < OPTIMAL_ML) {
+            int correction;
+            int new_ml = ml;
+            if (new_ml > OPTIMAL_ML) new_ml = OPTIMAL_ML;
+            if (ip + new_ml > start2 + ml2 - MINMATCH) new_ml = (int)(start2 - ip) + ml2 - MINMATCH;
+            correction = new_ml - (int)(start2 - ip);
+            if (correction > 0) {
+                start2 += correction;
+                ref2 += correction;
+                ml2 -= correction;
+            }
+        }
+        /* Now, we have start2 = ip+new_ml, with new_ml = min(ml, OPTIMAL_ML=18) */
+
+        if (start2 + ml2 <= mflimit) {
+            ml3 = LZ4HC_InsertAndGetWiderMatch(ctx,
+                start2 + ml2 - 3, start2, matchlimit, ml2, &ref3, &start3,
+                maxNbAttempts, patternAnalysis, 0, dict, favorCompressionRatio);
+        }
+        else {
+            ml3 = ml2;
+        }
+
+        if (ml3 == ml2) {  /* No better match => encode ML1 and ML2 */
+            /* ip & ref are known; Now for ml */
+            if (start2 < ip + ml)  ml = (int)(start2 - ip);
+            /* Now, encode 2 sequences */
+            optr = op;
+            if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ref, limit, oend)) goto _dest_overflow;
+            ip = start2;
+            optr = op;
+            if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml2, ref2, limit, oend)) {
+                ml = ml2;
+                ref = ref2;
+                goto _dest_overflow;
+            }
+            continue;
+        }
+
+        if (start3 < ip + ml + 3) {  /* Not enough space for match 2 : remove it */
+            if (start3 >= (ip + ml)) {  /* can write Seq1 immediately ==> Seq2 is removed, so Seq3 becomes Seq1 */
+                if (start2 < ip + ml) {
+                    int correction = (int)(ip + ml - start2);
+                    start2 += correction;
+                    ref2 += correction;
+                    ml2 -= correction;
+                    if (ml2 < MINMATCH) {
+                        start2 = start3;
+                        ref2 = ref3;
+                        ml2 = ml3;
+                    }
+                }
+
+                optr = op;
+                if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ref, limit, oend)) goto _dest_overflow;
+                ip = start3;
+                ref = ref3;
+                ml = ml3;
+
+                start0 = start2;
+                ref0 = ref2;
+                ml0 = ml2;
+                goto _Search2;
+            }
+
+            start2 = start3;
+            ref2 = ref3;
+            ml2 = ml3;
+            goto _Search3;
+        }
+
+        /*
+        * OK, now we have 3 ascending matches;
+        * let's write the first one ML1.
+        * ip & ref are known; Now decide ml.
+        */
+        if (start2 < ip + ml) {
+            if ((start2 - ip) < OPTIMAL_ML) {
+                int correction;
+                if (ml > OPTIMAL_ML) ml = OPTIMAL_ML;
+                if (ip + ml > start2 + ml2 - MINMATCH) ml = (int)(start2 - ip) + ml2 - MINMATCH;
+                correction = ml - (int)(start2 - ip);
+                if (correction > 0) {
+                    start2 += correction;
+                    ref2 += correction;
+                    ml2 -= correction;
+                }
+            }
+            else {
+                ml = (int)(start2 - ip);
+            }
+        }
+        optr = op;
+        if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ref, limit, oend)) goto _dest_overflow;
+
+        /* ML2 becomes ML1 */
+        ip = start2; ref = ref2; ml = ml2;
+
+        /* ML3 becomes ML2 */
+        start2 = start3; ref2 = ref3; ml2 = ml3;
+
+        /* let's find a new ML3 */
+        goto _Search3;
+    }
+
+_last_literals:
+    /* Encode Last Literals */
+    {   size_t lastRunSize = (size_t)(iend - anchor);  /* literals */
+    size_t llAdd = (lastRunSize + 255 - RUN_MASK) / 255;
+    size_t const totalSize = 1 + llAdd + lastRunSize;
+    if (limit == fillOutput) oend += LASTLITERALS;  /* restore correct value */
+    if (limit && (op + totalSize > oend)) {
+        if (limit == limitedOutput) return 0;
+        /* adapt lastRunSize to fill 'dest' */
+        lastRunSize = (size_t)(oend - op) - 1 /*token*/;
+        llAdd = (lastRunSize + 256 - RUN_MASK) / 256;
+        lastRunSize -= llAdd;
+    }
+    DEBUGLOG(6, "Final literal run : %i literals", (int)lastRunSize);
+    ip = anchor + lastRunSize;  /* can be != iend if limit==fillOutput */
+
+    if (lastRunSize >= RUN_MASK) {
+        size_t accumulator = lastRunSize - RUN_MASK;
+        *op++ = (RUN_MASK << ML_BITS);
+        for (; accumulator >= 255; accumulator -= 255) *op++ = 255;
+        *op++ = (BYTE)accumulator;
+    }
+    else {
+        *op++ = (BYTE)(lastRunSize << ML_BITS);
+    }
+    memcpy(op, anchor, lastRunSize);
+    op += lastRunSize;
+    }
+
+    /* End */
+    *srcSizePtr = (int)(((const char*)ip) - source);
+    return (int)(((char*)op) - dest);
+
+_dest_overflow:
+    if (limit == fillOutput) {
+        /* Assumption : ip, anchor, ml and ref must be set correctly */
+        size_t const ll = (size_t)(ip - anchor);
+        size_t const ll_addbytes = (ll + 240) / 255;
+        size_t const ll_totalCost = 1 + ll_addbytes + ll;
+        BYTE* const maxLitPos = oend - 3; /* 2 for offset, 1 for token */
+        DEBUGLOG(6, "Last sequence overflowing");
+        op = optr;  /* restore correct out pointer */
+        if (op + ll_totalCost <= maxLitPos) {
+            /* ll validated; now adjust match length */
+            size_t const bytesLeftForMl = (size_t)(maxLitPos - (op + ll_totalCost));
+            size_t const maxMlSize = MINMATCH + (ML_MASK - 1) + (bytesLeftForMl * 255);
+            assert(maxMlSize < INT_MAX); assert(ml >= 0);
+            if ((size_t)ml > maxMlSize) ml = (int)maxMlSize;
+            if ((oend + LASTLITERALS) - (op + ll_totalCost + 2) - 1 + ml >= MFLIMIT) {
+                LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ref, notLimited, oend);
+            }
+        }
+        goto _last_literals;
+    }
+    /* compression failed */
+    return 0;
+}
+#endif
+
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+static int (*LZ4HC_compress_hashChain_fp)(
+    LZ4HC_CCtx_internal* const ctx,
+    const char* const source,
+    char* const dest,
+    int* srcSizePtr,
+    int const maxOutputSize,
+    int maxNbAttempts,
+    const limitedOutput_directive limit,
+    const dictCtx_directive dict) = LZ4HC_compress_hashChain;
+
+// function pointer to variants of the LZ4HC_compress_hashChain() function, used for integration
+// with the dynamic dispatcher. 
+#endif
+
+
 static int LZ4HC_compress_optimal( LZ4HC_CCtx_internal* ctx,
     const char* const source, char* dst,
     int* srcSizePtr, int dstCapacity,
@@ -1018,9 +1286,21 @@ LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal (
         int result;
 
         if (cParam.strat == lz4hc) {
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+            result = LZ4HC_compress_hashChain_fp(ctx,
+                                src, dst, srcSizePtr, dstCapacity,
+                                cParam.nbSearches, limit, dict);
+#else
+            result = AOCL_LZ4HC_compress_hashChain(ctx,
+                                src, dst, srcSizePtr, dstCapacity,
+                                cParam.nbSearches, limit, dict);
+#endif
+#else
             result = LZ4HC_compress_hashChain(ctx,
                                 src, dst, srcSizePtr, dstCapacity,
                                 cParam.nbSearches, limit, dict);
+#endif
         } else {
             assert(cParam.strat == lz4opt);
             result = LZ4HC_compress_optimal(ctx,
@@ -1797,6 +2077,7 @@ static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
     if (optOff)
     {
         LZ4HC_countBack_fp = LZ4HC_countBack;
+        LZ4HC_compress_hashChain_fp = LZ4HC_compress_hashChain;
     }
     else
     {
@@ -1808,6 +2089,7 @@ static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
         case 3://AVX2 version
         default://AVX512 and other versions
             LZ4HC_countBack_fp = AOCL_LZ4HC_countBack;
+            LZ4HC_compress_hashChain_fp = AOCL_LZ4HC_compress_hashChain;
             break;
         }
     }

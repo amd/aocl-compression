@@ -101,13 +101,14 @@ ADDITIONAL LIBRARY BUILD OPTIONS
 --------------------------------
 You can use the following additional options for configuring your build.
 
-Option                           |  Description
----------------------------------|----------------------------------------------------------------------------------------
-AOCL_LZ4_OPT_PREFETCH_BACKWARDS  |	Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
-SNAPPY_MATCH_SKIP_OPT	         |	Enable Snappy match skipping optimization (Disabled by default)
-LZ4_FRAME_FORMAT_SUPPORT         |	Enable building LZ4 with Frame format and API support (Disabled by default)
-BUILD_DOC                        |	Build documentation for this library (Defult value is off)
-GTEST_ENABLE                     |      Enable gtest based test suite (Disabled by default)
+Option                              |  Description
+------------------------------------|----------------------------------------------------------------------------------------
+AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |	Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
+SNAPPY_MATCH_SKIP_OPT	            |	Enable Snappy match skipping optimization (Disabled by default)
+LZ4_FRAME_FORMAT_SUPPORT            |	Enable building LZ4 with Frame format and API support (Disabled by default)
+AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
+BUILD_DOC                           |	Build documentation for this library (Defult value is off)
+GTEST_ENABLE                        |  Enable gtest based test suite (Disabled by default)
 
 
 RUNNING AOCL COMPRESSION TEST BENCH ON LINUX
