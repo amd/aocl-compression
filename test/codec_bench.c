@@ -121,6 +121,11 @@ INTP get_codec_method_level(CHAR *str,
     if (tok)
     {
         codec_bench_handle->codec_level = atoi(tok);
+        if ((codec_bench_handle->codec_level < 
+             codec_list[codec_bench_handle->codec_method].lower_level) ||
+            (codec_bench_handle->codec_level > 
+             codec_list[codec_bench_handle->codec_method].upper_level))
+            return -2;
         tok = strtok_r(save, ":", &save);
         if (tok)
         {
