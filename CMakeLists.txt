@@ -218,25 +218,24 @@ set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHA
 endif()
 
 if (BUILD_DOC)
-	find_package(Doxygen)
+	find_package(Doxygen 1.9.6)
 	set(W_DIR "${CMAKE_CURRENT_SOURCE_DIR}/docs")
 	if(NOT (DOXYGEN_FOUND))
-		message(STATUS "Doxygen is not installed")
 		if (WIN32)
-			set(DOXYGEN "${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen-1.9.5/doxygen.exe")
+			set(DOXYGEN "${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen-1.9.6/doxygen.exe")
 			if(NOT (EXISTS ${DOXYGEN}))
 				message(STATUS "so downloading doxygen executables")
-				file(DOWNLOAD https://www.doxygen.nl/files/doxygen-1.9.5.windows.x64.bin.zip ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.zip
+				file(DOWNLOAD https://github.com/doxygen/doxygen/releases/download/Release_1_9_6/doxygen-1.9.6.windows.x64.bin.zip ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.zip
 						SHOW_PROGRESS )
-				execute_process(COMMAND powershell Expand-Archive ./doxygen.zip ./doxygen-1.9.5 -Force
+				execute_process(COMMAND powershell Expand-Archive ./doxygen.zip ./doxygen-1.9.6 -Force
 						WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/)
 				file(REMOVE ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.zip)
 			endif()
 		elseif (UNIX)
-			set(DOXYGEN "${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen-1.9.5/bin/doxygen")
+			set(DOXYGEN "${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen-1.9.6/bin/doxygen")
 			if(NOT (EXISTS ${DOXYGEN}))
 				message(STATUS "so downloading doxygen executables")
-				file(DOWNLOAD https://www.doxygen.nl/files/doxygen-1.9.5.linux.bin.tar.gz ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.gz
+				file(DOWNLOAD https://github.com/doxygen/doxygen/releases/download/Release_1_9_6/doxygen-1.9.6.linux.bin.tar.gz ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.gz
 						SHOW_PROGRESS )
 				execute_process(COMMAND tar -xf doxygen.gz
 						WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
