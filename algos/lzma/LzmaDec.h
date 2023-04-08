@@ -246,4 +246,11 @@ void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
 
 EXTERN_C_END
 
+#ifdef AOCL_LZMA_UNIT_TEST
+/* Move these APIs within the scope of gtest once the framework is ready */
+EXTERN_C_BEGIN
+void Test_Normal_Literal_Dec_Ref(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
+void Test_Normal_Literal_Dec_Opt(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
+EXTERN_C_END
+#endif
 #endif

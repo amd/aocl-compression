@@ -10,16 +10,6 @@
 
 #include "7zTypes.h"
 
-#define AOCL_LZMA_OPT
-
-//#define AOCL_LZMA_UNIT_TEST //DO NOT ENABLE THIS IN PRODUCTION CODE! 
-#ifdef AOCL_LZMA_UNIT_TEST
-// Enabling this will allow code paths to reach some of the hard to reach sections in the code
-#define AOCL_EXTEND_CODE_COVERAGE //DO NOT ENABLE THIS IN PRODUCTION CODE! 
-// Enables asserts for debugging
-//#define AOCL_LZMA_DEBUG 1 //DO NOT ENABLE THIS IN PRODUCTION CODE! 
-#endif
-
 #if defined(AOCL_LZMA_DEBUG) && (AOCL_LZMA_DEBUG>=1)
 #  include <assert.h>
 #else

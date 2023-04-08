@@ -1,8 +1,22 @@
 /* 7zTypes.h -- Basic types
 2022-04-01 : Igor Pavlov : Public domain */
 
+/**
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ */
+
 #ifndef __7Z_TYPES_H
 #define __7Z_TYPES_H
+
+#define AOCL_LZMA_OPT
+
+//#define AOCL_LZMA_UNIT_TEST //DO NOT ENABLE THIS IN PRODUCTION CODE! 
+#ifdef AOCL_LZMA_UNIT_TEST
+// Enabling this will allow code paths to reach some of the hard to reach sections in the code
+#define AOCL_EXTEND_CODE_COVERAGE //DO NOT ENABLE THIS IN PRODUCTION CODE! 
+// Enables asserts for debugging
+//#define AOCL_LZMA_DEBUG 1 //DO NOT ENABLE THIS IN PRODUCTION CODE! 
+#endif
 
 #ifdef _WIN32
 /* #include <windows.h> */
