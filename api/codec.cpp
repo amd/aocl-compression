@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -289,6 +289,11 @@ CHAR *aocl_zstd_setup(INTP optOff, INTP optLevel,
 {
     zstd_params_t *zstd_params = (zstd_params_t *) 
     malloc(sizeof(zstd_params_t));
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    aocl_setup_zstd_encode(optOff, optLevel, insize, level, windowLog);
+    aocl_setup_zstd_decode(optOff, optLevel, insize, level, windowLog);
+#endif
     if (!zstd_params)
 		return NULL;
     zstd_params->cctx = ZSTD_createCCtx();
