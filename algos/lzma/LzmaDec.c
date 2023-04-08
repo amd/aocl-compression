@@ -43,6 +43,7 @@
 #ifndef _LZMA_DEC_OPT
 
 #define kNumMoveBits 5
+#define kBitModelOffset ((1<<kNumMoveBits)-1)
 
 /* if range < 2^24 normalize range and code.
 * Set LSB 8 bits of code to next compressed byte value from stream */
@@ -105,8 +106,85 @@
   probLit = prob + (offs + bit + symbol); \
   GET_BIT2(probLit, symbol, offs ^= bit; , ;)
 
-#endif // _LZMA_DEC_OPT
+#ifdef AOCL_LZMA_OPT
+/* Asm code:
+ * code -= bound; bool CF = (tmpCode < bound);
+ * range = (!CF) ? range : bound; //cmovae  range, t0
+ * code = (CF) ? tmpCode : code; //cmovb   cod, t1
+ * int tmpProb = (tmpFlag) ? kBitModelTotal : kBitModelOffset;*/
+#define AOCL_GET_BIT2(p, i, A0, A1) \
+    ttt = *(p); \
+    NORMALIZE; \
+    tmpFlag = 0; \
+    tmpProb = kBitModelOffset; \
+    kBitModelTotal_reg = kBitModelTotal; \
+    tmpCode = code; \
+    bound = (range >> kNumBitModelTotalBits) * (UInt32)ttt; \
+    range -= bound; \
+    /* % 0: range, % 1 : code, % 2 : tmpFlag, % 3 : tmpProb, % 4 : bound, % 5 : tmpCode, % 6 : kBitModelTotal_reg */ \
+    __asm__( \
+        "subl %4, %1;" \
+        "cmovbl %4, %0;" \
+        "cmovbl %5, %1;" \
+        "cmovbl %6, %3;" \
+        "sbbl %2, %2;" \
+        :"+&r"(range), "+&r"(code), "+&r"(tmpFlag), "+&r"(tmpProb) \
+        : "r"(bound), "r"(tmpCode), "r"(kBitModelTotal_reg) \
+        : "cc" \
+    ); \
+    *(p) = (CLzmaProb)(ttt + ((tmpProb - ttt) >> kNumMoveBits)); \
+    tmpFlag = ~tmpFlag; \
+    i = (i + i) - tmpFlag; \
+    if (!tmpFlag) { A0; } \
+    else { A1; }
 
+/* If AOCL_TREE_GET_BIT is called multiple times in succession,
+* each call changes i to (i<<1)+(0 or 1). So, subsequent call
+* will use a probs context model located at the new position */
+#define AOCL_TREE_GET_BIT(probs, i) { AOCL_GET_BIT2(probs + i, i, ;, ;); }
+
+#define AOCL_NORMAL_LITER_DEC AOCL_TREE_GET_BIT(prob, symbol)
+
+#define AOCL_MATCHED_LITER_DEC \
+  matchByte += matchByte; \
+  bit = offs; \
+  offs &= matchByte; \
+  probLit = prob + (offs + bit + symbol); \
+  AOCL_GET_BIT2(probLit, symbol, offs ^= bit; , ;)
+
+/* Similar to AOCL_GET_BIT2, without 'i' update
+#define REV_BIT_PI(p, A0, A1) IF_BIT_0(p) \
+  { UPDATE_0(p); A0; } else \
+  { UPDATE_1(p); A1; } */
+#define AOCL_REV_BIT_PI(p, A0, A1) \
+    ttt = *(p); \
+    NORMALIZE; \
+    tmpFlag = 0; \
+    tmpProb = kBitModelOffset; \
+    kBitModelTotal_reg = kBitModelTotal; \
+    tmpCode = code; \
+    bound = (range >> kNumBitModelTotalBits) * (UInt32)ttt; \
+    range -= bound; \
+    __asm__( \
+        "subl %4, %1;" \
+        "cmovbl %4, %0;" \
+        "cmovbl %5, %1;" \
+        "cmovbl %6, %3;" \
+        "sbbl %2, %2;" \
+        :"+&r"(range), "+&r"(code), "+&r"(tmpFlag), "+&r"(tmpProb) \
+        : "r"(bound), "r"(tmpCode), "r"(kBitModelTotal_reg) \
+        : "cc" \
+    ); \
+    *(p) = (CLzmaProb)(ttt + ((tmpProb - ttt) >> kNumMoveBits)); \
+    if (tmpFlag) { A0; } \
+    else { A1; }
+
+#define AOCL_REV_BIT(p, i, A0, A1)  AOCL_REV_BIT_PI(p + i, A0, A1)
+#define AOCL_REV_BIT_VAR(  p, i, m) AOCL_REV_BIT(p, i, i += m; m += m, m += m; i += m; )
+#define AOCL_REV_BIT_CONST(p, i, m) AOCL_REV_BIT(p, i, i += m;       , i += m * 2; )
+#define AOCL_REV_BIT_LAST( p, i, m) AOCL_REV_BIT(p, i, i -= m        , ; )
+#endif
+#endif // _LZMA_DEC_OPT
 
 #define NORMALIZE_CHECK if (range < kTopValue) { if (buf >= bufLimit) return DUMMY_INPUT_EOF; range <<= 8; code = (code << 8) | (*buf++); }
 
@@ -286,6 +364,7 @@ int MY_FAST_CALL LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* bufLimit
 
 #else
 
+#if defined(AOCL_DYNAMIC_DISPATCHER) || !defined(AOCL_LZMA_OPT)
 static
 int MY_FAST_CALL LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* bufLimit)
 {
@@ -687,8 +766,419 @@ int MY_FAST_CALL LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* bufLimit
     return SZ_OK;
 }
 #endif
+#endif
 
+#ifdef AOCL_LZMA_OPT
+/*
+* @brief: Runs LZMA decoding 
+* 
+* Changes wrt LZMA_DECODE_REAL:
+*   + NORMAL_LITER_DEC, MATCHED_LITER_DEC, TREE_GET_BIT, REV_BIT_* 
+*     implemented using conditional moves via inline assembly
+*   + Call AOCL_NORMAL_LITER_DEC, AOCL_MATCHED_LITER_DEC, AOCL_TREE_GET_BIT, AOCL_REV_BIT_
+*     for these macros instead
+*/
+static
+int MY_FAST_CALL AOCL_LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* bufLimit)
+{
+    CLzmaProb* probs = GET_PROBS;
+    unsigned state = (unsigned)p->state;
+    UInt32 rep0 = p->reps[0], rep1 = p->reps[1], rep2 = p->reps[2], rep3 = p->reps[3];
+    unsigned pbMask = ((unsigned)1 << (p->prop.pb)) - 1;
+    unsigned lc = p->prop.lc;
+    unsigned lpMask = ((unsigned)0x100 << p->prop.lp) - ((unsigned)0x100 >> lc);
 
+    Byte* dic = p->dic;
+    SizeT dicBufSize = p->dicBufSize;
+    SizeT dicPos = p->dicPos;
+
+    UInt32 processedPos = p->processedPos;
+    UInt32 checkDicSize = p->checkDicSize;
+    unsigned len = 0;
+
+    const Byte* buf = p->buf;
+    UInt32 range = p->range;
+    UInt32 code = p->code;
+
+    /* State transitions are as follows:
+    *           next state
+    * cur   packet LIT MATCH REP SREP
+    * state
+    * 0            0   7     8   9
+    * 1            0   7     8   9
+    * 2            0   7     8   9
+    * 3            0   7     8   9
+    * 4            1   7     8   9
+    * 5            2   7     8   9
+    * 6            3   7     8   9
+    * 7            4   10    11  11
+    * 8            5   10    11  11
+    * 9            6   10    11  11
+    * 10           4   10    11  11
+    * 11           5   10    11  11 */
+    do
+    {
+        CLzmaProb* prob;
+        UInt32 bound;
+        unsigned ttt, tmpFlag, tmpCode, tmpProb, kBitModelTotal_reg;
+        unsigned posState = CALC_POS_STATE(processedPos, pbMask);
+
+        prob = probs + IsMatch + COMBINED_PS_STATE;
+        IF_BIT_0(prob)
+        {
+            unsigned symbol; //extract literal byte here
+            UPDATE_0(prob); //code 0 + literal
+            prob = probs + Literal;
+            if (processedPos != 0 || checkDicSize != 0)
+                prob += (UInt32)3 * ((((processedPos << 8) + dic[(dicPos == 0 ? dicBufSize : dicPos) - 1]) & lpMask) << lc);
+            processedPos++;
+
+            if (state < kNumLitStates) //cur= LIT, prev=LIT
+            {
+                state -= (state < 4) ? state : 3;
+                symbol = 1; //start with 1 and build byte bitwise in each of the _LITER_DEC calls
+                /* NORMAL_LITER_DEC is called 8 times in succession to decode a byte fully.
+                 * Each call adds an extra bit to symbol. As symbol can range from [0-255],
+                 * we can have 256 probs context models. */
+#ifdef _LZMA_SIZE_OPT
+                do { AOCL_NORMAL_LITER_DEC } while (symbol < 0x100);
+#else
+                    AOCL_NORMAL_LITER_DEC
+                    AOCL_NORMAL_LITER_DEC
+                    AOCL_NORMAL_LITER_DEC
+                    AOCL_NORMAL_LITER_DEC
+                    AOCL_NORMAL_LITER_DEC
+                    AOCL_NORMAL_LITER_DEC
+                    AOCL_NORMAL_LITER_DEC
+                    AOCL_NORMAL_LITER_DEC
+#endif
+            }
+            else //cur= LIT, prev=Non-LIT
+            {
+                unsigned matchByte = dic[dicPos - rep0 + (dicPos < rep0 ? dicBufSize : 0)];
+                unsigned offs = 0x100;
+                state -= (state < 10) ? 3 : 6;
+                symbol = 1;
+#ifdef _LZMA_SIZE_OPT
+                do
+                {
+                    unsigned bit;
+                    CLzmaProb* probLit;
+                    AOCL_MATCHED_LITER_DEC
+                } while (symbol < 0x100);
+#else
+                    {
+                        unsigned bit;
+                        CLzmaProb* probLit;
+                        AOCL_MATCHED_LITER_DEC
+                        AOCL_MATCHED_LITER_DEC
+                        AOCL_MATCHED_LITER_DEC
+                        AOCL_MATCHED_LITER_DEC
+                        AOCL_MATCHED_LITER_DEC
+                        AOCL_MATCHED_LITER_DEC
+                        AOCL_MATCHED_LITER_DEC
+                        AOCL_MATCHED_LITER_DEC
+                    }
+#endif
+            }
+
+            dic[dicPos++] = (Byte)symbol; //add symbol to decompressed dictionary
+            continue; //done. go to next packet
+        }
+
+        {
+            UPDATE_1(prob); //code 1
+            prob = probs + IsRep + state;
+            IF_BIT_0(prob)
+            {
+                UPDATE_0(prob); //code 10 + len + dis (match)
+                state += kNumStates; //just an indicator for 'match' state to check later on
+                prob = probs + LenCoder;
+            }
+      else
+      {
+      UPDATE_1(prob); //code 11 (srep or rep)
+      prob = probs + IsRepG0 + state;
+      IF_BIT_0(prob)
+      {
+          UPDATE_0(prob); //code 110 (srep or rep0)
+          prob = probs + IsRep0Long + COMBINED_PS_STATE;
+          IF_BIT_0(prob)
+          {
+              UPDATE_0(prob); //code 1100 (srep)
+
+              // that case was checked before with kBadRepCode
+              // if (checkDicSize == 0 && processedPos == 0) { len = kMatchSpecLen_Error_Data + 1; break; }
+              // The caller doesn't allow (dicPos == limit) case here
+              // so we don't need the following check:
+              // if (dicPos == limit) { state = state < kNumLitStates ? 9 : 11; len = 1; break; }
+
+              //copy single byte from dictionary at srep position
+              dic[dicPos] = dic[dicPos - rep0 + (dicPos < rep0 ? dicBufSize : 0)];
+              dicPos++;
+              processedPos++;
+              state = state < kNumLitStates ? 9 : 11;
+              continue; //done. go to next packet
+          }
+          UPDATE_1(prob); //code 1101 (rep0)
+      }
+        else
+        {
+        UInt32 distance; //get distance from rep values
+        UPDATE_1(prob);  //code 111 (rep1-3)
+        prob = probs + IsRepG1 + state;
+        IF_BIT_0(prob)
+        {
+            UPDATE_0(prob); //code 1110 (rep1)
+            distance = rep1;
+        }
+          else
+          {
+          UPDATE_1(prob); //code 1111 (rep2-3)
+          prob = probs + IsRepG2 + state;
+          IF_BIT_0(prob)
+          {
+              UPDATE_0(prob); //code 11110 (rep2)
+              distance = rep2;
+          }
+            else
+            {
+            UPDATE_1(prob); //code 11111 (rep3)
+            distance = rep3;
+            rep3 = rep2; //shift rep queue
+            }
+            rep2 = rep1;
+          }
+          rep1 = rep0;
+          rep0 = distance;
+        }
+        state = state < kNumLitStates ? 8 : 11;
+        prob = probs + RepLenCoder;
+      }
+
+      //Process len bits for Match or Rep
+#ifdef _LZMA_SIZE_OPT
+      {
+      unsigned lim, offset;
+      CLzmaProb* probLen = prob + LenChoice;
+      IF_BIT_0(probLen)
+      {
+          UPDATE_0(probLen);
+          probLen = prob + LenLow + GET_LEN_STATE;
+          offset = 0;
+          lim = (1 << kLenNumLowBits);
+      }
+        else
+        {
+        UPDATE_1(probLen);
+        probLen = prob + LenChoice2;
+        IF_BIT_0(probLen)
+        {
+            UPDATE_0(probLen);
+            probLen = prob + LenLow + GET_LEN_STATE + (1 << kLenNumLowBits);
+            offset = kLenNumLowSymbols;
+            lim = (1 << kLenNumLowBits);
+        }
+          else
+          {
+          UPDATE_1(probLen);
+          probLen = prob + LenHigh;
+          offset = kLenNumLowSymbols * 2;
+          lim = (1 << kLenNumHighBits);
+          }
+        }
+        TREE_DECODE(probLen, lim, len);
+        len += offset;
+      }
+#else
+      {
+          CLzmaProb* probLen = prob + LenChoice;
+          IF_BIT_0(probLen)
+          {
+              UPDATE_0(probLen); //code 0 len
+              probLen = prob + LenLow + GET_LEN_STATE;
+              //Decompress 3 len bits representing length in range[0-7]
+              len = 1;
+              AOCL_TREE_GET_BIT(probLen, len);
+              AOCL_TREE_GET_BIT(probLen, len);
+              AOCL_TREE_GET_BIT(probLen, len);
+              len -= 8; // len obtained above is in range [8-15]. -8 to bring it down to [0-7]
+          }
+        else
+        {
+        UPDATE_1(probLen); //code 1x len
+        probLen = prob + LenChoice2;
+        IF_BIT_0(probLen)
+        {
+            UPDATE_0(probLen); //code 10 len
+            probLen = prob + LenLow + GET_LEN_STATE + (1 << kLenNumLowBits);
+            /* Decompress 3 len bits representing length in range[8-15]
+            * Same context prob used for all 3 bits */
+            len = 1;
+            AOCL_TREE_GET_BIT(probLen, len);
+            AOCL_TREE_GET_BIT(probLen, len);
+            AOCL_TREE_GET_BIT(probLen, len);
+        }
+          else
+          {
+          UPDATE_1(probLen); //code 11 len
+          probLen = prob + LenHigh;
+          //Decompress 8 len bits representing length in range[16-271]
+          TREE_DECODE(probLen, (1 << kLenNumHighBits), len); //Do 8 TREE_GET_BIT() calls for 8-bit len
+          len += kLenNumLowSymbols * 2; // len obtained above is in range [0-255]. Shift to [16-271]
+          }
+        }
+      }
+#endif
+      //Process distance bits for Match
+      if (state >= kNumStates) //if match, we need to decompress distance as well
+      {
+          UInt32 distance;
+          //prob context for distance is based on len as well: 0,1,2,>2
+          prob = probs + PosSlot +
+              ((len < kNumLenToPosStates ? len : kNumLenToPosStates - 1) << kNumPosSlotBits);
+          TREE_6_DECODE(prob, distance); //decompress 6 bit slot part
+          if (distance >= kStartPosModelIndex) //if slot range [4, max_dist] decompress remaining bits
+          {
+              unsigned posSlot = (unsigned)distance;
+              unsigned numDirectBits = (unsigned)(((distance >> 1) - 1));
+              distance = (2 | (distance & 1));
+              if (posSlot < kEndPosModelIndex) //distance range [4-127] direct bits only
+              {
+                  distance <<= numDirectBits;
+                  prob = probs + SpecPos;
+                  {
+                      UInt32 m = 1;
+                      distance++;
+                      do
+                      {
+                          AOCL_REV_BIT_VAR(prob, distance, m);
+                      } while (--numDirectBits);
+                      distance -= m;
+                  }
+              }
+              else //distance range [128, max_dist] direct bits + 4 align bits
+              {
+                  numDirectBits -= kNumAlignBits;
+                  do
+                  {
+                      NORMALIZE
+                          range >>= 1;
+
+                      {
+                          UInt32 t;
+                          code -= range;
+                          t = (0 - ((UInt32)code >> 31)); /* (UInt32)((Int32)code >> 31) */
+                          distance = (distance << 1) + (t + 1);
+                          code += range & t;
+                      }
+                      /*
+                      distance <<= 1;
+                      if (code >= range)
+                      {
+                        code -= range;
+                        distance |= 1;
+                      }
+                      */
+                  } while (--numDirectBits);
+                  prob = probs + Align;
+                  distance <<= kNumAlignBits;
+                  { //decompress remaining 4 align bits
+                      unsigned i = 1;
+                      AOCL_REV_BIT_CONST(prob, i, 1);
+                      AOCL_REV_BIT_CONST(prob, i, 2);
+                      AOCL_REV_BIT_CONST(prob, i, 4);
+                      AOCL_REV_BIT_LAST(prob, i, 8);
+                      distance |= i;
+                  }
+                  if (distance == (UInt32)0xFFFFFFFF)
+                  {
+                      len = kMatchSpecLenStart;
+                      state -= kNumStates;
+                      break;
+                  }
+              }
+          }
+
+          rep3 = rep2; // shift rep queue by 1 position. latest rep must be in rep0
+          rep2 = rep1;
+          rep1 = rep0;
+          rep0 = distance + 1;
+          state = (state < kNumStates + kNumLitStates) ? kNumLitStates : kNumLitStates + 3;
+          if (distance >= (checkDicSize == 0 ? processedPos : checkDicSize))
+          {
+              len += kMatchSpecLen_Error_Data + kMatchMinLen;
+              // len = kMatchSpecLen_Error_Data;
+              // len += kMatchMinLen;
+              break;
+          }
+      }
+
+      len += kMatchMinLen; // add offset 2 to len to bring to range [2-273]
+
+      {
+          SizeT rem;
+          unsigned curLen;
+          SizeT pos;
+
+          if ((rem = limit - dicPos) == 0)
+          {
+              /*
+              We stop decoding and return SZ_OK, and we can resume decoding later.
+              Any error conditions can be tested later in caller code.
+              For more strict mode we can stop decoding with error
+              // len += kMatchSpecLen_Error_Data;
+              */
+              break;
+          }
+
+          curLen = ((rem < len) ? (unsigned)rem : len);
+          pos = dicPos - rep0 + (dicPos < rep0 ? dicBufSize : 0);
+
+          processedPos += (UInt32)curLen;
+
+          len -= curLen;
+          if (curLen <= dicBufSize - pos)
+          {
+              Byte* dest = dic + dicPos;
+              ptrdiff_t src = (ptrdiff_t)pos - (ptrdiff_t)dicPos;
+              const Byte* lim = dest + curLen;
+              dicPos += (SizeT)curLen;
+              do
+                  *(dest) = (Byte) * (dest + src);
+              while (++dest != lim);
+          }
+          else
+          {
+              do
+              {
+                  dic[dicPos++] = dic[pos];
+                  if (++pos == dicBufSize)
+                      pos = 0;
+              } while (--curLen != 0);
+          }
+      }
+        }
+    } while (dicPos < limit && buf < bufLimit);
+
+    NORMALIZE;
+
+    p->buf = buf;
+    p->range = range;
+    p->code = code;
+    p->remainLen = (UInt32)len; // & (kMatchSpecLen_Error_Data - 1); // we can write real length for error matches too.
+    p->dicPos = dicPos;
+    p->processedPos = processedPos;
+    p->reps[0] = rep0;
+    p->reps[1] = rep1;
+    p->reps[2] = rep2;
+    p->reps[3] = rep3;
+    p->state = (UInt32)state;
+    if (len >= kMatchSpecLen_Error_Data)
+        return SZ_ERROR_DATA;
+    return SZ_OK;
+}
+#endif
 
 static void MY_FAST_CALL LzmaDec_WriteRem(CLzmaDec* p, SizeT limit)
 {
@@ -743,6 +1233,9 @@ We use early check of (RangeCoder:Code) over kBadRepCode to simplify main decodi
 #error Stop_Compiling_Bad_LZMA_Check
 #endif
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+int (*Lzma_Decode_Real_fp)(CLzmaDec* p, SizeT limit, const Byte* bufLimit) = LZMA_DECODE_REAL;
+#endif
 
 /*
 LzmaDec_DecodeReal2():
@@ -768,13 +1261,20 @@ static int MY_FAST_CALL LzmaDec_DecodeReal2(CLzmaDec* p, SizeT limit, const Byte
             limit = p->dicPos + rem;
     }
     {
+#ifdef AOCL_LZMA_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+        int res = Lzma_Decode_Real_fp(p, limit, bufLimit);
+#else
+        int res = AOCL_LZMA_DECODE_REAL(p, limit, bufLimit);
+#endif
+#else
         int res = LZMA_DECODE_REAL(p, limit, bufLimit);
+#endif
         if (p->checkDicSize == 0 && p->processedPos >= p->prop.dicSize)
             p->checkDicSize = p->prop.dicSize;
         return res;
     }
 }
-
 
 
 typedef enum
@@ -1435,11 +1935,53 @@ SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
     return res;
 }
 
-
 #ifdef AOCL_DYNAMIC_DISPATCHER
+static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
+{
+    if (optOff)
+    {
+        //C version
+        Lzma_Decode_Real_fp = LZMA_DECODE_REAL;
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case 0://C version
+        case 1://SSE version
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            Lzma_Decode_Real_fp = AOCL_LZMA_DECODE_REAL;
+            break;
+        }
+    }
+}
+
 void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog)
 {
-    //ToDo: Implement a new lzma decode API for setup
+    aocl_register_lzma_encode_fmv(optOff, optLevel);
+}
+#endif
+
+#ifdef AOCL_LZMA_UNIT_TEST
+/* Move these APIs within the scope of gtest once the framework is ready */
+void Test_Normal_Literal_Dec_Ref(const Byte* buf, UInt32* _range, UInt32* _code, CLzmaProb* prob, unsigned symbol) {
+    unsigned ttt;
+    UInt32 range = *_range, code = *_code;
+    UInt32 bound;
+    NORMAL_LITER_DEC;
+    *_range = range;
+    *_code = code;
+}
+
+void Test_Normal_Literal_Dec_Opt(const Byte* buf, UInt32* _range, UInt32* _code, CLzmaProb* prob, unsigned symbol) {
+    unsigned ttt, tmpFlag, tmpCode, tmpProb, kBitModelTotal_reg;
+    UInt32 range = *_range, code = *_code;
+    UInt32 bound;
+    AOCL_NORMAL_LITER_DEC;
+    *_range = range;
+    *_code = code;
 }
 #endif
