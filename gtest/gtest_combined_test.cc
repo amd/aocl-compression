@@ -50,10 +50,6 @@
 #include "utils/utils.h"
 #include <gtest/gtest.h>
 
-#include "lz4/lz4_gtest.cc"
-#include "snappy/snappy_gtest.cc"
-#include "zlib/zlib_gtest.cc"
-
 using namespace std;
 
 // sets the optLevel of a method, if the optLevel crosses
@@ -129,7 +125,14 @@ string create_filter(vector<string> &prog)
          num = s.size()==2 ? s[1]-'0' : 0;
          method = ZLIB;
       }
-      else if (regex_match(s, match, regex("--(lzma|zstd|bzip2|lz4hc)(:\\d)?")))
+      else if (regex_match(s, match, regex("--lzma(:\\d)?")))
+      {
+          filt += "LZMA*";
+          s = (string)match[1];
+          num = s.size() == 2 ? s[1] - '0' : 0;
+          method = LZMA;
+      }
+      else if (regex_match(s, match, regex("--(zstd|bzip2|lz4hc)(:\\d)?")))
       {
          cout << "Error: Current testing framework for the method ";
          cout << match[1] << " is currently unsupported\n";
@@ -148,7 +151,8 @@ string create_filter(vector<string> &prog)
          cout << "Supported methods are\n";
          cout << "1. lz4\n";
          cout << "2. snappy\n";
-         cout << "3. zlib\n\n";
+         cout << "3. zlib\n";
+         cout << "4. lzma\n\n";
          cout << "Examples:\n";
          cout << "gtest_combined_test --lz4\n";
          cout << "gtest_combined_test --snappy:2 --zlib:0\n";
@@ -176,6 +180,7 @@ int main(int argc, char *argv[])
       prog.push_back("--lz4");
       prog.push_back("--snappy");
       prog.push_back("--zlib");
+      prog.push_back("--lzma");
    }
 
    string filt = create_filter(prog);
