@@ -56,18 +56,6 @@ Note: When using cmake with version lesser than 3.15, `-B` option is not support
 so the build folder needs to be created manually.
 The option `-v` is also not supported in cmake with version lesser than 3.15.
 
-BUILD OPTIONS
--------------
-You can use the following additional options for configuring your build.
-
-Option                              |  Description
-------------------------------------|----------------------------------------------------------------------------------------
-AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |	Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
-SNAPPY_MATCH_SKIP_OPT	            |	Enable Snappy match skipping optimization (Disabled by default)
-LZ4_FRAME_FORMAT_SUPPORT            |	Enable building LZ4 with Frame format and API support (Disabled by default)
-AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
-BUILD_DOC                           |	Build documentation for this library (Defult value is off)
-GTEST_ENABLE                        |	Enable gtest based test suite (Disabled by default)
 
 BUILDING ON WINDOWS
 -------------------
@@ -107,6 +95,20 @@ BUILDING WITH VISUAL STUDIO IDE (command line)
 cmake .. -T ClangCl -G <installed Visual Studio version> && cmake --build . --config Release --target INSTALL
 ```
       Additional config and build options can be passed to the above command.
+
+ADDITIONAL LIBRARY BUILD OPTIONS
+--------------------------------
+You can use the following additional options for configuring your build.
+
+Option                              |  Description
+------------------------------------|----------------------------------------------------------------------------------------
+AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |  Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
+SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Disabled by default)
+LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Disabled by default)
+AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
+AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER  |  Enable 4-byte comparison for finding a potential better match candidate with Lazy2 compressor (Disabled by default)
+BUILD_DOC                           |  Build documentation for this library (Defult value is off)
+GTEST_ENABLE                        |  Enable gtest based test suite (Disabled by default)
 
 RUNNING AOCL COMPRESSION TEST BENCH ON LINUX
 --------------------------------------
@@ -156,27 +158,28 @@ Here, `-v` can be passed with a number like v<n> that can take values:
   
 To test and benchmark the performance of IPP's compression methods, use the
 test bench option `-c` along with other relevant options (as explained above).
-Currently, IPP's lz4, lz4hc and zlib methods are supported by the test bench.
+IPP's lz4, lz4hc, zlib and bzip2 methods are supported by the test bench.
 Check the following details for the exact steps:
 1. Set the library path environment variable (export LD_LIBRARY_PATH on
    Linux) to point to the installed IPP library path.
    Alternatively, one can also run vars.sh that comes along with the
    IPP installation to setup the environment variable.
-2. Download lz4-1.9.3 and zlib-1.2.11 source packages.
-3. Apply IPP's lz4 and zlib patch files as per below command:
+2. Download lz4-1.9.3, zlib-1.2.11 and bzip2-1.0.8 source packages.
+3. Apply IPP's patch files as per below command:
    `patch -p1 < path to corresponding patch file>`
 
-4. Build the patched IPP lz4 and zlib libraries as per the steps given
+4. Build the patched IPP lz4, zlib and bzip2 libraries as per the steps given
    in IPP's readme files present in the corresponding patch file
    locations for these compression methods.
 5. Set the library path environment variable (export LD_LIBRARY_PATH on
-   Linux) to point to patched IPP lz4 and zlib libraries.
+   Linux) to point to patched IPP lz4, zlib and bzip2 libraries.
 6. Run the test bench as given below to benchmark IPP library methods:
 ```
     aocl_compression_bench -a -p -c <input filename>
     aocl_compression_bench -elz4 -p -c <input filename>
     aocl_compression_bench -elz4hc -p -c <input filename>
     aocl_compression_bench -ezlib -p -c <input filename>
+    aocl_compression_bench -ebzip2 -p -c <input filename>
 ```
 
 RUNNING AOCL COMPRESSION TEST BENCH ON WINDOWS

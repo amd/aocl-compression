@@ -22,9 +22,9 @@ a single optimized library portable across different x86 CPU architectures.
 AOCL Compression framework is developed in C for Unix and Windows based systems.
 A test suite is provided for validation and performance benchmarking
 of the supported compression and decompression methods. The test suite also
-supports the benchmarking of IPP compression methods like lz4, lz4hc and zlib.
+supports the benchmarking of IPP compression methods like lz4, lz4hc, zlib and bzip2.
 
 CONTACTS
 --------
 AOCL Compression is developed and maintained by AMD.
-You can contact us on the email-id aoclsupport@amd.com.
+You can contact us on the email-id toolchainsupport@amd.com.

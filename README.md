@@ -103,11 +103,12 @@ You can use the following additional options for configuring your build.
 
 Option                              |  Description
 ------------------------------------|----------------------------------------------------------------------------------------
-AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |	Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
-SNAPPY_MATCH_SKIP_OPT	            |	Enable Snappy match skipping optimization (Disabled by default)
-LZ4_FRAME_FORMAT_SUPPORT            |	Enable building LZ4 with Frame format and API support (Disabled by default)
+AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |  Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
+SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Disabled by default)
+LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Disabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
-BUILD_DOC                           |	Build documentation for this library (Defult value is off)
+AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER  |  Enable 4-byte comparison for finding a potential better match candidate with Lazy2 compressor (Disabled by default)
+BUILD_DOC                           |  Build documentation for this library (Defult value is off)
 GTEST_ENABLE                        |  Enable gtest based test suite (Disabled by default)
 
 
@@ -204,4 +205,4 @@ TEST SUITE FOR INDIVIDUAL ALGORITHM API's
 CONTACTS
 --------
 AOCL Compression is developed and maintained by AMD.
-You can contact us on the email-id aoclsupport@amd.com.
+You can contact us on the email-id toolchainsupport@amd.com.
