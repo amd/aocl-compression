@@ -18,6 +18,40 @@
 //#define AOCL_LZMA_DEBUG 1 //DO NOT ENABLE THIS IN PRODUCTION CODE! 
 #endif
 
+/*
+*  LZMA_DLL_EXPORT :
+*  Enable exporting of functions when building a Windows DLL
+*  LZMALIB_VISIBILITY :
+*  Control library symbols visibility.
+*/
+#ifndef LZMALIB_VISIBILITY
+#  if defined(__GNUC__) && (__GNUC__ >= 4)
+#    define LZMALIB_VISIBILITY __attribute__ ((visibility ("default")))
+#  else
+#    define LZMALIB_VISIBILITY
+#  endif
+#endif
+#if defined(LZMA_DLL_EXPORT) && (LZMA_DLL_EXPORT==1)
+#  define LZMALIB_API __declspec(dllexport) LZMALIB_VISIBILITY
+#elif defined(LZMA_DLL_IMPORT) && (LZMA_DLL_IMPORT==1)
+#  define LZMALIB_API __declspec(dllimport) LZMALIB_VISIBILITY /* It isn't required but allows to generate better code, saving a function pointer load from the IAT and an indirect jump.*/
+#else
+#  define LZMALIB_API LZMALIB_VISIBILITY
+#endif
+
+#if (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__)
+#  define expect(expr,value) (__builtin_expect ((expr),(value)) )
+#else
+#  define expect(expr,value) (expr)
+#endif
+
+#ifndef likely
+#define likely(expr)     expect((expr) != 0, 1)
+#endif
+#ifndef unlikely
+#define unlikely(expr)   expect((expr) != 0, 0)
+#endif
+
 #ifdef _WIN32
 /* #include <windows.h> */
 #else

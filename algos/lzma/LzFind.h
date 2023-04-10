@@ -9,7 +9,6 @@
 #define __LZ_FIND_H
 
 #include "7zTypes.h"
-
 #if defined(AOCL_LZMA_DEBUG) && (AOCL_LZMA_DEBUG>=1)
 #  include <assert.h>
 #else
@@ -197,25 +196,25 @@ EXTERN_C_END
 #ifdef AOCL_LZMA_UNIT_TEST
 /* Move these APIs within the scope of gtest once the framework is ready */
 EXTERN_C_BEGIN
-void Test_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
+LZMALIB_API void Test_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
     Byte btMode, UInt32 fixedHashSize, UInt32 cyclicBufferSize, UInt32 hashSizeSum,
     size_t numRefs, UInt32 hashMask, int level);
 
-void Test_AOCL_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
+LZMALIB_API void Test_AOCL_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
     Byte btMode, UInt32 fixedHashSize, UInt32 cyclicBufferSize, UInt32 hashSizeSum,
     size_t numRefs, UInt32 hashMask, int level);
 
-int Test_AOCL_Find_Matching_Bytes_Len(int startLen, Byte* data1, Byte* data2, int limit);
+LZMALIB_API int Test_AOCL_Find_Matching_Bytes_Len(int startLen, Byte* data1, Byte* data2, int limit);
 
-UInt32 Test_Compute_Hash_Mask(UInt32 sz, UInt32 block_cnt);
+LZMALIB_API UInt32 Test_Compute_Hash_Mask(UInt32 sz, UInt32 block_cnt);
 
-UInt32 Test_Compute_Hash(Byte* cur, CMatchFinder* p);
+LZMALIB_API UInt32 Test_Compute_Hash(Byte* cur, CMatchFinder* p);
 
-UInt32 Test_Circular_Inc(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX);
+LZMALIB_API UInt32 Test_Circular_Inc(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX);
 
-UInt32 Test_Circular_Dec(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX);
+LZMALIB_API UInt32 Test_Circular_Dec(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX);
 
-UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 pos,
+LZMALIB_API UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 pos,
     const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
     UInt32 cutValue, UInt32* d, unsigned maxLen, int blockSz);
 EXTERN_C_END

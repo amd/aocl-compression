@@ -1,6 +1,10 @@
 /*  LzmaEnc.h -- LZMA Encoder
 2019-10-30 : Igor Pavlov : Public domain */
 
+/**
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ */
+
 #ifndef __LZMA_ENC_H
 #define __LZMA_ENC_H
 

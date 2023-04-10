@@ -63,19 +63,6 @@
 #ifdef AOCL_LZMA_OPT
 #define kEmptySonValue 0
 
-#if (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__)
-#  define expect(expr,value) (__builtin_expect ((expr),(value)) )
-#else
-#  define expect(expr,value) (expr)
-#endif
-
-#ifndef likely
-#define likely(expr)     expect((expr) != 0, 1)
-#endif
-#ifndef unlikely
-#define unlikely(expr)   expect((expr) != 0, 0)
-#endif
-
 // Change wrt HASH4_CALC: 3-byte fixed table not used. h3 not computed.
 #define AOCL_HASH4_CALC { \
   UInt32 temp = p->crc[cur[0]] ^ cur[1]; \
@@ -1267,30 +1254,32 @@ UInt32 * GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byt
 }
 
 #ifdef AOCL_LZMA_OPT
-// circular buffer pos inc. hcHead range must be: 1 <= hcHead <= HASH_CHAIN_MAX.
+// circular buffer pos inc. hcHead range must be: hcBase+1 <= hcHead <= hcBase+HASH_CHAIN_MAX.
 #define CIRC_INC_HEAD(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) \
 ((((hcHead + 1) % HASH_CHAIN_SLOT_SZ) != 0) ? (hcHead + 1) : (hcHead + 1 - HASH_CHAIN_MAX))
 
-// circular buffer pos dec. hcHead range must be: 1 <= hcHead <= HASH_CHAIN_MAX.
+// circular buffer pos dec. hcHead range must be: hcBase+1 <= hcHead <= hcBase+HASH_CHAIN_MAX.
 #define CIRC_DEC_HEAD(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) \
 ((((hcHead - 1) % HASH_CHAIN_SLOT_SZ) != 0) ? (hcHead - 1) : (hcHead + HASH_CHAIN_MAX - 1))
 
 // Compare bytes in data2 and data1 using UInt32 ptrs and __builtin_ctz
 #define AOCL_FIND_MATCHING_BYTES_LEN(len, limit, data1, data2, exit_point) \
-    UInt32 D = 0; \
-    UInt32 lenLimit4 = limit - 4; \
-    while (len <= lenLimit4) { \
-        UInt32 C1 = *(UInt32*)&data2[len]; \
-        UInt32 C2 = *(UInt32*)&data1[len]; \
-        D = C1 ^ C2; \
-        if (D) { \
-            int trail = __builtin_ctz(D); \
-            len += (trail >> 3); \
-            goto exit_point; \
+    if (likely(limit >= 4)) { \
+        UInt32 D = 0; \
+        UInt32 lenLimit4 = limit - 4; \
+        while (len <= lenLimit4) { \
+            UInt32 C1 = *(UInt32*)&data2[len]; \
+            UInt32 C2 = *(UInt32*)&data1[len]; \
+            D = C1 ^ C2; \
+            if (D) { \
+                int trail = __builtin_ctz(D); \
+                len += (trail >> 3); \
+                goto exit_point; \
+            } \
+            len += 4; \
         } \
-        len += 4; \
     } \
-    while (len != limit) { \
+    while (len < limit) { \
     if (data2[len] != data1[len]) \
         break; \
     len++; \

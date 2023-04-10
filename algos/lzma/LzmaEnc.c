@@ -2296,20 +2296,22 @@ if (len2 <= limit) \
 #ifdef AOCL_LZMA_OPT
 // Compare bytes in data2 and data1 using UInt32 ptrs and __builtin_ctz
 #define AOCL_FIND_MATCHING_BYTES_LEN(len, limit, data1, data2) { \
-UInt32 D = 0; \
-UInt32 lenLimit4 = limit - 4; \
-while (len <= lenLimit4) { \
-    UInt32 C1 = *(UInt32*)&data2[len]; \
-    UInt32 C2 = *(UInt32*)&data1[len]; \
-    D = C1 ^ C2; \
-    if (D) { \
-        int trail = __builtin_ctz(D); \
-        len += (trail >> 3); \
-        break; \
+if (likely(limit >= 4)) { \
+    UInt32 D = 0; \
+    UInt32 lenLimit4 = limit - 4; \
+    while (len <= lenLimit4) { \
+        UInt32 C1 = *(UInt32*)&data2[len]; \
+        UInt32 C2 = *(UInt32*)&data1[len]; \
+        D = C1 ^ C2; \
+        if (D) { \
+            int trail = __builtin_ctz(D); \
+            len += (trail >> 3); \
+            break; \
+        } \
+        len += 4; \
     } \
-    len += 4; \
 } \
-while (len != limit) { \
+while (len < limit) { \
     if (data2[len] != data1[len]) \
         break; \
     len++; \
