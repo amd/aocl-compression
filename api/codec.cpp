@@ -121,6 +121,11 @@ CHAR *aocl_lz4_setup(INTP optOff, INTP optLevel,
 #endif
 }
 
+#if defined(__GNUC__) && defined(__x86_64__)
+/* Changes in code alignment affects performance of LZ4 compress
+* functions. Aligning to 32-bytes boundary to fix this instability.*/
+__asm__(".p2align 5");
+#endif
 INT64 aocl_lz4_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                         UINTP outsize, UINTP level, UINTP, CHAR *)
 {
