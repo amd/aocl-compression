@@ -105,6 +105,7 @@ local  void check_match OF((deflate_state *s, IPos start, IPos match,
 #endif
 
 #ifdef AOCL_ZLIB_OPT
+uint32_t mask = 0xFFFFFFFF;
 void (*fill_window_fp) (deflate_state *s) = fill_window;
 void (*flush_pending_fp) (z_streamp strm) = flush_pending;
 #ifdef ZLIB_DEBUG
@@ -120,6 +121,10 @@ local block_state aocl_deflate_fast_v2(deflate_state *s, int flush);
 local block_state aocl_deflate_slow_v1(deflate_state *s, int flush);
 local block_state aocl_deflate_slow_v2(deflate_state *s, int flush);
 extern block_state deflate_medium(deflate_state *s, int flush);
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+block_state (*aocl_deflate_lvl1_fp)(deflate_state *s, int flush) = deflate_fast;
+extern block_state deflate_quick(deflate_state *s, int flush);
+#endif
 #endif
 
 /* ===========================================================================
@@ -175,7 +180,7 @@ local const config *config_table = configuration_table;
 local const config configuration_table_opt[10] = {
 /*      good lazy nice chain */
 /* 0 */ {0,    0,  0,    0, deflate_stored},  /* store only */
-/* 1 */ {4,    4,  8,    4, deflate_fast}, /* max speed, no lazy matches */
+/* 1 */ {4,    4,  8,    2, deflate_fast}, /* max speed, no lazy matches */
 /* 2 */ {4,    5, 16,    8, deflate_fast},
 /* 3 */ {4,    6, 32,   32, deflate_fast},
 
@@ -299,12 +304,18 @@ ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv(int optOff, int optLevel, int insi
         aocl_fill_window_fp = aocl_fill_window_v2;
         aocl_deflate_fast_fp = aocl_deflate_fast_v2;
         aocl_deflate_slow_fp = aocl_deflate_slow_v2;
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+        aocl_deflate_lvl1_fp = deflate_quick;
+#endif
     }
     else {
         aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_v1;
         aocl_fill_window_fp = aocl_fill_window_v1;
         aocl_deflate_fast_fp = aocl_deflate_fast_v1;
         aocl_deflate_slow_fp = aocl_deflate_slow_v1;
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+        aocl_deflate_lvl1_fp = deflate_fast;
+#endif
     }
 
     aocl_register_slide_hash_fmv(optOff, optLevel, slide_hash);
@@ -390,6 +401,19 @@ int ZEXPORT deflateInit2_(strm, level, method, windowBits, memLevel, strategy,
         return Z_STREAM_ERROR;
     }
     if (windowBits == 8) windowBits = 9;  /* until 256-byte window bug fixed */
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+    if (level == 1) {
+        windowBits = 13;
+    }
+#endif
+
+#ifdef AOCL_ZLIB_OPT
+if(level > 5)
+    mask = 0xFFFFFF; // for generating hash keys from 3 bytes
+else
+    mask = 0xFFFFFFFF; // for generating hash keys from 4 bytes
+#endif
+
     s = (deflate_state *) ZALLOC(strm, 1, sizeof(deflate_state));
     if (s == Z_NULL) return Z_MEM_ERROR;
     strm->state = (struct internal_state FAR *)s;
@@ -430,6 +454,11 @@ int ZEXPORT deflateInit2_(strm, level, method, windowBits, memLevel, strategy,
     s->l_buf = s->pending_buf + (1+sizeof(ush))*s->lit_bufsize;
 
     s->level = level;
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_2
+    if(s->level == 1)
+        s->strategy = Z_FIXED;
+    else
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE_2 */
     s->strategy = strategy;
     s->method = (Byte)method;
 
@@ -1278,6 +1307,9 @@ int ZEXPORT deflate (strm, flush)
         block_state bstate;
 
         bstate = s->level == 0 ? deflate_stored(s, flush) :
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+                 s->level == 1 ? aocl_deflate_lvl1_fp(s, flush) :
+#endif
                  s->strategy == Z_HUFFMAN_ONLY ? deflate_huff(s, flush) :
                  s->strategy == Z_RLE ? deflate_rle(s, flush) :
 #ifndef AOCL_ZLIB_OPT
@@ -2512,15 +2544,11 @@ local block_state aocl_deflate_fast_v1(s, flush)
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
-            if(s->level == 1)
-                s->match_length = longest_match (s, hash_head);
-            else {
 #ifdef AOCL_DYNAMIC_DISPATCHER
-                s->match_length = deflate_longest_match_fp(s, hash_head);
+            s->match_length = deflate_longest_match_fp(s, hash_head);
 #else
-                s->match_length = longest_match_x86(s, hash_head);
+            s->match_length = longest_match_x86(s, hash_head);
 #endif
-            }
             /* longest_match() sets match_start */
         }
         if (s->match_length >= MIN_MATCH) {
@@ -2617,15 +2645,11 @@ local block_state aocl_deflate_fast_v2(s, flush)
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
-            if(s->level == 1)
-                s->match_length = longest_match (s, hash_head);
-            else {
 #ifdef AOCL_DYNAMIC_DISPATCHER
-                s->match_length = deflate_longest_match_fp(s, hash_head);
+            s->match_length = deflate_longest_match_fp(s, hash_head);
 #else
-                s->match_length = longest_match_x86(s, hash_head);
+            s->match_length = longest_match_x86(s, hash_head);
 #endif
-            }
             /* longest_match() sets match_start */
         }
         if (s->match_length >= MIN_MATCH) {

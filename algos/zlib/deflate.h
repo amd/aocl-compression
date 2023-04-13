@@ -389,8 +389,9 @@ extern void (*check_match_fp) (deflate_state *s, IPos start, IPos match,
 #endif
 
 #ifdef AOCL_ZLIB_AVX_OPT
+extern uint32_t mask;
 #include<nmmintrin.h>
-#define UPDATE_HASH_CRC(s,h,c) (h = _mm_crc32_u32(0, (*(unsigned *)((uintptr_t)(&c) - (MIN_MATCH-1))) & 0xFFFFFF) & s->hash_mask)
+#define UPDATE_HASH_CRC(s,h,c) (h = _mm_crc32_u32(0, (*(unsigned *)((uintptr_t)(&c) - (MIN_MATCH-1))) & mask) & s->hash_mask)
 
 #ifdef FASTEST
 #define INSERT_STRING_CRC(s, str, match_head) \
@@ -425,6 +426,77 @@ extern void (*check_match_fp) (deflate_state *s, IPos start, IPos match,
    FLUSH_BLOCK_ONLY(s, last); \
    if (s->strm->avail_out == 0) return (last) ? finish_started : need_more; \
 }
+
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#define END_BLOCK 256
+/* end of block literal code */
+
+/* ===========================================================================
+ * Output a short LSB first on the stream.
+ * IN assertion: there is enough room in pendingBuf.
+ */
+#define put_short(s, w) { \
+    put_byte(s, (uch)((w) & 0xff)); \
+    put_byte(s, (uch)((ush)(w) >> 8)); \
+}
+
+#ifndef ZLIB_DEBUG
+#  define send_code(s, c, tree) send_bits(s, tree[c].Code, tree[c].Len)
+   /* Send a code of the given tree. c and tree must not have side effects */
+
+#else /* !ZLIB_DEBUG */
+#  define send_code(s, c, tree) \
+     { if (z_verbose>2) fprintf(stderr,"\ncd %3d ",(c)); \
+       send_bits(s, tree[c].Code, tree[c].Len); }
+#endif
+/* ===========================================================================
+ * Send a value on a given number of bits.
+ * IN assertion: length <= 16 and value fits in length bits.
+ */
+#ifdef ZLIB_DEBUG
+local void send_bits      OF((deflate_state *s, int value, int length));
+
+local void send_bits(s, value, length)
+    deflate_state *s;
+    int value;  /* value to send */
+    int length; /* number of bits */
+{
+    Tracevv((stderr," l %2d v %4x ", length, value));
+    Assert(length > 0 && length <= 15, "invalid length");
+    s->bits_sent += (ulg)length;
+
+    /* If not enough room in bi_buf, use (valid) bits from bi_buf and
+     * (16 - bi_valid) bits from value, leaving (width - (16-bi_valid))
+     * unused bits in value.
+     */
+    if (s->bi_valid > (int)Buf_size - length) {
+        s->bi_buf |= (ush)value << s->bi_valid;
+        put_short(s, s->bi_buf);
+        s->bi_buf = (ush)value >> (Buf_size - s->bi_valid);
+        s->bi_valid += length - Buf_size;
+    } else {
+        s->bi_buf |= (ush)value << s->bi_valid;
+        s->bi_valid += length;
+    }
+}
+#else /* !ZLIB_DEBUG */
+
+#define send_bits(s, value, length) \
+{ int len = length;\
+  if (s->bi_valid > (int)Buf_size - len) {\
+    int val = (int)value;\
+    s->bi_buf |= (ush)val << s->bi_valid;\
+    put_short(s, s->bi_buf);\
+    s->bi_buf = (ush)val >> (Buf_size - s->bi_valid);\
+    s->bi_valid += len - Buf_size;\
+  } else {\
+    s->bi_buf |= (ush)(value) << s->bi_valid;\
+    s->bi_valid += len;\
+  }\
+}
+#endif /* ZLIB_DEBUG */
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE_3 */
+
 #endif /* AOCL_ZLIB_OPT */
 
 #endif /* DEFLATE_H */

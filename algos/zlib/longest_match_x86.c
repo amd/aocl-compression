@@ -352,6 +352,11 @@ uInt ZLIB_INTERNAL longest_match_x86(deflate_state *s, IPos cur_match)
     return longest_match_c_opt(s, cur_match);
 #endif
 }
+
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+uint32_t (*aocl_compare256_fp) (const Bytef *src1, const Bytef *src2) = compare256_avx;
+#endif
+
 #endif //AOCL_ZLIB_OPT
 
 #ifdef AOCL_DYNAMIC_DISPATCHER
@@ -372,6 +377,9 @@ void aocl_register_longest_match_fmv(int optOff, int optLevel,
             break;
         case 2://AVX version
             longest_match_fp = longest_match_avx_opt;
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+            aocl_compare256_fp = compare256_avx;
+#endif
             break;
         case 3://AVX2 version
         default://AVX512 and other versions
@@ -381,6 +389,9 @@ void aocl_register_longest_match_fmv(int optOff, int optLevel,
             longest_match_fp = longest_match_avx_opt;
 #else
             longest_match_fp = longest_match_c_opt;
+#endif
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+            aocl_compare256_fp = compare256_avx2;
 #endif
             break;
         }

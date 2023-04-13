@@ -68,6 +68,12 @@ endif()
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option(GTEST_ENABLE "Enable gtest based test suite (Disabled by default)" OFF)
 option(BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)
+option(ZLIB_DEFLATE_FAST_MODE_2 "Enable optimization for deflate fast using Z_FIXED strategy (Disabled by default)" OFF)
+option(ZLIB_DEFLATE_FAST_MODE_3 "Enable ZLIB deflate quick strategy (Disabled by default)" OFF)
+
+if(ZLIB_DEFLATE_FAST_MODE_2 AND ZLIB_DEFLATE_FAST_MODE_3)
+	message(FATAL_ERROR "You can not enable ZLIB_DEFLATE_FAST_MODE_2 and ZLIB_DEFLATE_FAST_MODE_3 together.")
+endif()
 
 #list source files to be compiled for the library
 file(GLOB API_SRC_FILES api/*.c api/*.cpp api/*.h)
@@ -102,6 +108,7 @@ set (ZLIB_SRC_FILES	${ALGOS_PATH}/zlib/adler32.c
 					${ALGOS_PATH}/zlib/crc32.c
 					${ALGOS_PATH}/zlib/deflate.c
 					${ALGOS_PATH}/zlib/deflate_medium.c
+					${ALGOS_PATH}/zlib/deflate_quick.c
 					${ALGOS_PATH}/zlib/gzclose.c
 					${ALGOS_PATH}/zlib/gzlib.c
 					${ALGOS_PATH}/zlib/gzread.c
@@ -203,7 +210,13 @@ endif()
 #set(USER_DEBUG_ON "-g")
 message(STATUS "C Compiler used: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ Compiler used: ${CMAKE_CXX_COMPILER}")
+if(ZLIB_DEFLATE_FAST_MODE_3)
+set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1;-DAOCL_ZLIB_DEFLATE_FAST_MODE_3=1")
+elseif(ZLIB_DEFLATE_FAST_MODE_2)
+set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1;-DAOCL_ZLIB_DEFLATE_FAST_MODE_2=1")
+else()
 set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
+endif()
 if (WIN32)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /fp:fast /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /fp:fast /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
