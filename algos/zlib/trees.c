@@ -1,5 +1,6 @@
 /* trees.c -- output deflated data using Huffman coding
  * Copyright (C) 1995-2017 Jean-loup Gailly
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * detect_data_type() function provided freely by Cosmin Truta, 2006
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
@@ -47,7 +48,9 @@
 #define MAX_BL_BITS 7
 /* Bit length codes must not exceed MAX_BL_BITS bits */
 
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
 #define END_BLOCK 256
+#endif
 /* end of block literal code */
 
 #define REP_3_6      16
@@ -83,7 +86,11 @@ local const uch bl_order[BL_CODES]
 #if defined(GEN_TREES_H) || !defined(STDC)
 /* non ANSI compilers may not accept trees.h */
 
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
 local ct_data static_ltree[L_CODES+2];
+#else
+ZLIB_INTERNAL ct_data static_ltree[L_CODES+2];
+#endif
 /* The static literal tree. Since the bit lengths are imposed, there is no
  * need for the L_CODES extra codes used during heap construction. However
  * The codes 286 and 287 are needed to build a canonical tree (see _tr_init
@@ -150,13 +157,18 @@ local void compress_block OF((deflate_state *s, const ct_data *ltree,
                               const ct_data *dtree));
 local int  detect_data_type OF((deflate_state *s));
 local unsigned bi_reverse OF((unsigned value, int length));
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
 local void bi_windup      OF((deflate_state *s));
+#else
+void ZLIB_INTERNAL bi_windup      OF((deflate_state *s));
+#endif
 local void bi_flush       OF((deflate_state *s));
 
 #ifdef GEN_TREES_H
 local void gen_trees_header OF((void));
 #endif
 
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
 #ifndef ZLIB_DEBUG
 #  define send_code(s, c, tree) send_bits(s, tree[c].Code, tree[c].Len)
    /* Send a code of the given tree. c and tree must not have side effects */
@@ -222,7 +234,7 @@ local void send_bits(s, value, length)
   }\
 }
 #endif /* ZLIB_DEBUG */
-
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE_3 */
 
 /* the arguments must not have side effects */
 
@@ -331,8 +343,11 @@ void gen_trees_header()
     Assert (header != NULL, "Can't open trees.h");
     fprintf(header,
             "/* header created automatically with -DGEN_TREES_H */\n\n");
-
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
     fprintf(header, "local const ct_data static_ltree[L_CODES+2] = {\n");
+#else
+    fprintf(header, "ZLIB_INTERNAL const ct_data static_ltree[L_CODES+2] = {\n");
+#endif
     for (i = 0; i < L_CODES+2; i++) {
         fprintf(header, "{{%3u},{%3u}}%s", static_ltree[i].Code,
                 static_ltree[i].Len, SEPARATOR(i, L_CODES+1, 5));
@@ -1187,7 +1202,11 @@ local void bi_flush(s)
 /* ===========================================================================
  * Flush the bit buffer and align the output on a byte boundary
  */
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
 local void bi_windup(s)
+#else
+void ZLIB_INTERNAL bi_windup(s)
+#endif
     deflate_state *s;
 {
     if (s->bi_valid > 8) {
