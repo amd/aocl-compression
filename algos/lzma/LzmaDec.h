@@ -44,7 +44,7 @@ Returns:
   SZ_ERROR_UNSUPPORTED - Unsupported properties
 */
 
-SRes LzmaProps_Decode(CLzmaProps* p, const Byte* data, unsigned size);
+LZMALIB_API SRes LzmaProps_Decode(CLzmaProps* p, const Byte* data, unsigned size);
 
 
 /* ---------- LZMA Decoder state ---------- */
@@ -79,7 +79,7 @@ typedef struct
 
 #define LzmaDec_Construct(p) { (p)->dic = NULL; (p)->probs = NULL; }
 
-void LzmaDec_Init(CLzmaDec* p);
+LZMALIB_API void LzmaDec_Init(CLzmaDec* p);
 
 /* There are two types of LZMA streams:
      - Stream with end mark. That end mark adds about 6 bytes to compressed size.
@@ -140,11 +140,11 @@ typedef enum
      SZ_ERROR_UNSUPPORTED - Unsupported properties
    */
 
-SRes LzmaDec_AllocateProbs(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAllocPtr alloc);
-void LzmaDec_FreeProbs(CLzmaDec* p, ISzAllocPtr alloc);
+LZMALIB_API SRes LzmaDec_AllocateProbs(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAllocPtr alloc);
+LZMALIB_API void LzmaDec_FreeProbs(CLzmaDec* p, ISzAllocPtr alloc);
 
-SRes LzmaDec_Allocate(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAllocPtr alloc);
-void LzmaDec_Free(CLzmaDec* p, ISzAllocPtr alloc);
+LZMALIB_API SRes LzmaDec_Allocate(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAllocPtr alloc);
+LZMALIB_API void LzmaDec_Free(CLzmaDec* p, ISzAllocPtr alloc);
 
 /* ---------- Dictionary Interface ---------- */
 
@@ -188,7 +188,7 @@ Returns:
   SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure
 */
 
-SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit,
+LZMALIB_API SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit,
     const Byte* src, SizeT* srcLen, ELzmaFinishMode finishMode, ELzmaStatus* status);
 
 
@@ -205,7 +205,7 @@ finishMode:
   LZMA_FINISH_END - Stream must be finished after (*destLen).
 */
 
-SRes LzmaDec_DecodeToBuf(CLzmaDec* p, Byte* dest, SizeT* destLen,
+LZMALIB_API SRes LzmaDec_DecodeToBuf(CLzmaDec* p, Byte* dest, SizeT* destLen,
     const Byte* src, SizeT* srcLen, ELzmaFinishMode finishMode, ELzmaStatus* status);
 
 
@@ -231,7 +231,7 @@ Returns:
   SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure
 */
 
-SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
+LZMALIB_API SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
     const Byte* propData, unsigned propSize, ELzmaFinishMode finishMode,
     ELzmaStatus* status, ISzAllocPtr alloc);
 
@@ -240,7 +240,7 @@ SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
  * AMD optimized lzma routines depending upon the detected CPU features.
  */
 #ifdef AOCL_DYNAMIC_DISPATCHER
-void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
+LZMALIB_API void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 #endif
 
@@ -249,8 +249,10 @@ EXTERN_C_END
 #ifdef AOCL_LZMA_UNIT_TEST
 /* Move these APIs within the scope of gtest once the framework is ready */
 EXTERN_C_BEGIN
-void Test_Normal_Literal_Dec_Ref(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
-void Test_Normal_Literal_Dec_Opt(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
+LZMALIB_API void Test_Rc_Get_Bit_2_Dec_Ref(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
+LZMALIB_API void Test_Rc_Get_Bit_2_Dec_Opt(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
+LZMALIB_API void Test_Rc_Rev_Bit_Dec_Ref(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
+LZMALIB_API void Test_Rc_Rev_Bit_Dec_Opt(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
 EXTERN_C_END
 #endif
 #endif

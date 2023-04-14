@@ -37,9 +37,9 @@ typedef struct _CLzmaEncProps
   UInt64 affinity;
 } CLzmaEncProps;
 
-void LzmaEncProps_Init(CLzmaEncProps *p);
-void LzmaEncProps_Normalize(CLzmaEncProps *p);
-UInt32 LzmaEncProps_GetDictSize(const CLzmaEncProps *props2);
+LZMALIB_API void LzmaEncProps_Init(CLzmaEncProps *p);
+LZMALIB_API void LzmaEncProps_Normalize(CLzmaEncProps *p);
+LZMALIB_API UInt32 LzmaEncProps_GetDictSize(const CLzmaEncProps *props2);
 
 
 /* ---------- CLzmaEncHandle Interface ---------- */
@@ -57,23 +57,23 @@ SRes:
 
 typedef void * CLzmaEncHandle;
 
-CLzmaEncHandle LzmaEnc_Create(ISzAllocPtr alloc);
-void LzmaEnc_Destroy(CLzmaEncHandle p, ISzAllocPtr alloc, ISzAllocPtr allocBig);
+LZMALIB_API CLzmaEncHandle LzmaEnc_Create(ISzAllocPtr alloc);
+LZMALIB_API void LzmaEnc_Destroy(CLzmaEncHandle p, ISzAllocPtr alloc, ISzAllocPtr allocBig);
 
-SRes LzmaEnc_SetProps(CLzmaEncHandle p, const CLzmaEncProps *props);
-void LzmaEnc_SetDataSize(CLzmaEncHandle p, UInt64 expectedDataSiize);
-SRes LzmaEnc_WriteProperties(CLzmaEncHandle p, Byte *properties, SizeT *size);
-unsigned LzmaEnc_IsWriteEndMark(CLzmaEncHandle p);
+LZMALIB_API SRes LzmaEnc_SetProps(CLzmaEncHandle p, const CLzmaEncProps *props);
+LZMALIB_API void LzmaEnc_SetDataSize(CLzmaEncHandle p, UInt64 expectedDataSiize);
+LZMALIB_API SRes LzmaEnc_WriteProperties(CLzmaEncHandle p, Byte *properties, SizeT *size);
+LZMALIB_API unsigned LzmaEnc_IsWriteEndMark(CLzmaEncHandle p);
 
-SRes LzmaEnc_Encode(CLzmaEncHandle p, ISeqOutStream *outStream, ISeqInStream *inStream,
+LZMALIB_API SRes LzmaEnc_Encode(CLzmaEncHandle p, ISeqOutStream *outStream, ISeqInStream *inStream,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig);
-SRes LzmaEnc_MemEncode(CLzmaEncHandle p, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
+LZMALIB_API SRes LzmaEnc_MemEncode(CLzmaEncHandle p, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig);
 
 
 /* ---------- One Call Interface ---------- */
 
-SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
+LZMALIB_API SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig);
 
@@ -82,10 +82,18 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
  * AMD optimized lzma routines depending upon the detected CPU features.
  */
 #ifdef AOCL_DYNAMIC_DISPATCHER
-void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
+LZMALIB_API void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
   size_t level, size_t windowLog);
 #endif
 
+#ifdef AOCL_LZMA_UNIT_TEST
+LZMALIB_API void Test_LzmaEncProps_Normalize_Dyn(CLzmaEncProps* p);
+LZMALIB_API SRes Test_SetProps_Dyn(CLzmaEncHandle pp, const CLzmaEncProps* props);
+LZMALIB_API void Test_AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p);
+LZMALIB_API UInt64 Test_SetDataSize(CLzmaEncHandle pp, UInt64 expectedDataSize);
+LZMALIB_API SRes Test_WriteProperties(CLzmaEncHandle pp, Byte* props, SizeT* size, UInt32 dictSize);
+LZMALIB_API unsigned Test_IsWriteEndMark(CLzmaEncHandle pp, unsigned wem);
+#endif
 EXTERN_C_END
 
 #endif

@@ -345,6 +345,7 @@ if (GTEST_ENABLE)
 		${GTEST_PATH}/gtest_combined_test.cc
 	)
 	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
+	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
 	
 	add_executable(gtest_combined_test ${GTEST_SRC_FILES})
 	target_link_libraries(gtest_combined_test gtest_main ${lib_name})

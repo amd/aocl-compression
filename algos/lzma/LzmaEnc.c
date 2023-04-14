@@ -4291,6 +4291,9 @@ unsigned LzmaEnc_IsWriteEndMark(CLzmaEncHandle pp)
 SRes LzmaEnc_MemEncode(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  if (src == NULL || srcLen == 0 || dest == NULL)
+      return SZ_ERROR_PARAM;
+
   SRes res;
   CLzmaEnc *p = (CLzmaEnc *)pp;
 
@@ -4319,10 +4322,35 @@ SRes LzmaEnc_MemEncode(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte
   return res;
 }
 
+/* Ensure user settings passed are within range.
+* Range values are regulated based on ranges indicated in LzmaEnc.h */
+SRes ValidateParams(const CLzmaEncProps* props) {
+    //If <0 uses default
+    if (props->level > 9 ||
+        props->lc > 8 ||
+        props->lp > 4 ||
+        props->pb > 4 ||
+        props->algo > 1 ||
+        ((props->fb >= 0) && (props->fb < 5 || props->fb > 273)) ||
+        props->btMode > 1 ||
+        props->numHashBytes > 5 ||
+        props->mc > ((UInt32)1 << 30) ||
+        props->writeEndMark > 1)
+        return SZ_ERROR_PARAM;
+    else
+        return SZ_OK;
+}
+
 SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  if (src == NULL || srcLen == 0 || dest == NULL || propsEncoded == NULL)
+    return SZ_ERROR_PARAM;
+
+  if (ValidateParams(props) != SZ_OK)
+      return SZ_ERROR_PARAM;
+
   CLzmaEnc *p = (CLzmaEnc *)LzmaEnc_Create(alloc);
   SRes res;
   if (!p)
@@ -4372,21 +4400,12 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
     case 2://AVX version
     case 3://AVX2 version
     default://AVX512 and other versions
-#ifdef AOCL_LZMA_OPT //necessary here as AOCL_ methods are declared in header file under AOCL_LZMA_OPT
       MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
       MatchFinder_Create_fp = AOCL_MatchFinder_Create;
       MatchFinder_Free_fp = AOCL_MatchFinder_Free;
       GetOptimum_fp = AOCL_GetOptimum;
       LzmaEncProps_Normalize_fp = AOCL_LzmaEncProps_Normalize;
       LzmaEnc_SetProps_fp = AOCL_LzmaEnc_SetProps;
-#else
-      MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
-      MatchFinder_Create_fp = MatchFinder_Create;
-      MatchFinder_Free_fp = MatchFinder_Free;
-      GetOptimum_fp = GetOptimum;
-      LzmaEncProps_Normalize_fp = LzmaEncProps_Normalize;
-      LzmaEnc_SetProps_fp = LzmaEnc_SetProps;
-#endif
       break;
     }
   }
@@ -4396,5 +4415,57 @@ void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
   size_t level, size_t windowLog)
 {
   aocl_register_lzma_encode_fmv(optOff, optLevel);
+}
+#endif
+
+#ifdef AOCL_LZMA_UNIT_TEST
+void Test_LzmaEncProps_Normalize_Dyn(CLzmaEncProps* p) {
+#ifdef AOCL_LZMA_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    LzmaEncProps_Normalize_fp(p);
+#else
+    AOCL_LzmaEncProps_Normalize(p);
+#endif
+#else
+    LzmaEncProps_Normalize(p);
+#endif
+}
+
+void Test_AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p) {
+#ifdef AOCL_LZMA_OPT
+    AOCL_LzmaEncProps_Normalize(p);
+#endif
+}
+
+UInt64 Test_SetDataSize(CLzmaEncHandle pp, UInt64 expectedDataSize) {
+    LzmaEnc_SetDataSize(pp, expectedDataSize);
+    CLzmaEnc* p = (CLzmaEnc*)pp;
+    return p->matchFinderBase.expectedDataSize;
+}
+
+SRes Test_WriteProperties(CLzmaEncHandle pp, Byte* props, SizeT* size, UInt32 dictSize) {
+    CLzmaEnc* p = (CLzmaEnc*)pp;
+    p->dictSize = dictSize;
+    return LzmaEnc_WriteProperties(pp, props, size);
+}
+
+unsigned Test_IsWriteEndMark(CLzmaEncHandle pp, unsigned wem) {
+    CLzmaEnc* p = (CLzmaEnc*)pp;
+    p->writeEndMark = wem;
+    return LzmaEnc_IsWriteEndMark(p);
+}
+
+SRes Test_SetProps_Dyn(CLzmaEncHandle pp, const CLzmaEncProps* props) {
+    CLzmaEnc* p = (CLzmaEnc*)pp;
+#ifdef AOCL_LZMA_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    SRes res = LzmaEnc_SetProps_fp(p, props);
+#else
+    SRes res = AOCL_LzmaEnc_SetProps(p, props);
+#endif
+#else
+    SRes res = LzmaEnc_SetProps(p, props);
+#endif
+    return res;
 }
 #endif

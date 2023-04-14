@@ -1967,20 +1967,38 @@ void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
 
 #ifdef AOCL_LZMA_UNIT_TEST
 /* Move these APIs within the scope of gtest once the framework is ready */
-void Test_Normal_Literal_Dec_Ref(const Byte* buf, UInt32* _range, UInt32* _code, CLzmaProb* prob, unsigned symbol) {
+void Test_Rc_Get_Bit_2_Dec_Ref(const Byte* buf, UInt32* _range, UInt32* _code, CLzmaProb* prob, unsigned symbol) {
     unsigned ttt;
     UInt32 range = *_range, code = *_code;
     UInt32 bound;
-    NORMAL_LITER_DEC;
+    GET_BIT2(prob + symbol, symbol, ;, ;);
     *_range = range;
     *_code = code;
 }
 
-void Test_Normal_Literal_Dec_Opt(const Byte* buf, UInt32* _range, UInt32* _code, CLzmaProb* prob, unsigned symbol) {
+void Test_Rc_Get_Bit_2_Dec_Opt(const Byte* buf, UInt32* _range, UInt32* _code, CLzmaProb* prob, unsigned symbol) {
     unsigned ttt, tmpFlag, tmpCode, tmpProb, kBitModelTotal_reg;
     UInt32 range = *_range, code = *_code;
     UInt32 bound;
-    AOCL_NORMAL_LITER_DEC;
+    AOCL_GET_BIT2(prob + symbol, symbol, ; , ;);
+    *_range = range;
+    *_code = code;
+}
+
+void Test_Rc_Rev_Bit_Dec_Ref(const Byte* buf, UInt32* _range, UInt32* _code, CLzmaProb* prob, unsigned symbol) {
+    unsigned ttt;
+    UInt32 range = *_range, code = *_code;
+    UInt32 bound;
+    REV_BIT(prob + symbol, symbol, ; , ;);
+    *_range = range;
+    *_code = code;
+}
+
+void Test_Rc_Rev_Bit_Dec_Opt(const Byte* buf, UInt32* _range, UInt32* _code, CLzmaProb* prob, unsigned symbol) {
+    unsigned ttt, tmpFlag, tmpCode, tmpProb, kBitModelTotal_reg;
+    UInt32 range = *_range, code = *_code;
+    UInt32 bound;
+    AOCL_REV_BIT(prob + symbol, symbol, ;, ;);
     *_range = range;
     *_code = code;
 }
