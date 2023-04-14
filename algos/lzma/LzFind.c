@@ -1292,6 +1292,7 @@ exit_point:
     UInt32 hcStart = hcHead; /* current head of chain */ \
     UInt32 curMatch = son[hcHead]; \
     UInt32 delta = (pos - curMatch); \
+    unsigned checkLen = maxLen; /* to ensure cur does not access beyond lenLimit */ \
     \
     if (curMatch > 0 && delta < _cyclicBufferSize) { \
         __builtin_prefetch(cur, 0, 2); \
@@ -1307,14 +1308,14 @@ exit_point:
                 *
                 * Checking 2 bytes instead of 1 at maxLen results in
                 * slight increase in compression ratio */ \
-                if (GetUi16(cur + maxLen) == GetUi16(cur + maxLen + diff) && \
+                if (GetUi16(cur + checkLen) == GetUi16(cur + checkLen + diff) && \
                     GetUi32(cur) == GetUi32(cur + diff)) \
                 { \
                     const Byte* c = cur; \
                     const Byte* cd = c + diff; \
                     unsigned len = 4; /* first 4 bytes already matched */ \
                     \
-                    AOCL_FIND_MATCHING_BYTES_LEN(len, lenLimit, c, cd, check_len) \
+                    AOCL_FIND_MATCHING_BYTES_LEN(len, lenLimit, c, cd, exit_point_check_len) \
                     \
                     { \
                         if (maxLen < len) /* found a match longer than maxLen. Save <len, dist> pair in distances */ \
@@ -1328,6 +1329,9 @@ exit_point:
                                 return d; /* return <len, dist> pairs found */ \
                             } \
                             maxLen = len; \
+                            checkLen = maxLen; \
+                            if(unlikely(maxLen >= (lenLimit - 1))) \
+                                checkLen = (maxLen - 1); \
                         } \
                     } \
                 } \
