@@ -50,6 +50,12 @@
 #include "utils/utils.h"
 #include <gtest/gtest.h>
 
+#include "algos/lz4/lz4.h"
+#include "algos/snappy/snappy.h"
+#include "algos/zlib/zlib.h"
+#include "algos/lzma/LzmaDec.h"
+#include "algos/lzma/LzmaEnc.h"
+
 using namespace std;
 
 // sets the optLevel of a method, if the optLevel crosses
@@ -76,10 +82,15 @@ int setup(aocl_compression_type method, int optLevel)
             aocl_setup_lz4(0, optLevel, 0, 0, 0);
             break;
          case SNAPPY:
-            aocl_setup_snappy(0, optLevel, 0, 0, 0);
+            snappy::aocl_setup_snappy(0, optLevel, 0, 0, 0);
             break;
          case ZLIB:
             aocl_setup_zlib(0, optLevel, 0, 0, 0);
+            break;
+         case LZMA:
+            aocl_setup_lzma_encode(0, optLevel, 0, 0, 0);
+            aocl_setup_lzma_decode(0, optLevel, 0, 0, 0);
+            break;
       }
 #endif
    }
