@@ -1208,6 +1208,9 @@ TEST(LZMA_encPropsInit, AOCL_Compression_lzma_LzmaEncProps_Init_common_1) //chec
     EXPECT_EQ(p.btMode, -1);
     EXPECT_EQ(p.numHashBytes, -1);
     EXPECT_EQ(p.numThreads, -1);
+#ifdef AOCL_LZMA_OPT
+    EXPECT_EQ(p.srcLen, 0);
+#endif
 }
 /*********************************************
  * End of LZMA_encPropsInit
@@ -1313,8 +1316,20 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         for (int i = LZMA_MIN_LEVEL; i <= LZMA_MAX_LEVEL; ++i) {
             LzmaEncProps_Init(&p); //reset for each test
             p.level = i;
-            Test_AOCL_LzmaEncProps_Normalize(&p);
+            p.srcLen = MIN_SIZE_FOR_CF_HC + 1; //for expectedDataSize > MIN_SIZE_FOR_CF_HC, USE_CACHE_EFFICIENT_HASH_CHAIN
+            AOCL_LzmaEncProps_Normalize(&p);
             EXPECT_EQ(p.dictSize, dictSizes[i]); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_dictSizeOpt_common_11 - 20
+        }
+    }
+    { //optimized settings
+        CLzmaEncProps p;
+        UInt32 dictSizes[10] = { 65536, 262144, 1048576, 4194304, 8388608, 16777216, 33554432, 33554432, 67108864, 67108864 };
+        for (int i = LZMA_MIN_LEVEL; i <= LZMA_MAX_LEVEL; ++i) {
+            LzmaEncProps_Init(&p); //reset for each test
+            p.level = i;
+            p.srcLen = MIN_SIZE_FOR_CF_HC;
+            AOCL_LzmaEncProps_Normalize(&p);
+            EXPECT_EQ(p.dictSize, dictSizes[i]); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_dictSizeOpt_common_21 - 30
         }
     }
 #endif
@@ -1334,7 +1349,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         CLzmaEncProps p;
         LzmaEncProps_Init(&p);
         p.reduceSize = ((UInt32)1 << 16);
-        Test_AOCL_LzmaEncProps_Normalize(&p);
+        AOCL_LzmaEncProps_Normalize(&p);
         EXPECT_EQ(p.dictSize, p.reduceSize); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_reduceSize_common_2
     }
 #endif
@@ -1355,7 +1370,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         CLzmaEncProps p;
         LzmaEncProps_Init(&p);
         p.reduceSize = ((UInt32)1 << 10);
-        Test_AOCL_LzmaEncProps_Normalize(&p);
+        AOCL_LzmaEncProps_Normalize(&p);
         EXPECT_EQ(p.dictSize, kReduceMin); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_kReduceMin_common_2
     }
 #endif
@@ -1375,7 +1390,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         CLzmaEncProps p;
         LzmaEncProps_Init(&p);
         set_user_settings(&p);
-        Test_AOCL_LzmaEncProps_Normalize(&p);
+        AOCL_LzmaEncProps_Normalize(&p);
         validate_user_settings(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_userSettings_common_2
     }
 #endif
@@ -1390,7 +1405,8 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         p.btMode = 0;
         p.dictSize = kHashGuarentee;
         p.level = HASH_CHAIN_16_LEVEL - 1;
-        Test_AOCL_LzmaEncProps_Normalize(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_minDictSize_common_1
+        p.srcLen = MIN_SIZE_FOR_CF_HC + 1; //for expectedDataSize > MIN_SIZE_FOR_CF_HC, USE_CACHE_EFFICIENT_HASH_CHAIN
+        AOCL_LzmaEncProps_Normalize(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_minDictSize_common_1
         EXPECT_EQ(p.dictSize, kHashGuarentee * HASH_CHAIN_SLOT_SZ_8);
     }
     {
@@ -1399,7 +1415,8 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         p.btMode = 0;
         p.dictSize = kHashGuarentee;
         p.level = HASH_CHAIN_16_LEVEL;
-        Test_AOCL_LzmaEncProps_Normalize(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_minDictSize_common_2
+        p.srcLen = MIN_SIZE_FOR_CF_HC + 1; //for expectedDataSize > MIN_SIZE_FOR_CF_HC, USE_CACHE_EFFICIENT_HASH_CHAIN
+        AOCL_LzmaEncProps_Normalize(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_minDictSize_common_2
         EXPECT_EQ(p.dictSize, kHashGuarentee * HASH_CHAIN_SLOT_SZ_16);
     }
 #endif
@@ -1616,7 +1633,7 @@ TEST(LZMA_isWriteEndMark, AOCL_Compression_lzma_LzmaEnc_IsWriteEndMark_common_1)
 /*
     Base class for all fixtures that test/use lzma encoder
 */
-class LZMA_encodeBase : public ::testing::Test {
+class LZMA_encodeBase : public ::testing::TestWithParam<size_t> {
 public:
     void decomp_validate(size_t resultComp) {
         //compress
@@ -1636,13 +1653,14 @@ public:
     const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
 
     char* inPtr = nullptr, * compPtr = nullptr, * decompPtr = nullptr;
-    const size_t inSize = 1024 * 1024; //1MB
+    size_t inSize;
     size_t outSize = 0;
     size_t headerSize;
     SizeT outLen;
 
 protected:
-    void SetUpEncode() {
+    void SetUpEncode(size_t _inSize) {
+        inSize = _inSize;
         //setup buffers
         buffers_setup();
         headerSize = LZMA_PROPS_SIZE;
@@ -1719,7 +1737,8 @@ class LZMA_memEncode : public LZMA_encodeBase
 {
 public:
     void SetUp() override {
-        SetUpEncode();
+        size_t inSize = GetParam();
+        SetUpEncode(inSize);
     }
 
     void TearDown() override
@@ -1740,6 +1759,9 @@ public:
 
     void set_properties() {
         LzmaEncProps_Init(&props); //necessary, else props will have invalid values
+#ifdef AOCL_LZMA_OPT
+        props.srcLen = GetParam();
+#endif
         SRes res = Test_SetProps_Dyn(p, &props);
         ASSERT_EQ(res, SZ_OK);
 
@@ -1751,7 +1773,7 @@ public:
     CLzmaEncHandle p = nullptr;
 };
 
-TEST_F(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_common)
+TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_common)
 {
     //Test for all levels
     for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level) { //AOCL_Compression_lzma_LzmaEnc_MemEncode_common_1 - 10
@@ -1772,6 +1794,16 @@ TEST_F(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_common)
         free_encoder();
     }
 }
+
+/*
+* Run all LZMA_memEncode tests for 2 settings:
+*   + USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize > MIN_SIZE_FOR_CF_HC: 1 MB (1024 * 1024)
+*   + Not USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize <= MIN_SIZE_FOR_CF_HC:  MIN_SIZE_FOR_CF_HC
+*/
+INSTANTIATE_TEST_SUITE_P(
+    LZMA_encode,
+    LZMA_memEncode,
+    ::testing::Values((size_t)(1024 * 1024), (size_t)(MIN_SIZE_FOR_CF_HC)));
 /*********************************************
 * End of LZMA_memEncode
 *********************************************/
@@ -1787,7 +1819,8 @@ class LZMA_encodeFile : public LZMA_encodeBase
 {
 public:
     void SetUp() override {
-        SetUpEncode();
+        size_t inSize = GetParam();
+        SetUpEncode(inSize);
     }
 
     void TearDown() override
@@ -1818,7 +1851,7 @@ public:
     }
 };
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_valid_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_valid_common)
 {
     //Test for all levels
     for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level) {
@@ -1830,7 +1863,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_valid_common)
     }
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_minDict_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_minDict_common_1)
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -1841,7 +1874,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_minDict_common_1)
     execute();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_maxDict_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_maxDict_common_1)
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -1852,7 +1885,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_maxDict_common_1)
     execute();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_2ByteHashHc_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_2ByteHashHc_common_1)
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -1863,7 +1896,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_2ByteHashHc_common_1)
     execute();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_2ByteHashBt_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_2ByteHashBt_common_1)
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -1874,7 +1907,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_2ByteHashBt_common_1)
     execute();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_3ByteHashHc_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_3ByteHashHc_common_1)
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -1885,7 +1918,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_3ByteHashHc_common_1)
     execute();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_3ByteHashBt_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_3ByteHashBt_common_1)
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -1896,7 +1929,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_3ByteHashBt_common_1)
     execute();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_4ByteHashHc_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_4ByteHashHc_common_1)
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -1907,7 +1940,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_4ByteHashHc_common_1)
     execute();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_4ByteHashBt_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_4ByteHashBt_common_1)
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -1918,7 +1951,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_4ByteHashBt_common_1)
     execute();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_5ByteHashHc_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_5ByteHashHc_common_1)
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -1929,7 +1962,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_5ByteHashHc_common_1)
     execute();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_5ByteHashBt_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_5ByteHashBt_common_1)
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -1940,7 +1973,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_5ByteHashBt_common_1)
     execute();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_lc_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_lc_common)
 {
     for (int lc = -1; lc <= 8; ++lc) { /* 0 <= lc <= 8, default = 3 */
         //setup
@@ -1959,7 +1992,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_lc_common)
     }
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_lp_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_lp_common)
 {
     for (int lp = -1; lp <= 4; ++lp) { /* 0 <= lp <= 4, default = 0 */
         //setup
@@ -1978,7 +2011,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_lp_common)
     }
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pb_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pb_common)
 {
     for (int pb = -1; pb <= 4; ++pb) { /* 0 <= pb <= 4, default = 2 */
         //setup
@@ -1997,7 +2030,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pb_common)
     }
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_algo_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_algo_common)
 {
     for (int algo = -1; algo <= 1;++algo) { /* 0 - fast, 1 - normal, default = 1 */
         //setup
@@ -2014,7 +2047,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_algo_common)
     }
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_btMode_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_btMode_common)
 {
     for (int btMode = -1; btMode <= 1; ++btMode) { /* 0 - hashChain Mode, 1 - binTree mode - normal, default = 1 */
         //setup
@@ -2031,7 +2064,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_btMode_common)
     }
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_invalidNumHashBytes_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_invalidNumHashBytes_common_1)
 {
     //setup
     init();
@@ -2040,7 +2073,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_invalidNumHashBytes_com
     execute_invalid();
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fb_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fb_common)
 {
     /* 5 <= fb <= 273, default = 32 */
     {
@@ -2087,7 +2120,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fb_common)
     }
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_mc_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_mc_common)
 {
     /* 1 <= mc <= (1 << 30), default = 32 */
     {
@@ -2127,7 +2160,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_mc_common)
     }
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_writeEndMark_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_writeEndMark_common)
 {
     for (int wem = 0; wem <= 1; ++wem) { /* 0 - do not write EOPM, 1 - write EOPM, default = 0 */
         //setup
@@ -2144,7 +2177,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_writeEndMark_common)
     }
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noSrc_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noSrc_common_1)
 {
     //input buffer: src: = nullptr
     SRes res = LzmaEncode((uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, nullptr, inSize,
@@ -2152,7 +2185,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noSrc_common_1)
     EXPECT_NE(res, SZ_OK);
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noSrcSz_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noSrcSz_common_1)
 {
     SizeT invalidInSize = 0; //srcLen empty
     SRes res = LzmaEncode((uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, (uint8_t*)inPtr, invalidInSize,
@@ -2160,7 +2193,7 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noSrcSz_common_1)
     EXPECT_NE(res, SZ_OK);
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noDst_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noDst_common_1)
 {
     //output buffer: dest = nullptr
     SRes res = LzmaEncode(nullptr, &outLen, (uint8_t*)inPtr, inSize,
@@ -2168,13 +2201,24 @@ TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noDst_common_1)
     EXPECT_NE(res, SZ_OK);
 }
 
-TEST_F(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noHeader_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noHeader_common_1)
 {
     //header buffer: propsEncoded = nullptr
     SRes res = LzmaEncode((uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, (uint8_t*)inPtr, inSize,
         &props, nullptr, &headerSize, 0, NULL, &g_Alloc, &g_AllocBig);
     EXPECT_NE(res, SZ_OK);
 }
+
+/*
+* Run all LZMA_encodeFile tests for 2 settings:
+*   + USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize > MIN_SIZE_FOR_CF_HC: 1 MB (1024 * 1024)
+*   + Not USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize <= MIN_SIZE_FOR_CF_HC:  MIN_SIZE_FOR_CF_HC
+*/
+INSTANTIATE_TEST_SUITE_P(
+    LZMA_encode,
+    LZMA_encodeFile,
+    ::testing::Values((size_t)(1024 * 1024), (size_t)(MIN_SIZE_FOR_CF_HC)));
+
 /*********************************************
 * End of LZMA_encodeFile
 *********************************************/

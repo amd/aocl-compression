@@ -74,6 +74,9 @@ void LzmaEncProps_Init(CLzmaEncProps *p)
   p->lc = p->lp = p->pb = p->algo = p->fb = p->btMode = p->numHashBytes = p->numThreads = -1;
   p->writeEndMark = 0;
   p->affinity = 0;
+#ifdef AOCL_LZMA_OPT
+  p->srcLen = 0;
+#endif
 }
 
 // Default settings as per LZMA SDK 22.01
@@ -131,15 +134,26 @@ void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
   if (level < 0) level = 5;
   p->level = level;
   
-  /* Using larger dictionaries for level <= 4 to compensate for compression drop 
-   * due to unused slots in cache efficient dictionary blocks */
-  if (p->dictSize == 0) 
-      p->dictSize =
-      ( level <= 2 ? ((UInt32)1 << (level + 19)) :
-      ( level <= 4 ? ((UInt32)1 << (level + 20)) :
-      ( level <= 6 ? ((UInt32)1 << (level + 19)) :
-      ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
-      ))));
+  if (p->srcLen > 0 && p->srcLen <= MIN_SIZE_FOR_CF_HC) { //use reference settings
+      if (p->dictSize == 0)
+          p->dictSize =
+              ( level <= 3 ? ((UInt32)1 << (level * 2 + 16)) :
+              ( level <= 6 ? ((UInt32)1 << (level + 19)) :
+              ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
+              )));
+  }
+  else { //use cache efficient settings for lower levels
+      /* Using larger dictionaries for level <= 4 to compensate for compression drop 
+       * due to unused slots in cache efficient dictionary blocks */
+      if (p->dictSize == 0) 
+          p->dictSize =
+          ( level <= 2 ? ((UInt32)1 << (level + 19)) :
+          ( level <= 4 ? ((UInt32)1 << (level + 20)) :
+          ( level <= 6 ? ((UInt32)1 << (level + 19)) :
+          ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
+          ))));
+  }
+
   if (p->dictSize > p->reduceSize)
   {
     UInt32 v = (UInt32)p->reduceSize;
@@ -160,7 +174,7 @@ void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
   if (p->numHashBytes < 0) p->numHashBytes = (p->btMode ? 4 : 5);
   if (p->mc == 0) p->mc = (16 + ((unsigned)p->fb >> 1)) >> (p->btMode ? 0 : 1);
 
-  if (!p->btMode) {
+  if (!p->btMode && p->srcLen > MIN_SIZE_FOR_CF_HC) {
       /* For hash chain algo, cache efficient hash chains with direct mapping
       * from hash to blocks are used. Size of the hash table is derived from dictSize.
       * Due to certain assumptions on the hashes, a minimum hash table size of 
@@ -4347,7 +4361,7 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     return SZ_ERROR_PARAM;
 
   if (ValidateParams(props) != SZ_OK)
-      return SZ_ERROR_PARAM;
+    return SZ_ERROR_PARAM;
 
   CLzmaEnc *p = (CLzmaEnc *)LzmaEnc_Create(alloc);
   SRes res;
@@ -4355,10 +4369,12 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     return SZ_ERROR_MEM;
 
 #ifdef AOCL_LZMA_OPT
+  CLzmaEncProps props_cur = *props;
+  props_cur.srcLen = srcLen; //same srcLen value must be set here and passed to LzmaEnc_MemEncode()
 #ifdef AOCL_DYNAMIC_DISPATCHER
-  res = LzmaEnc_SetProps_fp(p, props);
+  res = LzmaEnc_SetProps_fp(p, &props_cur);
 #else
-  res = AOCL_LzmaEnc_SetProps(p, props);
+  res = AOCL_LzmaEnc_SetProps(p, &props_cur);
 #endif
 #else
   res = LzmaEnc_SetProps(p, props);
@@ -4426,12 +4442,6 @@ void Test_LzmaEncProps_Normalize_Dyn(CLzmaEncProps* p) {
 #endif
 #else
     LzmaEncProps_Normalize(p);
-#endif
-}
-
-void Test_AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p) {
-#ifdef AOCL_LZMA_OPT
-    AOCL_LzmaEncProps_Normalize(p);
 #endif
 }
 
