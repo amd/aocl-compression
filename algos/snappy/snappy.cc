@@ -785,6 +785,9 @@ char* AOCL_CompressFragment(const char* input,
 #endif  
     const char* ip_limit = input + input_size - kInputMarginBytes;
 
+#ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
+    uint32_t bbhl_prev = 0; //baseline bytes_between_hash_lookups to use
+#endif
     for (uint32_t preload = LittleEndian::AOCL_Load32(ip + 1);;) {
       // Bytes in [next_emit, ip) will be emitted as literal bytes.  Or
       // [next_emit, ip_end) after the main loop.
@@ -862,7 +865,7 @@ char* AOCL_CompressFragment(const char* input,
         uint32_t hash = HashBytes(data, shift);
 
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
-        uint32_t bytes_between_hash_lookups = (skip >> 5) << 1;
+        uint32_t bytes_between_hash_lookups = bbhl_prev + ((skip >> 5) << 1);
         skip += (skip >> 5);
 #else
         uint32_t bytes_between_hash_lookups = skip >> 5;
@@ -888,6 +891,18 @@ char* AOCL_CompressFragment(const char* input,
 #else
         if (SNAPPY_PREDICT_FALSE(static_cast<uint32_t>(data) ==
                                 LittleEndian::AOCL_Load32(candidate))) {
+#endif
+#ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
+            //set offset to 0 or 1/2 of current value depending on how large 
+            //bytes_between_hash_lookups(bbhl) is.
+            //For files that compress well, bbhl tends to be small,
+            //and no additonal offset is required (bbhl_prev=0).
+            //For files that do not compress well, finding matches once bbhl
+            //is fairly large is unreliable. Hence, instead of starting to match with bbhl=1
+            //in the next iteration, we start with an offset of bbhl/2.
+            //This gives significant speed up for files that do not compress well, at the
+            //expense of slight ratio degradation.
+            bbhl_prev = bytes_between_hash_lookups > AOCL_SNAPPY_MATCH_SKIPPING_THRESHOLD ? (bytes_between_hash_lookups >> 1) : 0;
 #endif
           break;
         }
