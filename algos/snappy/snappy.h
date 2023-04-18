@@ -61,6 +61,9 @@
 #  define SNAPPYLIB_API SNAPPYLIB_VISIBILITY
 #endif
 
+#ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
+#define AOCL_SNAPPY_MATCH_SKIPPING_THRESHOLD 8 // longer skips in next iter if bytes_between_hash_lookups grows above this
+#endif
 namespace snappy {
 /*!
  * \addtogroup SNAPPY_API
