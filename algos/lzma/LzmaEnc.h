@@ -35,6 +35,10 @@ typedef struct _CLzmaEncProps
                         Encoder uses this value to reduce dictionary size */
 
   UInt64 affinity;
+
+#ifdef AOCL_LZMA_OPT
+  size_t srcLen;
+#endif
 } CLzmaEncProps;
 
 LZMALIB_API void LzmaEncProps_Init(CLzmaEncProps *p);
@@ -86,10 +90,14 @@ LZMALIB_API void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
   size_t level, size_t windowLog);
 #endif
 
+#ifdef AOCL_LZMA_OPT
+LZMALIB_API void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p);
+LZMALIB_API SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* props2);
+#endif
+
 #ifdef AOCL_LZMA_UNIT_TEST
 LZMALIB_API void Test_LzmaEncProps_Normalize_Dyn(CLzmaEncProps* p);
 LZMALIB_API SRes Test_SetProps_Dyn(CLzmaEncHandle pp, const CLzmaEncProps* props);
-LZMALIB_API void Test_AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p);
 LZMALIB_API UInt64 Test_SetDataSize(CLzmaEncHandle pp, UInt64 expectedDataSize);
 LZMALIB_API SRes Test_WriteProperties(CLzmaEncHandle pp, Byte* props, SizeT* size, UInt32 dictSize);
 LZMALIB_API unsigned Test_IsWriteEndMark(CLzmaEncHandle pp, unsigned wem);

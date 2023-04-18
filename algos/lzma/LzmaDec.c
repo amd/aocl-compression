@@ -107,6 +107,7 @@
   GET_BIT2(probLit, symbol, offs ^= bit; , ;)
 
 #ifdef AOCL_LZMA_OPT
+#if defined(__GNUC__) || defined(__clang__)
 /* Asm code:
  * code -= bound; bool CF = (tmpCode < bound);
  * range = (!CF) ? range : bound; //cmovae  range, t0
@@ -137,6 +138,9 @@
     i = (i + i) - tmpFlag; \
     if (!tmpFlag) { A0; } \
     else { A1; }
+#else //inline assembly might not be supported by other compilers
+#define AOCL_GET_BIT2(p, i, A0, A1) GET_BIT2(p, i, A0, A1)
+#endif
 
 /* If AOCL_TREE_GET_BIT is called multiple times in succession,
 * each call changes i to (i<<1)+(0 or 1). So, subsequent call
@@ -152,10 +156,8 @@
   probLit = prob + (offs + bit + symbol); \
   AOCL_GET_BIT2(probLit, symbol, offs ^= bit; , ;)
 
-/* Similar to AOCL_GET_BIT2, without 'i' update
-#define REV_BIT_PI(p, A0, A1) IF_BIT_0(p) \
-  { UPDATE_0(p); A0; } else \
-  { UPDATE_1(p); A1; } */
+#if defined(__GNUC__) || defined(__clang__)
+/* Similar to AOCL_GET_BIT2, without 'i' update */
 #define AOCL_REV_BIT_PI(p, A0, A1) \
     ttt = *(p); \
     NORMALIZE; \
@@ -178,6 +180,11 @@
     *(p) = (CLzmaProb)(ttt + ((tmpProb - ttt) >> kNumMoveBits)); \
     if (tmpFlag) { A0; } \
     else { A1; }
+#else //inline assembly might not be supported by other compilers
+#define AOCL_REV_BIT_PI(p, A0, A1) IF_BIT_0(p) \
+  { UPDATE_0(p); A0; } else \
+  { UPDATE_1(p); A1; }
+#endif
 
 #define AOCL_REV_BIT(p, i, A0, A1)  AOCL_REV_BIT_PI(p + i, A0, A1)
 #define AOCL_REV_BIT_VAR(  p, i, m) AOCL_REV_BIT(p, i, i += m; m += m, m += m; i += m; )

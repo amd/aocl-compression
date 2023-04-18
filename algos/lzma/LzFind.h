@@ -35,6 +35,11 @@ hcChain part is a circular buffer */
 #define HASH_CHAIN_SLOT_SZ_16 (HASH_CHAIN_MAX_16+1) // head_ptr and hash-chain
 #endif
 
+#define MIN_SIZE_FOR_CF_HC (kHashGuarentee * HASH_CHAIN_SLOT_SZ_8)
+
+// Condition to use cache efficient hash chains
+#define USE_CACHE_EFFICIENT_HASH_CHAIN (!p->btMode && p->expectedDataSize > MIN_SIZE_FOR_CF_HC)
+
 EXTERN_C_BEGIN
 
 typedef UInt32 CLzRef;
