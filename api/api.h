@@ -48,6 +48,7 @@ extern "C" {
  * \defgroup LZ4_API
  * \defgroup SNAPPY_API
  * \defgroup ZLIB_API
+ * \defgroup LZMA_API
  */
 
 /**

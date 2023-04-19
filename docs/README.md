@@ -10,7 +10,7 @@ easily integrate and use them. For AOCL Compression framework API's refer @ref A
 AOCL Compression supports the following libraries's compression and decompression methods along with their native APIs.
 1. @ref LZ4_API "lz4"
 2. @ref ZLIB_API "zlib/deflate"
-3. lzma
+3. @ref LZMA_API "lzma"
 5. zstd
 6. bzip2
 7. @ref SNAPPY_API "snappy"
