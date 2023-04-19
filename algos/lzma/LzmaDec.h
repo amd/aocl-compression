@@ -1,7 +1,7 @@
 /* LzmaDec.h -- LZMA Decoder
 2020-03-19 : Igor Pavlov : Public domain */
 
-/**
+/*
  * Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
  */
 
@@ -12,10 +12,33 @@
 
 EXTERN_C_BEGIN
 
-/* #define _LZMA_PROB32 */
-/* _LZMA_PROB32 can increase the speed on some CPUs,
-   but memory usage for CLzmaDec::probs will be doubled in that case */
+/*!
+ * \addtogroup LZMA_API
+ * @brief
+ * LZMA is a lossless compression algorithm that provides a high degree of compression.
+ * Its compression ratios are lower than other LZ77 based methods for most inputs 
+ * (in the range of 25-30 for Silesia dataset).
+ * The lower compression ratio comes at the expense of lower compression speed. 
+ * However, it provides good decompression speed (better than BZIP2, which can give
+ * compression ratios close to LZMA).
+ * 
+ * The LZMA compression library provides in-memory compression and decompression functions.
+ * Typical usage is as follows :
+ * 1. Call aocl_setup_lzma_encode() and aocl_setup_lzma_decode() to choose optimization options.
+ * 2. Call LzmaEncProps_Init() to initialize CLzmaEncProps object.
+ * 3. Update _CLzmaEncProps, if any specific user settings are desired, such as compression level.
+ * 4. To compress a file, load file to a source buffer and pass this and a destination buffer to LzmaEncode().
+ * LzmaEncode() performs in-memory compression and writes the compressed data to the destination buffer.
+ * 5. To decompress, call LzmaDecode() by passing compressed data as source and a destination buffer
+ * to hold uncompressed bytes.
+ *
+ * @{
+*/
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+/* #define _LZMA_PROB32 */
+/** _LZMA_PROB32 can increase the speed on some CPUs,
+   but memory usage for CLzmaDec::probs will be doubled in that case. */
     typedef
 #ifdef _LZMA_PROB32
     UInt32
@@ -23,20 +46,29 @@ EXTERN_C_BEGIN
     UInt16
 #endif
     CLzmaProb;
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 
 /* ---------- LZMA Properties ---------- */
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 #define LZMA_PROPS_SIZE 5
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 typedef struct _CLzmaProps
 {
-    Byte lc;
-    Byte lp;
-    Byte pb; // number of low bits of processedPos to include in posState (default 2)
+    Byte lc; /**< number of high bits of the previous byte to use as a context for literal encoding (default 3). */
+    Byte lp; /**< number of low bits of the dictionary position to include in literal posState (default 0). */
+    Byte pb; /**< number of low bits of processedPos to include in posState (default 2). */
     Byte _pad_;
-    UInt32 dicSize;
+    UInt32 dicSize; /**< size of dictionary / search buffer to use to find matches */
 } CLzmaProps;
+
+
+/*!
+ * @name Decode Functions
+ * @{
+ */
 
 /* LzmaProps_Decode - decodes properties
 Returns:
@@ -44,78 +76,126 @@ Returns:
   SZ_ERROR_UNSUPPORTED - Unsupported properties
 */
 
+/*! @brief decodes header bytes in `data` and sets properties in `p`.
+*
+* | Parameters | Direction   | Description |
+* |:-----------|:-----------:|:------------|
+* | \b p       | out         | Properties object to be set |
+* | \b data    | in          | Header bytes from compressed stream |
+* | \b size    | in          | Size of header in bytes |
+*
+* @return 
+* | Result     | Description |
+* |:-----------|:------------|
+* | Success    |SZ_OK                                         |
+* | Fail       |SZ_ERROR_UNSUPPORTED - Unsupported properties |
+* 
+*/
 LZMALIB_API SRes LzmaProps_Decode(CLzmaProps* p, const Byte* data, unsigned size);
 
+/**
+ * @}
+*/
 
 /* ---------- LZMA Decoder state ---------- */
 
-/* LZMA_REQUIRED_INPUT_MAX = number of required input bytes for worst case.
-   Num bits = log2((2^11 / 31) ^ 22) + 26 < 134 + 26 = 160; */
-
-#define LZMA_REQUIRED_INPUT_MAX 20
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+#define LZMA_REQUIRED_INPUT_MAX 20  /**< LZMA_REQUIRED_INPUT_MAX = number of required input bytes for worst case. \n
+                                         Num bits = log2((2^11 / 31) ^ 22) + 26 < 134 + 26 = 160; */
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 typedef struct
 {
     /* Don't change this structure. ASM code can use it. */
-    CLzmaProps prop;
-    CLzmaProb* probs; // all context model probabilities
-    CLzmaProb* probs_1664; // all context model probabilities
-    Byte* dic; // circular buffer of decompressed bytes. Used as reference to copy from for future matches
-    SizeT dicBufSize; // dic size
-    SizeT dicPos; // current position in dic 
-    const Byte* buf; // input stream of compressed bytes
-    UInt32 range; // range size
-    UInt32 code; // encoded point within range
-    UInt32 processedPos; // indicator of bytes decompressed until now. ++ or +=len based on type of decompress operation performed
-    UInt32 checkDicSize;
-    UInt32 reps[4]; // offsets  for rep0-3
-    UInt32 state; // current state machine state
-    UInt32 remainLen;
+    CLzmaProps prop;       /**< properties read from header bytes in compressed data */
+    CLzmaProb* probs;      /**< all context model probabilities */
+    CLzmaProb* probs_1664; /**< all context model probabilities */
+    Byte* dic;             /**< circular buffer of decompressed bytes. Used as reference to copy from for future matches */
+    SizeT dicBufSize;      /**< dictionary size */
+    SizeT dicPos;          /**< current position in dictionary */
+    const Byte* buf;       /**< input stream of compressed bytes */
+    UInt32 range;          /**< range coder: range size */
+    UInt32 code;           /**< range coder: encoded point within range */
+    UInt32 processedPos;   /**< indicator of bytes decompressed until now. Incremented by 1 or incremented by len based on type of decompress operation performed */
+    UInt32 checkDicSize;   /**< indicator for situation where bytes to be processed is more than bytes that can fit in dest buffer */
+    UInt32 reps[4];        /**< offsets for repeated matches rep0-3 */
+    UInt32 state;          /**< current state in state machine */
+    UInt32 remainLen;      /**< shows status of LZMA decoder: \n 
+                                < kMatchSpecLenStart  : the number of bytes to be copied with (rep0) offset \n 
+                                = kMatchSpecLenStart  : the LZMA stream was finished with end mark \n 
+                                = kMatchSpecLenStart + 1  : need init range coder \n 
+                                = kMatchSpecLenStart + 2  : need init range coder and state \n 
+                                = kMatchSpecLen_Error_Fail                : Internal Code Failure \n 
+                                = kMatchSpecLen_Error_Data + [0 ... 273]  : LZMA Data Error */
 
-    UInt32 numProbs;
+    UInt32 numProbs;       /**< number of items in probs table */
     unsigned tempBufSize;
     Byte tempBuf[LZMA_REQUIRED_INPUT_MAX];
 } CLzmaDec;
 
-#define LzmaDec_Construct(p) { (p)->dic = NULL; (p)->probs = NULL; }
+/*! @brief First operation to call before setting up CLzmaDec
+*
+* | Parameters | Direction   | Description |
+* |:-----------|:-----------:|:------------|
+* | \b p       | out         | Decoder object to be initialized |
+*/
+#define LzmaDec_Construct(p) \
+{ (p)->dic = NULL; (p)->probs = NULL; }
 
+/*!
+ * @name Decode Functions
+ * @{
+ */
+
+/*! @brief Initialize LZMA decoder
+*
+* | Parameters | Direction   | Description |
+* |:-----------|:-----------:|:------------|
+* | \b p       | out         | Decoder object to be initialized |
+*
+* @return void
+* 
+*/
 LZMALIB_API void LzmaDec_Init(CLzmaDec* p);
 
-/* There are two types of LZMA streams:
-     - Stream with end mark. That end mark adds about 6 bytes to compressed size.
-     - Stream without end mark. You must know exact uncompressed size to decompress such stream. */
+/**
+ * @}
+*/
 
+/*! @brief 
+   There are two types of LZMA streams:
+     - Stream with end mark. That end mark adds about 6 bytes to compressed size.
+     - Stream without end mark. You must know exact uncompressed size to decompress such stream.
+
+   ELzmaFinishMode has meaning only if the decoding reaches output limit.
+
+   @note 1. You must use `LZMA_FINISH_END`, when you know that current output buffer
+   covers last bytes of block. In other cases you must use `LZMA_FINISH_ANY`. \n
+
+   @note 2.  If LZMA decoder sees end marker before reaching output limit, it returns `SZ_OK`,
+   and output value of destLen will be less than output buffer size limit. 
+   You can check status result also. \n
+
+   @note 3.  You can use multiple checks to test data integrity after full decompression: \n
+      -  Check Result and "status" variable. \n
+      -  Check that output(destLen) = uncompressedSize, if you know real uncompressedSize. \n
+      -  Check that output(srcLen) = compressedSize, if you know real compressedSize. \n
+        You must use correct finish mode in that case. */
 typedef enum
 {
-    LZMA_FINISH_ANY,   /* finish at any point */
-    LZMA_FINISH_END    /* block must be finished at the end */
+    LZMA_FINISH_ANY,   /**< finish at any point */
+    LZMA_FINISH_END    /**< block must be finished at the end */
 } ELzmaFinishMode;
 
-/* ELzmaFinishMode has meaning only if the decoding reaches output limit !!!
-
-   You must use LZMA_FINISH_END, when you know that current output buffer
-   covers last bytes of block. In other cases you must use LZMA_FINISH_ANY.
-
-   If LZMA decoder sees end marker before reaching output limit, it returns SZ_OK,
-   and output value of destLen will be less than output buffer size limit.
-   You can check status result also.
-
-   You can use multiple checks to test data integrity after full decompression:
-     1) Check Result and "status" variable.
-     2) Check that output(destLen) = uncompressedSize, if you know real uncompressedSize.
-     3) Check that output(srcLen) = compressedSize, if you know real compressedSize.
-        You must use correct finish mode in that case. */
-
+/*! @brief ELzmaStatus is used as output status of decode function call. */
 typedef enum
 {
-    LZMA_STATUS_NOT_SPECIFIED,               /* use main error code instead */
-    LZMA_STATUS_FINISHED_WITH_MARK,          /* stream was finished with end mark. */
-    LZMA_STATUS_NOT_FINISHED,                /* stream was not finished */
-    LZMA_STATUS_NEEDS_MORE_INPUT,            /* you must provide more input bytes */
-    LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK  /* there is probability that stream was finished without end mark */
+    LZMA_STATUS_NOT_SPECIFIED,               /**< use main error code instead */
+    LZMA_STATUS_FINISHED_WITH_MARK,          /**< stream was finished with end mark. */
+    LZMA_STATUS_NOT_FINISHED,                /**< stream was not finished */
+    LZMA_STATUS_NEEDS_MORE_INPUT,            /**< you must provide more input bytes */
+    LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK  /**< there is probability that stream was finished without end mark */
 } ELzmaStatus;
-
-/* ELzmaStatus is used only as output value for function call */
 
 
 /* ---------- Interfaces ---------- */
@@ -140,10 +220,74 @@ typedef enum
      SZ_ERROR_UNSUPPORTED - Unsupported properties
    */
 
+/*!
+ * @name Decode Functions
+ * @{
+ */
+
+/*! @brief Allocate probability tables in decoder object.
+*          Sets properties in p by calling LzmaProps_Decode().
+*
+* | Parameters | Direction   | Description |
+* |:-----------|:-----------:|:------------|
+* | \b p         | out         | Decoder object that holds prob tables |
+* | \b props     | in          | Header bytes from compressed stream |
+* | \b propsSize | in          | Size of header in bytes |
+* | \b alloc     | in          | Allocator object |
+* 
+* @return 
+* | Result     | Description |
+* |:-----------|:------------|
+* | Success    |SZ_OK                                          |
+* | Fail       |SZ_ERROR_MEM         - Memory allocation error |
+* | ^          |SZ_ERROR_UNSUPPORTED - Unsupported properties  |
+* 
+*/
 LZMALIB_API SRes LzmaDec_AllocateProbs(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAllocPtr alloc);
+
+/*! @brief Free probability tables in decoder object.
+*
+* | Parameters | Direction   | Description |
+* |:-----------|:-----------:|:------------|
+* | \b p        | out         | Decoder object that holds prob tables |
+* | \b alloc    | in          | Allocator object |
+*
+* @return void
+* 
+*/
 LZMALIB_API void LzmaDec_FreeProbs(CLzmaDec* p, ISzAllocPtr alloc);
 
+/*! @brief Allocate probability tables in decoder object.
+*          Sets properties in p by calling LzmaProps_Decode().
+*          Allocate dictionary buffer.
+*
+* | Parameters | Direction   | Description |
+* |:-----------|:-----------:|:------------|
+* | \b p         | out         | Decoder object that holds prob tables and dictionary |
+* | \b props     | in          | Header bytes from compressed stream |
+* | \b propsSize | in          | Size of header in bytes |
+* | \b alloc     | in          | Allocator object |
+*
+* @return 
+* | Result     | Description |
+* |:-----------|:------------|
+* | Success    |SZ_OK                                          |
+* | Fail       |SZ_ERROR_MEM         - Memory allocation error |
+* | ^          |SZ_ERROR_UNSUPPORTED - Unsupported properties  |
+* 
+*/
 LZMALIB_API SRes LzmaDec_Allocate(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAllocPtr alloc);
+
+/*! @brief Free probability tables and dictionary in decoder object.
+*
+* | Parameters | Direction   | Description |
+* |:-----------|:-----------:|:------------|
+* | \b p        | out         | Decoder object that holds prob tables and dictionary |
+* | \b alloc    | in          | Allocator object |
+*
+* @return void
+* 
+*/
 LZMALIB_API void LzmaDec_Free(CLzmaDec* p, ISzAllocPtr alloc);
 
 /* ---------- Dictionary Interface ---------- */
@@ -188,8 +332,55 @@ Returns:
   SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure
 */
 
+
+/*! @brief Decode src and write decompressed data into internal dictionary buffer.
+* You can use it, if you want to eliminate the overhead for data copying from
+* dictionary to some other external buffer.
+* You must work with CLzmaDec variables directly in this interface.
+* 
+* STEPS:
+* ~~~~~~~~~~~~
+     LzmaDec_Construct()
+     LzmaDec_Allocate()
+     for (each new stream)
+     {
+       LzmaDec_Init()
+       while (it needs more decompression)
+       {
+         LzmaDec_DecodeToDic()
+         use data from CLzmaDec::dic and update CLzmaDec::dicPos
+       }
+     }
+     LzmaDec_Free()
+* ~~~~~~~~~~~~
+* 
+*  When decoding to internal dictionary buffer (CLzmaDec::dic),
+*  you must manually update CLzmaDec::dicPos, if it reaches CLzmaDec::dicBufSize !!!
+*
+* | Parameters | Direction   | Description |
+* |:-----------|:-----------:|:------------|
+* | \b p          | in,out      | Decoder object that contains properties and dictionary buffer |
+* | \b dicLimit   | in          | Max number of bytes that can be decompressed and saved in dictionary |
+* | \b src        | in          | Source buffer containing compressed data |
+* | \b srcLen     | in,out      | Length of source buffer |
+* | \b finishMode |             | It has meaning only if the decoding reaches output limit (dicLimit). |
+* | ^             | ^           | - LZMA_FINISH_ANY - Decode just dicLimit bytes.                      |
+* | ^             | ^           | - LZMA_FINISH_END - Stream must be finished after dicLimit.          |
+* | \b status     | out         | Decompression status at the end of current operation |
+*
+* @return 
+* | Result     | Description |
+* |:-----------|:------------|
+* | Success    |SZ_OK                      |
+* | Fail       |SZ_ERROR_DATA - Data error |
+* | ^          |SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure  |
+* 
+*/
+
 LZMALIB_API SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit,
     const Byte* src, SizeT* srcLen, ELzmaFinishMode finishMode, ELzmaStatus* status);
+
+
 
 
 /* ---------- Buffer Interface ---------- */
@@ -205,9 +396,14 @@ finishMode:
   LZMA_FINISH_END - Stream must be finished after (*destLen).
 */
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 LZMALIB_API SRes LzmaDec_DecodeToBuf(CLzmaDec* p, Byte* dest, SizeT* destLen,
     const Byte* src, SizeT* srcLen, ELzmaFinishMode finishMode, ELzmaStatus* status);
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
+/**
+ * @}
+*/
 
 /* ---------- One Call Interface ---------- */
 
@@ -231,18 +427,67 @@ Returns:
   SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure
 */
 
+/*!
+ * @name Decode One Call Interface
+ * @{
+ */
+
+/*! @brief Decode compressed data in `src` and save result to `dest`
+*
+* | Parameters | Direction   | Description |
+* |:-----------|:-----------:|:------------|
+* | \b dest       | out         | Destination buffer to save decompressed data |
+* | \b destLen    | out         | Size of decompressed data|
+* | \b src        | in          | Source buffer containing compressed data |
+* | \b srcLen     | in,out      | Length of source buffer |
+* | \b propData   | in          | Header bytes in compressed source data |
+* | \b propSize   | in          | Size of header |
+* | \b finishMode |             | It has meaning only if the decoding reaches output limit (*destLen). |
+* | ^             | ^           | - LZMA_FINISH_ANY - Decode just destLen bytes.                       |
+* | ^             | ^           | - LZMA_FINISH_END - Stream must be finished after (*destLen).        |
+* | \b status     | out         | Decompression status at the end of current operation |
+* | \b alloc      | in          | Memory allocator object |
+*
+* @return 
+* | Result     | Description |
+* |:-----------|:------------|
+* | Success    |SZ_OK                      |
+* | Fail       |SZ_ERROR_DATA - Data error |
+* | ^          |SZ_ERROR_MEM  - Memory allocation error  |
+* | ^          |SZ_ERROR_UNSUPPORTED - Unsupported properties |
+* | ^          |SZ_ERROR_INPUT_EOF - It needs more bytes in input buffer (src) |
+* | ^          |SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure  |
+* 
+*/
 LZMALIB_API SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
     const Byte* propData, unsigned propSize, ELzmaFinishMode finishMode,
     ELzmaStatus* status, ISzAllocPtr alloc);
+    
+/**
+ * @}
+*/
 
-
-/* AOCL-Compression defined setup function that configures with the right
- * AMD optimized lzma routines depending upon the detected CPU features.
- */
 #ifdef AOCL_DYNAMIC_DISPATCHER
+/*! @brief AOCL-Compression defined setup function that configures with the right
+ * AMD optimized lzma routines depending upon the detected CPU features.
+ *
+* | Parameters    | Description |
+ * |:-------------|:------------|
+ * | \b optOff    | Turn off all optimizations .                                                                  |
+ * | \b optLevel  | Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .             |
+ * | \b insize    | Input data length.                                                                            |
+ * | \b level     | Requested compression level.                                                                  |
+ * | \b windowLog | Largest match distance : larger == more compression, more memory needed during decompression. |
+ *
+ * @return \b NULL 
+ */
 LZMALIB_API void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 #endif
+
+/**
+ * @}
+ */
 
 EXTERN_C_END
 
