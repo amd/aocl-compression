@@ -1,5 +1,6 @@
 /* crc32.c -- compute the CRC-32 of a data stream
  * Copyright (C) 1995-2006, 2010, 2011, 2012, 2016 Mark Adler
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  *
  * Thanks to Rodney Brown <rbrown64@csc.com.au> for his contribution of faster
@@ -162,9 +163,13 @@ local void make_crc_table()
 }
 
 #ifdef MAKECRCH
+#ifdef ENABLE_STRICT_WARNINGS
+local void write_table(FILE *out, const z_crc_t FAR *table)
+#else
 local void write_table(out, table)
     FILE *out;
     const z_crc_t FAR *table;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int n;
 
@@ -199,10 +204,14 @@ const z_crc_t FAR * ZEXPORT get_crc_table()
 #define DO8 DO1; DO1; DO1; DO1; DO1; DO1; DO1; DO1
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf, z_size_t len)
+#else
 unsigned long ZEXPORT crc32_z(crc, buf, len)
     unsigned long crc;
     const unsigned char FAR *buf;
     z_size_t len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     if (buf == Z_NULL) return 0UL;
 
@@ -234,10 +243,14 @@ unsigned long ZEXPORT crc32_z(crc, buf, len)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+unsigned long ZEXPORT crc32(unsigned long crc, const unsigned char FAR *buf, uInt len)
+#else
 unsigned long ZEXPORT crc32(crc, buf, len)
     unsigned long crc;
     const unsigned char FAR *buf;
     uInt len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return crc32_z(crc, buf, len);
 }
@@ -263,10 +276,14 @@ unsigned long ZEXPORT crc32(crc, buf, len)
 #define DOLIT32 DOLIT4; DOLIT4; DOLIT4; DOLIT4; DOLIT4; DOLIT4; DOLIT4; DOLIT4
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+local unsigned long crc32_little(unsigned long crc, const unsigned char FAR *buf, z_size_t len)
+#else
 local unsigned long crc32_little(crc, buf, len)
     unsigned long crc;
     const unsigned char FAR *buf;
     z_size_t len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     register z_crc_t c;
     register const z_crc_t FAR *buf4;
@@ -303,10 +320,14 @@ local unsigned long crc32_little(crc, buf, len)
 #define DOBIG32 DOBIG4; DOBIG4; DOBIG4; DOBIG4; DOBIG4; DOBIG4; DOBIG4; DOBIG4
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+local unsigned long crc32_big(unsigned long crc, const unsigned char FAR *buf, z_size_t len)
+#else
 local unsigned long crc32_big(crc, buf, len)
     unsigned long crc;
     const unsigned char FAR *buf;
     z_size_t len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     register z_crc_t c;
     register const z_crc_t FAR *buf4;
@@ -341,9 +362,13 @@ local unsigned long crc32_big(crc, buf, len)
 #define GF2_DIM 32      /* dimension of GF(2) vectors (length of CRC) */
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+local unsigned long gf2_matrix_times(unsigned long *mat, unsigned long vec)
+#else
 local unsigned long gf2_matrix_times(mat, vec)
     unsigned long *mat;
     unsigned long vec;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned long sum;
 
@@ -358,9 +383,13 @@ local unsigned long gf2_matrix_times(mat, vec)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+local void gf2_matrix_square(unsigned long *square, unsigned long *mat)
+#else
 local void gf2_matrix_square(square, mat)
     unsigned long *square;
     unsigned long *mat;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int n;
 
@@ -369,10 +398,14 @@ local void gf2_matrix_square(square, mat)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+local uLong crc32_combine_(uLong crc1, uLong crc2, z_off64_t len2)
+#else
 local uLong crc32_combine_(crc1, crc2, len2)
     uLong crc1;
     uLong crc2;
     z_off64_t len2;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int n;
     unsigned long row;
@@ -425,18 +458,26 @@ local uLong crc32_combine_(crc1, crc2, len2)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+uLong ZEXPORT crc32_combine(uLong crc1, uLong crc2, z_off_t len2)
+#else
 uLong ZEXPORT crc32_combine(crc1, crc2, len2)
     uLong crc1;
     uLong crc2;
     z_off_t len2;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return crc32_combine_(crc1, crc2, len2);
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+uLong ZEXPORT crc32_combine64(uLong crc1, uLong crc2, z_off64_t len2)
+#else
 uLong ZEXPORT crc32_combine64(crc1, crc2, len2)
     uLong crc1;
     uLong crc2;
     z_off64_t len2;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return crc32_combine_(crc1, crc2, len2);
 }

@@ -116,8 +116,12 @@ static int (*updatewindow_fp)(z_streamp strm, const Bytef * end, unsigned copy) 
 static void (*inflate_fast_fp)(z_streamp strm, unsigned start) = inflate_fast;
 #endif
 
+#ifdef ENABLE_STRICT_WARNINGS
+local int inflateStateCheck(z_streamp strm)
+#else
 local int inflateStateCheck(strm)
 z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
     if (strm == Z_NULL ||
@@ -130,8 +134,12 @@ z_streamp strm;
     return 0;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateResetKeep(z_streamp strm)
+#else
 int ZEXPORT inflateResetKeep(strm)
 z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
 
@@ -155,8 +163,12 @@ z_streamp strm;
     return Z_OK;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateReset(z_streamp strm)
+#else
 int ZEXPORT inflateReset(strm)
 z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
 
@@ -168,9 +180,13 @@ z_streamp strm;
     return inflateResetKeep(strm);
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateReset2(z_streamp strm, int windowBits)
+#else
 int ZEXPORT inflateReset2(strm, windowBits)
 z_streamp strm;
 int windowBits;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int wrap;
     struct inflate_state FAR *state;
@@ -206,11 +222,15 @@ int windowBits;
     return inflateReset(strm);
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateInit2_(z_streamp strm, int windowBits, const char *version, int stream_size)
+#else
 int ZEXPORT inflateInit2_(strm, windowBits, version, stream_size)
 z_streamp strm;
 int windowBits;
 const char *version;
 int stream_size;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int ret;
     struct inflate_state FAR *state;
@@ -250,18 +270,26 @@ int stream_size;
     return ret;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateInit_(z_streamp strm, const char *version, int stream_size)
+#else
 int ZEXPORT inflateInit_(strm, version, stream_size)
 z_streamp strm;
 const char *version;
 int stream_size;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return inflateInit2_(strm, DEF_WBITS, version, stream_size);
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflatePrime(z_streamp strm, int bits, int value)
+#else
 int ZEXPORT inflatePrime(strm, bits, value)
 z_streamp strm;
 int bits;
 int value;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
 
@@ -289,8 +317,12 @@ int value;
    used for threaded applications, since the rewriting of the tables and virgin
    may not be thread-safe.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local void fixedtables(struct inflate_state FAR *state)
+#else
 local void fixedtables(state)
 struct inflate_state FAR *state;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
 #ifdef BUILDFIXED
     static int virgin = 1;
@@ -407,10 +439,14 @@ void makefixed()
    output will fall in the output data, making match copies simpler and faster.
    The advantage may be dependent on the size of the processor's data caches.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local int updatewindow(z_streamp strm, const Bytef *end, unsigned copy)
+#else
 local int updatewindow(strm, end, copy)
 z_streamp strm;
 const Bytef *end;
 unsigned copy;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
     unsigned dist;
@@ -458,10 +494,7 @@ unsigned copy;
 }
 
 #ifdef AOCL_ZLIB_SSE2_OPT
-local int aocl_updatewindow(strm, end, copy)
-z_streamp strm;
-const Bytef *end;
-unsigned copy;
+local int aocl_updatewindow(z_streamp strm, const Bytef *end, unsigned copy)
 {
     struct inflate_state FAR *state;
     unsigned dist;
@@ -703,9 +736,13 @@ unsigned copy;
    will return Z_BUF_ERROR if it has not reached the end of the stream.
  */
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflate(z_streamp strm, int flush)
+#else
 int ZEXPORT inflate(strm, flush)
 z_streamp strm;
 int flush;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
     z_const unsigned char FAR *next;    /* next input */
@@ -1494,8 +1531,12 @@ int flush;
     return ret;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateEnd(z_streamp strm)
+#else
 int ZEXPORT inflateEnd(strm)
 z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
     if (inflateStateCheck(strm))
@@ -1508,10 +1549,14 @@ z_streamp strm;
     return Z_OK;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateGetDictionary(z_streamp strm, Bytef *dictionary, uInt *dictLength)
+#else
 int ZEXPORT inflateGetDictionary(strm, dictionary, dictLength)
 z_streamp strm;
 Bytef *dictionary;
 uInt *dictLength;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
 
@@ -1531,10 +1576,14 @@ uInt *dictLength;
     return Z_OK;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateSetDictionary(z_streamp strm, const Bytef *dictionary, uInt dictLength)
+#else
 int ZEXPORT inflateSetDictionary(strm, dictionary, dictLength)
 z_streamp strm;
 const Bytef *dictionary;
 uInt dictLength;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
     unsigned long dictid;
@@ -1579,9 +1628,13 @@ uInt dictLength;
     return Z_OK;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateGetHeader(z_streamp strm, gz_headerp head)
+#else
 int ZEXPORT inflateGetHeader(strm, head)
 z_streamp strm;
 gz_headerp head;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
 
@@ -1607,10 +1660,14 @@ gz_headerp head;
    called again with more data and the *have state.  *have is initialized to
    zero for the first call.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local unsigned syncsearch(unsigned FAR *have, const unsigned char FAR *buf, unsigned len)
+#else
 local unsigned syncsearch(have, buf, len)
 unsigned FAR *have;
 const unsigned char FAR *buf;
 unsigned len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned got;
     unsigned next;
@@ -1630,8 +1687,12 @@ unsigned len;
     return next;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateSync(z_streamp strm)
+#else
 int ZEXPORT inflateSync(strm)
 z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned len;               /* number of bytes to look at or looked at */
     unsigned long in, out;      /* temporary to save total_in and total_out */
@@ -1681,8 +1742,12 @@ z_streamp strm;
    block. When decompressing, PPP checks that at the end of input packet,
    inflate is waiting for these length bytes.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateSyncPoint(z_streamp strm)
+#else
 int ZEXPORT inflateSyncPoint(strm)
 z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
 
@@ -1691,9 +1756,13 @@ z_streamp strm;
     return state->mode == STORED && state->bits == 0;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateCopy(z_streamp dest, z_streamp source)
+#else
 int ZEXPORT inflateCopy(dest, source)
 z_streamp dest;
 z_streamp source;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
     struct inflate_state FAR *copy;
@@ -1738,9 +1807,13 @@ z_streamp source;
     return Z_OK;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateUndermine(z_streamp strm, int subvert)
+#else
 int ZEXPORT inflateUndermine(strm, subvert)
 z_streamp strm;
 int subvert;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
 
@@ -1756,9 +1829,13 @@ int subvert;
 #endif
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT inflateValidate(z_streamp strm, int check)
+#else
 int ZEXPORT inflateValidate(strm, check)
 z_streamp strm;
 int check;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
 
@@ -1771,8 +1848,12 @@ int check;
     return Z_OK;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+long ZEXPORT inflateMark(z_streamp strm)
+#else
 long ZEXPORT inflateMark(strm)
 z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
 
@@ -1784,8 +1865,12 @@ z_streamp strm;
             (state->mode == MATCH ? state->was - state->length : 0));
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+unsigned long ZEXPORT inflateCodesUsed(z_streamp strm)
+#else
 unsigned long ZEXPORT inflateCodesUsed(strm)
 z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
     if (inflateStateCheck(strm)) return (unsigned long)-1;

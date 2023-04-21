@@ -1090,7 +1090,7 @@ Int32 AOCL_BZ2_decompress ( DState* s )
 
             /*-- uc = MTF ( nextSym-1 ) --*/
             {
-               Int32 ii, jj, kk, pp, lno, off;
+               Int32 ii, kk, pp, lno, off;
                UInt32 nn;
                nn = (UInt32)(nextSym - 1);
 

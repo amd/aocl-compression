@@ -1,5 +1,5 @@
 // Copyright 2005 and onwards Google Inc.
-//
+// Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -61,8 +61,8 @@
 #  define SNAPPYLIB_API SNAPPYLIB_VISIBILITY
 #endif
 
-/**
- * 
+namespace snappy {
+/*!
  * \addtogroup SNAPPY_API
  * @brief
  * A light-weight compression algorithm.  It is designed for speed of
@@ -77,7 +77,6 @@
  * @{
  */
 
-namespace snappy {
   class Source;
   class Sink;
 
@@ -430,12 +429,7 @@ namespace snappy {
 
   static constexpr int kMaxHashTableBits = 14;
   static constexpr size_t kMaxHashTableSize = 1 << kMaxHashTableBits;
+  /*! @} end doxygen SNAPPY_API*/
 }  // end namespace snappy
 
 #endif  // THIRD_PARTY_SNAPPY_SNAPPY_H__
-/*
-/**
- * @}
- *
- * /
- */

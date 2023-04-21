@@ -46,7 +46,7 @@ INTP is_SSE2_supported(aocl_compression_desc *aocl_codec_handle)
     INTP eax, ebx, ecx, edx;
     cpu_features_detection(0x00000001, 0, &eax, &ebx, &ecx, &edx);
     ret = ((edx & (1 << 26)) != 0);
-    LOG(INFO, aocl_codec_handle->printDebugLogs,
+    LOG_FORMATTED(INFO, aocl_codec_handle->printDebugLogs,
         "SSE2 SIMD %s supported", (ret ? "is" : "is not"));
     return ret;
 }
@@ -57,7 +57,7 @@ INTP is_AVX_supported(aocl_compression_desc *aocl_codec_handle)
     INTP eax, ebx, ecx, edx;
     cpu_features_detection(0x00000001, 0, &eax, &ebx, &ecx, &edx);
     ret = ((ecx & 0x18000000) == 0x18000000);
-    LOG(INFO, aocl_codec_handle->printDebugLogs,
+    LOG_FORMATTED(INFO, aocl_codec_handle->printDebugLogs,
         "AVX SIMD %s supported", (ret ? "is" : "is not"));
     return ret;
 }
@@ -68,7 +68,7 @@ INTP is_AVX2_supported(aocl_compression_desc *aocl_codec_handle)
     INTP eax, ebx, ecx, edx;
     cpu_features_detection(0x00000007, 0, &eax, &ebx, &ecx, &edx);
     ret = ((ebx & (1 << 5)) != 0);
-    LOG(INFO, aocl_codec_handle->printDebugLogs,
+    LOG_FORMATTED(INFO, aocl_codec_handle->printDebugLogs,
         "AVX2 SIMD %s supported", (ret ? "is" : "is not"));
     return ret;
 }
@@ -102,7 +102,7 @@ INTP is_AVX512_supported(aocl_compression_desc *aocl_codec_handle)
             }
         }
     }
-    LOG(INFO, aocl_codec_handle->printDebugLogs,
+    LOG_FORMATTED(INFO, aocl_codec_handle->printDebugLogs,
         "AVX512 SIMD %s supported", (ret ? "is" : "is not"));
     return ret;
 }
@@ -110,12 +110,12 @@ INTP is_AVX512_supported(aocl_compression_desc *aocl_codec_handle)
 VOID set_cpu_opt_flags(VOID *handle)
 {
     aocl_compression_desc *aocl_codec_handle = (aocl_compression_desc *)handle;
-    LOG(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
     
     aocl_codec_handle->optLevel = is_SSE2_supported(aocl_codec_handle);
     aocl_codec_handle->optLevel += is_AVX_supported(aocl_codec_handle);
     aocl_codec_handle->optLevel += is_AVX2_supported(aocl_codec_handle);
     aocl_codec_handle->optLevel += is_AVX512_supported(aocl_codec_handle);
     
-    LOG(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
 }

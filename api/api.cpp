@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -48,14 +48,15 @@ INT64 aocl_llc_compress(aocl_compression_desc *handle,
                         aocl_compression_type codec_type)
 {
     INT64 ret;
+#ifdef WIN32
     timer clkTick;
+#endif
     timeVal startTime, endTime;
 
-    LOG(TRACE, enableLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, enableLogs, "Enter");
 
-    LOG(INFO, enableLogs,
+    LOG_FORMATTED(INFO, enableLogs,
        "Calling compression method: %s", aocl_codec[codec_type].codec_name);
-
     initTimer(clkTick);
     getTime(startTime);
     
@@ -75,7 +76,7 @@ INT64 aocl_llc_compress(aocl_compression_desc *handle,
         handle->cSpeed = (handle->inSize * 1000.0) / handle->cTime;
     }
     
-    LOG(TRACE, enableLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
 
     return ret;
 }
@@ -85,14 +86,15 @@ INT64 aocl_llc_decompress(aocl_compression_desc *handle,
                           aocl_compression_type codec_type)
 {
     INT64 ret;
+#ifdef WIN32
     timer clkTick;
+#endif
     timeVal startTime, endTime;
     
-    LOG(TRACE, enableLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, enableLogs, "Enter");
 
-    LOG(INFO, enableLogs,
+    LOG_FORMATTED(INFO, enableLogs,
        "Calling decompression method: %s", aocl_codec[codec_type].codec_name);
-
     initTimer(clkTick);
     getTime(startTime);
     
@@ -112,7 +114,7 @@ INT64 aocl_llc_decompress(aocl_compression_desc *handle,
         handle->dSpeed = (handle->dSize * 1000.0) / handle->dTime;
     }
 
-    LOG(TRACE, enableLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
 
     return ret;
 }
@@ -123,15 +125,15 @@ VOID aocl_llc_setup(aocl_compression_desc *handle,
 {
     enableLogs = handle->printDebugLogs;
 
-    LOG(TRACE, enableLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, enableLogs, "Enter");
 
-    LOG(INFO, enableLogs,
+    LOG_FORMATTED(INFO, enableLogs,
        "All optimizations are turned %s", (handle->optOff ? "off" : "on"));
 
     if (!handle->optOff)
         set_cpu_opt_flags((VOID *)handle);
 
-    LOG(INFO, enableLogs,
+    LOG_FORMATTED(INFO, enableLogs,
        "Calling setup method for: %s", aocl_codec[codec_type].codec_name);
 
     if (aocl_codec[codec_type].setup)
@@ -143,16 +145,16 @@ VOID aocl_llc_setup(aocl_compression_desc *handle,
                                                         handle->optVar);
     }
 
-    LOG(TRACE, enableLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
 }
 
 //API to destroy memory and deinit the compression method
 VOID aocl_llc_destroy(aocl_compression_desc *handle,
                       aocl_compression_type codec_type)
 {
-    LOG(TRACE, enableLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, enableLogs, "Enter");
 
-    LOG(INFO, enableLogs,
+    LOG_FORMATTED(INFO, enableLogs,
        "Calling destroy method for: %s", aocl_codec[codec_type].codec_name);
 
     if (aocl_codec[codec_type].destroy)
@@ -160,7 +162,7 @@ VOID aocl_llc_destroy(aocl_compression_desc *handle,
         aocl_codec[codec_type].destroy(handle->workBuf);
     }
 
-    LOG(TRACE, enableLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
 }
 
 //API to return the compression library version string

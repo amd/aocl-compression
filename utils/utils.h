@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -45,6 +45,12 @@
 
 #define AOCL_CL_CPUID_SIMD_DETECTION
 
+#if defined(__GNUC__) && __GNUC__ >= 3
+#define FUNC_NAME __func__
+#else
+#define FUNC_NAME __FUNCTION__
+#endif
+
 #ifdef AOCL_CL_DTL
 #define ERR      1
 #define INFO     2
@@ -76,7 +82,7 @@ typedef struct timespec timeVal;
 #ifdef AOCL_CL_DTL
 #include <stdio.h>
 #ifdef __cplusplus
-#define LOG(logType, enableLog, str, ...)     do {\
+#define LOG_UNFORMATTED(logType, enableLog, str)     do {\
                             if (enableLog)\
                             {\
                                 const char *type=NULL;\
@@ -91,14 +97,35 @@ typedef struct timespec timeVal;
                                 if (logType <= enableLog)\
                                 {\
                                     fprintf (stdout, "[%s] : %s : %s : %d : ",\
-                                    type, __FILE__, __FUNCTION__, __LINE__);\
-                                    fprintf(stdout, str, ##__VA_ARGS__);\
+                                    type, __FILE__, FUNC_NAME, __LINE__);\
+                                    fprintf(stdout, str);\
+                                    fprintf(stdout, "\n");\
+                                }\
+                            }\
+                        } while (0)
+#define LOG_FORMATTED(logType, enableLog, str, ...)     do {\
+                            if (enableLog)\
+                            {\
+                                const char *type=NULL;\
+                                if (logType == ERR)\
+                                    type = "ERR";\
+                                else if (logType == INFO)\
+                                    type = "INFO";\
+                                else if (logType == DEBUG)\
+                                    type = "DEBUG";\
+                                else if (logType == TRACE)\
+                                    type = "TRACE";\
+                                if (logType <= enableLog)\
+                                {\
+                                    fprintf (stdout, "[%s] : %s : %s : %d : ",\
+                                    type, __FILE__, FUNC_NAME, __LINE__);\
+                                    fprintf(stdout, str, __VA_ARGS__);\
                                     fprintf(stdout, "\n");\
                                 }\
                             }\
                         } while (0)
 #else
-#define LOG(logType, enableLog, str, ...)     do {\
+#define LOG_UNFORMATTED(logType, enableLog, str)     do {\
                             if (enableLog)\
                             {\
                                 const char *type=NULL;\
@@ -112,12 +139,30 @@ typedef struct timespec timeVal;
                                     type = "TRACE";\
                                 if (logType <= enableLog)\
                                     printf ("[%s] : %s : %s : %d : "str"\n",\
-                                    type, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);\
+                                    type, __FILE__, FUNC_NAME, __LINE__);\
+                            }\
+                        } while (0)
+#define LOG_FORMATTED(logType, enableLog, str, ...)     do {\
+                            if (enableLog)\
+                            {\
+                                const char *type=NULL;\
+                                if (logType == ERR)\
+                                    type = "ERR";\
+                                else if (logType == INFO)\
+                                    type = "INFO";\
+                                else if (logType == DEBUG)\
+                                    type = "DEBUG";\
+                                else if (logType == TRACE)\
+                                    type = "TRACE";\
+                                if (logType <= enableLog)\
+                                    printf ("[%s] : %s : %s : %d : "str"\n",\
+                                    type, __FILE__, FUNC_NAME, __LINE__, __VA_ARGS__);\
                             }\
                         } while (0)
 #endif
 #else
-#define LOG(logType, enableLog, str, ...) 
+#define LOG_UNFORMATTED(logType, enableLog, str)
+#define LOG_FORMATTED(logType, enableLog, str, ...)
 #endif
 
 //Timer and stats keeping
@@ -125,7 +170,7 @@ typedef struct timespec timeVal;
 #ifdef _WINDOWS
 #define initTimer(timerClk) if(!QueryPerformanceFrequency(&timerClk))\
                          {\
-                             LOG(ERR, 1, \
+                             LOG_UNFORMATTED(ERR, 1, \
                              "QueryPerformanceFrequency based Timer failed.");\
                          }
 #define getTime(timeVal) QueryPerformanceCounter(&timeVal)

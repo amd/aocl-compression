@@ -1,5 +1,6 @@
 /* gzwrite.c -- zlib functions for writing gzip files
  * Copyright (C) 2004-2017 Mark Adler
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -14,8 +15,12 @@ local z_size_t gz_write OF((gz_statep, voidpc, z_size_t));
 /* Initialize state for writing a gzip file.  Mark initialization by setting
    state->size to non-zero.  Return -1 on a memory allocation failure, or 0 on
    success. */
+#ifdef ENABLE_STRICT_WARNINGS
+local int gz_init(gz_statep state)
+#else
 local int gz_init(state)
     gz_statep state;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int ret;
     z_streamp strm = &(state->strm);
@@ -70,9 +75,13 @@ local int gz_init(state)
    deflate() flush value.  If flush is Z_FINISH, then the deflate() state is
    reset to start a new gzip stream.  If gz->direct is true, then simply write
    to the output file without compressing, and ignore flush. */
+#ifdef ENABLE_STRICT_WARNINGS
+local int gz_comp(gz_statep state, int flush)
+#else
 local int gz_comp(state, flush)
     gz_statep state;
     int flush;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int ret, writ;
     unsigned have, put, max = ((unsigned)-1 >> 2) + 1;
@@ -86,7 +95,7 @@ local int gz_comp(state, flush)
     if (state->direct) {
         while (strm->avail_in) {
             put = strm->avail_in > max ? max : strm->avail_in;
-            writ = write(state->fd, strm->next_in, put);
+            writ = AOCL_WRITE_GZ(state->fd, strm->next_in, put);
             if (writ < 0) {
                 gz_error(state, Z_ERRNO, zstrerror());
                 return -1;
@@ -107,7 +116,7 @@ local int gz_comp(state, flush)
             while (strm->next_out > state->x.next) {
                 put = strm->next_out - state->x.next > (int)max ? max :
                       (unsigned)(strm->next_out - state->x.next);
-                writ = write(state->fd, state->x.next, put);
+                writ = AOCL_WRITE_GZ(state->fd, state->x.next, put);
                 if (writ < 0) {
                     gz_error(state, Z_ERRNO, zstrerror());
                     return -1;
@@ -142,9 +151,13 @@ local int gz_comp(state, flush)
 
 /* Compress len zeros to output.  Return -1 on a write error or memory
    allocation failure by gz_comp(), or 0 on success. */
+#ifdef ENABLE_STRICT_WARNINGS
+local int gz_zero(gz_statep state, z_off64_t len)
+#else
 local int gz_zero(state, len)
     gz_statep state;
     z_off64_t len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int first;
     unsigned n;
@@ -175,10 +188,14 @@ local int gz_zero(state, len)
 
 /* Write len bytes from buf to file.  Return the number of bytes written.  If
    the returned value is less than len, then there was an error. */
+#ifdef ENABLE_STRICT_WARNINGS
+local z_size_t gz_write(gz_statep state, voidpc buf, z_size_t len)
+#else
 local z_size_t gz_write(state, buf, len)
     gz_statep state;
     voidpc buf;
     z_size_t len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     z_size_t put = len;
 
@@ -243,10 +260,14 @@ local z_size_t gz_write(state, buf, len)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzwrite(gzFile file, voidpc buf, unsigned len)
+#else
 int ZEXPORT gzwrite(file, buf, len)
     gzFile file;
     voidpc buf;
     unsigned len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -271,11 +292,15 @@ int ZEXPORT gzwrite(file, buf, len)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+z_size_t ZEXPORT gzfwrite(voidpc buf, z_size_t size, z_size_t nitems, gzFile file)
+#else
 z_size_t ZEXPORT gzfwrite(buf, size, nitems, file)
     voidpc buf;
     z_size_t size;
     z_size_t nitems;
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     z_size_t len;
     gz_statep state;
@@ -301,9 +326,13 @@ z_size_t ZEXPORT gzfwrite(buf, size, nitems, file)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzputc(gzFile file, int c)
+#else
 int ZEXPORT gzputc(file, c)
     gzFile file;
     int c;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned have;
     unsigned char buf[1];
@@ -349,9 +378,13 @@ int ZEXPORT gzputc(file, c)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzputs(gzFile file, const char *str)
+#else
 int ZEXPORT gzputs(file, str)
     gzFile file;
     const char *str;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int ret;
     z_size_t len;
@@ -462,12 +495,17 @@ int ZEXPORTVA gzprintf(gzFile file, const char *format, ...)
 #else /* !STDC && !Z_HAVE_STDARG_H */
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORTVA gzprintf (gzFile file, const char *format, int a1, int a2, int a3, int a4, int a5, int a6, int a7, int a8, int a9, int a10,
+        int a11, int a12, int a13, int a14, int a15, int a16, int a17, int a18, int a19, int a20)
+#else
 int ZEXPORTVA gzprintf (file, format, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10,
                        a11, a12, a13, a14, a15, a16, a17, a18, a19, a20)
     gzFile file;
     const char *format;
     int a1, a2, a3, a4, a5, a6, a7, a8, a9, a10,
         a11, a12, a13, a14, a15, a16, a17, a18, a19, a20;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned len, left;
     char *next;
@@ -550,9 +588,13 @@ int ZEXPORTVA gzprintf (file, format, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10,
 #endif
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzflush(gzFile file, int flush)
+#else
 int ZEXPORT gzflush(file, flush)
     gzFile file;
     int flush;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -582,10 +624,14 @@ int ZEXPORT gzflush(file, flush)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzsetparams(gzFile file, int level, int strategy)
+#else
 int ZEXPORT gzsetparams(file, level, strategy)
     gzFile file;
     int level;
     int strategy;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
     z_streamp strm;
@@ -624,8 +670,12 @@ int ZEXPORT gzsetparams(file, level, strategy)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzclose_w(gzFile file)
+#else
 int ZEXPORT gzclose_w(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int ret = Z_OK;
     gz_statep state;
@@ -658,7 +708,7 @@ int ZEXPORT gzclose_w(file)
     }
     gz_error(state, Z_OK, NULL);
     free(state->path);
-    if (close(state->fd) == -1)
+    if (AOCL_CLOSE_GZ(state->fd) == -1)
         ret = Z_ERRNO;
     free(state);
     return ret;

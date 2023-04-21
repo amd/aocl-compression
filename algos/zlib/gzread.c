@@ -1,5 +1,6 @@
 /* gzread.c -- zlib functions for reading gzip files
  * Copyright (C) 2004, 2005, 2010, 2011, 2012, 2013, 2016 Mark Adler
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -18,11 +19,15 @@ local z_size_t gz_read OF((gz_statep, voidp, z_size_t));
    state->fd, and update state->eof, state->err, and state->msg as appropriate.
    This function needs to loop on read(), since read() is not guaranteed to
    read the number of bytes requested, depending on the type of descriptor. */
+#ifdef ENABLE_STRICT_WARNINGS
+local int gz_load(gz_statep state, unsigned char *buf, unsigned len, unsigned *have)
+#else
 local int gz_load(state, buf, len, have)
     gz_statep state;
     unsigned char *buf;
     unsigned len;
     unsigned *have;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int ret;
     unsigned get, max = ((unsigned)-1 >> 2) + 1;
@@ -32,7 +37,7 @@ local int gz_load(state, buf, len, have)
         get = len - *have;
         if (get > max)
             get = max;
-        ret = read(state->fd, buf + *have, get);
+        ret = AOCL_READ_GZ(state->fd, buf + *have, get);
         if (ret <= 0)
             break;
         *have += (unsigned)ret;
@@ -53,8 +58,12 @@ local int gz_load(state, buf, len, have)
    If strm->avail_in != 0, then the current data is moved to the beginning of
    the input buffer, and then the remainder of the buffer is loaded with the
    available data from the input file. */
+#ifdef ENABLE_STRICT_WARNINGS
+local int gz_avail(gz_statep state)
+#else
 local int gz_avail(state)
     gz_statep state;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned got;
     z_streamp strm = &(state->strm);
@@ -88,8 +97,12 @@ local int gz_avail(state)
    case, all further file reads will be directly to either the output buffer or
    a user buffer.  If decompressing, the inflate state will be initialized.
    gz_look() will return 0 on success or -1 on failure. */
+#ifdef ENABLE_STRICT_WARNINGS
+local int gz_look(gz_statep state)
+#else
 local int gz_look(state)
     gz_statep state;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     z_streamp strm = &(state->strm);
 
@@ -172,8 +185,12 @@ local int gz_look(state)
    data.  If the gzip stream completes, state->how is reset to LOOK to look for
    the next gzip stream or raw data, once state->x.have is depleted.  Returns 0
    on success, -1 on failure. */
+#ifdef ENABLE_STRICT_WARNINGS
+local int gz_decomp(gz_statep state)
+#else
 local int gz_decomp(state)
     gz_statep state;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int ret = Z_OK;
     unsigned had;
@@ -226,8 +243,12 @@ local int gz_decomp(state)
    looked for to determine whether to copy or decompress.  Returns -1 on error,
    otherwise 0.  gz_fetch() will leave state->how as COPY or GZIP unless the
    end of the input file has been reached and all data has been processed.  */
+#ifdef ENABLE_STRICT_WARNINGS
+local int gz_fetch(gz_statep state)
+#else
 local int gz_fetch(state)
     gz_statep state;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     z_streamp strm = &(state->strm);
 
@@ -256,9 +277,13 @@ local int gz_fetch(state)
 }
 
 /* Skip len uncompressed bytes of output.  Return -1 on error, 0 on success. */
+#ifdef ENABLE_STRICT_WARNINGS
+local int gz_skip(gz_statep state, z_off64_t len)
+#else
 local int gz_skip(state, len)
     gz_statep state;
     z_off64_t len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned n;
 
@@ -291,10 +316,14 @@ local int gz_skip(state, len)
    input.  Return the number of bytes read.  If zero is returned, either the
    end of file was reached, or there was an error.  state->err must be
    consulted in that case to determine which. */
+#ifdef ENABLE_STRICT_WARNINGS
+local z_size_t gz_read(gz_statep state, voidp buf, z_size_t len)
+#else
 local z_size_t gz_read(state, buf, len)
     gz_statep state;
     voidp buf;
     z_size_t len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     z_size_t got;
     unsigned n;
@@ -372,10 +401,14 @@ local z_size_t gz_read(state, buf, len)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzread(gzFile file, voidp buf, unsigned len)
+#else
 int ZEXPORT gzread(file, buf, len)
     gzFile file;
     voidp buf;
     unsigned len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -408,11 +441,15 @@ int ZEXPORT gzread(file, buf, len)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+z_size_t ZEXPORT gzfread(voidp buf, z_size_t size, z_size_t nitems, gzFile file)
+#else
 z_size_t ZEXPORT gzfread(buf, size, nitems, file)
     voidp buf;
     z_size_t size;
     z_size_t nitems;
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     z_size_t len;
     gz_statep state;
@@ -444,8 +481,12 @@ z_size_t ZEXPORT gzfread(buf, size, nitems, file)
 #else
 #  undef gzgetc
 #endif
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzgetc(gzFile file)
+#else
 int ZEXPORT gzgetc(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int ret;
     unsigned char buf[1];
@@ -473,16 +514,24 @@ int ZEXPORT gzgetc(file)
     return ret < 1 ? -1 : buf[0];
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzgetc_(gzFile file)
+#else
 int ZEXPORT gzgetc_(file)
 gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return gzgetc(file);
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzungetc(int c, gzFile file)
+#else
 int ZEXPORT gzungetc(c, file)
     int c;
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -540,10 +589,14 @@ int ZEXPORT gzungetc(c, file)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+char * ZEXPORT gzgets(gzFile file, char *buf, int len)
+#else
 char * ZEXPORT gzgets(file, buf, len)
     gzFile file;
     char *buf;
     int len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned left, n;
     char *str;
@@ -604,8 +657,12 @@ char * ZEXPORT gzgets(file, buf, len)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzdirect(gzFile file)
+#else
 int ZEXPORT gzdirect(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -624,8 +681,12 @@ int ZEXPORT gzdirect(file)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzclose_r(gzFile file)
+#else
 int ZEXPORT gzclose_r(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int ret, err;
     gz_statep state;
@@ -648,7 +709,7 @@ int ZEXPORT gzclose_r(file)
     err = state->err == Z_BUF_ERROR ? Z_BUF_ERROR : Z_OK;
     gz_error(state, Z_OK, NULL);
     free(state->path);
-    ret = close(state->fd);
+    ret = AOCL_CLOSE_GZ(state->fd);
     free(state);
     return ret ? Z_ERRNO : err;
 }

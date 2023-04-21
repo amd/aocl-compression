@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Yann Collet, Facebook, Inc.
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -131,10 +132,14 @@ static size_t ZSTD_seqDecompressedSize(seqStore_t const* seqStore, const seqDef*
     const seqDef* const send = sequences + nbSeq;
     const seqDef* sp = sstart;
     size_t matchLengthSum = 0;
+#if (DEBUGLEVEL>=1) //assert enabled
     size_t litLengthSum = 0;
+#endif
     while (send-sp > 0) {
         ZSTD_sequenceLength const seqLen = ZSTD_getSequenceLength(seqStore, sp);
+#if (DEBUGLEVEL>=1) //assert enabled
         litLengthSum += seqLen.litLength;
+#endif
         matchLengthSum += seqLen.matchLength;
         sp++;
     }

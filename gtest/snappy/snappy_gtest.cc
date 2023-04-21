@@ -42,8 +42,6 @@
 #include <limits.h>
 #include "gtest/gtest.h"
 
-#define AOCL_DYNAMIC_DISPATCHER
-
 #include "algos/snappy/snappy.h"
 #include "algos/snappy/snappy-sinksource.h"
 #include "algos/snappy/snappy-internal.h"
@@ -426,6 +424,7 @@ void iov_init(iovec iov[],const int kLengths[],int kLengths_size)
 class isValid
 {
 public:
+    virtual ~isValid() {};
     virtual bool isVldCmpBfr(string s) = 0;
     virtual bool isVldCmpBfr(const char *c, size_t sz) = 0;
 };
@@ -1370,7 +1369,6 @@ TEST(SNAPPY_RawCompress, fail_case2)    // AOCL_Compression_snappy_RawCompress_c
 TEST(SNAPPY_RawCompress, fail_case3)    // AOCL_Compression_snappy_RawCompress_common_7
 {
     char src[11] = "helloWorld";
-    size_t c_len = -1;
     char compressed[50];
     compressed[0] = 5;
 

@@ -1,5 +1,6 @@
 /* zutil.c -- target dependent utility functions for the compression library
  * Copyright (C) 1995-2017 Jean-loup Gailly
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -119,8 +120,12 @@ uLong ZEXPORT zlibCompileFlags()
 #  endif
 int ZLIB_INTERNAL z_verbose = verbose;
 
+#ifdef ENABLE_STRICT_WARNINGS
+void ZLIB_INTERNAL z_error (char *m)
+#else
 void ZLIB_INTERNAL z_error (m)
     char *m;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     fprintf(stderr, "%s\n", m);
     exit(1);
@@ -130,8 +135,12 @@ void ZLIB_INTERNAL z_error (m)
 /* exported to allow conversion of error code to string for compress() and
  * uncompress()
  */
+#ifdef ENABLE_STRICT_WARNINGS
+const char * ZEXPORT zError(int err)
+#else
 const char * ZEXPORT zError(err)
     int err;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return ERR_MSG(err);
 }
@@ -146,10 +155,14 @@ const char * ZEXPORT zError(err)
 
 #ifndef HAVE_MEMCPY
 
+#ifdef ENABLE_STRICT_WARNINGS
+void ZLIB_INTERNAL zmemcpy(Bytef* dest, const Bytef* source, uInt  len)
+#else
 void ZLIB_INTERNAL zmemcpy(dest, source, len)
     Bytef* dest;
     const Bytef* source;
     uInt  len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     if (len == 0) return;
     do {
@@ -157,10 +170,14 @@ void ZLIB_INTERNAL zmemcpy(dest, source, len)
     } while (--len != 0);
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZLIB_INTERNAL zmemcmp(const Bytef* s1, const Bytef* s2, uInt  len)
+#else
 int ZLIB_INTERNAL zmemcmp(s1, s2, len)
     const Bytef* s1;
     const Bytef* s2;
     uInt  len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     uInt j;
 
@@ -170,9 +187,13 @@ int ZLIB_INTERNAL zmemcmp(s1, s2, len)
     return 0;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+void ZLIB_INTERNAL zmemzero(Bytef* dest, uInt  len)
+#else
 void ZLIB_INTERNAL zmemzero(dest, len)
     Bytef* dest;
     uInt  len;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     if (len == 0) return;
     do {
@@ -302,19 +323,27 @@ extern voidp  calloc OF((uInt items, uInt size));
 extern void   free   OF((voidpf ptr));
 #endif
 
+#ifdef ENABLE_STRICT_WARNINGS
+voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, unsigned items, unsigned size)
+#else
 voidpf ZLIB_INTERNAL zcalloc (opaque, items, size)
     voidpf opaque;
     unsigned items;
     unsigned size;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     (void)opaque;
     return sizeof(uInt) > 2 ? (voidpf)malloc(items * size) :
                               (voidpf)calloc(items, size);
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+void ZLIB_INTERNAL zcfree (voidpf opaque, voidpf ptr)
+#else
 void ZLIB_INTERNAL zcfree (opaque, ptr)
     voidpf opaque;
     voidpf ptr;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     (void)opaque;
     free(ptr);

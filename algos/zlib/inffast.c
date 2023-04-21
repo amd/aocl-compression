@@ -1,5 +1,6 @@
 /* inffast.c -- fast decoding
  * Copyright (C) 1995-2017 Mark Adler
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -47,9 +48,17 @@
       requires strm->avail_out >= 258 for each loop to avoid checking for
       output space.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+void ZLIB_INTERNAL inflate_fast
+(
+    z_streamp strm,
+    unsigned start         /* inflate()'s starting value for strm->avail_out */
+)
+#else
 void ZLIB_INTERNAL inflate_fast(strm, start)
 z_streamp strm;
 unsigned start;         /* inflate()'s starting value for strm->avail_out */
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     struct inflate_state FAR *state;
     z_const unsigned char FAR *in;      /* local strm->next_in */
