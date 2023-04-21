@@ -289,23 +289,27 @@ if (GTEST_ENABLE)
 		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DSNAPPY_DLL_EXPORT=1")
 		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DLL=1")
 		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZMA_DLL_EXPORT=1")
+		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4HC_DLL_EXPORT=1")
         endif()
 	set_property(SOURCE ${LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
+	set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_UNIT_TEST")
 
 	# gtest_combined_test is an executable generated inside build folder
 	set (GTEST_PATH gtest)
 	set(GTEST_SRC_FILES 
         ${GTEST_PATH}/lz4/lz4_gtest.cc
+		${GTEST_PATH}/lz4hc/lz4hc_gtest.cc
 		${GTEST_PATH}/lzma/lzma_gtest.cc
 		${GTEST_PATH}/snappy/snappy_gtest.cc
 		${GTEST_PATH}/zlib/zlib_gtest.cc
 		${GTEST_PATH}/gtest_combined_test.cc
 	)
 	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
+	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_UNIT_TEST")
 	if (AOCL_DYNAMIC_DISPATCHER)
 		set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
 	endif()
-
+	
 	add_executable(gtest_combined_test ${GTEST_SRC_FILES})
 	target_link_libraries(gtest_combined_test gtest_main ${lib_name})
         string(REPLACE " " ";" CXX_FLAGS ${CMAKE_CXX_FLAGS})

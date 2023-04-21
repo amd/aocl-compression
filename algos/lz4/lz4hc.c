@@ -297,6 +297,20 @@ int AOCL_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
 }
 #endif
 
+#ifdef AOCL_LZ4HC_UNIT_TEST
+int Test_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
+                    const BYTE* const iMin, const BYTE* const mMin)
+{
+    return LZ4HC_countBack(ip, match, iMin, mMin);
+}
+
+int Test_AOCL_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
+                    const BYTE* const iMin, const BYTE* const mMin)
+{
+    return AOCL_LZ4HC_countBack(ip, match, iMin, mMin);
+}
+#endif
+
 
 #ifdef AOCL_DYNAMIC_DISPATCHER
     static int (*LZ4HC_countBack_fp)(const BYTE* const ip, 
@@ -1392,6 +1406,8 @@ static size_t LZ4_streamHC_t_alignment(void)
  * in which case its size and alignment have already been validate */
 int LZ4_compress_HC_extStateHC_fastReset (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
+    if(state==NULL || (src==NULL && srcSize!=0) || dst==NULL)
+        return -1;
     LZ4HC_CCtx_internal* const ctx = &((LZ4_streamHC_t*)state)->internal_donotuse;
     if (!LZ4_isAligned(state, LZ4_streamHC_t_alignment())) return 0;
     LZ4_resetStreamHC_fast((LZ4_streamHC_t*)state, compressionLevel);
@@ -1427,6 +1443,8 @@ int LZ4_compress_HC(const char* src, char* dst, int srcSize, int dstCapacity, in
 /* state is presumed sized correctly (>= sizeof(LZ4_streamHC_t)) */
 int LZ4_compress_HC_destSize(void* state, const char* source, char* dest, int* sourceSizePtr, int targetDestSize, int cLevel)
 {
+    if(state==NULL || source==NULL || dest==NULL || sourceSizePtr==NULL)
+        return -1;
     LZ4_streamHC_t* const ctx = LZ4_initStreamHC(state, sizeof(*ctx));
     if (ctx==NULL) return 0;   /* init failure */
     LZ4HC_init_internal(&ctx->internal_donotuse, (const BYTE*) source);
@@ -1484,6 +1502,8 @@ void LZ4_resetStreamHC (LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLevel)
 
 void LZ4_resetStreamHC_fast (LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLevel)
 {
+    if(LZ4_streamHCPtr == NULL) return;
+    
     DEBUGLOG(4, "LZ4_resetStreamHC_fast(%p, %d)", LZ4_streamHCPtr, compressionLevel);
     if (LZ4_streamHCPtr->internal_donotuse.dirty) {
         LZ4_initStreamHC(LZ4_streamHCPtr, sizeof(*LZ4_streamHCPtr));
@@ -1514,6 +1534,8 @@ void LZ4_favorDecompressionSpeed(LZ4_streamHC_t* LZ4_streamHCPtr, int favor)
 int LZ4_loadDictHC (LZ4_streamHC_t* LZ4_streamHCPtr,
               const char* dictionary, int dictSize)
 {
+    if(LZ4_streamHCPtr==NULL || dictionary==NULL)
+        return -1;
     LZ4HC_CCtx_internal* const ctxPtr = &LZ4_streamHCPtr->internal_donotuse;
     DEBUGLOG(4, "LZ4_loadDictHC(ctx:%p, dict:%p, dictSize:%d)", LZ4_streamHCPtr, dictionary, dictSize);
     assert(LZ4_streamHCPtr != NULL);
@@ -1562,6 +1584,8 @@ LZ4_compressHC_continue_generic (LZ4_streamHC_t* LZ4_streamHCPtr,
                                  int* srcSizePtr, int dstCapacity,
                                  limitedOutput_directive limit)
 {
+    if(LZ4_streamHCPtr==NULL || src==NULL || dst==NULL)
+        return -1;
     LZ4HC_CCtx_internal* const ctxPtr = &LZ4_streamHCPtr->internal_donotuse;
     DEBUGLOG(5, "LZ4_compressHC_continue_generic(ctx=%p, src=%p, srcSize=%d, limit=%d)",
                 LZ4_streamHCPtr, src, *srcSizePtr, limit);
@@ -1615,6 +1639,8 @@ int LZ4_compress_HC_continue_destSize (LZ4_streamHC_t* LZ4_streamHCPtr, const ch
  */
 int LZ4_saveDictHC (LZ4_streamHC_t* LZ4_streamHCPtr, char* safeBuffer, int dictSize)
 {
+    if(LZ4_streamHCPtr == NULL || (safeBuffer == NULL && dictSize != 0))
+        return -1;
     LZ4HC_CCtx_internal* const streamPtr = &LZ4_streamHCPtr->internal_donotuse;
     int const prefixSize = (int)(streamPtr->end - (streamPtr->base + streamPtr->dictLimit));
     DEBUGLOG(5, "LZ4_saveDictHC(%p, %p, %d)", LZ4_streamHCPtr, safeBuffer, dictSize);

@@ -108,7 +108,7 @@ LZ4LIB_API int LZ4_compress_HC_destSize(void* stateHC,
  * 
  * @return \b NULL .
  */
-char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize,
+LZ4LIB_API char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 #endif
 
@@ -193,6 +193,13 @@ LZ4LIB_API int LZ4_compress_HC_continue_destSize(LZ4_streamHC_t* LZ4_streamHCPtr
 
 LZ4LIB_API int LZ4_saveDictHC (LZ4_streamHC_t* streamHCPtr, char* safeBuffer, int maxDictSize);
 
+#ifdef AOCL_LZ4HC_UNIT_TEST
+LZ4LIB_API int Test_LZ4HC_countBack(const LZ4_byte* const ip, const LZ4_byte* const match,
+                    const LZ4_byte* const iMin, const LZ4_byte* const mMin);
+                    
+LZ4LIB_API int Test_AOCL_LZ4HC_countBack(const LZ4_byte* const ip, const LZ4_byte* const match,
+                    const LZ4_byte* const iMin, const LZ4_byte* const mMin);
+#endif
 
 
 /*^**********************************************
