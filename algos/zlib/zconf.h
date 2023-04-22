@@ -541,6 +541,7 @@ typedef uLong FAR uLongf;
 #define AOCL_ZLIB_AVX2_OPT
 #define AOCL_ZLIB_AVX_OPT
 #define AOCL_ZLIB_SSE2_OPT
+//#define USE_AOCL_ADLER32_AVX2
 #ifdef HAVE_BUILTIN_EXPECT
 #define LIKELY(x) (__builtin_expect((x), 1))
 #define UNLIKELY(x) (__builtin_expect((x), 0))
