@@ -43,6 +43,8 @@
 #include "algos/zlib/inftrees.h"
 #include "algos/zlib/inflate.h"
 #include "algos/zlib/deflate.h"
+#include "algos/zlib/aocl_zlib_x86.h"
+#include "api/api.h"
 #include "gtest/gtest.h"
 
 using namespace std;
@@ -1778,4 +1780,49 @@ TEST(ZLIB_inflateCodesUsed, pass_cases)
   EXPECT_EQ(inflateCodesUsed(strm), ENOUGH - 1);  // AOCL_Compression_zlib_inflateCodesUsed_common_5
 
   rsti(strm);
+}
+
+TEST(ZLIB_adler32_x86, all_cases)
+{
+  size_t len = 5552;
+  Bytef *buf = (Bytef *)malloc(len);
+  for (size_t i = 0; i < len; i++)
+  {
+    buf[len - i - 1] = i % 255;
+  }
+
+  uLong adler = 1 << 16;
+  len = 10;
+  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len)); // AOCL_Compression_zlib_adler32_x86_common_1
+
+  adler = 0;
+  len = 10;
+  EXPECT_EQ(Test_adler32_x86(adler, NULL, len), adler32(adler, NULL, len));  // AOCL_Compression_zlib_adler32_x86_common_2
+
+  adler = ((uLong)1L << 31) - 1;
+  len = 1;
+  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_3
+
+  len = 10;
+  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_4
+
+  len = 19;
+  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len)); // AOCL_Compression_zlib_adler32_x86_common_5
+
+  len = 5552;
+  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_6
+
+  len = 64;
+  adler = 1;
+  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_7
+
+  len = 1;
+  adler = 0xFFFFFFFF;
+  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_8
+
+  len = 60;
+  adler = 0xFFFFFFFF;
+  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_9
+
+  free(buf);
 }

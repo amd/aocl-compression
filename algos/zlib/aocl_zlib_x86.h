@@ -36,4 +36,16 @@ ZEXTERN void slide_hash_x86(deflate_state *s);
 ZEXTERN uInt longest_match_x86 (deflate_state *s, IPos cur_match);
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef AOCL_ZLIB_UNIT_TEST
+ZEXTERN uint32_t ZEXPORT Test_adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif
