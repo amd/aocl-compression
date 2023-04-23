@@ -465,7 +465,8 @@ else
     }
     s->d_buf = overlay + s->lit_bufsize/sizeof(ush);
     s->l_buf = s->pending_buf + (1+sizeof(ush))*s->lit_bufsize;
-
+    // initializing the dynamic array prev to 0
+    memset(s->prev, 0x00, s->w_size * sizeof(Pos));
     s->level = level;
 #ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_2
     if(s->level == 1)
