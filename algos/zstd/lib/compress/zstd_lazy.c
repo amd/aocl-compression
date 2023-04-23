@@ -1408,7 +1408,12 @@ size_t AOCL_ZSTD_RowFindBestMatch_generic(
             if (currentMl > ml) {
                 ml = currentMl;
                 *offsetPtr = curr - matchIndex + ZSTD_REP_MOVE;
-                if (ip + currentMl == iLimit) break; /* best possible, avoids read overflow on next attempt */
+#ifndef AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER
+                if ((ip + currentMl + 1) >= iLimit)
+#else
+                if ((ip + currentMl + 3) >= iLimit)
+#endif
+                    break; /* best possible, avoids read overflow on next attempt */
             }
         }
     }
