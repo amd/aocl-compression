@@ -367,7 +367,11 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                 status = 0;
                 
                 //setup the codec method
-                aocl_llc_setup(aocl_codec_handle, i);
+                if (aocl_llc_setup(aocl_codec_handle, i) != 0)
+                {
+                    retStatus = -2;
+                    break;
+                }
 
                 for (k = 0; k < codec_bench_handle->iterations; k++)
                 {
@@ -543,7 +547,12 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
             status = 0;
 
             //setup the codec method
-            aocl_llc_setup(aocl_codec_handle, codec_bench_handle->codec_method);
+            if (aocl_llc_setup(aocl_codec_handle,
+                codec_bench_handle->codec_method) != 0)
+            {
+                retStatus = -2;
+                break;
+            }
         
             for (k = 0; k < codec_bench_handle->iterations; k++)
             {
