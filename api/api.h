@@ -51,6 +51,7 @@ extern "C" {
  * \defgroup BZIP2_API
  * \defgroup LZMA_API
  * \defgroup LZ4HC_API
+ * \defgroup ZSTD_API
  */
 
 /**
