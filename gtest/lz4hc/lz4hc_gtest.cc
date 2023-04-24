@@ -45,9 +45,6 @@
 
 using namespace std;
 
-#ifndef LZ4HC_HEAPMODE
-#  define LZ4HC_HEAPMODE 1
-#endif
 
 class TestLoad_1
 {
@@ -71,7 +68,7 @@ public:
             orig_data[i] = rand() % 255;
         }
 
-        // Provides the maximum size that LZ4 compression may output in a "worst case".
+        // Provides the maximum size that LZ4/LZ4HC compression may output in a "worst case".
         compressed_sz = LZ4_compressBound(sz);
         compressed_data = (char *)malloc(compressed_sz);
     }
@@ -317,7 +314,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_6) // Compression_level_is_smaller_than_min
+TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_6) // Compression_level_is_less_than_min
 {
     setSrcSize(100000);
     setDstSize(LZ4_compressBound(srcSize));
@@ -496,7 +493,6 @@ TEST(LZ4HC_LZ4_freeStreamHC, AOCL_Compression_lz4hc_LZ4_freeStreamHC_common_2) /
 {
     Stream State_stream(0);
     ASSERT_NE((long long)State_stream.stream, NULL);
-    // May be problem, distructor is also using LZ4_freeStream and this test class is also doing the same.
     EXPECT_EQ(LZ4_freeStreamHC(State_stream.stream), 0);
 }
 
@@ -1229,7 +1225,7 @@ protected:
     LZ4_streamHC_t *stream = NULL;
     char *dict = NULL;
     int dictSize;
-    LZ4HC_CCtx_internal *dic;
+    LZ4HC_CCtx_internal *ctx;
     
     // Initialize a LZ4_streamHC ptr.
     void SetUp() override
@@ -1259,10 +1255,21 @@ protected:
         return internal_p->end;
     }
 
-    void set_dic_to_stream_Internal(LZ4_streamHC_t* stream)
+    void set_ctx_to_stream_Internal(LZ4_streamHC_t* stream)
     {
-        dic = &(stream->internal_donotuse);
+        ctx = &(stream->internal_donotuse);
     }
+    
+    const LZ4_byte* get_ctx_end()
+    {
+        return ctx->end;
+    }
+
+    const LZ4_byte* get_ctx_base()
+    {
+        return ctx->base;
+    }
+    
     
     // Destructor function of `LLZ4_saveDictHC` class.
     ~LZ4HC_LZ4_saveDictHC()
@@ -1286,9 +1293,9 @@ TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_1) // 
     EXPECT_EQ(loadDictHC(66000),64 * 1024);
     EXPECT_EQ(LZ4_saveDictHC(stream, data, dictSize), 64 * 1024);
 
-    set_dic_to_stream_Internal(stream);
+    set_ctx_to_stream_Internal(stream);
 
-    EXPECT_EQ(memcmp(dic->end - 64 * 1024, data, 64 * 1024), 0);
+    EXPECT_EQ(memcmp(get_ctx_end() - 64 * 1024, data, 64 * 1024), 0);
 
     free(data);
 }
@@ -1329,8 +1336,8 @@ TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_6) // 
     EXPECT_EQ(LZ4_saveDictHC(stream, data, 0), 0);
     
     
-    set_dic_to_stream_Internal(stream);
-    EXPECT_EQ(dic->end - dic->base, 0);
+    set_ctx_to_stream_Internal(stream);
+    EXPECT_EQ(get_ctx_end() - get_ctx_base(), 0);
 }
 
 /*********************************************

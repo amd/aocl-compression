@@ -936,7 +936,8 @@ static size_t ZSTD_decompressMultiFrame(ZSTD_DCtx* dctx,
                                   const void* src, size_t srcSize,
                                   const void* dict, size_t dictSize,
                                   const ZSTD_DDict* ddict)
-{
+{   if(src == NULL || dst == NULL) return -1;
+
     void* const dststart = dst;
     int moreThan1Frame = 0;
 
@@ -1050,6 +1051,7 @@ static ZSTD_DDict const* ZSTD_getDDict(ZSTD_DCtx* dctx)
 
 size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
+    if(dctx == NULL) return -1;
     return ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
 }
 
