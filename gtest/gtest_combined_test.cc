@@ -50,12 +50,22 @@
 #include "utils/utils.h"
 #include <gtest/gtest.h>
 
+#ifndef AOCL_EXCLUDE_LZ4
 #include "algos/lz4/lz4.h"
+#endif
+#if !defined(AOCL_EXCLUDE_LZ4HC) && !defined(AOCL_EXCLUDE_LZ4)
 #include "algos/lz4/lz4hc.h"
+#endif
+#ifndef AOCL_EXCLUDE_SNAPPY
 #include "algos/snappy/snappy.h"
+#endif
+#ifndef AOCL_EXCLUDE_ZLIB
 #include "algos/zlib/zlib.h"
+#endif
+#ifndef AOCL_EXCLUDE_LZMA
 #include "algos/lzma/LzmaDec.h"
 #include "algos/lzma/LzmaEnc.h"
+#endif
 
 using namespace std;
 
@@ -79,22 +89,32 @@ int setup(aocl_compression_type method, int optLevel)
 #ifdef AOCL_DYNAMIC_DISPATCHER
       switch(method)
       {
+#ifndef AOCL_EXCLUDE_LZ4
          case LZ4:
             aocl_setup_lz4(0, optLevel, 0, 0, 0);
             break;
+#endif
+#ifndef AOCL_EXCLUDE_SNAPPY
          case SNAPPY:
             snappy::aocl_setup_snappy(0, optLevel, 0, 0, 0);
             break;
+#endif
+#ifndef AOCL_EXCLUDE_ZLIB
          case ZLIB:
             aocl_setup_zlib(0, optLevel, 0, 0, 0);
             break;
+#endif
+#ifndef AOCL_EXCLUDE_LZMA
          case LZMA:
             aocl_setup_lzma_encode(0, optLevel, 0, 0, 0);
             aocl_setup_lzma_decode(0, optLevel, 0, 0, 0);
             break;
+#endif
+#if !defined(AOCL_EXCLUDE_LZ4HC) && !defined(AOCL_EXCLUDE_LZ4)
          case LZ4HC:
             aocl_setup_lz4hc(0, optLevel, 0, 0, 0);
             break;
+#endif
          default:
              cout << "Error: Unsupported method\n";
              break;

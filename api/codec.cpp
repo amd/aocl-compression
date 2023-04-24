@@ -49,7 +49,7 @@
 #include "algos/lz4/lz4.h"
 #endif
 //lz4hc
-#ifndef AOCL_EXCLUDE_LZ4HC
+#if !defined(AOCL_EXCLUDE_LZ4HC) && !defined(AOCL_EXCLUDE_LZ4)
 #include "algos/lz4/lz4hc.h"
 #endif
 //lzma
@@ -69,6 +69,7 @@
 #endif
 //zstd
 #ifndef AOCL_EXCLUDE_ZSTD
+#include <cstdlib>
 #define ZSTD_STATIC_LINKING_ONLY
 #include "algos/zstd/lib/zstd.h"
 #endif
@@ -141,7 +142,7 @@ INT64 aocl_lz4_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 
 
 //lz4hc
-#ifndef AOCL_EXCLUDE_LZ4HC
+#if !defined(AOCL_EXCLUDE_LZ4HC) && !defined(AOCL_EXCLUDE_LZ4)
 CHAR *aocl_lz4hc_setup(INTP optOff, INTP optLevel,
                        UINTP insize, UINTP level, UINTP windowLog)
 {

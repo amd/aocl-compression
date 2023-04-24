@@ -60,7 +60,9 @@ extern "C" {
 
 #ifdef _WINDOWS
 /**
- *You can export data, functions, classes, or class member functions from a DLL using the __declspec(dllexport) keyword. __declspec(dllexport) adds the export directive to the object file so you do not need to use a .def file.
+ * You can export data, functions, classes, or class member functions from a DLL
+ * using the __declspec(dllexport) keyword. __declspec(dllexport) adds the export
+ * directive to the object file so you do not need to use a .def file.
  * 
  */
 #define EXPORT_SYM_DYN __declspec(dllexport)
@@ -75,14 +77,23 @@ extern "C" {
 #define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 1.0"
 
 
+ /**
+  * @brief Error codes supported in aocl-compression.
+  *
+  * 
+  */
+typedef enum
+{
+    ERR_UNSUPPORTED_METHOD = -3,     ///<compression method not supported by the library
+    ERR_EXCLUDED_METHOD,             ///<compression method excluded from this library build
+    ERR_COMPRESSION_FAILED,          ///<failure in compression/decompression
+    ERR_COMPRESSION_INVALID_OUTPUT   ///<invalid compression/decompression output
+} aocl_error_type;
 
 /**
  * @brief Types of compression methods supported.
  * 
- * Optimizations are performed for following methods
- * @ref LZ4_API, 
- * @ref ZLIB_API, 
- * @ref SNAPPY_API
+ * Optimizations are included for all the supported methods
  */
 typedef enum
 {
@@ -131,7 +142,7 @@ typedef struct
  * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
  * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
  * 
- * @return EXPORT_SYM_DYN 
+ * @return Numbers of bytes compressed on success. Error codes ERR_COMPRESSION_FAILED or ERR_COMPRESSION_INVALID_OUTPUT on failure.
  */
 EXPORT_SYM_DYN int64_t aocl_llc_compress(aocl_compression_desc *handle,
                             aocl_compression_type codec_type);
@@ -142,7 +153,7 @@ EXPORT_SYM_DYN int64_t aocl_llc_compress(aocl_compression_desc *handle,
  * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
  * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
  * 
- * @return EXPORT_SYM_DYN 
+ * @return Numbers of bytes decompressed on success. Error codes ERR_COMPRESSION_FAILED or ERR_COMPRESSION_INVALID_OUTPUT on failure.
  */
 
 EXPORT_SYM_DYN int64_t aocl_llc_decompress(aocl_compression_desc *handle,
@@ -154,10 +165,10 @@ EXPORT_SYM_DYN int64_t aocl_llc_decompress(aocl_compression_desc *handle,
  * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
  * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
  * 
- * @return EXPORT_SYM_DYN 
+ * @return 0 on success. Error codes ERR_UNSUPPORTED_METHOD or ERR_EXCLUDED_METHOD on failure.
  */
 
-EXPORT_SYM_DYN void aocl_llc_setup(aocl_compression_desc *handle,
+EXPORT_SYM_DYN int32_t aocl_llc_setup(aocl_compression_desc *handle,
                       aocl_compression_type codec_type);
 
 /**
@@ -166,14 +177,14 @@ EXPORT_SYM_DYN void aocl_llc_setup(aocl_compression_desc *handle,
  * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
  * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
  * 
- * @return EXPORT_SYM_DYN 
+ * @return void 
  */
 EXPORT_SYM_DYN void aocl_llc_destroy(aocl_compression_desc *handle,
                         aocl_compression_type codec_type);
 /**
  * @brief Interface API to get compression library version string.
  * 
- * @return EXPORT_SYM_DYN const* 
+ * @return aocl library version 
  */
 
 EXPORT_SYM_DYN const char *aocl_llc_version(void);

@@ -57,25 +57,34 @@ else ()
     message(FATAL_ERROR "Compiler not supported! Library has only been tested with Clang and GCC.")
 endif ()
 
+set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
 option (BUILD_STATIC_LIBS "Build static library (Default build type is shared library)" OFF)
 option (AOCL_LZ4_OPT_PREFETCH_BACKWARDS "Enable LZ4 optimizations related to backward prefetching of data" OFF)
 option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Disabled by default)" OFF)
-option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Disabled by default)" OFF)
+option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Enabled by default)" ON)
 option (AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER "Enable 4-byte comparison when finding match candidates with Lazy2 compressor (Disabled by default)" OFF)
-set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
-option(GTEST_ENABLE "Enable gtest based test suite (Disabled by default)" OFF)
-option(BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)
-option(ZLIB_DEFLATE_FAST_MODE_2 "Enable optimization for deflate fast using Z_FIXED strategy (Disabled by default)" OFF)
-option(ZLIB_DEFLATE_FAST_MODE_3 "Enable ZLIB deflate quick strategy (Disabled by default)" OFF)
+option (GTEST_ENABLE "Enable gtest based test suite (Disabled by default)" OFF)
+option (BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)
+option (ZLIB_DEFLATE_FAST_MODE_2 "Enable optimization for deflate fast using Z_FIXED strategy (Disabled by default)" OFF)
+option (ZLIB_DEFLATE_FAST_MODE_3 "Enable ZLIB deflate quick strategy (Disabled by default)" OFF)
 
 if(ZLIB_DEFLATE_FAST_MODE_2 AND ZLIB_DEFLATE_FAST_MODE_3)
 	message(FATAL_ERROR "You can not enable ZLIB_DEFLATE_FAST_MODE_2 and ZLIB_DEFLATE_FAST_MODE_3 together.")
 endif()
 
+option (AOCL_EXCLUDE_BZIP2 "Exclude BZIP2 compression method from the library build (Disabled by default)" OFF)
+option (AOCL_EXCLUDE_LZ4 "Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)" OFF)
+option (AOCL_EXCLUDE_LZ4HC "Exclude LZ4HC compression method from the library build (Disabled by default)" OFF)
+option (AOCL_EXCLUDE_LZMA "Exclude LZMA compression method from the library build (Disabled by default)" OFF)
+option (AOCL_EXCLUDE_SNAPPY "Exclude SNAPPY compression method from the library build (Disabled by default)" OFF)
+option (AOCL_EXCLUDE_ZLIB "Exclude ZLIB compression method from the library build (Disabled by default)" OFF)
+option (AOCL_EXCLUDE_ZSTD "Exclude ZSTD compression method from the library build (Disabled by default)" OFF)
+
 #list source files to be compiled for the library
 file(GLOB API_SRC_FILES api/*.c api/*.cpp api/*.h)
 set (ALGOS_PATH algos)
+if (NOT AOCL_EXCLUDE_BZIP2)
 set (BZIP2_SRC_FILES 	${ALGOS_PATH}/bzip2/blocksort.c
 						${ALGOS_PATH}/bzip2/huffman.c
 						${ALGOS_PATH}/bzip2/crctable.c
@@ -84,10 +93,22 @@ set (BZIP2_SRC_FILES 	${ALGOS_PATH}/bzip2/blocksort.c
 						${ALGOS_PATH}/bzip2/decompress.c
 						${ALGOS_PATH}/bzip2/bzlib.c
 						${ALGOS_PATH}/bzip2/bzlib.h)
+else ()
+set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
+endif ()
+if (NOT AOCL_EXCLUDE_LZ4)
 set (LZ4_SRC_FILES	${ALGOS_PATH}/lz4/lz4.c
 					${ALGOS_PATH}/lz4/lz4.h)
+else ()
+set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
+endif ()
+if (NOT AOCL_EXCLUDE_LZ4HC AND NOT AOCL_EXCLUDE_LZ4)
 set (LZ4HC_SRC_FILES	${ALGOS_PATH}/lz4/lz4hc.c
 						${ALGOS_PATH}/lz4/lz4hc.h)
+else ()
+set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
+endif ()
+if (NOT AOCL_EXCLUDE_LZMA)
 set (LZMA_SRC_FILES	${ALGOS_PATH}/lzma/LzFind.c
 					${ALGOS_PATH}/lzma/LzmaDec.c
 					${ALGOS_PATH}/lzma/LzmaEnc.c
@@ -96,10 +117,18 @@ set (LZMA_SRC_FILES	${ALGOS_PATH}/lzma/LzFind.c
 					${ALGOS_PATH}/lzma/LzmaDec.h
 					${ALGOS_PATH}/lzma/LzmaEnc.h
 					${ALGOS_PATH}/lzma/LzFind.h)
+else ()
+set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
+endif ()
+if (NOT AOCL_EXCLUDE_SNAPPY)
 set (SNAPPY_SRC_FILES 	${ALGOS_PATH}/snappy/snappy-sinksource.cc
 						${ALGOS_PATH}/snappy/snappy-stubs-internal.cc
 						${ALGOS_PATH}/snappy/snappy.cc
 						${ALGOS_PATH}/snappy/snappy.h)
+else ()
+set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
+endif ()
+if (NOT AOCL_EXCLUDE_ZLIB)
 set (ZLIB_SRC_FILES	${ALGOS_PATH}/zlib/adler32.c
 					${ALGOS_PATH}/zlib/adler32_x86.c
 					${ALGOS_PATH}/zlib/compress.c
@@ -122,6 +151,10 @@ set (ZLIB_SRC_FILES	${ALGOS_PATH}/zlib/adler32.c
 					${ALGOS_PATH}/zlib/uncompr.c
 					${ALGOS_PATH}/zlib/zutil.c
 					${ALGOS_PATH}/zlib/zlib.h)
+else ()
+set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
+endif ()
+if (NOT AOCL_EXCLUDE_ZSTD)
 set (ZSTD_SRC_FILES	${ALGOS_PATH}/zstd/lib/common/zstd_common.c
 					${ALGOS_PATH}/zstd/lib/common/fse_decompress.c
 					${ALGOS_PATH}/zstd/lib/common/xxhash.c
@@ -152,6 +185,9 @@ set (ZSTD_SRC_FILES	${ALGOS_PATH}/zstd/lib/common/zstd_common.c
 					${ALGOS_PATH}/zstd/lib/dictBuilder/fastcover.c
 					${ALGOS_PATH}/zstd/lib/dictBuilder/zdict.c
 					${ALGOS_PATH}/zstd/lib/zstd.h)
+else ()
+set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
+endif ()
 file(GLOB UTILS_SRC_FILES utils/*.c utils/*.cpp utils/*.h)
 
 #set the expected path variables
@@ -162,33 +198,48 @@ set(DEST_LIB_PATH aocl_compression/lib)
 set(DEST_INC_PATH aocl_compression/include)
 set(DEST_BIN_PATH aocl_compression/bin)
 
-set(INC_FILES api/api.h 
-	${ALGOS_PATH}/bzip2/bzlib.h
-	${ALGOS_PATH}/lz4/lz4.h
-	${ALGOS_PATH}/lz4/lz4hc.h
-	${ALGOS_PATH}/lzma/Alloc.h
-	${ALGOS_PATH}/lzma/LzmaDec.h
-	${ALGOS_PATH}/lzma/LzmaEnc.h 
-	${ALGOS_PATH}/snappy/snappy.h
-	${ALGOS_PATH}/zlib/zlib.h
-	${ALGOS_PATH}/zstd/lib/zstd.h
-    )
+set(INC_FILES api/api.h)
+if (NOT AOCL_EXCLUDE_BZIP2)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/bzip2/bzlib.h)
+endif ()
+if (NOT AOCL_EXCLUDE_LZ4)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lz4/lz4.h)
+endif ()
+if (NOT AOCL_EXCLUDE_LZ4HC AND NOT AOCL_EXCLUDE_LZ4)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lz4/lz4hc.h)
+endif ()
+if (NOT AOCL_EXCLUDE_LZMA)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lzma/Alloc.h)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lzma/LzmaDec.h)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lzma/LzmaEnc.h)
+endif ()
+if (NOT AOCL_EXCLUDE_SNAPPY)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/snappy/snappy.h)
+endif ()
+if (NOT AOCL_EXCLUDE_ZLIB)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/zlib/zlib.h)
+endif ()
+if (NOT AOCL_EXCLUDE_ZSTD)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/zstd/lib/zstd.h)
+endif ()
 
-if (LZ4_FRAME_FORMAT_SUPPORT)
-    set(INC_FILES ${INC_FILES}
-                  ${ALGOS_PATH}/lz4/lz4frame.h)
-    set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
-                       ${ALGOS_PATH}/lz4/lz4frame.c
-                       ${ALGOS_PATH}/lz4/lz4frame.h)
-    if (AOCL_EXCLUDE_LZ4HC)
+if (NOT AOCL_EXCLUDE_LZ4)
+    if (LZ4_FRAME_FORMAT_SUPPORT)
+        set(INC_FILES ${INC_FILES}
+                      ${ALGOS_PATH}/lz4/lz4frame.h)
         set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
-                           ${ALGOS_PATH}/lz4/lz4hc.c
-                           ${ALGOS_PATH}/lz4/lz4hc.h)
-    endif()
-    if (AOCL_EXCLUDE_ZSTD)
-        set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
-                           ${ALGOS_PATH}/lz4/xxhash.c
-                           ${ALGOS_PATH}/lz4/xxhash.h)
+                           ${ALGOS_PATH}/lz4/lz4frame.c
+                           ${ALGOS_PATH}/lz4/lz4frame.h)
+        if (AOCL_EXCLUDE_LZ4HC)
+            set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
+                               ${ALGOS_PATH}/lz4/lz4hc.c
+                               ${ALGOS_PATH}/lz4/lz4hc.h)
+        endif()
+        if (AOCL_EXCLUDE_ZSTD)
+            set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
+                               ${ALGOS_PATH}/lz4/xxhash.c
+                               ${ALGOS_PATH}/lz4/xxhash.h)
+        endif()
     endif()
 endif()
 
@@ -271,49 +322,68 @@ endif()
 
 #setup gtest and build test executable
 if (GTEST_ENABLE)
-	include(FetchContent)
-	FetchContent_Declare(
-	    googletest
-	    # Specify the commit you depend on and update it regularly.
-	    URL https://github.com/google/googletest/archive/refs/tags/v1.13.0.zip
-	)
-	# For Windows: Prevent overriding the parent project's compiler/linker settings
-	set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-	FetchContent_GetProperties(googletest)
-	if(NOT googletest_POPULATED)
-  		FetchContent_Populate(googletest)
-  		add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
-	endif()
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        # Specify the commit you depend on and update it regularly.
+        URL https://github.com/google/googletest/archive/refs/tags/v1.13.0.zip
+    )
+    # For Windows: Prevent overriding the parent project's compiler/linker settings
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_GetProperties(googletest)
+    if(NOT googletest_POPULATED)
+    	FetchContent_Populate(googletest)
+    	add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
+    endif()
         if(NOT BUILD_STATIC_LIBS AND WIN32)
-		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")
-		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DSNAPPY_DLL_EXPORT=1")
-		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DLL=1")
-		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZMA_DLL_EXPORT=1")
-		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4HC_DLL_EXPORT=1")
+    	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")
+    	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DSNAPPY_DLL_EXPORT=1")
+    	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DLL=1")
+    	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZMA_DLL_EXPORT=1")
+    	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4HC_DLL_EXPORT=1")
         endif()
-	set_property(SOURCE ${LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
-	set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_UNIT_TEST")
-	set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZLIB_UNIT_TEST")
-
-	# gtest_combined_test is an executable generated inside build folder
+    set_property(SOURCE ${LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
+    set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_UNIT_TEST")
+    set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZLIB_UNIT_TEST")
+    
+    # gtest_combined_test is an executable generated inside build folder
 	set (GTEST_PATH gtest)
-	set(GTEST_SRC_FILES 
-        ${GTEST_PATH}/lz4/lz4_gtest.cc
-		${GTEST_PATH}/lz4hc/lz4hc_gtest.cc
-		${GTEST_PATH}/lzma/lzma_gtest.cc
-		${GTEST_PATH}/snappy/snappy_gtest.cc
-		${GTEST_PATH}/zlib/zlib_gtest.cc
-		${GTEST_PATH}/gtest_combined_test.cc
-	)
-	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
-	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_UNIT_TEST")
-	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZLIB_UNIT_TEST")
-	if (AOCL_DYNAMIC_DISPATCHER)
-		set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
-	endif()
-	
-	add_executable(gtest_combined_test ${GTEST_SRC_FILES})
-	target_link_libraries(gtest_combined_test gtest_main ${lib_name})
+	set (GTEST_SRC_FILES ${GTEST_PATH}/gtest_combined_test.cc)
+    if (NOT AOCL_EXCLUDE_LZ4)
+        set (GTEST_SRC_FILES ${GTEST_SRC_FILES} ${GTEST_PATH}/lz4/lz4_gtest.cc)
+    else ()
+        set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
+    endif ()
+    if (NOT AOCL_EXCLUDE_LZ4HC AND NOT AOCL_EXCLUDE_LZ4)
+        set (GTEST_SRC_FILES ${GTEST_SRC_FILES} ${GTEST_PATH}/lz4hc/lz4hc_gtest.cc)
+    else ()
+        set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
+    endif ()
+    if (NOT AOCL_EXCLUDE_LZMA)
+        set (GTEST_SRC_FILES ${GTEST_SRC_FILES} ${GTEST_PATH}/lzma/lzma_gtest.cc)
+    else ()
+        set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
+    endif ()
+    if (NOT AOCL_EXCLUDE_SNAPPY)
+        set (GTEST_SRC_FILES ${GTEST_SRC_FILES} ${GTEST_PATH}/snappy/snappy_gtest.cc)
+    else ()
+        set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
+    endif ()
+    if (NOT AOCL_EXCLUDE_ZLIB)
+        set (GTEST_SRC_FILES ${GTEST_SRC_FILES} ${GTEST_PATH}/zlib/zlib_gtest.cc)
+    else ()
+        set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
+    endif ()
+    
+    set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
+    set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_UNIT_TEST")
+    set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZLIB_UNIT_TEST")
+    if (AOCL_DYNAMIC_DISPATCHER)
+    	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
+    endif()
+    
+    add_executable(gtest_combined_test ${GTEST_SRC_FILES})
+    target_link_libraries(gtest_combined_test gtest_main ${lib_name})
         string(REPLACE " " ";" CXX_FLAGS ${CMAKE_CXX_FLAGS})
         target_compile_options(gtest_combined_test PRIVATE ${CXX_FLAGS})
 endif()

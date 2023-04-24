@@ -120,12 +120,19 @@ INT64 aocl_llc_decompress(aocl_compression_desc *handle,
 }
 
 //API to setup and initialize memory for the compression method
-VOID aocl_llc_setup(aocl_compression_desc *handle,
+INT32 aocl_llc_setup(aocl_compression_desc *handle,
                     aocl_compression_type codec_type)
 {
     enableLogs = handle->printDebugLogs;
 
     LOG_UNFORMATTED(TRACE, enableLogs, "Enter");
+
+    if ((codec_type < LZ4) || (codec_type >= AOCL_COMPRESSOR_ALGOS_NUM))
+    {
+        LOG_UNFORMATTED(ERR, enableLogs,
+            "setup failed !! compression method is not supported.");
+        return ERR_UNSUPPORTED_METHOD;
+    }
 
     LOG_FORMATTED(INFO, enableLogs,
        "All optimizations are turned %s", (handle->optOff ? "off" : "on"));
@@ -144,8 +151,16 @@ VOID aocl_llc_setup(aocl_compression_desc *handle,
                                                         handle->level,
                                                         handle->optVar);
     }
+    else
+    {
+        LOG_UNFORMATTED(ERR, enableLogs,
+            "setup failed !! compression method is excluded from this library build.");
+        LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
+        return ERR_EXCLUDED_METHOD;
+    }
 
     LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
+    return 0;
 }
 
 //API to destroy memory and deinit the compression method

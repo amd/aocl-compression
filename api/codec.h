@@ -73,7 +73,7 @@ typedef VOID  (*destroy_fp)(CHAR *memBuff);
         #define aocl_lz4_setup NULL
 #endif
 //Method 3
-#ifndef AOCL_EXCLUDE_LZ4HC
+#if !defined(AOCL_EXCLUDE_LZ4HC) && !defined(AOCL_EXCLUDE_LZ4)
         INT64 aocl_lz4hc_compress(CHAR *inBuf, UINTP inSize, CHAR *outBuf, 
                          UINTP outSize, UINTP level, UINTP optVar, CHAR *workBuf);
         INT64 aocl_lz4hc_decompress(CHAR *inBuf, UINTP inSize, CHAR *outBuf, 
