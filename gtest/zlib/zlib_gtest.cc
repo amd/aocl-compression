@@ -43,11 +43,13 @@
 #include "algos/zlib/inftrees.h"
 #include "algos/zlib/inflate.h"
 #include "algos/zlib/deflate.h"
-#include "algos/zlib/aocl_zlib_x86.h"
+#include "algos/zlib/aocl_zlib_test.h"
 #include "api/api.h"
 #include "gtest/gtest.h"
 
 using namespace std;
+
+#define MIN(a,b)    ( (a) < (b) ? (a) : (b) )
 
 z_streamp strm;
 
@@ -1825,4 +1827,370 @@ TEST(ZLIB_adler32_x86, all_cases)
   EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_9
 
   free(buf);
+}
+
+/* inflate small amount of data and validate with adler32 checksum */
+const char* orig = "The quick brown fox jumped over the lazy dog";
+
+z_const unsigned char comp[] = {
+    0x78, 0x9c, 0x0b, 0xc9, 0x48, 0x55, 0x28, 0x2c, 0xcd, 0x4c, 0xce, 0x56, 0x48,
+    0x2a, 0xca, 0x2f, 0xcf, 0x53, 0x48, 0xcb, 0xaf, 0x50, 0xc8, 0x2a, 0xcd, 0x2d,
+    0x48, 0x4d, 0x51, 0xc8, 0x2f, 0x4b, 0x2d, 0x52, 0x28, 0xc9, 0x48, 0x55, 0xc8,
+    0x49, 0xac, 0xaa, 0x54, 0x48, 0xc9, 0x4f, 0x07, 0x00, 0x6b, 0x93, 0x10, 0x30
+};
+
+TEST(ZLIB_inflate, AOCL_Compression_zlib_inflate_adler32_1)
+{
+    unsigned char uncomp[1024];
+    z_stream strm;
+
+    memset(&strm, 0, sizeof(strm));
+
+    int err = inflateInit2(&strm, 32 + MAX_WBITS);
+    EXPECT_EQ(err, Z_OK);
+
+    strm.next_in = comp;
+    strm.avail_in = sizeof(comp);
+    strm.next_out = uncomp;
+    strm.avail_out = sizeof(uncomp);
+
+    err = inflate(&strm, Z_NO_FLUSH);
+    EXPECT_EQ(err, Z_STREAM_END);
+
+    EXPECT_EQ(strm.adler, 0x6b931030); // match the checksum with checksum value of orig
+
+    err = inflateEnd(&strm);
+    EXPECT_EQ(err, Z_OK);
+
+    EXPECT_TRUE(memcmp(uncomp, orig, MIN(strm.total_out, strlen(orig))) == 0);
+}
+
+/* Test deflate() and inflate() with small buffers */
+static z_const char hello[] = "hello, hello!";
+static const int hello_len = sizeof(hello);
+
+TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_1) {
+    z_stream c_strm, d_strm;
+    uint8_t compr[128], uncompr[128];
+    z_size_t compr_len = sizeof(compr), uncompr_len = sizeof(uncompr);
+    int err;
+
+    memset(&c_strm, 0, sizeof(c_strm));
+    memset(&d_strm, 0, sizeof(d_strm));
+
+    EXPECT_EQ(deflateInit(&c_strm, 1), Z_OK);
+
+    c_strm.next_in  = (z_const unsigned char *)hello;
+    c_strm.next_out = compr;
+
+    while (c_strm.total_in != hello_len && c_strm.total_out < compr_len) {
+        c_strm.avail_in = c_strm.avail_out = 1; /* force small buffers */
+        EXPECT_EQ(deflate(&c_strm, Z_NO_FLUSH), Z_OK);
+    }
+    /* Finish the stream, still forcing small buffers */
+    for (;;) {
+        c_strm.avail_out = 1;
+        err = deflate(&c_strm, Z_FINISH);
+        if (err == Z_STREAM_END) break;
+        EXPECT_EQ(err, Z_OK);
+    }
+
+    EXPECT_EQ(deflateEnd(&c_strm), Z_OK);
+
+    strcpy((char*)uncompr, "garbage");
+
+    d_strm.next_in  = compr;
+    d_strm.next_out = uncompr;
+
+    EXPECT_EQ(inflateInit(&d_strm), Z_OK);
+
+    while (d_strm.total_out < uncompr_len && d_strm.total_in < compr_len) {
+        d_strm.avail_in = d_strm.avail_out = 1; /* force small buffers */
+        err = inflate(&d_strm, Z_NO_FLUSH);
+        if (err == Z_STREAM_END) break;
+        EXPECT_EQ(err, Z_OK);
+    }
+
+    EXPECT_EQ(inflateEnd(&d_strm), Z_OK);
+
+    EXPECT_STREQ((char*)uncompr, hello);
+}
+
+TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_2) {
+    z_stream c_strm, d_strm;
+    uint8_t compr[128], uncompr[128];
+    z_size_t compr_len = sizeof(compr), uncompr_len = sizeof(uncompr);
+    int err;
+
+    memset(&c_strm, 0, sizeof(c_strm));
+    memset(&d_strm, 0, sizeof(d_strm));
+
+    EXPECT_EQ(deflateInit(&c_strm, Z_DEFAULT_COMPRESSION), Z_OK);
+
+    c_strm.next_in  = (z_const unsigned char *)hello;
+    c_strm.next_out = compr;
+
+    while (c_strm.total_in != hello_len && c_strm.total_out < compr_len) {
+        c_strm.avail_in = c_strm.avail_out = 1; /* force small buffers */
+        EXPECT_EQ(deflate(&c_strm, Z_NO_FLUSH), Z_OK);
+    }
+    /* Finish the stream, still forcing small buffers */
+    for (;;) {
+        c_strm.avail_out = 1;
+        err = deflate(&c_strm, Z_FINISH);
+        if (err == Z_STREAM_END) break;
+        EXPECT_EQ(err, Z_OK);
+    }
+
+    EXPECT_EQ(deflateEnd(&c_strm), Z_OK);
+
+    strcpy((char*)uncompr, "garbage");
+
+    d_strm.next_in  = compr;
+    d_strm.next_out = uncompr;
+
+    EXPECT_EQ(inflateInit(&d_strm), Z_OK);
+
+    while (d_strm.total_out < uncompr_len && d_strm.total_in < compr_len) {
+        d_strm.avail_in = d_strm.avail_out = 1; /* force small buffers */
+        err = inflate(&d_strm, Z_NO_FLUSH);
+        if (err == Z_STREAM_END) break;
+        EXPECT_EQ(err, Z_OK);
+    }
+
+    EXPECT_EQ(inflateEnd(&d_strm), Z_OK);
+
+    EXPECT_STREQ((char*)uncompr, hello);
+}
+
+TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_3) {
+    z_stream c_strm, d_strm;
+    uint8_t compr[128], uncompr[128];
+    z_size_t compr_len = sizeof(compr), uncompr_len = sizeof(uncompr);
+    int err;
+
+    memset(&c_strm, 0, sizeof(c_strm));
+    memset(&d_strm, 0, sizeof(d_strm));
+
+    EXPECT_EQ(deflateInit(&c_strm, 9), Z_OK);
+
+    c_strm.next_in  = (z_const unsigned char *)hello;
+    c_strm.next_out = compr;
+
+    while (c_strm.total_in != hello_len && c_strm.total_out < compr_len) {
+        c_strm.avail_in = c_strm.avail_out = 1; /* force small buffers */
+        EXPECT_EQ(deflate(&c_strm, Z_NO_FLUSH), Z_OK);
+    }
+    /* Finish the stream, still forcing small buffers */
+    for (;;) {
+        c_strm.avail_out = 1;
+        err = deflate(&c_strm, Z_FINISH);
+        if (err == Z_STREAM_END) break;
+        EXPECT_EQ(err, Z_OK);
+    }
+
+    EXPECT_EQ(deflateEnd(&c_strm), Z_OK);
+
+    strcpy((char*)uncompr, "garbage");
+
+    d_strm.next_in  = compr;
+    d_strm.next_out = uncompr;
+
+    EXPECT_EQ(inflateInit(&d_strm), Z_OK);
+
+    while (d_strm.total_out < uncompr_len && d_strm.total_in < compr_len) {
+        d_strm.avail_in = d_strm.avail_out = 1; /* force small buffers */
+        err = inflate(&d_strm, Z_NO_FLUSH);
+        if (err == Z_STREAM_END) break;
+        EXPECT_EQ(err, Z_OK);
+    }
+
+    EXPECT_EQ(inflateEnd(&d_strm), Z_OK);
+
+    EXPECT_STREQ((char*)uncompr, hello);
+}
+
+/* Test deflate() and inflate() with large buffers */
+#define COMPR_BUFFER_SIZE (48 * 1024)
+#define UNCOMPR_BUFFER_SIZE (32 * 1024)
+#define UNCOMPR_RAND_SIZE (8 * 1024)
+
+TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_1)
+{
+    z_stream c_strm, d_strm;
+    uint8_t *compr, *uncompr;
+    uint32_t compr_len, uncompr_len;
+    int32_t i;
+    time_t now;
+    int err;
+
+    memset(&c_strm, 0, sizeof(c_strm));
+    memset(&d_strm, 0, sizeof(d_strm));
+
+    compr = (uint8_t *)calloc(1, COMPR_BUFFER_SIZE);
+    ASSERT_TRUE(compr != NULL);
+    uncompr = (uint8_t *)calloc(1, UNCOMPR_BUFFER_SIZE);
+    ASSERT_TRUE(uncompr != NULL);
+
+    compr_len = COMPR_BUFFER_SIZE;
+    uncompr_len = UNCOMPR_BUFFER_SIZE;
+
+    srand((unsigned)time(&now));
+    for (i = 0; i < UNCOMPR_RAND_SIZE; i++)
+        uncompr[i] = (uint8_t)(rand() % 256);
+
+    EXPECT_EQ(deflateInit(&c_strm, 1), Z_OK);
+
+    c_strm.next_out = compr;
+    c_strm.avail_out = compr_len;
+    c_strm.next_in = uncompr;
+    c_strm.avail_in = uncompr_len;
+
+    EXPECT_EQ(deflate(&c_strm, Z_NO_FLUSH), Z_OK);
+    EXPECT_EQ(c_strm.avail_in, 0);
+
+    EXPECT_EQ(deflate(&c_strm, Z_FINISH), Z_STREAM_END);
+
+    EXPECT_EQ(deflateEnd(&c_strm), Z_OK);
+
+    d_strm.next_in  = compr;
+    d_strm.avail_in = compr_len;
+    d_strm.next_out = uncompr;
+
+    EXPECT_EQ(inflateInit(&d_strm), Z_OK);
+
+    for (;;) {
+        d_strm.next_out = uncompr;            /* discard the output */
+        d_strm.avail_out = uncompr_len;
+        err = inflate(&d_strm, Z_NO_FLUSH);
+        if (err == Z_STREAM_END) break;
+        EXPECT_EQ(err, Z_OK);
+    }
+
+    EXPECT_EQ(inflateEnd(&d_strm), Z_OK);
+
+    EXPECT_EQ(d_strm.total_out, uncompr_len);
+
+    free(compr);
+    free(uncompr);
+}
+
+TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_2)
+{
+    z_stream c_strm, d_strm;
+    uint8_t *compr, *uncompr;
+    uint32_t compr_len, uncompr_len;
+    int32_t i;
+    time_t now;
+    int err;
+
+    memset(&c_strm, 0, sizeof(c_strm));
+    memset(&d_strm, 0, sizeof(d_strm));
+
+    compr = (uint8_t *)calloc(1, COMPR_BUFFER_SIZE);
+    ASSERT_TRUE(compr != NULL);
+    uncompr = (uint8_t *)calloc(1, UNCOMPR_BUFFER_SIZE);
+    ASSERT_TRUE(uncompr != NULL);
+
+    compr_len = COMPR_BUFFER_SIZE;
+    uncompr_len = UNCOMPR_BUFFER_SIZE;
+
+    srand((unsigned)time(&now));
+    for (i = 0; i < UNCOMPR_RAND_SIZE; i++)
+        uncompr[i] = (uint8_t)(rand() % 256);
+
+    EXPECT_EQ(deflateInit(&c_strm, Z_DEFAULT_COMPRESSION), Z_OK);
+
+    c_strm.next_out = compr;
+    c_strm.avail_out = compr_len;
+    c_strm.next_in = uncompr;
+    c_strm.avail_in = uncompr_len;
+
+    EXPECT_EQ(deflate(&c_strm, Z_NO_FLUSH), Z_OK);
+    EXPECT_EQ(c_strm.avail_in, 0);
+
+    EXPECT_EQ(deflate(&c_strm, Z_FINISH), Z_STREAM_END);
+
+    EXPECT_EQ(deflateEnd(&c_strm), Z_OK);
+
+    d_strm.next_in  = compr;
+    d_strm.avail_in = compr_len;
+    d_strm.next_out = uncompr;
+
+    EXPECT_EQ(inflateInit(&d_strm), Z_OK);
+
+    for (;;) {
+        d_strm.next_out = uncompr;            /* discard the output */
+        d_strm.avail_out = uncompr_len;
+        err = inflate(&d_strm, Z_NO_FLUSH);
+        if (err == Z_STREAM_END) break;
+        EXPECT_EQ(err, Z_OK);
+    }
+
+    EXPECT_EQ(inflateEnd(&d_strm), Z_OK);
+
+    EXPECT_EQ(d_strm.total_out, uncompr_len);
+
+    free(compr);
+    free(uncompr);
+}
+
+TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_3)
+{
+    z_stream c_strm, d_strm;
+    uint8_t *compr, *uncompr;
+    uint32_t compr_len, uncompr_len;
+    int32_t i;
+    time_t now;
+    int err;
+
+    memset(&c_strm, 0, sizeof(c_strm));
+    memset(&d_strm, 0, sizeof(d_strm));
+
+    compr = (uint8_t *)calloc(1, COMPR_BUFFER_SIZE);
+    ASSERT_TRUE(compr != NULL);
+    uncompr = (uint8_t *)calloc(1, UNCOMPR_BUFFER_SIZE);
+    ASSERT_TRUE(uncompr != NULL);
+
+    compr_len = COMPR_BUFFER_SIZE;
+    uncompr_len = UNCOMPR_BUFFER_SIZE;
+
+    srand((unsigned)time(&now));
+    for (i = 0; i < UNCOMPR_RAND_SIZE; i++)
+        uncompr[i] = (uint8_t)(rand() % 256);
+
+    EXPECT_EQ(deflateInit(&c_strm, 9), Z_OK);
+
+    c_strm.next_out = compr;
+    c_strm.avail_out = compr_len;
+    c_strm.next_in = uncompr;
+    c_strm.avail_in = uncompr_len;
+
+    EXPECT_EQ(deflate(&c_strm, Z_NO_FLUSH), Z_OK);
+    EXPECT_EQ(c_strm.avail_in, 0);
+
+    EXPECT_EQ(deflate(&c_strm, Z_FINISH), Z_STREAM_END);
+
+    EXPECT_EQ(deflateEnd(&c_strm), Z_OK);
+
+    d_strm.next_in  = compr;
+    d_strm.avail_in = compr_len;
+    d_strm.next_out = uncompr;
+
+    EXPECT_EQ(inflateInit(&d_strm), Z_OK);
+
+    for (;;) {
+        d_strm.next_out = uncompr;            /* discard the output */
+        d_strm.avail_out = uncompr_len;
+        err = inflate(&d_strm, Z_NO_FLUSH);
+        if (err == Z_STREAM_END) break;
+        EXPECT_EQ(err, Z_OK);
+    }
+
+    EXPECT_EQ(inflateEnd(&d_strm), Z_OK);
+
+    EXPECT_EQ(d_strm.total_out, uncompr_len);
+
+    free(compr);
+    free(uncompr);
 }

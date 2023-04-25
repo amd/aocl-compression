@@ -26,14 +26,21 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef AOCL_X86_H
-#define AOCL_X86_H
-#include "deflate.h"
+#ifndef AOCL_ZLIB_TEST_H
+#define AOCL_ZLIB_TEST_H
 
-#ifdef AOCL_ZLIB_OPT
-ZEXTERN uint32_t adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
-ZEXTERN void slide_hash_x86(deflate_state *s);
-ZEXTERN uInt longest_match_x86 (deflate_state *s, IPos cur_match);
+#include "zlib.h"
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
+#ifdef AOCL_ZLIB_UNIT_TEST
+ZEXTERN uint32_t ZEXPORT Test_adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
 #endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* AOCL_ZLIB_TEST_H */
