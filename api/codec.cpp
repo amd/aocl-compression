@@ -184,8 +184,6 @@ CHAR *aocl_lzma_setup(INTP optOff, INTP optLevel,
 INT64 aocl_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                          UINTP outsize, UINTP level, UINTP, CHAR *)
 {
-    if (outsize <= LZMA_PROPS_SIZE) return 0;
-
     CLzmaEncProps encProps;
     INTP res;
     UINTP headerSize = LZMA_PROPS_SIZE;
@@ -206,8 +204,6 @@ INT64 aocl_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 INT64 aocl_lzma_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 						   UINTP outsize, UINTP, UINTP, CHAR *)
 {
-    if (insize <= LZMA_PROPS_SIZE) return 0;
-
     INTP res;
     SizeT outLen = outsize;
     SizeT srcLen = insize - LZMA_PROPS_SIZE;

@@ -45,6 +45,19 @@
 #include "algos/zstd/lib/zstd.h"
 #endif
 
+#define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
+
+/* This base class can be used for all fixtures
+ * that require dynamic dispatcher setup */
+class AOCL_setup_zstd : public ::testing::Test {
+public:
+    AOCL_setup_zstd() {
+        int optLevel = DEFAULT_OPT_LEVEL;
+        aocl_setup_zstd_encode(0, optLevel, 0, 0, 0);
+        aocl_setup_zstd_decode(0, optLevel, 0, 0, 0);
+    }
+};
+
 
 #define ZSTD_COMPRESS_HEAPMODE
 
@@ -192,21 +205,23 @@ TEST(ZSTD_versionString, AOCL_Compression_zstd_ZSTD_versionString_common_2) // S
 /***********************************************
  * "Begin" of ZSTD_compress
  ***********************************************/
+class ZSTD_ZSTD_compress : public AOCL_setup_zstd {
+};
 
-TEST(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_1) // compress_FAIL_src_is_NULL
+TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_1) // compress_FAIL_src_is_NULL
 {
     TestLoad_2 d(8000);
     
     EXPECT_EQ(Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), NULL, d.getOrigSize(), 1), -1);
 }
 
-TEST(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_2) // Compress_FAIL_dst_is_NULL
+TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_2) // Compress_FAIL_dst_is_NULL
 {
     TestLoad_2 d(800);
     EXPECT_EQ(Test_ZSTD_compress(NULL, d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), 1), -1);
 }
 
-TEST(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_3 ) // compress_PASS
+TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_3 ) // compress_PASS
 {
     for(int cLevel=1; cLevel<=22; cLevel++) {
         TestLoad_2 d(8000);
@@ -215,14 +230,14 @@ TEST(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_3 ) // compr
     }
 }
 
-TEST(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_4) // compress_FAIL_dst_size_not_enough
+TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_4) // compress_FAIL_dst_size_not_enough
 {
     TestLoad_2 d(800);
     int outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getOrigSize() / 20, d.getOrigData(),d.getCompressedSize(), 1);
     EXPECT_FALSE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
 }
 
-TEST(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_5) // Compression_level_less_than_minimum_limit
+TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_5) // Compression_level_less_than_minimum_limit
 {
     TestLoad_2 d(800);
     int cLevel = -1;
@@ -233,7 +248,7 @@ TEST(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_5) // Compre
     EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
 }
 
-TEST(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_6) // Compression_level_greater_than_maximum_limit
+TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_6) // Compression_level_greater_than_maximum_limit
 {
     TestLoad_2 d(800);
     int cLevel = 23;
@@ -251,7 +266,7 @@ TEST(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_6) // Compre
  * "Begin" of ZSTD_decompress
  ***********************************************/
 
-class ZSTD_ZSTD_decompress : public ::testing::Test
+class ZSTD_ZSTD_decompress : public AOCL_setup_zstd
 {
 public:
     TestLoad_2 *d = NULL;
@@ -502,7 +517,7 @@ TEST_F(ZSTD_ZSTD_findFrameCompressedSize, AOCL_Compression_zstd_ZSTD_findFrameCo
  * Begin of ZSTD_compress_advanced
  *********************************************/
 
-class ZSTD_ZSTD_compressed_advanced: public ::testing::Test
+class ZSTD_ZSTD_compressed_advanced: public AOCL_setup_zstd
 {
 public:
     // dctx is a paramter in `ZSTD_ZSTD_decompressDCtx`

@@ -69,8 +69,8 @@ static const algo_level_t algo_levels[AOCL_COMPRESSOR_ALGOS_NUM] =
 };
 
 #define MAX_MEM_SIZE_FOR_FILE_READ 1073741824 //(1024 MBs)
-#define DEFAULT_OPT_LEVEL 4
-#define MAX_OPT_LEVEL 4
+#define DEFAULT_OPT_LEVEL 2
+#define MAX_OPT_LEVEL 2 // Set to test AVX code paths. If your system supports AVX2, AVX-512 this can be increased to 3, 4.
 
 /*
 * This function provides list of valid algo ids
@@ -522,6 +522,9 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpNull_common_5) //
     setup();
 
     int64_t cSize = compress();
+
+    printf("cSize by algo %d %ld", algo, cSize);
+
     switch (algo) {
     case SNAPPY:
         EXPECT_EQ(cSize, cpr.getOutSize()); //snappy does not return error code
