@@ -24,6 +24,9 @@
 #include "LzFindMt.h"
 #endif
 
+#ifdef AOCL_LZMA_OPT
+#include <limits.h>
+#endif
 /* the following LzmaEnc_* declarations is internal LZMA interface for LZMA2 encoder */
 
 SRes LzmaEnc_PrepareForLzma2(CLzmaEncHandle pp, ISeqInStream *inStream, UInt32 keepWindowSize,
@@ -4357,7 +4360,9 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
-  if (src == NULL || srcLen == 0 || dest == NULL || propsEncoded == NULL)
+  if (src == NULL || srcLen == 0 || dest == NULL || propsEncoded == NULL ||
+      props == NULL || propsSize == NULL || destLen == NULL ||
+      *destLen > (ULLONG_MAX - LZMA_PROPS_SIZE)) // handles case when dest size is < LZMA_PROPS_SIZE, resulting in destLen rolling over in calling APIs
     return SZ_ERROR_PARAM;
 
   if (ValidateParams(props) != SZ_OK)

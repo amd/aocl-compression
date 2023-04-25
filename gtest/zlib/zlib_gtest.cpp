@@ -49,7 +49,19 @@
 
 using namespace std;
 
+#define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
+
 #define MIN(a,b)    ( (a) < (b) ? (a) : (b) )
+
+/* This base class can be used for all fixtures
+* that require dynamic dispatcher setup */
+class AOCL_setup_zlib : public ::testing::Test {
+public:
+    AOCL_setup_zlib() {
+        int optLevel = DEFAULT_OPT_LEVEL;
+        aocl_setup_zlib(0, optLevel, 0, 0, 0);
+    }
+};
 
 z_streamp strm;
 
@@ -200,7 +212,6 @@ TEST(ZLIB_deflateInit_, pass_cases)
   rstd(zp);
 }
 
-
 TEST(ZLIB_deflateEnd, Z_OK_)
 {
   z_streamp zp = nzp();
@@ -288,7 +299,10 @@ TEST(ZLIB_compressBound, basic)
   EXPECT_EQ(compressBound(1 << 26), 67129359);  // AOCL_compressBoundion_zlib_compressBound_common_4
 }
 
-TEST(ZLIB_compress, fail_cases)
+class ZLIB_compress : public AOCL_setup_zlib {
+};
+
+TEST_F(ZLIB_compress, fail_cases)
 {
   unsigned long destLen = compressBound(11);
   char c[11] = "helloWorld";
@@ -305,7 +319,7 @@ TEST(ZLIB_compress, fail_cases)
   free(dest);
 }
 
-TEST(ZLIB_compress, pass)
+TEST_F(ZLIB_compress, pass)
 {
   uLong srcLen = 11;
   char c[11] = "helloWorld";
@@ -324,7 +338,7 @@ TEST(ZLIB_compress, pass)
   free(dest);
 }
 
-TEST(ZLIB_compress, pass2)
+TEST_F(ZLIB_compress, pass2)
 {
   char c[11] = "";
   uLong srcLen = 1;
@@ -343,7 +357,10 @@ TEST(ZLIB_compress, pass2)
   free(dest);
 }
 
-TEST(ZLIB_compress2, fail_cases)
+class ZLIB_compress2 : public AOCL_setup_zlib {
+};
+
+TEST_F(ZLIB_compress2, fail_cases)
 {
   const uLong srcLen = 10;
   Bytef src[srcLen + 1] = "helloWorld";
@@ -361,7 +378,7 @@ TEST(ZLIB_compress2, fail_cases)
   free(dest);
 }
 
-TEST(ZLIB_compress2, pass)
+TEST_F(ZLIB_compress2, pass)
 {
   uLong srcLen = 11;
   char c[11] = "helloWorld";
@@ -380,7 +397,7 @@ TEST(ZLIB_compress2, pass)
   free(dest);
 }
 
-TEST(ZLIB_compress2, pass2)
+TEST_F(ZLIB_compress2, pass2)
 {
   uLong srcLen = 1;
   char c[11] = "";
@@ -399,7 +416,10 @@ TEST(ZLIB_compress2, pass2)
   free(dest);
 }
 
-TEST(ZLIB_uncompress2, fail_cases)
+class ZLIB_uncompress2 : public AOCL_setup_zlib {
+};
+
+TEST_F(ZLIB_uncompress2, fail_cases)
 {
   string source = "helloWorld";
   const uLong compressedAlloc = 100;
@@ -426,7 +446,7 @@ TEST(ZLIB_uncompress2, fail_cases)
   EXPECT_EQ(uncompress2(uncompressed,&uncompressLen,compressed,NULL),Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
 }
 
-TEST(ZLIB_uncompress2, pass)
+TEST_F(ZLIB_uncompress2, pass)
 {
   string source = "helloWorld";
   const uLong compressedAlloc = 100;
@@ -441,7 +461,10 @@ TEST(ZLIB_uncompress2, pass)
   EXPECT_TRUE(cmpr(source.data(), (char *)uncompressed, source.size()));
 }
 
-TEST(ZLIB_uncompress, fail_cases)
+class ZLIB_uncompress : public AOCL_setup_zlib {
+};
+
+TEST_F(ZLIB_uncompress, fail_cases)
 {
   string source = "helloWorld";
   const uLong compressedAlloc = 100;
@@ -468,7 +491,7 @@ TEST(ZLIB_uncompress, fail_cases)
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, 0), Z_DATA_ERROR); // AOCL_Compression_zlib_uncompress_common_7
 }
 
-TEST(ZLIB_uncompress, pass)
+TEST_F(ZLIB_uncompress, pass)
 {
   string source = "helloWorld";
   const uLong compressedAlloc = 100;
@@ -775,7 +798,10 @@ TEST(ZLIB_deflateReset, pass_cases)
   rstd(strm);
 }
 
-TEST(ZLIB_deflateParams, fail_cases)
+class ZLIB_deflateParams : public AOCL_setup_zlib {
+};
+
+TEST_F(ZLIB_deflateParams, fail_cases)
 {
   z_streamp strm = nzp();
   int level = -1;
@@ -812,7 +838,7 @@ TEST(ZLIB_deflateParams, fail_cases)
   rstd(strm);
 }
 
-TEST(ZLIB_deflateParams, pass_cases)
+TEST_F(ZLIB_deflateParams, pass_cases)
 {
   z_streamp strm = nzp();
   int level;
@@ -1784,7 +1810,10 @@ TEST(ZLIB_inflateCodesUsed, pass_cases)
   rsti(strm);
 }
 
-TEST(ZLIB_adler32_x86, all_cases)
+class ZLIB_adler32_x86 : public AOCL_setup_zlib {
+};
+
+TEST_F(ZLIB_adler32_x86, all_cases)
 {
   size_t len = 5552;
   Bytef *buf = (Bytef *)malloc(len);
@@ -1839,7 +1868,10 @@ z_const unsigned char comp[] = {
     0x49, 0xac, 0xaa, 0x54, 0x48, 0xc9, 0x4f, 0x07, 0x00, 0x6b, 0x93, 0x10, 0x30
 };
 
-TEST(ZLIB_inflate, AOCL_Compression_zlib_inflate_adler32_1)
+class ZLIB_inflate : public AOCL_setup_zlib {
+};
+
+TEST_F(ZLIB_inflate, AOCL_Compression_zlib_inflate_adler32_1)
 {
     unsigned char uncomp[1024];
     z_stream strm;
@@ -1869,7 +1901,10 @@ TEST(ZLIB_inflate, AOCL_Compression_zlib_inflate_adler32_1)
 static z_const char hello[] = "hello, hello!";
 static const int hello_len = sizeof(hello);
 
-TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_1) {
+class ZLIB_deflate : public AOCL_setup_zlib {
+};
+
+TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_1) {
     z_stream c_strm, d_strm;
     uint8_t compr[128], uncompr[128];
     z_size_t compr_len = sizeof(compr), uncompr_len = sizeof(uncompr);
@@ -1916,7 +1951,7 @@ TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_1) {
     EXPECT_STREQ((char*)uncompr, hello);
 }
 
-TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_2) {
+TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_2) {
     z_stream c_strm, d_strm;
     uint8_t compr[128], uncompr[128];
     z_size_t compr_len = sizeof(compr), uncompr_len = sizeof(uncompr);
@@ -1963,7 +1998,7 @@ TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_2) {
     EXPECT_STREQ((char*)uncompr, hello);
 }
 
-TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_3) {
+TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_3) {
     z_stream c_strm, d_strm;
     uint8_t compr[128], uncompr[128];
     z_size_t compr_len = sizeof(compr), uncompr_len = sizeof(uncompr);
@@ -2015,7 +2050,7 @@ TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_3) {
 #define UNCOMPR_BUFFER_SIZE (32 * 1024)
 #define UNCOMPR_RAND_SIZE (8 * 1024)
 
-TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_1)
+TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_1)
 {
     z_stream c_strm, d_strm;
     uint8_t *compr, *uncompr;
@@ -2075,7 +2110,7 @@ TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_1)
     free(uncompr);
 }
 
-TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_2)
+TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_2)
 {
     z_stream c_strm, d_strm;
     uint8_t *compr, *uncompr;
@@ -2135,7 +2170,7 @@ TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_2)
     free(uncompr);
 }
 
-TEST(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_3)
+TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_3)
 {
     z_stream c_strm, d_strm;
     uint8_t *compr, *uncompr;

@@ -48,6 +48,23 @@
 
 using namespace std;
 
+#define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
+
+void aocl_setup_lzma_test() {
+    int optLevel = DEFAULT_OPT_LEVEL;
+    aocl_setup_lzma_encode(0, optLevel, 0, 0, 0);
+    aocl_setup_lzma_decode(0, optLevel, 0, 0, 0);
+}
+
+/* This base class can be used for all fixtures
+* that require dynamic dispatcher setup */
+class AOCL_setup_lzma : public ::testing::Test {
+public:
+    AOCL_setup_lzma() {
+        aocl_setup_lzma_test();
+    }
+};
+
 /*********************************************
  * Begin of Unit Tests
  *********************************************/
@@ -1224,7 +1241,7 @@ TEST(LZMA_encPropsInit, AOCL_Compression_lzma_LzmaEncProps_Init_common_1) //chec
  /*
      Fixture class for testing AOCL_LzmaEncProps_Normalize
  */
-class LZMA_encPropsNormalize : public ::testing::Test
+class LZMA_encPropsNormalize : public AOCL_setup_lzma
 {
 public:
     void validate_defaults(CLzmaEncProps* p, int level) {
@@ -1428,7 +1445,10 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
 /*********************************************
 * Begin of LZMA_encPropsGetDictSize
 *********************************************/
-TEST(LZMA_encPropsGetDictSize, AOCL_Compression_lzma_LzmaEncProps_GetDictSize_common_1)
+class LZMA_encPropsGetDictSize : public AOCL_setup_lzma {
+};
+
+TEST_F(LZMA_encPropsGetDictSize, AOCL_Compression_lzma_LzmaEncProps_GetDictSize_common_1)
 {
     CLzmaEncProps p;
     LzmaEncProps_Init(&p);
@@ -1463,7 +1483,7 @@ TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Create_common_1) //LzmaEnc cr
 /*
     Fixture class for testing AOCL_LzmaEnc_SetProps
 */
-class LZMA_encSetProps : public ::testing::Test
+class LZMA_encSetProps : public AOCL_setup_lzma
 {
 public:
     void SetUp() override {
@@ -1660,6 +1680,7 @@ public:
 
 protected:
     void SetUpEncode(size_t _inSize) {
+        aocl_setup_lzma_test();
         inSize = _inSize;
         //setup buffers
         buffers_setup();
@@ -2257,7 +2278,7 @@ TEST(LZMA_decInit, AOCL_Compression_lzma_LzmaDec_Init_common_1) //check initiali
 /*
     Base class for alloc free and props set APIs
 */
-class LZMA_allocFreeBase : public ::testing::Test {
+class LZMA_allocFreeBase : public AOCL_setup_lzma {
 protected:
     void SetUpBase() {
         pe = LzmaEnc_Create(&g_Alloc); //create encoder
@@ -2715,7 +2736,7 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_highDictSz_common_
 /*
     Fixture class for testing
 */
-class LZMA_decodeBase : public ::testing::Test {
+class LZMA_decodeBase : public AOCL_setup_lzma {
 public:
     void validate() {
         EXPECT_EQ(memcmp(inPtr, decompPtr, inSize), 0); //decompressed data must match input
@@ -3055,11 +3076,10 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_srcSzZero_common_1)
     //size_t d_inSize = LZMA_PROPS_SIZE + outLen;
     size_t d_outSize = inSize;
     SizeT outLen = d_outSize;
-    //SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+    SizeT srcLen = 0; //src len 0
 
-    //srcLen = 0
     SRes res = decode((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
-        0, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
 
     EXPECT_NE(res, SZ_OK);
 }
