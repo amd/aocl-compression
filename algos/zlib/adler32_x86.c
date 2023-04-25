@@ -29,6 +29,9 @@
 #include <immintrin.h>
 #include <stdint.h>
 #include "zutil.h"
+#ifdef AOCL_ZLIB_UNIT_TEST
+#include "aocl_zlib_test.h"
+#endif /* AOCL_ZLIB_UNIT_TEST */
 
 /* Largest prime smaller than 65536 */
 #define BASE 65521U

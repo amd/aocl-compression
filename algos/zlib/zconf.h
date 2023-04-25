@@ -332,6 +332,9 @@
    /* If building or using zlib as a DLL, define ZLIB_DLL.
     * This is not mandatory, but it offers a little performance increase.
     */
+#  ifdef ZLIB_DLL_EXPORT
+#     define ZLIB_DLL
+#  endif /* ZLIB_DLL_EXPORT */
 #  ifdef ZLIB_DLL
 #    if defined(WIN32) && (!defined(__BORLANDC__) || (__BORLANDC__ >= 0x500))
 #      ifdef ZLIB_INTERNAL
