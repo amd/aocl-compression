@@ -94,12 +94,9 @@ except ImportError:
     install_required_modules()
 
 
-FILENAME_TEST_CONFIG = "pretest_config.json"
 DEFAULT_DATASETS = 'http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip'
 ITERS = 50
 pwd = os.path.dirname(os.path.abspath(__file__)) # Get the absolute path of the current python script
-FILEPATH_TEST_CONFIG = os.path.join(
-    pwd, FILENAME_TEST_CONFIG)  # /path/to/pretestconfig file
 DEFAULT_REPO = os.path.join(pwd, '..')
 DEFAULT_BUILD = os.path.join(DEFAULT_REPO, 'build')
 install = 'pip install'
@@ -118,6 +115,7 @@ def remove_file_folder(path):
     else:
         pass
 
+
 ## =========================
 # Calculate %Gain/Regression
 ## =========================
@@ -125,8 +123,8 @@ def remove_file_folder(path):
 def get_percentage_inc_dec(first_num, second_num):
     try:
         return ((first_num / second_num) - 1) * 100
-    except ZeroDivisionError:
-        return "AMD_NO_OPT is {}".format(second_num)
+    except ZeroDivisionError as e:
+        return error + str(e)
 
 # Get Geometric mean
 def geo_mean(itr):
@@ -134,7 +132,7 @@ def geo_mean(itr):
     return math.exp(sum(math.log(n) for n in ls) / len(ls))
 
 
-# Prints log
+# Print log
 def write(msg):
     print(time.strftime("%Y/%m/%d %H:%M:%S") + ' - ' + msg + '\n')
 
@@ -166,11 +164,14 @@ def parse_line(line, amd_opt):
     return the key and match result of the first matching regex
 
     """
+    # Check if Error occurred
+    if "Error" in line:
+        print("\n" + line)
+        exit()
+
     # If IPP option enabled
     if amd_opt == "IPP":
         rx_dict['libdata'] = re.compile(r'IPP \[(.*)\] \[Filename:(.*)\] --')
-    else:
-        pass
 
     for key, rx in rx_dict.items():
         match = rx.search(line)
@@ -183,7 +184,7 @@ def parse_line(line, amd_opt):
 def proc(cmd_args, pipe=True):
     """
     Args:
-        cmd_args: The command argument is pass as the cmd_args parameter.
+        cmd_args: The command argument is passed as the cmd_args parameter.
         pipe: stdout is redirected to a pipe. Defaults to True.
     """
     if pipe:
@@ -219,7 +220,6 @@ def parse_file(fileName, amd_opt):
         while line:
             # at each line check for a match with a regex
             key, match = parse_line(line, amd_opt)
-
             if key == 'libdata':
                 lib = match.group(1)
                 dataset = match.group(2)
@@ -250,15 +250,15 @@ def testbench(args, pipe=True):
 def run_command(cmd, filename='build_logs.log', print_command=True, print_output=False, print_error=True, param_shell=True):
     """
     Parameters:
-        cmd: Pass the command as the cmd parameter.
-        filename: Save Console's output to file. Defaults is in 'build_logs.log'.
-        print_command: Print command to the console before being executed.
-        print_output: Command's output print to the console.
-        print_error: If error messages, print to the console.
+        cmd: Pass the command for execution.
+        filename: Save Console's output to file. Defaults to 'build_logs.log'.
+        print_command: Print the command to the console before being executed.
+        print_output: Print the command's output to the console.
+        print_error: Print error messages to the console.
         param_shell: cmd string is passed to the system's shell for execution if it is true.
     Raises:
-        RuntimeError: Function raises a RuntimeError if the command's return code is non-zero and not None
-    Returns: Returns a list of the lines of output generated with the command.
+        RuntimeError: Function raises a RuntimeError if the command's return code is non-zero(means subprocess completed with error) and not None(subprocess has completed)
+    Returns: Function returns a list of the lines of output generated with the command.
     """
     if print_command:
         write(cmd)
@@ -406,8 +406,11 @@ def create_tables(fileName, amd_opt, method_name):
         DspeedOPT,
         ComprRatio]
 
-    # Parse the output file
-    parse_file('out.log', amd_opt)
+     # Parse the output file
+    if os.path.exists('out.log') and os.path.getsize('out.log') == 0:
+        print(error + "The benchmark output file is empty. The tests might have failed")
+    else:
+        parse_file('out.log', amd_opt)
     mName = get_results(fileName)[0]
     csize = get_results(fileName)[1]
     cspeed = get_results(fileName)[2]
@@ -437,6 +440,9 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
         amd_opt = 'AMD_OPT_ON'
     if amd_opt == "off" or amd_opt == "OFF":
         amd_opt = 'AMD_OPT_OFF'
+    if amd_opt == "ipp" or amd_opt == "IPP":
+        amd_opt = 'IPP'
+
     method = "-e{}".format(method_name)
     testOptions = []
     compare = comparewith
@@ -448,7 +454,7 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
             method_name, amd_opt.replace("IPP", "IPP_OPT_ON")))
         remove_file_folder("out.log")
         for dataset in datasetFile_lst:
-            testOptions = ["-a", "-t", "-p"]
+            testOptions = ["-t", "-p"]
             if amd_opt == "IPP" or amd_opt == "ipp":
                 testOptions.append("-c")
                 testOptions.append("-v3")
@@ -459,7 +465,10 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
             testOptions.append(method)
             testOptions.append(iters)
             testbench(testOptions, True)
-        create_tables('parse_out.log', amd_opt, method_name)
+        if os.path.exists('parse_out.log') and os.path.getsize('parse_out.log') == 0:
+            print(error + "The output file is empty. The tests might have failed")
+        else:
+            create_tables('parse_out.log', amd_opt, method_name)
 
         if comparewith == "ipp":
             if ipp != 'off':
@@ -510,21 +519,21 @@ if __name__ == '__main__':
         '--ipp', '-ipp',
         help='Provide IPP installed library path like for lz4: --ipp $PATH/lz4-1.9.3/lib) and for zlib: --ipp $PATH/zlib-1.2.11)', default=ipp)
     parser.add_argument(
-        '--optimization', '-o', choices=['on', 'off'],
-        help='Specify one of the options: on(default - with AOCL optimization), off(without AOCL optimization)', type=str,
+        '--optimization', '-o', choices=['on', 'off', 'ipp'],
+        help='Specify one of the options: on(default - with AOCL optimization), off(without AOCL optimization), ipp(with IPP patch)', type=str,
         default="AMD_OPT_ON")
     parser.add_argument(
         '--comparewith', '-cw', choices=['ipp', 'vanilla'],
-        help='Please specify comparision library, options are vanilla(Vanilla VS AOCL optimization), ipp(IPP VS AOCL optimization)', type=str
+        help='Please specify a library for comparison, options are vanilla(Vanilla VS AOCL optimization), ipp(IPP VS AOCL optimization)', type=str
     )
     parser.add_argument(
         '--iterations', '-itr',
         help='Specify number of iterations for compression/decompression.', default=ITERS)
     parser.add_argument('--optionalFlags', '-flags',
-                        help='Pass a list of optional supportive flags (SNAPPY_MATCH_SKIP_OPT, AOCL_LZ4_OPT_PREFETCH_BACKWARDS, and LZ4_FRAME_FORMAT_SUPPORT) as required. For example: -flags SNAPPY_MATCH_SKIP_OPT=ON AOCL_LZ4_OPT_PREFETCH_BACKWARDS=ON LZ4_FRAME_FORMAT_SUPPORT=ON',
+                        help='Pass a list of supported optional flags (SNAPPY_MATCH_SKIP_OPT, AOCL_LZ4_OPT_PREFETCH_BACKWARDS, and LZ4_FRAME_FORMAT_SUPPORT) as required. For example: -flags SNAPPY_MATCH_SKIP_OPT=ON AOCL_LZ4_OPT_PREFETCH_BACKWARDS=ON LZ4_FRAME_FORMAT_SUPPORT=ON',
                         type=str, nargs="*", default=[])
     parser.add_argument('--VSVersion', '-vs',
-                        type=str, help='This is a Windows platfrom specific option. Use this option to provide installed Visual Studio version on system. Default is "Visual Studio 17 2022"', default="Visual Studio 17 2022")
+                        type=str, help='This is a Windows platform specific option. Use this option to provide an installed Visual Studio version available on the system. Default is "Visual Studio 17 2022"', default="Visual Studio 17 2022")
     args = parser.parse_args()
 
     run_command.cwd = DEFAULT_REPO
@@ -594,7 +603,7 @@ if __name__ == '__main__':
                             "Installing AOCL-Compression using Clang Compiler ..... \n")
                     else:
                         print(
-                            "Installing AOCL-Compression using gcc Compiler..... \n")
+                            "Installing AOCL-Compression using gcc Compiler ..... \n")
                         
             # Check if the user wanted to collect build log
             if args.collectBuildlogs == "yes":
@@ -606,7 +615,7 @@ if __name__ == '__main__':
     if not os.path.exists(args.dataset) and not os.path.isfile(args.dataset):
         os.mkdir(args.dataset)
     if not os.listdir(args.dataset):
-        print("Input dataset is not available at specified path: {}. So, Silesia datasets are downloading to the path \n".format(args.dataset))
+        print("Input dataset is not available at specified path: {}. So, downloading Silesia dataset to the path \n".format(args.dataset))
         download_datasets(DEFAULT_DATASETS, args.dataset)
 
     # Make list of the datasets that are available in the directory 
@@ -614,12 +623,12 @@ if __name__ == '__main__':
     ipp_supports_methods = ['lz4', 'lz4hc', 'zlib', "bzip2"]
 
     # Sets the IPP enviroment variable before running IPP patched method
-    if args.ipp != "off" or args.comparewith == "ipp":
-        if args.method[0].split(":")[0] in ipp_supports_methods:
+    if (args.ipp != "off" or "ipp" in [args.comparewith, args.optimization]):
+        if (args.method[0].split(":")[0] in ipp_supports_methods) and which_platform != 'Windows':
             os.environ['LD_LIBRARY_PATH'] = args.ipp
         else:
             print(
-                error + "Compression test framework does not support IPP method: {}".format(args.method))
+                error + "Compression test framework does not support IPP method: {} on {}".format(args.method, which_platform))
             exit()
     
     ## =====================================
@@ -627,19 +636,17 @@ if __name__ == '__main__':
     ## ======================================
 
     if args.comparewith and args.optimization == "off":
-        raise ValueError("comparewith doesn't support with optimization off")
+        raise ValueError("comparewith doesn't support execution with optimization off")
 
-    if args.comparewith == "ipp" and args.ipp == "off":
-        print(error + "Comparewith(IPP) and IPP path flags should be enabled together \n")
+    if "ipp" in [args.comparewith, args.optimization] and args.ipp == "off":
+        print(error + "Provide the IPP library path using --ipp flag to perform IPP \n")
         exit()
     elif args.comparewith == "vanilla" and args.ipp != "off":
-        print(error + "Comparewith(vanilla) and IPP path flags should not be enabled together \n")
+        print(error + "Comparewith(vanilla) and IPP path flags can not be enabled together \n")
         exit()
     elif args.comparewith == "ipp" and len(args.method) >1:
         print(error + "--method/-m argument does not accept list of methods when comparing with IPP. Instead, only pass the specific method that you want to compare with IPP.")
         exit()
-    else:
-        pass
     
     ## ===========================
     # Compression building control  
@@ -666,4 +673,4 @@ if __name__ == '__main__':
         run_benchmark_test(datasetFile_lst, m, args.iterations,
                        args.optimization, args.comparewith, args.ipp)
 
-    print("Compression benchmarking tests are completed. Please find the generated reports.")
+    print("Compression benchmarking tests are completed. Please check the generated reports for details.")
