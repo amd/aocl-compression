@@ -2,6 +2,7 @@
  *  LZ4 - Fast LZ compression algorithm
  *  Header File
  *  Copyright (C) 2011-present, Yann Collet.
+ *  Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -46,27 +47,27 @@ extern "C" {
 /*!
  * \addtogroup LZ4_API
  * @brief
- *  LZ4 is lossless compression algorithm, providing compression speed >500 MB/s per core,
- *   scalable with multi-cores CPU. It features an extremely fast decoder, with speed in
+ *   LZ4 is a lossless compression algorithm, providing compression speed >500 MB/s per core,
+ *   and scalable with multi-core CPU. It features an extremely fast decoder, with speed in
  *   multiple GB/s per core, typically reaching RAM speed limits on multi-core systems.
  *
  *   The LZ4 compression library provides in-memory compression and decompression functions.
  *   It gives full buffer control to user.
  *   Compression can be done in:
- *       - a single step (described as Simple Functions)
+ *       - a single step (described in Simple Functions)
  *       - a single step, reusing a context (described in Advanced Functions)
- *       - unbounded multiple steps (described as Streaming compression)
+ *       - unbounded multiple steps (described in Streaming compression)
  *
- *   lz4.h generates and decodes LZ4-compressed blocks (doc/lz4_Block_format.md).
+ *   APIs in lz4.h generate LZ4-compressed blocks in this format [lz4_Block_format](https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md).
  *   Decompressing such a compressed block requires additional metadata.
  *   Exact metadata depends on exact decompression function.
  *   For the typical case of LZ4_decompress_safe(),
  *   metadata includes block's compressed size, and maximum bound of decompressed size.
  *   Each application is free to encode and pass such metadata in whichever way it wants.
  *
- *   lz4.h only handle blocks, it can not generate Frames. 
+ *   API's in lz4.h only handle blocks, it can not generate Frames. 
  *
- *    Blocks are different from Frames (doc/lz4_Frame_format.md).
+ *    Blocks are different from Frames [lz4_Frame_format](https://github.com/lz4/lz4/blob/dev/doc/lz4_Frame_format.md).
  * Frames bundle both blocks and metadata in a specified manner.
  * Embedding metadata is required for compressed data to be self-contained and portable.
  * Frame format is delivered through a companion API, declared in lz4frame.h.
@@ -84,6 +85,9 @@ extern "C" {
 *  LZ4LIB_VISIBILITY :
 *  Control library symbols visibility.
 */
+
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
 #ifndef LZ4LIB_VISIBILITY
 #  if defined(__GNUC__) && (__GNUC__ >= 4)
 #    define LZ4LIB_VISIBILITY __attribute__ ((visibility ("default")))
@@ -111,11 +115,13 @@ extern "C" {
 #define LZ4_EXPAND_AND_QUOTE(str) LZ4_QUOTE(str)
 #define LZ4_VERSION_STRING LZ4_EXPAND_AND_QUOTE(LZ4_LIB_VERSION)
 
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
+
 /*!
  *  @brief
  *  Library Version number.
  *  Useful to check dll version.
- * @return Library Version in integer format.
+ *  @return Library Version in integer format.
  */
 
 LZ4LIB_API int LZ4_versionNumber (void);  
@@ -129,6 +135,7 @@ LZ4LIB_API int LZ4_versionNumber (void);
 
 LZ4LIB_API const char* LZ4_versionString (void);
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 
 /**----- AOCL Optimization flags -----*/
 #define AOCL_LZ4_OPT
@@ -149,25 +156,28 @@ LZ4LIB_API const char* LZ4_versionString (void);
 # define LZ4_MEMORY_USAGE 14
 #endif
 
+/// @endcond  /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*-************************************
 *  Simple Functions
 **************************************/
 
 /*!
- * @name Simple Functions
+ * @name Simple_Functions
  * @{
  */
 
 /*!
  *  @brief Compresses 'srcSize' bytes from buffer 'src'
  *  into already allocated 'dst' buffer of size 'dstCapacity'.
+ *  
+ *  |Parameters     |Direction  |Description                                                                           |
+ *  |:--------------|:---------:|:-------------------------------------------------------------------------------------|
+ *  | \b src        |   in      | Source buffer, the data which you want to compress is copied/or pointed here.        |
+ *  | \b dst        |   out     | Destination buffer, compressed data is kept here, memory should be allocated already.|
+ *  | \b srcSize    |   in      | Maximum supported value is `LZ4_MAX_INPUT_SIZE`.                                     |
+ *  | \b dstCapacity|   in      | Size of pre-allocated 'dst' buffer.                                                  |
  * 
- *  @param src Source buffer, the data which you want to compress is copied/or pointed here.
- *  @param dst Destination buffer, compressed data is kept here, memory should be allocated already.
- *  @param srcSize Maximum supported value is LZ4_MAX_INPUT_SIZE.
- *  @param dstCapacity Size of buffer 'dst' (which must be already allocated).
- *
  *  @note Compression is guaranteed to succeed if 'dstCapacity' >= LZ4_compressBound(srcSize).
  *  It also runs faster, so it's a recommended setting.
  *  @note This function is protected against buffer overflow scenarios (never writes outside 'dst' buffer, nor read outside 'source' buffer).
@@ -175,8 +185,13 @@ LZ4LIB_API const char* LZ4_versionString (void);
  *  @warning If the function cannot compress 'src' into a more limited 'dst' budget,
  *  compression stops *immediately*, and the function result is zero.
  *  In which case, 'dst' content is undefined (invalid).
- * 
- *  @return  The number of bytes written into buffer 'dst' (necessarily <= dstCapacity) or 0 if compression fails.
+ *   
+ *  @return
+ *  |Result | Description                                                                                           |
+ *  |:------|:------------------------------------------------------------------------------------------------------|
+ *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst.|
+ *  |Fail   | Returns <= 0                                                                                          |
+ *
  */
 LZ4LIB_API int LZ4_compress_default(const char* src, char* dst, int srcSize, int dstCapacity);
 
@@ -184,10 +199,12 @@ LZ4LIB_API int LZ4_compress_default(const char* src, char* dst, int srcSize, int
  * @brief Decompresses the compressed data that is pointed by src into dst and return the number of bytes decompressed
  * into destination buffer.
  * 
- * @param src This buffer contains compressed data.
- * @param dst This is the destination buffer, the data is decompressed to this buffer.
- * @param compressedSize It is the exact complete size of the compressed block.
- * @param dstCapacity It is the size of destination buffer (which must be already allocated), presumed an upper bound of decompressed size.
+ *  |Parameters         |Direction|Description                                                                                                                 |
+ *  |:------------------|:-------:|:---------------------------------------------------------------------------------------------------------------------------|
+ *  | \b src            |  in     | This buffer contains compressed data.                                                                                      |
+ *  | \b dst            |  out    | This is the destination buffer, the data is decompressed to this buffer.                                                   |
+ *  | \b compressedSize |  in     | It is the exact complete size of the compressed block.                                                                     |
+ *  | \b dstCapacity    |  in     | It is the size of the destination buffer (which must be pre-allocated), presumed to be an upper bound of decompressed size.|
  * 
  * @note 1 : This function is protected against malicious data packets :
  *          it will never writes outside 'dst' buffer, nor read outside 'source' buffer,
@@ -197,9 +214,13 @@ LZ4LIB_API int LZ4_compress_default(const char* src, char* dst, int srcSize, int
  *          The implementation is free to send / store / derive this information in whichever way is most beneficial.
  *          If there is a need for a different format which bundles together both compressed data and its metadata, consider looking at lz4frame.h instead.
  * 
- * @return The number of bytes decompressed into destination buffer (necessarily <= dstCapacity)
- *           If destination buffer is not large enough, decoding will stop and output an error code (negative value).
- *           If the source stream is detected malformed, the function will stop decoding and return a negative result.
+ *  @return
+ *  |Result | Description                                                                                               |
+ *  |:-----:|:----------------------------------------------------------------------------------------------------------|
+ *  |Success| The number of bytes decompressed into destination buffer (<= dstCapacity)                                 |
+ *  |Fail   | If destination buffer is not large enough, decoding will stop and output an error code (negative value).  |
+ *  |   ^   | If the source stream is detected malformed, the function will stop decoding and return a negative result. |
+ *
  */
 LZ4LIB_API int LZ4_decompress_safe (const char* src, char* dst, int compressedSize, int dstCapacity);
 
@@ -210,7 +231,18 @@ LZ4LIB_API int LZ4_decompress_safe (const char* src, char* dst, int compressedSi
 /*-************************************
 *  Advanced Functions
 **************************************/
+
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
 #define LZ4_MAX_INPUT_SIZE        0x7E000000   /* 2 113 929 216 bytes */
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
+
+/**
+ * @def LZ4_COMPRESSBOUND(isize)
+ * Macro LZ4_COMPRESSBOUND(isize) is provided for compilation-time evaluation (stack memory allocation) alternative of LZ4_compressBound()
+ * 
+*/
 #define LZ4_COMPRESSBOUND(isize)  ((unsigned)(isize) > (unsigned)LZ4_MAX_INPUT_SIZE ? 0 : (isize) + ((isize)/255) + 16)
 
 /**
@@ -222,39 +254,50 @@ LZ4LIB_API int LZ4_decompress_safe (const char* src, char* dst, int compressedSi
  *  @brief Provides the maximum size that LZ4 compression may output in a "worst case" scenario (input data not compressible).
  *  
  *  This function is primarily useful for memory allocation purposes (destination buffer size).
- *  Macro LZ4_COMPRESSBOUND() is also provided for compilation-time evaluation (stack memory allocation for example).
- * 
- *  @param inputSize  Maximum supported value is LZ4_MAX_INPUT_SIZE .
- *  @note LZ4_compress_default() compresses faster when dstCapacity is >= LZ4_compressBound(srcSize).
+ *  Macro LZ4_COMPRESSBOUND(isize) is also provided for compilation-time evaluation (stack memory allocation for example).
+ *
  *  
- *  @return Maximum output size in a "worst case" scenario
- *              or 0, if input size is incorrect (too large or negative).
+ *  |Parameters     |Direction|Description                                      |
+ *  |:--------- ----|:-------:|:------------------------------------------------|
+ *  | \b inputSize  |    in   | Maximum supported value is LZ4_MAX_INPUT_SIZE . |
+ * 
+ *  @note LZ4_compress_default() compresses faster when dstCapacity is >= LZ4_compressBound(srcSize).
+ *
+ *  @return
+ *  |Result | Description                                                   |
+ *  |:-----:|:--------------------------------------------------------------|
+ *  |Success| Returns Maximum output size in a "worst case" scenario        |
+ *  |Fail   | Returns 0, if input size is incorrect (too large or negative).|
 */
 LZ4LIB_API int LZ4_compressBound(int inputSize);
 
 /*! @brief Same as LZ4_compress_default(), but allows selection of "acceleration" factor.
 
- *  @param src Source buffer, the data which you want to compress is copied/or pointed here.
- *  @param dst Destination buffer, compressed data is kept here, memory should be allocated already.
- *  @param srcSize Maximum supported value is LZ4_MAX_INPUT_SIZE.
- *  @param dstCapacity Size of buffer 'dst' (which must be already allocated).
- *  @param acceleration Values <= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).\n
- *  Values > LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).
- *  The larger the acceleration value, the faster the algorithm, but also the lesser the compression.
- *  It's a trade-off. It can be fine tuned, with each successive value providing roughly +~3% to speed.
- *  An acceleration value of "1" is the same as regular LZ4_compress_default().
- * 
- *  @return  The number of bytes written into buffer 'dst' (necessarily <= dstCapacity) or 0 if compression fails.
+ *  |Parameters      |Direction |Description                                                                                                         |
+ *  |:---------------|:--------:|:-------------------------------------------------------------------------------------------------------------------|
+ *  | \b src         |  in      | Source buffer, the data which you want to compress is copied/or pointed here.                                      |
+ *  | \b dst         |  out     | Destination buffer, compressed data is kept here, memory should be allocated already.                              |
+ *  | \b srcSize     |  in      | Maximum supported value is LZ4_MAX_INPUT_SIZE.                                                                     |
+ *  | \b dstCapacity |  in      | Size of buffer 'dst' (which must be already allocated).                                                            |
+ *  | \b acceleration|  in      | Values <= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).                              |
+ *  |      ^         |  ^       | Values > LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).            |
+ *  |      ^         |  ^       | The larger the acceleration value, the faster the algorithm, but also the lesser the compression. It's a trade-off.| 
+ *  |      ^         |  ^       | It can be fine tuned, with each successive value providing roughly +~3% to speed.                                  |
+ *  |      ^         |  ^       | An acceleration value of "1" is the same as regular LZ4_compress_default().                                        |
+ *
+ *  @return
+ *  |Result | Description                                                                                            |
+ *  |:------|:-------------------------------------------------------------------------------------------------------|   
+ *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst. |
+ *  |Fail   | Returns <= 0.                                                                                          |
 */
 LZ4LIB_API int LZ4_compress_fast (const char* src, char* dst, int srcSize, int dstCapacity, int acceleration);
 
 /*!
- * @brief The amount of memory which must be allocated for its state.
- * @param void
+ * @brief Get the amount of memory which must be allocated for its state.
+ * 
  * @return The amount of memory which must be allocated for its state.
 */
-
-
 LZ4LIB_API int LZ4_sizeofState(void);
 
 /*! @brief Same as LZ4_compress_fast(), using an externally allocated memory space for its state.
@@ -262,22 +305,29 @@ LZ4LIB_API int LZ4_sizeofState(void);
  *  Use LZ4_sizeofState() to know how much memory must be allocated,
  *  and allocate it on 8-bytes boundaries (using `malloc()` typically).
  *  Then, provide this buffer as `void* state` to compression function.
- * 
- *  @param state It acts as a handle.
- *  @param src Source buffer, the data which you want to compress is copied/or pointed here.
- *  @param dst Destination buffer, compressed data is kept here, memory should be allocated already.
- *  @param srcSize Maximum supported value is LZ4_MAX_INPUT_SIZE.
- *  @param dstCapacity Size of buffer 'dst' (which must be already allocated)
- *  @param acceleration The larger the acceleration value, the faster the algorithm, but also the lesser the compression.
- *  It's a trade-off. It can be fine tuned, with each successive value providing roughly +~3% to speed.
- *  An acceleration value of "1" is the same as regular LZ4_compress_default().
- *  Values <= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).\n
- *  Values > LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).
- * 
- *  @return  The number of bytes written into buffer 'dst' (necessarily <= dstCapacity) or 0 if compression fails.
+ *
+ *  |Parameters       |Direction|Description                                                                                             |
+ *  |:----------------|:-------:|:-------------------------------------------------------------------------------------------------------|
+ *  | \b state        |  in,out | It acts as a handle.                                                                                   |
+ *  | \b src          |  in     | Source buffer, the data which you want to compress is copied/or pointed here.                          |
+ *  | \b dst          |  out    | Destination buffer, compressed data is kept here, memory should be allocated already.                  |
+ *  | \b srcSize      |  in     | Maximum supported value is LZ4_MAX_INPUT_SIZE.                                                         |
+ *  | \b dstCapacity  |  in     | Size of buffer 'dst' (which must be already allocated).                                                |
+ *  | \b acceleration |  in     | The larger the acceleration value, the faster the algorithm, but also the lesser the compression.      |
+ *  |        ^        |   ^     | It's a trade-off. It can be fine tuned, with each successive value providing roughly +~3% to speed.    |
+ *  |        ^        |   ^     | An acceleration value of "1" is the same as regular LZ4_compress_default().                            |
+ *  |        ^        |   ^     | Values <= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).                  |
+ *  |        ^        |   ^     | Values > LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).|
+ *
+ *  @return
+ *  |Result | Description                                                                                            |
+ *  |:------|:----------- -------------------------------------------------------------------------------------------|
+ *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst. |
+ *  |Fail   | Returns <= 0.                                                                                          |
  */
 LZ4LIB_API int LZ4_compress_fast_extState (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int acceleration);
 
+#ifdef AOCL_LZ4_OPT
 /** @brief AOCL optimized fast compress LZ4 function that gets selected by default.
  * 
  *  Same as LZ4_compress_fast(), using an externally allocated memory space for its state.
@@ -285,20 +335,26 @@ LZ4LIB_API int LZ4_compress_fast_extState (void* state, const char* src, char* d
  *  and allocate it on 8-bytes boundaries (using `malloc()` typically).
  *  Then, provide this buffer as `void* state` to compression function.
  * 
- *  @param state It acts as a handle.
- *  @param src Source buffer, the data which you want to compress is copied/or pointed here.
- *  @param dst Destination buffer, compressed data is kept here, memory should be allocated already.
- *  @param srcSize Max supported value is LZ4_MAX_INPUT_SIZE.
- *  @param dstCapacity Size of buffer 'dst' (which must be already allocated)
- *  @param acceleration The larger the acceleration value, the faster the algorithm, but also the lesser the compression.
- *  It's a trade-off. It can be fine tuned, with each successive value providing roughly +~3% to speed.
- *  An acceleration value of "1" is the same as regular LZ4_compress_default().
- *  Values <= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).\n
- *  Values > LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).
+ *  |Parameters       |Direction|Description                                                                                             |
+ *  |:----------------|:-------:|:-------------------------------------------------------------------------------------------------------|
+ *  | \b state        |  in,out | It acts as a handle.                                                                                   |
+ *  | \b src          |  in     | Source buffer, the data which you want to compress is copied/or pointed here.                          |
+ *  | \b dst          |  out    | Destination buffer, compressed data is kept here, memory should be allocated already.                  |
+ *  | \b srcSize      |  in     | Maximum supported value is LZ4_MAX_INPUT_SIZE.                                                         |
+ *  | \b dstCapacity  |  in     | Size of buffer 'dst' (which must be already allocated).                                                |
+ *  | \b acceleration |  in     | The larger the acceleration value, the faster the algorithm, but also the lesser the compression.      |
+ *  |        ^        |   ^     | It's a trade-off. It can be fine tuned, with each successive value providing roughly +~3% to speed.    |
+ *  |        ^        |   ^     | An acceleration value of "1" is the same as regular LZ4_compress_default().                            |
+ *  |        ^        |   ^     | Values <= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).                  |
+ *  |        ^        |   ^     | Values > LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).|
  * 
- *  @return  The number of bytes written into buffer 'dest' (necessarily <= dstCapacity) or 0 if compression fails.
+ * 
+ *  @return
+ *  |Result | Description                                                                                            |
+ *  |:------|:----------- -------------------------------------------------------------------------------------------|
+ *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst. |
+ *  |Fail   | Returns <= 0.                                                                                          |
  */
-#ifdef AOCL_LZ4_OPT
 LZ4LIB_API int AOCL_LZ4_compress_fast_extState(void* state, const char* source,
     char* dest, int inputSize,
     int maxOutputSize, int acceleration);
@@ -309,15 +365,15 @@ LZ4LIB_API int AOCL_LZ4_compress_fast_extState(void* state, const char* source,
  *  Reverse the logic : compresses as much data as possible from 'src' buffer
  *  into already allocated buffer 'dst', of size >= 'targetDestSize'.
  *  note: acceleration parameter is fixed to "default".
- * 
- *  @param src Source buffer, the data which you want to compress is copied/or pointed here.
- *  @param dst Destination buffer, compressed data is kept here, memory should be allocated already.
- *  @param *srcSizePtr Will be modified to indicate how many bytes were read from 'src' to fill 'dst'.
- *               New value is necessarily <= input value.
- *  @param targetDstSize Size of buffer 'dst' (which must be already allocated).
- * 
  *
- *  @warning From v1.8.2 to v1.9.1, this function had a bug (fixed un v1.9.2+):
+ *  |Parameters     |Direction|Description                                                                                                              |
+ *  |:--------------|:-------:|:------------------------------------------------------------------------------------------------------------------------|
+ *  | \b src        |  in     | Source buffer, the data which you want to compress is copied/or pointed here.                                           |
+ *  | \b dst        |  out    | Destination buffer, compressed data is kept here, memory should be pre-allocated.                                       |
+ *  | \b srcSizePtr |  in,out | Will be modified to indicate how many bytes were read from 'src' to fill 'dst'. New value is necessarily <= input value.|
+ *  | \b Size       |  in     | Size of buffer 'dst' (which must be already allocated).                                                                 |
+ *  
+ * @warning From v1.8.2 to v1.9.1, this function had a bug (fixed un v1.9.2+):
  *        the produced compressed content could, in specific circumstances,
  *        require to be decompressed into a destination buffer larger
  *        by at least 1 byte than the content to decompress.
@@ -327,8 +383,13 @@ LZ4LIB_API int AOCL_LZ4_compress_fast_extState(void* state, const char* source,
  *        the receiving decompression function should provide
  *        a dstCapacity which is > decompressedSize, by at least 1 byte.
  *        See https://github.com/lz4/lz4/issues/859 for details.
- * 
- *  @return Nb bytes written into 'dst' (necessarily <= targetDestSize) or 0 if compression fails.
+ *
+ *
+ *  @return
+ *  |Result | Description                                                           |
+ *  |:------|:----------------------------------------------------------------------|
+ *  |Success| Returns Nb bytes written into **dst** (<= targetDestSize).            |
+ *  |Fail   | Returns 0 on fail   .                                                 |
  */
 LZ4LIB_API int LZ4_compress_destSize (const char* src, char* dst, int* srcSizePtr, int targetDstSize);
 
@@ -363,8 +424,12 @@ LZ4LIB_API int LZ4_compress_destSize (const char* src, char* dst, int* srcSizePt
  *           then targetOutputSize **MUST** be <= block's decompressed size.
  *           Otherwise, *silent corruption will occur*.
  *
- *  @return The number of bytes decoded in `dst` (necessarily <= targetOutputSize)
- *           If source stream is detected malformed, function returns a negative result.
+ *  
+ *  @return
+ *  |Result | Description                                                                |
+ *  |:------|:---------------------------------------------------------------------------|
+ *  |Success| The number of bytes decoded in `dst` (<= targetOutputSize)                 |
+ *  |Fail   | If source stream is detected malformed, function returns a negative result.|
  */
 LZ4LIB_API int LZ4_decompress_safe_partial (const char* src, char* dst, int srcSize, int targetOutputSize, int dstCapacity);
 
@@ -391,6 +456,9 @@ LZ4LIB_API char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
 /*-*********************************************
 *  Streaming Compression Functions
 ***********************************************/
+/**
+ * @brief A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended.
+*/
 typedef union LZ4_stream_u LZ4_stream_t;  /* incomplete type (defined later) */
 
 /**
@@ -408,8 +476,10 @@ LZ4LIB_API LZ4_stream_t* LZ4_createStream(void);
 
 /*!
  * @brief Frees the memory pointed by streamPtr .
-
- * @param streamPtr LZ4_stream_t* type streaming compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended.
+ *
+ *  |Parameters    |Direction|Description                                                                                                                                                                                     |
+ *  |:-------------|:-------:|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+ *  | \b StreamPtr | in,out  | LZ4_stream_t* type streaming compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended.|  
  * 
  * @return int 0 .
  */
@@ -437,8 +507,10 @@ LZ4LIB_API int           LZ4_freeStream (LZ4_stream_t* streamPtr);
  * 
  *  @attention This function is for v1.9.0+.
  * 
- *  @param streamPtr LZ4_stream_t* type streaming compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended. Initialize `LZ4_stream_t` using `LZ4_initStream()`.
- * 
+ *  |Parameters    |Direction|Description                                                                                                                                                                                    |
+ *  |:-------------|:-------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+ *  | \b StreamPtr |  in,out |LZ4_stream_t* type streaming compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended.|
+ *  
  *  @note It's only useful to call LZ4_resetStream_fast()
  *        in the context of streaming compression.
  *        The *extState* functions perform their own resets.
@@ -458,12 +530,18 @@ LZ4LIB_API void LZ4_resetStream_fast (LZ4_stream_t* streamPtr);
  *  While LZ4 accept any input as dictionary,
  *  results are generally better when using Zstandard's Dictionary Builder.
  *  Loading a size of 0 is allowed, and is the same as reset.
+ *
+ *  |Parameters     |Direction|Description                                                                                                                                                                                                                                             |
+ *  |:--------------|:-------:|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+ *  | \b streamPtr  | in,out  |LZ4_stream_t* type streaming type compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended. Initialize `LZ4_stream_t` using `LZ4_initStream()`.|
+ *  | \b dictionary | in,out  |Dictionary buffer                                                                                                                                                                                                                                       |
+ *  | \b dictSize   | in      |Size of dictionary                                                                                                                                                                                                                                      |
+ *
  * 
- * @param streamPtr LZ4_stream_t* type streaming type compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended. Initialize `LZ4_stream_t` using `LZ4_initStream()`.
- * @param dictionary Dictionary buffer
- * @param dictSize Size of dictionary
- * 
- * @return Loaded dictionary size, in bytes (necessarily <= 64 KB).
+ *  @return
+ *  |Result | Description                                            |
+ *  |:------|:-------------------------------------------------------|
+ *  |Success|Loaded dictionary size, in bytes (<= 64 KB).            |
  */
 LZ4LIB_API int LZ4_loadDict (LZ4_stream_t* streamPtr, const char* dictionary, int dictSize);
 
@@ -471,18 +549,20 @@ LZ4LIB_API int LZ4_loadDict (LZ4_stream_t* streamPtr, const char* dictionary, in
  *  Compress `src` content using data from previously compressed blocks, for better compression ratio.
  * `dst` buffer must be already allocated.
  *  If dstCapacity >= LZ4_compressBound(srcSize), compression is guaranteed to succeed, and runs faster.
- * 
- *  @param streamPtr LZ4_stream_t* type streaming type compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended. Initialize `LZ4_stream_t` using `LZ4_initStream()`.
- *  @param src Source buffer, the data which you want to compress is copied/or pointed here.
- *  @param dst Destination buffer, compressed data is kept here, memory should be allocated already.
- *  @param srcSize Maximum supported value is LZ4_MAX_INPUT_SIZE.
- *  @param dstCapacity Size of buffer 'dst' (which must be already allocated)
- *  @param acceleration The larger the acceleration value, the faster the algorithm, but also the lesser the compression.
- *  It's a trade-off. It can be fine tuned, with each successive value providing roughly +~3% to speed.
- *  An acceleration value of "1" is the same as regular LZ4_compress_default()
- *  Values <= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).\n
- *  Values > LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).
  *
+ *  |Parameters       |Direction|Description                                                                                                                                                                                                                                              |
+ *  |:----------------|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+ *  | \b state        |  in,out | LZ4_stream_t* type streaming type compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended. Initialize `LZ4_stream_t` using `LZ4_initStream()`.|
+ *  | \b src          |  in     | Source buffer, the data which you want to compress is copied/or pointed here.                                                                                                                                                                           |
+ *  | \b dst          |  out    | Destination buffer, compressed data is kept here, memory should be allocated already.                                                                                                                                                                   |
+ *  | \b srcSize      |  in     | Maximum supported value is LZ4_MAX_INPUT_SIZE.                                                                                                                                                                                                          |
+ *  | \b dstCapacity  |  in     | Size of buffer 'dst' (which must be already allocated).                                                                                                                                                                                                 |
+ *  | \b acceleration |  in     | The larger the acceleration value, the faster the algorithm, but also the lesser the compression.                                                                                                                                                       |
+ *  |        ^        |   ^     | It's a trade-off. It can be fine tuned, with each successive value providing roughly +~3% to speed.                                                                                                                                                     |
+ *  |        ^        |   ^     | An acceleration value of "1" is the same as regular LZ4_compress_default().                                                                                                                                                                             |
+ *  |        ^        |   ^     | Values <= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).                                                                                                                                                                   |
+ *  |        ^        |   ^     | Values > LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).                                                                                                                                                 |
+ * 
  *  @note 1 : Each invocation to LZ4_compress_fast_continue() generates a new block.
  *           Each block has precise boundaries.
  *           Each block must be decompressed separately, calling LZ4_decompress_*() with relevant metadata.
@@ -497,23 +577,30 @@ LZ4LIB_API int LZ4_loadDict (LZ4_stream_t* streamPtr, const char* dictionary, in
  *  @note 4 : If input buffer is a ring-buffer, it can have any size, including < 64 KB.
  *
  *  @note 5 : After an error, the stream status is undefined (invalid), it can only be reset or freed.
- * 
- *  @return  Size of compressed block
- *           or 0 if there is an error (typically, cannot fit into 'dst').
+ *
+ *  @return
+ *  |Result | Description                                                       |
+ *  |:------|:------------------------------------------------------------------|
+ *  |Success| Returns the size of compressed block                              |
+ *  |Fail   | Returns 0 if there is an error (typically, cannot fit into 'dst').|
  */
 LZ4LIB_API int LZ4_compress_fast_continue (LZ4_stream_t* streamPtr, const char* src, char* dst, int srcSize, int dstCapacity, int acceleration);
 
 /*! @brief
  *  If last 64KB data cannot be guaranteed to remain available at its current memory location,
  *  save it into a safer place (char* safeBuffer).
+ *
+ *  |Parameters|Direction|Description|
+ *  |:---------|:-------:|:----------|
+ *  | \b streamPtr   | in,out|LZ4_stream_t* type streaming type compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended. Initialize `LZ4_stream_t` using `LZ4_initStream()`.|
+ *  | \b safeBuffer  |  in   |Buffer where you want to store dictionary.|
+ *  | \b maxDictSize |  in   |  Size of safeBuffer, memory should be allocated such that dictionary would fit inside safeBuffer.This is schematically equivalent to a memcpy() followed by LZ4_loadDict(),but is much faster, because LZ4_saveDict() doesn't need to rebuild tables.
  * 
- *  @param streamPtr LZ4_stream_t* type streaming compression tracking context.A tracking context can be re-used multiple times.
- *  @param safeBuffer Buffer where you want to store dictionary.
- *  @param maxDictSize Size of safeBuffer, memory should be allocated such that dictionary would fit inside safeBuffer
- *  This is schematically equivalent to a memcpy() followed by LZ4_loadDict(),
- *  but is much faster, because LZ4_saveDict() doesn't need to rebuild tables.
- * 
- *  @return Saved dictionary size in bytes (necessarily <= maxDictSize), or 0 if error.
+ *  @return 
+ *  |Result | Description                                                                           |
+ *  |:------|:--------------------------------------------------------------------------------------|
+ *  |Success|Saved dictionary size in bytes which is a positive integer (<= maxDictSize)            |
+ *  |Fail   |Returns 0 if error.                                                                    |
  */
 LZ4LIB_API int LZ4_saveDict (LZ4_stream_t* streamPtr, char* safeBuffer, int maxDictSize);
 
@@ -526,11 +613,18 @@ LZ4LIB_API int LZ4_saveDict (LZ4_stream_t* streamPtr, char* safeBuffer, int maxD
 *  Streaming Decompression Functions
 *  Bufferless synchronous API
 ************************************************/
+/**
+ * @brief It is used to track the LZ4 stream during decompression
+*/
 typedef union LZ4_streamDecode_u LZ4_streamDecode_t;   /* tracking context */
 
 /*! LZ4_createStreamDecode() and LZ4_freeStreamDecode() :
  *  creation / destruction of streaming decompression tracking context.
- *  A tracking context can be re-used multiple times.
+ * @brief  Creation of streaming decompression tracking context.
+ *  
+ * A tracking context can be re-used multiple times.
+ * 
+ * @return A pointer of LZ4_stream_t type whose memmory has been allocated dynamically.
  */
 
 LZ4LIB_API LZ4_streamDecode_t* LZ4_createStreamDecode(void);
@@ -538,7 +632,10 @@ LZ4LIB_API LZ4_streamDecode_t* LZ4_createStreamDecode(void);
 /**
  * @brief Frees up the memory that is occupied by LZ4_stream .
  * 
- * @param LZ4_stream LZ4_streamDecode_t* works as a streaming decompression tracking context. A tracking context can be re-used multiple times.
+ *  |Parameters     |Direction|Description                                                                                                               |
+ *  |:--------------|:-------:|:-------------------------------------------------------------------------------------------------------------------------|
+ *  | \b LZ4_stream |  in,out |LZ4_streamDecode_t* works as a streaming decompression tracking context. A tracking context can be re-used multiple times.|
+ * 
  * @return int 0.
  */
 
@@ -546,38 +643,57 @@ LZ4LIB_API int                 LZ4_freeStreamDecode (LZ4_streamDecode_t* LZ4_str
 
 /*! @brief
  *  Use this function to start decompression of a new stream of blocks.
- *
- *  @param LZ4_streamDecode An LZ4_streamDecode_t context can be allocated once and re-used multiple times.
- *  @param dictionary A dictionary can optionally be set. Use \b NULL or size 0 for a reset order.
- *  @param dictSize Size of dictionary.
+ * 
+ *  |Parameters           |Direction|Description                                                                      |
+ *  |:--------------------|:-------:|:--------------------------------------------------------------------------------|
+ *  | \b LZ4_streamDecode | in,out  | An LZ4_streamDecode_t context can be allocated once and re-used multiple times. |
+ *  | \b dictionary       | in,out  | A dictionary can optionally be set. Use \b NULL or size 0 for a reset order.    |
+ *  | \b dictSize         | in      | Size of dictionary                                                              |
  * 
  *  @note Dictionary is presumed stable : it must remain accessible and unmodified during next decompression.
  *  
  *  @return 
- *  - 1 if OK .
- *  - 0 if error .
+ *  |Result | Description        |    
+ *  |:------|:-------------------|
+ *  |Success|Returns 1 if OK .   |
+ *  |Fail   |Returns 0 if error. |
+ * 
  */
 LZ4LIB_API int LZ4_setStreamDecode (LZ4_streamDecode_t* LZ4_streamDecode, const char* dictionary, int dictSize);
 
 /*!
- *  In a ring buffer scenario (optional),
+ *  @brief In a ring buffer scenario (optional),
  *  blocks are presumed decompressed next to each other
  *  up to the moment there is not enough remaining space for next block (remainingSize < maxBlockSize),
  *  at which stage it resumes from beginning of ring buffer.
+ *  
  *  When setting such a ring buffer for streaming decompression,
- *  provides the minimum size of this ring buffer
+ *  this function provides the minimum size of this ring buffer
  *  to be compatible with any source respecting maxBlockSize condition.
+ *  
+ *  |Parameters       |Direction|Description                               |
+ *  |:----------------|:-------:|:-----------------------------------------|
+ *  | \b maxBlockSize |  in,out |The maximum block size of compressed data.|
+ *
  *  @warning This works for v1.8.2+ .
- *  @param maxBlockSize The maximum block size of compressed data.
- *  @return Minimum ring buffer size,
- *           or 0 if there is an error (invalid maxBlockSize).
+ *  @return
+ *  |Result | Description                                           |
+ *  |:------|:------------------------------------------------------|
+ *  |Success| Minimum ring buffer size.                             |
+ *  |Fail   | Returns 0 if there is an error (invalid maxBlockSize).|
  */
 LZ4LIB_API int LZ4_decoderRingBufferSize(int maxBlockSize);
+
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
 #define LZ4_DECODER_RING_BUFFER_SIZE(maxBlockSize) (65536 + 14 + (maxBlockSize))  /* for static allocation; maxBlockSize presumed valid */
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*!
     @brief
  *  These decoding functions allow decompression of consecutive blocks in "streaming" mode.
+ *  
  *  A block is an unsplittable entity, it must be presented entirely to a decompression function.
  *  Decompression functions only accepts one block at a time.
  *  The last 64KB of previously decoded data *must* remain available and unmodified at the memory position where they were decoded.
@@ -597,40 +713,51 @@ LZ4LIB_API int LZ4_decoderRingBufferSize(int maxBlockSize);
  *    In which case, encoding and decoding buffers do not need to be synchronized,
  *    and encoding ring buffer can have any size, including small ones ( < 64 KB).
  *
- *  @param LZ4_streamDecode An LZ4_streamDecode_t context can be allocated once and re-used multiple times.
- *  @param src This buffer contains compressed data.
- *  @param dst Destination buffer, the data is decompressed to this buffer.
- *  @param srcSize It is the exact complete size of the src.
- *  @param dstCapacity It is the size of destination buffer (which must be already allocated), presumed an upper bound of decompressed size.
+ *  |Parameters|Direction|Description|
+ *  |:---------|:-------:|:----------|
+ *  | \b LZ4_streamDecode | in,out |An LZ4_streamDecode_t context can be allocated once and re-used multiple times.|
+ *  | \b src     |  in     |This buffer contains compressed data.|
+ *  | \b dst     |  out    |Destination buffer, the data is decompressed to this buffer.|
+ *  | \b srcSize |  in     |It is the exact complete size of the src.|
+ *  | \b dstCapacity | in  |It is the size of destination buffer (which must be already allocated), presumed an upper bound of decompressed size.|
  *  
  *  @note
  *  Whenever these conditions are not possible,
  *  save the last 64KB of decoded data into a safe buffer where it can't be modified during decompression,
  *  then indicate where this data is saved using LZ4_setStreamDecode(), before decompressing next block.
  * 
- *  @return The number of bytes decoded in `dst` (necessarily <= targetOutputSize)
- *           If source stream is detected malformed, function returns a negative result.
+ *  @return
+ *  |Result | Description                                                                                       |
+ *  |:-----:|:--------------------------------------------------------------------------------------------------|
+ *  |Success| Returns the number of bytes decoded in `dst` which is positive (<= targetOutputSize)  |
+ *  |Fail   | If source stream is detected malformed, function returns a negative result.                       |
 */
 LZ4LIB_API int LZ4_decompress_safe_continue (LZ4_streamDecode_t* LZ4_streamDecode, const char* src, char* dst, int srcSize, int dstCapacity);
 
 
 /*! @brief
- *  These decoding functions work the same as
- *  a combination of LZ4_setStreamDecode() followed by LZ4_decompress_*_continue()
+ *  These decoding functions work the same as a combination of LZ4_setStreamDecode() followed by LZ4_decompress_*_continue()
+ *  
  *  They are stand-alone, and don't need an LZ4_streamDecode_t structure.
  *  Dictionary is presumed stable : it must remain accessible and unmodified during decompression.
  *  Performance tip : Decompression speed can be substantially increased
  *                    when dst == dictStart + dictSize.
+ *
  * 
- *  @param src This buffer contains compressed data.
- *  @param dst Destination buffer, the data is decompressed to this buffer.
- *  @param srcSize It is the exact complete size of the src.
- *  @param dstCapacity It is the size of destination buffer (which must be already allocated), presumed an upper bound of decompressed size.
- *  @param dictStart A dictionary can optionally be set. Use \b NULL or size 0 for a reset order.
- *  @param dictSize Size of dictionary.
- * 
- *  @return The number of bytes decoded in `dst` (necessarily <= targetOutputSize)
- *           If source stream is detected malformed, function returns a negative result.
+ *  |Parameters      |Direction|Description                                                                                                          |
+ *  |:---------------|:-------:|:--------------------------------------------------------------------------------------------------------------------|
+ *  | \b src         |  in     |This buffer contains compressed data.                                                                                |
+ *  | \b dst         |  out    |Destination buffer, the data is decompressed to this buffer.                                                         |
+ *  | \b srcSize     |  in     |It is the exact complete size of the src.                                                                            |
+ *  | \b dstCapacity |  in     |It is the size of destination buffer (which must be already allocated), presumed an upper bound of decompressed size.|
+ *  | \b dictStart   |  in,out |A dictionary can optionally be set. Use \b NULL or size 0 for a reset order.                                         |
+ *  | \b dictSize    |  in     |Size of dictionary.                                                                                                  |
+ *  
+ *  @return
+ *  |Result | Description                                                               |
+ *  |:-----:|:--------------------------------------------------------------------------|
+ *  |Success|The number of bytes decoded in `dst` (<= targetOutputSize)     |
+ *  |Fail   |If source stream is detected malformed, function returns a negative result.|
  */
 LZ4LIB_API int LZ4_decompress_safe_usingDict (const char* src, char* dst, int srcSize, int dstCapcity, const char* dictStart, int dictSize);
 
@@ -778,7 +905,7 @@ LZ4LIB_STATIC_API void LZ4_attach_dictionary(LZ4_stream_t* workingStream, const 
 #endif   /* LZ4_STATIC_3504398509 */
 #endif   /* LZ4_STATIC_LINKING_ONLY */
 
-
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 
 #ifndef LZ4_H_98237428734687
 #define LZ4_H_98237428734687
@@ -807,23 +934,35 @@ LZ4LIB_STATIC_API void LZ4_attach_dictionary(LZ4_stream_t* workingStream, const 
   typedef unsigned int   LZ4_u32;
 #endif
 
+/**
+ * @brief This acts as handle for defining the structure of internal stream_t (this structure is for internal library use, should not be handled manually)
+*/
 typedef struct LZ4_stream_t_internal LZ4_stream_t_internal;
+
+/**
+ * @brief This acts as handle for defining the structure of internal stream_t
+ */
+
 struct LZ4_stream_t_internal {
-    LZ4_u32 hashTable[LZ4_HASH_SIZE_U32];
-    LZ4_u32 currentOffset;
-    LZ4_u32 tableType;
-    const LZ4_byte* dictionary;
-    const LZ4_stream_t_internal* dictCtx;
-    LZ4_u32 dictSize;
+    LZ4_u32 hashTable[LZ4_HASH_SIZE_U32];   ///<hash table to match values and keys
+    LZ4_u32 currentOffset;                  ///<the last committed offset of the hashtable
+    LZ4_u32 tableType;                      ///<to prepare a table with structure and attributes, the values could be clearedTable = 0, byPtr = 1, byU32 = 2, byU16 = 3, this is used by internal functions
+    const LZ4_byte* dictionary;             ///<Dictionary buffer
+    const LZ4_stream_t_internal* dictCtx;   ///<current context of dictionary
+    LZ4_u32 dictSize;                       ///<size of dictionary
 };
 
+/**
+ * @brief  It acts as streaming decompressor for internal functions.
+ */
 typedef struct {
-    const LZ4_byte* externalDict;
-    size_t extDictSize;
-    const LZ4_byte* prefixEnd;
-    size_t prefixSize;
+    const LZ4_byte* externalDict;   ///< External content of dictionary.
+    size_t extDictSize;             ///< Size of  external dictionary.
+    const LZ4_byte* prefixEnd;      ///< Prefix of last committed value in dictionary.
+    size_t prefixSize;              ///< Size of prefix.
 } LZ4_streamDecode_t_internal;
 
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*! LZ4_stream_t :
  *  Do not use below internal definitions directly !
@@ -835,12 +974,18 @@ typedef struct {
  *  @note Only use this definition in association with static linking !
  *  this definition is not API/ABI safe, and may change in future versions.
  */
+
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
 #define LZ4_STREAMSIZE       16416  /* static size, for inter-version compatibility */
 #define LZ4_STREAMSIZE_VOIDP (LZ4_STREAMSIZE / sizeof(void*))
+
 union LZ4_stream_u {
-    void* table[LZ4_STREAMSIZE_VOIDP];
-    LZ4_stream_t_internal internal_donotuse;
+    void* table[LZ4_STREAMSIZE_VOIDP];          //<It defines the (LZ4_STREAMSIZE / sizeof(void*))
+    LZ4_stream_t_internal internal_donotuse;    //<It states not to use internal definitions directly
 }; /* previously typedef'd to LZ4_stream_t */
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /**
  * \addtogroup LZ4_API
@@ -866,10 +1011,12 @@ union LZ4_stream_u {
  *  @note 3: Before v1.9.0, use LZ4_resetStream() instead
  * 
  *  @warning Works for v1.9.0+
- * 
- *  @return A pointer of proper type upon initialization.
- *  @return Initialization fails if size and alignment conditions are not respected.
- *         In which case, the function will \b NULL.
+ *
+ *  @return
+ *  |Result | Description                                                                                                              |
+ *  |:-----:|:-------------------------------------------------------------------------------------------------------------------------|
+ *  |Success| A pointer of proper type upon initialization.                                                                            |
+ *  |Fail   | Initialization fails if size and alignment conditions are not respected. In which case, the function will return \b NULL.|
  */
 LZ4LIB_API LZ4_stream_t* LZ4_initStream (void* buffer, size_t size);
 /**
@@ -882,6 +1029,8 @@ LZ4LIB_API LZ4_stream_t* LZ4_initStream (void* buffer, size_t size);
  * 
  */
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
 /*! LZ4_streamDecode_t :
  *  information structure to track an LZ4 stream during decompression.
  *  init this structure  using LZ4_setStreamDecode() before first use.
@@ -891,16 +1040,19 @@ LZ4LIB_API LZ4_stream_t* LZ4_initStream (void* buffer, size_t size);
  */
 #define LZ4_STREAMDECODESIZE_U64 (4 + ((sizeof(void*)==16) ? 2 : 0) /*AS-400*/ )
 #define LZ4_STREAMDECODESIZE     (LZ4_STREAMDECODESIZE_U64 * sizeof(unsigned long long))
+
 union LZ4_streamDecode_u {
     unsigned long long table[LZ4_STREAMDECODESIZE_U64];
     LZ4_streamDecode_t_internal internal_donotuse;
 } ;   /* previously typedef'd to LZ4_streamDecode_t */
 
-
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*-************************************
 *  Obsolete Functions
 **************************************/
+
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 
 /*! Deprecation warnings
  *
@@ -1005,9 +1157,12 @@ LZ4_DEPRECATED("use LZ4_decompress_fast_usingDict() instead") LZ4LIB_API int LZ4
  *  Such functionality can be achieved in a more secure manner
  *  by employing LZ4_decompress_safe_partial().
  *
- *  @param src Compressed data is contained in this buffer
- *  @param dst It must be already allocated, its size must be >= 'originalSize' bytes.
- *  @param originalSize It is the uncompressed size to regenerate.
+ * 
+ *  |Parameters       |Direction|Description                                                             |
+ *  |:----------------|:-------:|:----------                                                             |
+ *  | \b src          |  in     | Compressed data is contained in this buffer                            |
+ *  | \b dst          |  out    | It must be already allocated, its size must be >= 'originalSize' bytes.|
+ *  | \b originalSize |  out    | It is the uncompressed size to regenerate.                             |
  * 
  *  @note : LZ4_decompress_fast*() requires originalSize. Thanks to this information, it never writes past the output buffer.
  *         However, since it doesn't know its 'src' size, it may read an unknown amount of input, past input buffer bounds.
@@ -1016,9 +1171,11 @@ LZ4_DEPRECATED("use LZ4_decompress_fast_usingDict() instead") LZ4LIB_API int LZ4
  *         But they may happen if input data is invalid (error or intentional tampering).
  *         As a consequence, use these functions in trusted environments with trusted data **only**.
  *
- *  @return It returns the number of bytes read from source buffer (== compressed size).
- *           The function expects to finish at block's end exactly.
- *           If the source stream is detected malformed, the function stops decoding and returns a negative result.
+ *  @return
+ *  |Result | Description                                                                                                                       |
+ *  |:-----:|:----------------------------------------------------------------------------------------------------------------------------------|
+ *  |Success| It returns the number of bytes read from source buffer (== compressed size).The function expects to finish at block's end exactly.|
+ *  |Fail   | If source stream is detected malformed, function stops decoding and returns a negative result.                                    |
  * @{
  */
 LZ4_DEPRECATED("This function is deprecated and unsafe. Consider using LZ4_decompress_safe() instead")
@@ -1031,15 +1188,20 @@ LZ4LIB_API int LZ4_decompress_fast_usingDict (const char* src, char* dst, int or
  * @} 
  */
 
-/*! An LZ4_stream_t structure must be initialized at least once.
+/*! @brief LZ4_stream_t structure must be initialized at least once.
  *  This is done with LZ4_initStream(), or LZ4_resetStream().
+ *  
  *  Consider switching to LZ4_initStream(),
- *  invoking LZ4_resetStream() will trigger deprecation warnings in the future.
- *  @param streamPtr LZ4_stream_t* type streaming compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended.
+ *  invoking LZ4_resetStream() will trigger deprecation warnings in the future. 
+ *  |Parameters    |Direction|Description                                                                                                                                                                                     |
+ *  |:-------------|:-------:|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+ *  | \b streamPtr |  in,out | LZ4_stream_t* type streaming compression tracking context. A tracking context can be re-used multiple times. Declare or create `LZ4_stream_t` using `LZ4_createStream()`, which is recommended.|
+ * 
  *  @return \b void .
  */
 LZ4LIB_API void LZ4_resetStream (LZ4_stream_t* streamPtr);
 
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 #endif /* LZ4_H_98237428734687 */
 
