@@ -232,7 +232,8 @@ int BZ_API(BZ2_bzCompressInit)
 
    if (strm == NULL || 
        blockSize100k < 1 || blockSize100k > 9 ||
-       workFactor < 0 || workFactor > 250)
+       workFactor < 0 || workFactor > 250 ||
+       verbosity < 0 || verbosity > 4)
      return BZ_PARAM_ERROR;
 
    if (workFactor == 0) workFactor = 30;
@@ -649,7 +650,7 @@ int BZ_API(BZ2_bzCompress) ( bz_stream *strm, int action )
             return progress ? BZ_RUN_OK : BZ_PARAM_ERROR;
          } 
          else
-	 if (action == BZ_FLUSH) {
+	      if (action == BZ_FLUSH) {
             s->avail_in_expect = strm->avail_in;
             s->mode = BZ_M_FLUSHING;
             goto preswitch;
@@ -684,7 +685,7 @@ int BZ_API(BZ2_bzCompress) ( bz_stream *strm, int action )
          s->mode = BZ_M_IDLE;
          return BZ_STREAM_END;
    }
-   return BZ_OK; /*--not reached--*/
+   return BZ_PARAM_ERROR; /*--not reached--*/
 }
 
 

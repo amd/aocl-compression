@@ -28,6 +28,9 @@
 
 cmake_minimum_required(VERSION 3.18.0)
 
+if (NOT AOCL_EXCLUDE_BZIP2)
+    set (METHODS ${METHODS} bzip2)
+endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
     set (METHODS ${METHODS} lz4)
 endif ()
