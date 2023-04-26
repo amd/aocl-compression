@@ -84,7 +84,11 @@ typedef
 #   endif
 #   ifdef BZ_EXPORT
 #   define BZ_API(func) WINAPI func
+#   ifdef BZIP2_DLL_EXPORT
+#   define BZ_EXTERN extern __declspec(dllexport)
+#   else
 #   define BZ_EXTERN extern
+#   endif /* BZIP2_DLL_EXPORT */
 #   else
    /* import windows dll dynamically */
 #   define BZ_API(func) (WINAPI * func)
