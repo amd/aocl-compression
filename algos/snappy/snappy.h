@@ -91,14 +91,17 @@ namespace snappy {
  * @brief 
  * Compress the bytes read from "*source" and append to "*sink". Return the
  * number of bytes written.
- * 
- * @param source A Source is an interface that yields a sequence of bytes, you can initialize it by calling
- * snappy::ByteArraySource(inBuf,inBufLen);
- * where inBuf is the pointer to original data and inBufLen is the size of inBuf
- * @param sink A Sink is an interface that consumes a sequence of bytes, you can initialize it by calling 
- * snappy::UncheckedByteArraySink(dest); where dest is the pointer to the destination buffer.
- * 
- * @return Return the number of bytes written.
+ *
+ *  |Parameters |Direction|Description                                                                                                                                                                                                      |
+ *  |:----------|:-------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+ *  | \b source | in,out  | A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen);where inBuf is the pointer to original data and inBufLen is the size of inBuf|
+ *  | \b sink   | in,out  | A Sink is an interface that consumes a sequence of bytes, you can initialize it by calling snappy::UncheckedByteArraySink(dest); where dest is the pointer to the destination buffer.                           |
+ *
+ *  @return
+ *  |Result | Description                                         |
+ *  |:------|:----------------------------------------------------|
+ *  |Success| Return the number of bytes written.                 |
+ *  |Failure| Return 0 upon failure or NULL parameters are passed |
  */
 
  SNAPPYLIB_API size_t Compress(Source* source, Sink* sink);
@@ -109,17 +112,20 @@ namespace snappy {
  * Note that the true length could deviate from this; the stream could e.g.
  * be truncated.
  *
- * @param source A Source is an interface that yields a sequence of bytes, you can initialize it by calling
- * snappy::ByteArraySource(inBuf,inBufLen).
- * where inBuf is the pointer to original data and inBufLen is the size of inBuf.
- * @param result Uncompressed length of the given stream is stored here.
+ *  |Parameters   |Direction|Description                                                                                                                                                                                                       |
+ *  |:------------|:-------:|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+ *  | \b source   | in,out  | A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf|
+ *  | \b result   | out     | Uncompressed length of the given stream is stored here.                                                                                                                                                          |
  * 
  * @note Also note that this leaves "*source" in a state that is unsuitable for
  * further operations, such as RawUncompress(). You will need to rewind
  * or recreate the source yourself before attempting any further calls. 
  * 
- * @return It will return \b false if the data inside the source is corrupted.
- * @return If the data inside the source is uncorrupted it will return \b true.
+ *  @return
+ *  |Result | Description                                                          |
+ *  |:------|:---------------------------------------------------------------------|
+ *  |Success| If the data inside the source is uncorrupted it will return \b true. |
+ *  |Failure| It will return \b false if the data inside the source is corrupted.  |
  */
 
  SNAPPYLIB_API bool GetUncompressedLength(Source* source, uint32_t* result);
@@ -133,13 +139,19 @@ namespace snappy {
  * Sets "*compressed" to the compressed version of "input[0,input_length-1]".
  * Original contents of *compressed are lost.
  *
- * @param input This is the buffer where the data we want to compress is accessible.
- * @param input_length Length of the input buffer.
- * @param compressed This is a buffer in which compressed data is stored.
+ *  |Parameters       |Direction|Description                                                          |
+ *  |:----------------|:-------:|:------------------------------------------------------------------- |
+ *  | \b input        | in      | This is the buffer where the data we want to compress is accessible.|
+ *  | \b input_length | in      | Length of the input buffer.                                         |
+ *  | \b compressed   | in,out  | This is a buffer in which compressed data is stored.                |
  * 
  * @attention REQUIRES: "input[]" is not an alias of "*compressed".
- * 
- * @return Return the number of bytes written.
+ *
+ *  @return
+ *  |Result | Description                                         |
+ *  |:------|:----------------------------------------------------|
+ *  |Success| Return the number of bytes written.                 |
+ *  |Failure| Return 0 upon failure or NULL parameters are passed |
  */
 
  SNAPPYLIB_API size_t Compress(const char* input, size_t input_length,
@@ -149,14 +161,19 @@ namespace snappy {
  *  Decompresses "compressed[0,compressed_length-1]" to "*uncompressed".
  *  Original contents of "*uncompressed" are lost.
  * 
- * @param compressed This is a buffer which contains compressed data.
- * @param compressed_length This is the length of the compressed buffer.
- * @param uncompressed Uncompressed data is stored in this buffer.
+ *  |Parameters            |Direction|Description|
+ *  |:---------------------|:-------:|:----------|
+ *  | \b compressed        | in      | This is a buffer which contains compressed data.|
+ *  | \b compressed_length | in      | This is the length of the compressed buffer.|
+ *  | \b uncompressed      | out     | Uncompressed data is stored in this buffer.|
  * 
  * @attention REQUIRES: "compressed[]" is not an alias of "*uncompressed".
  * 
- * @return Returns \b false if the message is corrupted and could not be decompressed.
- * 
+ *  @return
+ *  |Result | Description                                                                                                        |
+ *  |:------|:-------------------------------------------------------------------------------------------------------------------|
+ *  |Success| If the data inside the compressed is successfully decompressed it will return \b true. |
+ *  |Failure| It will return \b false if the decompression fails.                                                |
  */
 
  SNAPPYLIB_API bool Uncompress(const char* compressed, size_t compressed_length,
@@ -164,36 +181,39 @@ namespace snappy {
   /**
    * @brief Decompresses "compressed" to "*uncompressed".
    * 
-   * @param compressed A Source is an interface that yields a sequence of bytes, you can initialize it by calling
-   * snappy::ByteArraySource(inBuf,inBufLen);
-   * where inBuf is the pointer to original data and inBufLen is the size of inBuf .
-   * @param uncompressed A Sink is an interface that consumes a sequence of bytes, you can initialize it by calling 
-   * snappy::UncheckedByteArraySink(dest); where dest is the pointer to the destination buffer.
+   *  |Parameters       |Direction|Description                                                                                                                                                                                                         |
+   *  |:----------------|:-------:|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+   *  | \b compressed   |  in,out | A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf .|
+   *  | \b uncompressed |  in,out | A Sink is an interface that consumes a sequence of bytes, you can initialize it by calling snappy::UncheckedByteArraySink(dest); where dest is the pointer to the destination buffer.                              |
    * 
-   * @return \b true if successfull.
-   * @return \b false if the message is corrupted and could not be decompressed.
+   *  @return
+   *  |Result | Description                                                                |
+   *  |:------|:---------------------------------------------------------------------------|
+   *  |Success| Returns \b true if successful.                                             |
+   *  |Failure| Returns \b false if the decompression fails.                               |
    */
 
  SNAPPYLIB_API bool Uncompress(Source* compressed, Sink* uncompressed);
 
   /**
    * @brief 
-   * This routine uncompresses as much of the "compressed" as possible
+   * This routine decompresses as much of the "compressed" as possible
    * into sink.  It returns the number of valid bytes added to sink
    * (extra invalid bytes may have been added due to errors; the caller
    * should ignore those). The emitted data typically has length
    * GetUncompressedLength(), but may be shorter if an error is
    * encountered.
-   * 
-   * @param compressed A Source is an interface that yields a sequence of bytes, you can initialize it by calling
-   * snappy::ByteArraySource(inBuf,inBufLen);
-   * where inBuf is the pointer to original data and inBufLen is the size of inBuf .
-   * @param uncompressed A Sink is an interface that consumes a sequence of bytes, you can initialize it by calling 
-   * snappy::UncheckedByteArraySink(dest); where dest is the pointer to the destination buffer.
-   * 
-   * @return It returns the number of valid bytes added to sink
-   * (extra invalid bytes may have been added due to errors; the caller
-   * should ignore those).
+   *
+   *  |Parameters       |Direction|Description                                                                                                                                                                                                         |
+   *  |:----------------|:-------:|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+   *  | \b compressed   |  in,out | A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf .|
+   *  | \b uncompressed |  in,out | A Sink is an interface that consumes a sequence of bytes, you can initialize it by calling snappy::UncheckedByteArraySink(dest); where dest is the pointer to the destination buffer.                              |
+   *
+   *  @return
+   *  |Result | Description                                                                                                                                |
+   *  |:------|:-------------------------------------------------------------------------------------------------------------------------------------------|
+   *  |Success| It returns the number of valid bytes added to sink (extra invalid bytes may have been added due to errors; the caller should ignore those) |
+   *  |Failure| Returns 0 if the message is corrupted and could not be decompressed or NULL parameters are passed.                                         |
    */
 
  SNAPPYLIB_API size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed);
@@ -210,11 +230,13 @@ namespace snappy {
    * it in the array pointed to by "compressed".
    *
    * "*compressed_length" is set to the length of the compressed output.
-   * 
-   * @param input This is the buffer where the data we want to compress is accessible.
-   * @param input_length Length of the input buffer.
-   * @param compressed This is a buffer in which compressed data is stored.
-   * @param compressed_length The length of the data after compression is stored in this.
+   *
+   *  |Parameters            |Direction|Description                                                          |
+   *  |:---------------------|:-------:|:--------------------------------------------------------------------|
+   *  | \b input             |  in     | This is the buffer where the data we want to compress is accessible.|
+   *  | \b input_length      |  in     | Length of the input buffer.                                         |
+   *  | \b compressed        |  out    | This is a buffer in which compressed data is stored.                |
+   *  | \b compressed_length |  out    | The length of the data after compression is stored in this.         |
    * 
    * @attention REQUIRES: "compressed" must point to an area of memory that is at
    * least "MaxCompressedLength(input_length)" bytes in length.
@@ -241,13 +263,18 @@ namespace snappy {
    * calling the Snappy::Compress routine, this routine
    * stores the uncompressed data to
    *    uncompressed[0..GetUncompressedLength(compressed)-1] .
+   *
+   *  |Parameters            |Direction| Description                                      |
+   *  |:---------------------|:-------:|:-------------------------------------------------|
+   *  | \b compressed        |  in     | This is a buffer which contains compressed data. |
+   *  | \b compressed_length |  in     | This is the length of the compressed buffer.     |
+   *  | \b uncompressed      |  out    | Uncompressed data is stored in this buffer.      |
    * 
-   * @param compressed This is a buffer which contains compressed data.
-   * @param compressed_length This is the length of the compressed buffer.
-   * @param uncompressed Uncompressed data is stored in this buffer.
-   * 
-   * @return \b true if successfull.
-   * @return \b false if the message is corrupted and could not be decrypted.
+   *  @return
+   *  |Result | Description                                                            |
+   *  |:------|:-----------------------------------------------------------------------|
+   *  |Success|Returns \b true if successful.                                         |
+   *  |Failure|Returns \b false if the message is corrupted and could not be decrypted.|
    */
 
  SNAPPYLIB_API bool RawUncompress(const char* compressed, size_t compressed_length,
@@ -259,14 +286,17 @@ namespace snappy {
    * the Snappy::Compress routine, this routine stores the uncompressed
    * data to
    *    uncompressed[0..GetUncompressedLength(compressed,compressed_length)-1] .
-   * 
-   * @param compressed A Source is an interface that yields a sequence of bytes, you can initialize it by calling
-   * snappy::ByteArraySource(inBuf,inBufLen);
-   * where inBuf is the pointer to original data and inBufLen is the size of inBuf .
-   * @param uncompressed Uncompressed data is stored in this buffer.
-   * 
-   * @return \b true if successfull.
-   * @return \b false if the message is corrupted and could not be decrypted.
+   *
+   *  |Parameters       |Direction|Description                                                                                                                                                                                                         |
+   *  |:----------------|:-------:|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+   *  | \b compressed   | in,out  | A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf .|
+   *  | \b uncompressed | out     | Uncompressed data is stored in this buffer.                                                                                                                                                                        |
+   *
+   *  @return
+   *  |Result | Description                                                             |
+   *  |:------|:------------------------------------------------------------------------|
+   *  |Success| Returns \b true if successful.                                          |
+   *  |Failure| Returns \b false if the message is corrupted and could not be decrypted.|
    */
 
  SNAPPYLIB_API bool RawUncompress(Source* compressed, char* uncompressed);
@@ -279,15 +309,19 @@ namespace snappy {
    * buffers in "iov" is given by iov_cnt and their cumulative size
    * must be at least GetUncompressedLength(compressed). The individual buffers
    * in "iov" must not overlap with each other.
+   *
+   *  |Parameters            |Direction|Description                                                                                                     |
+   *  |:---------------------|:-------:|:---------------------------------------------------------------------------------------------------------------|
+   *  | \b compressed        | in      | This is a buffer which contains compressed data.                                                               |
+   *  | \b compressed_length | in      | This is the length of the compressed buffer.                                                                   |
+   *  | \b iov               | in,out  | The struct iovec defines one vector element. Normally, this structure is used as an array of multiple elements. |
+   *  | \b iov_cnt           | in,out  | This is the number of \a iovec structures in the array of \a iov .                                             |
    * 
-   * @param compressed This is a buffer which contains compressed data.
-   * @param compressed_length This is the length of the compressed buffer.
-   * @param iov The struct iovec defines one vector element. 
-   * Normally, this structure is used as an array of multiple elements. 
-   * @param iov_cnt This is the number of \a iovec structures in the array of \a iov .
-   * 
-   * @return \b true if successfull.
-   * @return \b false if the message is corrupted and could not be decrypted.
+   *  @return
+   *  |Result | Description                                                             |
+   *  |:------|:------------------------------------------------------------------------|
+   *  |Success| Returns \b true if successful.                                          |
+   *  |Failure| Returns \b false if the message is corrupted and could not be decrypted.|
    */
 
  SNAPPYLIB_API bool RawUncompressToIOVec(const char* compressed, size_t compressed_length,
@@ -301,15 +335,18 @@ namespace snappy {
    * buffers in "iov" is given by iov_cnt and their cumulative size
    * must be at least GetUncompressedLength(compressed). The individual buffers
    * in "iov" must not overlap with each other.
+   *
+   *  |Parameters     |Direction|Description                                                                                                                                                                                                          |
+   *  |:--------------|:-------:|:------------------------------------------------------------------                                                                                                                                                  |
+   *  | \b compressed | in,out  | A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf . |
+   *  | \b iov        | in,out  | The struct iovec defines one vector element. Normally, this structure is used as an array of multiple elements.                                                                                                     |
+   *  | \b iov_cnt    | out     | This is the number of \a iovec structures in the array of \a iov .                                                                                                                                                  |
    * 
-   * @param compressed A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen);
-   * where inBuf is the pointer to original data and inBufLen is the size of inBuf .
-   * @param iov The struct iovec defines one vector element. 
-   * Normally, this structure is used as an array of multiple elements. 
-   * @param iov_cnt This is the number of \a iovec structures in the array of \a iov .
-   * 
-   * @return \b true if successfull.
-   * @return \b false if the message is corrupted and could not be decrypted.
+   *  @return
+   *  |Result | Description                                                             |
+   *  |:------|:------------------------------------------------------------------------|
+   *  |Success| Returns \b true if successful.                                          |
+   *  |Failure| Returns \b false if the message is corrupted and could not be decrypted.|
    */
 
  SNAPPYLIB_API bool RawUncompressToIOVec(Source* compressed, const struct iovec* iov,
@@ -319,10 +356,14 @@ namespace snappy {
    * @brief This function determines the maximal size of the compressed representation of
    * input data that is "source_bytes" bytes in length.
    * 
-   * @param source_bytes The size of source in bytes.
-   * 
-   * @return Returns the maximal size of the compressed representation of
-   * input data that is "source_bytes" bytes in length.
+   *  |Parameters       |Direction| Description                 |
+   *  |:----------------|:-------:|:----------------------------|
+   *  | \b source_bytes |   in    | The size of source in bytes.|
+   *
+   *  @return
+   *  |Result | Description                                                                                                   |
+   *  |:------|:--------------------------------------------------------------------------------------------------------------|
+   *  |Success|Returns the maximal size of the compressed representation of input data that is "source_bytes" bytes in length.|
    */
 
  SNAPPYLIB_API size_t MaxCompressedLength(size_t source_bytes);
@@ -333,13 +374,18 @@ namespace snappy {
    * This operation takes O(1) time.
    * 
    * @attention REQUIRES: "compressed[]" was produced by RawCompress() or Compress().
-   * 
-   * @param compressed This is a buffer which contains compressed data.
-   * @param compressed_length This is the length of the compressed buffer.
-   * @param result This is the pointer to type size_t where the uncompressed length is stored.
-   * 
-   * @return \b true on successfull parsing.
-   * @return \b false on parsing error.
+   *
+   *  |Parameters            |Direction| Description                                                                 |
+   *  |:---------------------|:-------:|:----------------------------------------------------------------------------|
+   *  | \b compressed        |  in     | This is a buffer which contains compressed data.                            |
+   *  | \b compressed_length |  in     | This is the length of the compressed buffer.                                |
+   *  | \b result            |  out    |  This is the pointer to type size_t where the uncompressed length is stored.|
+   *
+   *  @return
+   *  |Result | Description                            |
+   *  |:------|:---------------------------------------|
+   *  |Success| Returns \b true on successful parsing.|
+   *  |Failure| Returns \b false on parsing error.     |
    */
 
  SNAPPYLIB_API bool GetUncompressedLength(const char* compressed, size_t compressed_length,
@@ -351,12 +397,17 @@ namespace snappy {
    * successfully.  Does not return the uncompressed data.  Takes
    * time proportional to compressed_length, but is usually at least
    * a factor of four faster than actual decompression.
-   * 
-   * @param compressed This is a buffer which contains compressed data.
-   * @param compressed_length This is the length of the compressed buffer.
-   * 
-   * @return \b true iff the contents of "compressed[]" can be uncompressed successfully.
-   * @return \b false if error.
+   *
+   *  |Parameters            |Direction|Description                                      |
+   *  |:---------------------|:-------:|:------------------------------------------------|
+   *  | \b compressed        |  in     | This is a buffer which contains compressed data.|
+   *  | \b compressed_length |  in     | This is the length of the compressed buffer.    |
+   *
+   *  @return
+   *  |Result | Description                                                                          |
+   *  |:------|:-------------------------------------------------------------------------------------|
+   *  |Success| Returns \b true iff the contents of "compressed[]" can be uncompressed successfully. |
+   *  |Failure| Returns \b false if error.                                                           |
    */
 
  SNAPPYLIB_API bool IsValidCompressedBuffer(const char* compressed,
@@ -370,13 +421,16 @@ namespace snappy {
    * a factor of four faster than actual decompression.
    * On success, consumes all of *compressed.  On failure, consumes an
    * unspecified prefix of *compressed.
-   * 
-   * @param compressed A Source is an interface that yields a sequence of bytes, you can initialize it by calling
-   * snappy::ByteArraySource(inBuf,inBufLen);
-   * where inBuf is the pointer to original data and inBufLen is the size of inBuf .
-   * 
-   * @return \b true iff the contents of "compressed" can be uncompressed successfully.
-   * @return \b false if error.
+   *
+   *  |Parameters     |Direction|Description                                                                                                                                                                                                         |
+   *  |:--------------|:-------:|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+   *  | \b compressed | in,out  | A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf .|
+   *
+   *  @return
+   *  |Result | Description                                                                        |
+   *  |:------|:-----------------------------------------------------------------------------------|
+   *  |Success| Returns \b true iff the contents of "compressed" can be uncompressed successfully. |
+   *  |Failure| Returns \b false if error.                                                         |
    */
  SNAPPYLIB_API bool IsValidCompressed(Source* compressed);
 
@@ -405,7 +459,7 @@ namespace snappy {
  * @brief This class is created to expose internal functions which are not available external to this method.
  * 
  * The test cases written for API level testing needed these internal functions, but can't access them directly
- * so a seperate class was needed for calling those internal functions.
+ * so a separate class was needed for calling those internal functions.
  */
  class SNAPPYLIB_API SNAPPY_Gtest_Util
  {
