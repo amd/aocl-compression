@@ -184,6 +184,8 @@ CHAR *aocl_lzma_setup(INTP optOff, INTP optLevel,
 INT64 aocl_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                          UINTP outsize, UINTP level, UINTP, CHAR *)
 {
+    if (outsize <= LZMA_PROPS_SIZE) return 0;
+
     CLzmaEncProps encProps;
     INTP res;
     UINTP headerSize = LZMA_PROPS_SIZE;
@@ -204,6 +206,8 @@ INT64 aocl_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 INT64 aocl_lzma_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 						   UINTP outsize, UINTP, UINTP, CHAR *)
 {
+    if (insize <= LZMA_PROPS_SIZE) return 0;
+
     INTP res;
     SizeT outLen = outsize;
     SizeT srcLen = insize - LZMA_PROPS_SIZE;
@@ -333,6 +337,8 @@ INT64 aocl_zstd_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
     if (!zstd_params || !zstd_params->cctx)
         return 0;
 
+        return 0;
+
     zstd_params->zparams = ZSTD_getParams(level, insize, 0);
     ZSTD_CCtx_setParameter(zstd_params->cctx, ZSTD_c_compressionLevel, level);
     zstd_params->zparams.fParams.contentSizeFlag = 1;
@@ -362,6 +368,8 @@ INT64 aocl_zstd_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 {
     zstd_params_t *zstd_params = (zstd_params_t *) workmem;
     if (!zstd_params || !zstd_params->dctx)
+        return 0;
+
         return 0;
 
     return ZSTD_decompressDCtx(zstd_params->dctx, outbuf, outsize, 

@@ -1306,7 +1306,7 @@ exit_point:
     UInt32 hcStart = hcHead; /* current head of chain */ \
     UInt32 curMatch = son[hcHead]; \
     UInt32 delta = (pos - curMatch); \
-    unsigned checkLen = maxLen; /* to ensure cur does not access beyond lenLimit */ \
+    unsigned checkLen = maxLen - 1; /* to ensure cur does not access beyond lenLimit */ \
     \
     if (curMatch > 0 && delta < _cyclicBufferSize) { \
         __builtin_prefetch(cur, 0, 2); \
@@ -2992,6 +2992,7 @@ void Test_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
     p.numRefs = numRefs;
     p.hashMask = hashMask;
     p.level = level;
+    p.expectedDataSize = MIN_SIZE_FOR_CF_HC + 1;
 
     size_t numSonRefs = p.cyclicBufferSize;
     if (p.btMode)
@@ -3012,6 +3013,7 @@ void Test_AOCL_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* 
     p.numRefs = numRefs;
     p.hashMask = hashMask;
     p.level = level;
+    p.expectedDataSize = MIN_SIZE_FOR_CF_HC + 1;
 
     AOCL_MatchFinder_Normalize3(subValue, &p);
 }
