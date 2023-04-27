@@ -14,7 +14,7 @@ AOCL Compression supports the following libraries's compression and decompressio
 5. zstd
 6. @ref BZIP2_API "bzip2" 
 7. @ref SNAPPY_API "snappy"
-8. lz4hc
+8. @ref LZ4HC_API "lz4hc"
 
 It supports a dynamic dispatcher feature that executes the most optimal
 function variant implemented using Function Multi-versioning thereby offering
