@@ -109,7 +109,7 @@ LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
 AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER  |  Enable 4-byte comparison for finding a potential better match candidate with Lazy2 compressor (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Defult value is off)
-GTEST_ENABLE                        |  Enable gtest based test suite (Disabled by default)
+AOCL_TEST_COVERAGE                  |  Enable gtest and aocl test bench based CTest suite (Disabled by default)
 
 
 RUNNING AOCL COMPRESSION TEST BENCH ON LINUX
