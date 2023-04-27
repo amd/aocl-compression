@@ -330,16 +330,14 @@ endif()
 #setup CTest for GoogleTest and aocl_compression_bench test
 if (AOCL_TEST_COVERAGE)
 	# enabling ctest
-	if(NOT (BUILD_SHARED_LIBS AND WIN32))
-		enable_testing()
+	enable_testing()
 
-		set_property(SOURCE ${LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
-		set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_UNIT_TEST")
-		set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZLIB_UNIT_TEST")
+	set_property(SOURCE ${LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
+	set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_UNIT_TEST")
+	set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZLIB_UNIT_TEST")
 
-		add_subdirectory(gtest)
-		add_subdirectory(test)
-	endif()
+	add_subdirectory(gtest)
+	add_subdirectory(test)
 endif()
 
 #Enabling strict warnings
@@ -388,6 +386,14 @@ message(STATUS "AOCL COMPRESSION Library, Interface header files and Test binary
 install(TARGETS ${exe_name} DESTINATION ${DEST_BIN_PATH})
 install(TARGETS ${lib_name} DESTINATION ${DEST_LIB_PATH})
 install(FILES ${INC_FILES} DESTINATION ${DEST_INC_PATH})
+if((NOT BUILD_STATIC_LIBS) AND WIN32 AND AOCL_TEST_COVERAGE)
+	add_custom_command(
+		TARGET ${lib_name}
+		POST_BUILD
+		COMMENT "Copy DLL to GTest executables path"
+		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${lib_name}> ${CMAKE_BINARY_DIR}/gtest
+		)
+endif()
 
 #Uninstall the binary. library and header files using custom command
 add_custom_target("uninstall" COMMENT "Uninstalling the installed files from ${install_dir}")
