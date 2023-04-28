@@ -129,7 +129,12 @@ def get_percentage_inc_dec(first_num, second_num):
 # Get Geometric mean
 def geo_mean(itr):
     ls = list(itr)
-    return math.exp(sum(math.log(n) for n in ls) / len(ls))
+    # Contain only positive numbers
+    pos_ls = [val for val in ls if val > 0]
+    if len(pos_ls) == 0:
+        return 0
+    else:
+        return math.exp(sum(math.log(n) for n in pos_ls) / len(pos_ls))
 
 
 # Print log
@@ -246,7 +251,7 @@ def testbench(args, pipe=True):
 ## ===================
 # Execute the command 
 ## ===================
-                
+
 def run_command(cmd, filename='build_logs.log', print_command=True, print_output=False, print_error=True, param_shell=True):
     """
     Parameters:
@@ -257,7 +262,7 @@ def run_command(cmd, filename='build_logs.log', print_command=True, print_output
         print_error: Print error messages to the console.
         param_shell: cmd string is passed to the system's shell for execution if it is true.
     Raises:
-        RuntimeError: Function raises a RuntimeError if the command's return code is non-zero(means subprocess completed with error) and not None(subprocess has completed)
+        RuntimeError: Function raises a RuntimeError if the command's return code is non-zero(means subprocess completed with error).
     Returns: Function returns a list of the lines of output generated with the command.
     """
     if print_command:
@@ -268,21 +273,19 @@ def run_command(cmd, filename='build_logs.log', print_command=True, print_output
         stderr=subprocess.PIPE,
         shell=param_shell,
         cwd=run_command.cwd)
-    stdout_lines, stderr_lines = popen.communicate()
-    stderr_lines = stderr_lines.decode("utf-8")
-    stdout_lines = stdout_lines.decode("utf-8")
+    output, error = popen.communicate()
+    output = output.decode()
+    error = error.decode()
     if print_output:
-        if stdout_lines:
-            with open(filename, "a") as f:
-                f.write(stdout_lines + '\n')
-        if stderr_lines:
-            with open(filename, "a") as f:
-                f.write(stderr_lines + '\n')
-    if popen.returncode is not None and popen.returncode != 0:
-        if stderr_lines and not print_output and print_error:
-            print(stderr_lines)
-        raise RuntimeError(stdout_lines + stderr_lines)
-    return (stdout_lines + stderr_lines).splitlines()
+        if output or (error and print_error):
+            with open(filename, 'a') as f:
+                f.write(output + '\n')
+                f.write(error + '\n')
+    if popen.returncode !=0:
+        if error and not print_output and print_error:
+            print(error)
+        raise RuntimeError(output + error).splitlines()
+    return (output + error).splitlines()
 
 run_command.cwd = None
 
@@ -565,7 +568,7 @@ if __name__ == '__main__':
 
         """
         # Add all the optional flags if specified by the user
-        for flag in args.optionalFlags:
+        for flag in optionalFlags:
             compression_cmds["config_cmd"] = compression_cmds["config_cmd"] + \
                 " " + "-D{}".format(flag)
         print("\nConfiguring AOCL-Compression for the installation .....\n")
