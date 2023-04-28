@@ -63,8 +63,8 @@ The option "-v" is also not supported in cmake with version lesser than 3.15.
 
 BUILDING ON WINDOWS
 -------------------
-As the prerequisites, make available Microsoft Visual Studio along with it's\
-   "Desktop development with C++" toolset that includes the Clang compiler.
+As the prerequisites, make available Microsoft Visual Studio along with its\
+"Desktop development with C++" toolset that includes the Clang compiler.
 
 BUILDING WITH VISUAL STUDIO IDE (GUI)
 -------------------------------------
@@ -110,7 +110,7 @@ SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization
 LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
 AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER  |  Enable 4-byte comparison for finding a potential better match candidate with Lazy2 compressor (Disabled by default)
-BUILD_DOC                           |  Build documentation for this library (Defult value is off)
+BUILD_DOC                           |  Build documentation for this library (Disabled by default)
 ZLIB_DEFLATE_FAST_MODE_2            |  Enable optimization for deflate fast using Z_FIXED strategy (Disabled by default)
 ZLIB_DEFLATE_FAST_MODE_3            |  Enable ZLIB deflate quick strategy (Disabled by default)
 AOCL_EXCLUDE_BZIP2                  |  Exclude BZIP2 compression method from the library build (Disabled by default)
