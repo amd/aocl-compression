@@ -44,14 +44,14 @@ extern "C" {
 
 #endif
 /**
- * \defgroup API Standardized/Unified API
- * \defgroup LZ4_API
- * \defgroup SNAPPY_API
- * \defgroup ZLIB_API
- * \defgroup BZIP2_API
- * \defgroup LZMA_API
- * \defgroup LZ4HC_API
- * \defgroup ZSTD_API
+ * \defgroup API        Standardized/Unified API
+ * \defgroup LZ4_API    LZ4 API
+ * \defgroup SNAPPY_API SNAPPY API
+ * \defgroup ZLIB_API   ZLIB API
+ * \defgroup BZIP2_API  BZIP2 API
+ * \defgroup LZMA_API   LZMA API
+ * \defgroup LZ4HC_API  LZ4HC API
+ * \defgroup ZSTD_API   ZSTD API
  */
 
 /**
