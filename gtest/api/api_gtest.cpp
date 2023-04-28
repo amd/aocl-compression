@@ -98,7 +98,18 @@ vector<ACT> get_algos() {
 #ifndef AOCL_EXCLUDE_ZSTD
     algos.push_back(ZSTD);
 #endif
+
+    if (algos.size() == 0) { //no algo enabled
+        algos.push_back(AOCL_COMPRESSOR_ALGOS_NUM); //add dummy entry. Else parameterized tests will fail.
+    }
     return algos;
+}
+
+#define skip_test_if_algo_invalid(algo) { \
+    if (algo == AOCL_COMPRESSOR_ALGOS_NUM) { \
+        EXPECT_EQ(algo, AOCL_COMPRESSOR_ALGOS_NUM); \
+        return; \
+    } \
 }
 
 class TestLoadBase {
@@ -306,6 +317,7 @@ public:
 
 TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_empty_common_1) //ACD empty
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     setup_and_validate();
     destroy();
@@ -313,6 +325,7 @@ TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_empty_common_1) //ACD empt
 
 TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_optoff_common_2) //ACD empty optOff
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     desc.optOff = 1; //switch off optimizations
     setup_and_validate();
@@ -321,6 +334,7 @@ TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_optoff_common_2) //ACD emp
 
 TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_ioSet_common_3) //ACD inBuf, outBuf set
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     TestLoad t(800, true);
     set_ACD_io_bufs(&desc, (TestLoadBase*)(&t));
@@ -330,6 +344,7 @@ TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_ioSet_common_3) //ACD inBu
 
 TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_logs_common) //logs
 {
+    skip_test_if_algo_invalid(algo)
     //Log levels: ERR:1,...TRACE:4
     for (int logLevel = 1; logLevel <= 4; ++logLevel) { //AOCL_Compression_api_aocl_llc_setup_logs_common_4-7
         reset_ACD(&desc, algo_levels[algo].def);
@@ -413,7 +428,8 @@ public:
     }
 
     void TearDown() override {
-        aocl_llc_destroy(&desc, algo);
+        if (algo < AOCL_COMPRESSOR_ALGOS_NUM)
+            aocl_llc_destroy(&desc, algo);
     }
 
     void setup() {
@@ -468,6 +484,7 @@ public:
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_defaultOptOn_common_1) //default optOn
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     TestLoad cpr(800, 1600, true);
     run_test((TestLoadBase*)(&cpr));
@@ -475,6 +492,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_defaultOptOn_common_
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_defaultOptOff_common_2) //default optOff
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     desc.optOff = 1; //switch off optimizations
     TestLoad cpr(800, 1600, true);
@@ -483,6 +501,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_defaultOptOff_common
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_measureStats_common_3) //measure stats
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     desc.measureStats = 1; //record stats
     TestLoad cpr(800, 1600, true);
@@ -491,6 +510,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_measureStats_common_
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_memLimit_common_4) //with different memLimits
 {
+    skip_test_if_algo_invalid(algo)
     {
         reset_ACD(&desc, algo_levels[algo].def);
         desc.memLimit = 1 << 9; //512KB. memLimit < input size
@@ -513,6 +533,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_memLimit_common_4) /
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpNull_common_5) //input buffer null
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     TestLoad cpr(800, 1600, true);
     desc.inBuf   = nullptr;
@@ -537,6 +558,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpNull_common_5) //
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpSzZero_common_6) //input size 0
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     TestLoad cpr(800, 1600, true);
     desc.inBuf   = cpr.getInpData();
@@ -573,6 +595,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpSzZero_common_6) 
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_outNull_common_7) //output buffer null
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     TestLoad cpr(800, 1600, true);
     desc.inBuf   = cpr.getInpData();
@@ -594,6 +617,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_outNull_common_7) //
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_outSzZero_common_8) //output size 0
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     TestLoad cpr(800, 1600, true);
     desc.inBuf   = cpr.getInpData();
@@ -615,6 +639,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_outSzZero_common_8) 
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_levelsOptOn_common) //all levels optOn
 {
+    skip_test_if_algo_invalid(algo)
     //AOCL_Compression_api_aocl_llc_compress_levelsOptOn_common_1-313
     for (int cpuOptLvl = 0; cpuOptLvl <= MAX_OPT_LEVEL; cpuOptLvl++) { //with optOn, test all dynamic dispatcher supported levels
         for (INTP level = algo_levels[algo].lower; level <= algo_levels[algo].upper; level++) {
@@ -629,6 +654,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_levelsOptOn_common) 
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_levelsOptOff_common) //all levels optOff
 {
+    skip_test_if_algo_invalid(algo)
     //AOCL_Compression_api_aocl_llc_compress_levelsOptOff_common_1-57
     for (INTP level = algo_levels[algo].lower; level <= algo_levels[algo].upper; level++) {
         if (level == algo_levels[algo].def) continue;  //run non-default config only
@@ -658,7 +684,9 @@ public:
     }
 
     void TearDown() override {
-        aocl_llc_destroy(&desc, algo);
+        if (algo < AOCL_COMPRESSOR_ALGOS_NUM)
+            aocl_llc_destroy(&desc, algo);
+
         if(cpr) delete cpr;
     }
 
@@ -712,6 +740,7 @@ private:
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_defaultOptOn_common_1) //default optOn
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     setup_and_compress();
     decompress_and_validate();
@@ -719,6 +748,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_defaultOptOn_com
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_defaultOptOff_common_1) //default optOff
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     desc.optOff = 1;
     setup_and_compress();
@@ -727,6 +757,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_defaultOptOff_co
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_inpNull_common_1) //inp NULL
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     setup_and_compress();
     
@@ -752,6 +783,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_inpNull_common_1
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_inpSzZero_common_1) //inp size = 0
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     setup_and_compress();
     
@@ -777,6 +809,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_inpSzZero_common
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_outNull_common_1) //out NULL
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     setup_and_compress();
     
@@ -802,6 +835,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_outNull_common_1
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_outSzZero_common_1) //out size = 0
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     setup_and_compress();
     
@@ -819,6 +853,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_outSzZero_common
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_invalidCprData_common_1) //invalid compressed data
 {
+    skip_test_if_algo_invalid(algo)
     reset_ACD(&desc, algo_levels[algo].def);
     setup_and_compress();
     
