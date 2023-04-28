@@ -476,6 +476,7 @@ a:link, a:visited, a:hover, a:focus, a:active {
     box-shadow: none;
     display: block;
     margin-top: 0;
+    margin-bottom: 7px;
 }
 
 .left #MSearchSelect {

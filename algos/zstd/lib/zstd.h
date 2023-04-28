@@ -1351,7 +1351,7 @@ typedef struct ZSTD_DDict_s ZSTD_DDict;
  *  @note  ZSTD_CDict can be created once and shared by multiple threads concurrently, since its usage is read-only.
  *  @note  `dictBuffer` can be released after ZSTD_CDict creation, because its content is copied within CDict.
  * 
- *  @note 1 : Consider experimental function `ZSTD_createCDict_byReference()` if you prefer to not duplicate @dictBuffer content.
+ *  @note 1 : Consider experimental function `ZSTD_createCDict_byReference()` if you prefer to not duplicate dictBuffer content.
  *  @note 2 : A ZSTD_CDict can be created from an empty `dictBuffer`,
  *      in which case the only thing that it transports is the `compressionLevel`.
  *      This can be useful in a pipeline featuring ZSTD_compress_usingCDict() exclusively,
@@ -1561,17 +1561,17 @@ ZSTDLIB_API unsigned ZSTD_getDictID_fromFrame(const void* src, size_t srcSize);
  * 
  *  \n \b Special: Loading a NULL (or 0-size) dictionary invalidates previous dictionary,
  *           meaning "return to no-dictionary mode".
- *  @note 1  Dictionary is sticky, it will be used for all future compressed frames.
- *           To return to "no-dictionary" situation, load a NULL dictionary (or reset parameters).
- *  @note 2  Loading a dictionary involves building tables.
- *           It's also a CPU consuming operation, with non-negligible impact on latency.
- *           Tables are dependent on compression parameters, and for this reason,
+ *  @note 1 : Dictionary is sticky, it will be used for all future compressed frames.
+ *            To return to "no-dictionary" situation, load a NULL dictionary (or reset parameters).
+ *  @note 2 : Loading a dictionary involves building tables.
+ *            It's also a CPU consuming operation, with non-negligible impact on latency.
+ *            Tables are dependent on compression parameters, and for this reason,
  *           compression parameters can no longer be changed after loading a dictionary.
- *  @note 3 `dict` content will be copied internally.
- *           Use experimental ZSTD_CCtx_loadDictionary_byReference() to reference content instead.
- *           In such a case, dictionary buffer must outlive its users.
- *  @note 4 Use ZSTD_CCtx_loadDictionary_advanced()
- *           to precisely select how dictionary content must be interpreted. 
+ *  @note 3 : `dict` content will be copied internally.
+ *            Use experimental ZSTD_CCtx_loadDictionary_byReference() to reference content instead.
+ *            In such a case, dictionary buffer must outlive its users.
+ *  @note 4 : Use ZSTD_CCtx_loadDictionary_advanced()
+ *            to precisely select how dictionary content must be interpreted. 
  *  @warning  Requires v1.4.0+*/
 ZSTDLIB_API size_t ZSTD_CCtx_loadDictionary(ZSTD_CCtx* cctx, const void* dict, size_t dictSize);
 

@@ -104,11 +104,19 @@ Option                              |  Description
 ------------------------------------|----------------------------------------------------------------------------------------
 AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |  Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
 SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Disabled by default)
-LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Disabled by default)
+LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
 AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER  |  Enable 4-byte comparison for finding a potential better match candidate with Lazy2 compressor (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Defult value is off)
-AOCL_TEST_COVERAGE                  |  Enable gtest and aocl test bench based CTest suite (Disabled by default)
+ZLIB_DEFLATE_FAST_MODE_2            |  Enable optimization for deflate fast using Z_FIXED strategy (Disabled by default)
+ZLIB_DEFLATE_FAST_MODE_3            |  Enable ZLIB deflate quick strategy (Disabled by default)
+AOCL_EXCLUDE_BZIP2                  |  Exclude BZIP2 compression method from the library build (Disabled by default)
+AOCL_EXCLUDE_LZ4                    |  Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)
+AOCL_EXCLUDE_LZ4HC                  |  Exclude LZ4HC compression method from the library build (Disabled by default)
+AOCL_EXCLUDE_LZMA                   |  Exclude LZMA compression method from the library build (Disabled by default)
+AOCL_EXCLUDE_SNAPPY                 |  Exclude SNAPPY compression method from the library build (Disabled by default)
+AOCL_EXCLUDE_ZLIB                   |  Exclude ZLIB compression method from the library build (Disabled by default)
+AOCL_EXCLUDE_ZSTD                   |  Exclude ZSTD compression method from the library build (Disabled by default)
 
 RUNNING AOCL COMPRESSION TEST BENCH ON LINUX
 --------------------------------------
@@ -197,13 +205,3 @@ GENERATING DOCUMENTATION
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
 - Documents will be generated in HTML format inside the folder __docs/html__ , you can open the index.html file with any browser to view the documentation.
 - CMake will use the existing Doxygen if available or else it will download the respective Doxygen binaries according to the OS you are using to build the documentation.
-
-TEST SUITE FOR INDIVIDUAL ALGORITHM API's
------------------------------------------
-- To build test suite for individual algorithm level API's for supported libraries:
-   1. SNAPPY
-   2. LZ4
-   3. ZLIB (with partial support)
-   , specify `-DGTEST_ENABLE=ON` option while building.
-- An executable will be generated in build folder named gtest_combined_test.
-- You can run individual libraries by specifying respective library names. For example, to run snappy you can run `./build/gtest_combined_test --snappy`.
