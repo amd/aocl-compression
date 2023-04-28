@@ -12,7 +12,7 @@ AOCL Compression supports the following libraries's compression and decompressio
 2. @ref ZLIB_API "zlib/deflate"
 3. @ref LZMA_API "lzma"
 5. zstd
-6. bzip2
+6. @ref BZIP2_API "bzip2" 
 7. @ref SNAPPY_API "snappy"
 8. lz4hc
 
