@@ -4666,6 +4666,9 @@ size_t ZSTD_compressEnd (ZSTD_CCtx* cctx,
                          void* dst, size_t dstCapacity,
                    const void* src, size_t srcSize)
 {
+    if(cctx == NULL || (dst == NULL || src == NULL)) 
+        return -1;
+
     size_t endResult;
     size_t const cSize = ZSTD_compressContinue_internal(cctx,
                                 dst, dstCapacity, src, srcSize,
