@@ -69,22 +69,12 @@ BUILDING WITH VISUAL STUDIO IDE (GUI)
    Generator as the installed Visual Studio version,
    Platform as x64,
    Optional toolset as ClangCl.
+   Choose additional library config and build options.
+   Configure CMAKE_INSTALL_PREFIX appropriately.
    Click the Generate option.
    After Microsoft Visual Studio project is generated, click "Open Project".
    This will launch the Microsoft Visual Studio project for the source package.
-2. To build a Static library, go to project aocl_compression -> Properties and then:
-   General -> "Configuration Type" and set it to Static library,
-   C/C++ -> "Code Generation" -> "Runtime Library" and set it to /MT or /MTd
-   depending upon whether the build type is Release or Debug.
-3. To build a Dynamic library, go to project aocl_compression -> Properties and then:
-   General -> "Configuration Type" and set it to Dynamic library,
-   C/C++ -> "Code Generation" -> "Runtime Library" and set it to /MD or /MDd
-   depending upon whether the build type is Release or Debug.
-4. To build the test bench binary, go to project aocl_compression_bench -> Properties and then:
-   Linker -> General -> "Additional Library Directories" and add the path to find aocl_compression library,
-   Linker -> General -> "Link Library Dependencies" and set it as "Yes",
-   Linker -> Input -> "Additional Dependencies" and add the aocl_compression library name.
-5. Build the entire solution or both the projects one by one separately.
+2. Build the entire solution or the required projects accordingly.
 
 BUILDING WITH VISUAL STUDIO IDE (command line)
 ----------------------------------------------
@@ -94,7 +84,7 @@ BUILDING WITH VISUAL STUDIO IDE (command line)
 ```
 cmake .. -T ClangCl -G <installed Visual Studio version> && cmake --build . --config Release --target INSTALL
 ```
-      Additional config and build options can be passed to the above command.
+      Additional library config and build options can be passed to the above command.
 
 ADDITIONAL LIBRARY BUILD OPTIONS
 --------------------------------
@@ -107,9 +97,10 @@ SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization
 LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
 AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER  |  Enable 4-byte comparison for finding a potential better match candidate with Lazy2 compressor (Disabled by default)
+AOCL_TEST_COVERAGE                  |  Enable GTest and AOCL test bench based CTest suite (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Defult value is off)
-ZLIB_DEFLATE_FAST_MODE_2            |  Enable optimization for deflate fast using Z_FIXED strategy (Disabled by default)
-ZLIB_DEFLATE_FAST_MODE_3            |  Enable ZLIB deflate quick strategy (Disabled by default)
+ZLIB_DEFLATE_FAST_MODE_2            |  Enable optimization for deflate fast using Z_FIXED strategy. Do not combine with ZLIB_DEFLATE_FAST_MODE_3 (Disabled by default)
+ZLIB_DEFLATE_FAST_MODE_3            |  Enable ZLIB deflate quick strategy. Do not combine with ZLIB_DEFLATE_FAST_MODE_2 (Disabled by default)
 AOCL_EXCLUDE_BZIP2                  |  Exclude BZIP2 compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_LZ4                    |  Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)
 AOCL_EXCLUDE_LZ4HC                  |  Exclude LZ4HC compression method from the library build (Disabled by default)
