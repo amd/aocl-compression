@@ -64,7 +64,7 @@ option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Disabl
 option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Enabled by default)" ON)
 option (AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER "Enable 4-byte comparison when finding match candidates with Lazy2 compressor (Disabled by default)" OFF)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
-option (AOCL_TEST_COVERAGE "Enable gtest and aocl test bench based CTest suite (Disabled by default)" OFF)
+option (AOCL_TEST_COVERAGE "Enable GTest and AOCL test bench based CTest suite (Disabled by default)" OFF)
 option (BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)
 option (ZLIB_DEFLATE_FAST_MODE_2 "Enable optimization for deflate fast using Z_FIXED strategy (Disabled by default)" OFF)
 option (ZLIB_DEFLATE_FAST_MODE_3 "Enable ZLIB deflate quick strategy (Disabled by default)" OFF)

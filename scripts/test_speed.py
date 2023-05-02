@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 """ This module is designed to install and run benchmark tests and generate the reports.
-    When the module is executed with the "comparewith" option, it will run 
+    When the module is executed with the "comparewith" option, it runs 
     the benchmark tests for both the AMD optimized vs reference methods   
     where the reference is either vanilla version or IPP patched version
-    and it store the performance results to CSV files.
+    and it stores the performance results to CSV files.
 
-    It will also display the summarized report and highlights of the performamce differences
+    It will also display the summarized report and highlights of the performance differences
     between the two versions on the console.
 
     This module works on both Linux and Windows.
@@ -16,7 +16,7 @@
     Python3 and python3-pip
     prettytable (https://pypi.org/project/prettytable/)
     pandas (https://pypi.org/project/pandas/)
-    If any required modules are not already installed on the system, this python module will autmatically install them. 
+    If any required modules are not already installed on the system, this python module will automatically install them. 
     If the automatic installation fails, please install the required modules manually. 
 """
 

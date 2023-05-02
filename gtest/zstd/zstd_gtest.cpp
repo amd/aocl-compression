@@ -378,7 +378,7 @@ TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_6) // 
     
 
     dstCapacity = Test_ZSTD_compress(dst, dstCapacity, orig, origLen_1, level);
-    int frameHeaderSize = Test_ZSTD_frameHeaderSize(original, origLen_1);
+    int frameHeaderSize = Test_ZSTD_frameHeaderSize(dst, dstCapacity);
     dst[frameHeaderSize + 2] = 2;
 
     size_t decompressedLen = Test_ZSTD_decompress(output, Test_ZSTD_decompressBound(orig, origLen_1), dst, dstCapacity);
@@ -652,7 +652,7 @@ TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_commo
     
 
     dstCapacity = Test_ZSTD_compress(dst, dstCapacity, orig, origLen_1, level);
-    int frameHeaderSize = Test_ZSTD_frameHeaderSize(original, origLen_1);
+    int frameHeaderSize = Test_ZSTD_frameHeaderSize(dst, dstCapacity);
     dst[frameHeaderSize + 2] = 2;
 
     size_t decompressedLen = Test_ZSTD_decompressDCtx(dctx, output, Test_ZSTD_decompressBound(orig, origLen_1), dst, dstCapacity);
