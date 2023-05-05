@@ -12,6 +12,7 @@
 #ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
 
 extern uint32_t (*aocl_compare256_fp) (const Bytef *src1, const Bytef *src2);
+extern void bi_windup(deflate_state *s);
 
 local z_const unsigned quick_len_codes[MAX_MATCH-MIN_MATCH+1];
 local z_const unsigned quick_dist_codes[8192];
