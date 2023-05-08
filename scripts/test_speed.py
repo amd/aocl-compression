@@ -569,7 +569,7 @@ if __name__ == '__main__':
         """
         # Add all the optional flags if specified by the user
         for flag in optionalFlags:
-            compression_cmds["config_cmd"] = compression_cmds["config_cmd"] + \
+            cmds["config_cmd"] = cmds["config_cmd"] + \
                 " " + "-D{}".format(flag)
         print("\nConfiguring AOCL-Compression for the installation .....\n")
         for k, val in cmds.items():
