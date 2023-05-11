@@ -1335,8 +1335,10 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
     LZ4_putPosition(ip, cctx->hashTable, tableType, base);
     ip++; forwardH = LZ4_hashPosition(ip, tableType);
 
+#ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
     int prevStep = 0;
-
+    int presetMatchNb = 0;
+#endif
     /* Main Loop */
     for ( ; ; ) {
         const BYTE* match;
@@ -1373,7 +1375,11 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
 
             const BYTE* forwardIp = ip;
             int step = 1;
+#ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
+            int searchMatchNb = acceleration << (LZ4_skipTrigger-presetMatchNb);
+#else
             int searchMatchNb = acceleration << LZ4_skipTrigger;
+#endif
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
             U32 ipData;
 #endif
@@ -1389,7 +1395,11 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                 ip = forwardIp;
                 forwardIp += step;
 
-                step = (searchMatchNb++ >> LZ4_skipTrigger) + prevStep ;
+#ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
+                step = (searchMatchNb++ >> (LZ4_skipTrigger-presetMatchNb)) + prevStep;
+#else
+                step = (searchMatchNb++ >> LZ4_skipTrigger);
+#endif
 
                 if (unlikely(forwardIp > mflimitPlusOne)) goto _last_literals;
                 assert(ip < mflimitPlusOne);
@@ -1450,13 +1460,19 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
 #endif
                     if (maybe_extMem) offset = current - matchIndex;
 
-                    if (step > AOCL_LZ4_MATCH_SKIPPING_THRESHOLD)                     
-                    {
+#ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
+                    if (step > AOCL_LZ4_MATCH_SKIPPING_THRESHOLD) {
                         prevStep = (step / 2) - 1 ;   /* for the next sequence `step` starts from `half of current step` instead of 1. */
-                    }
-                    else{
+#ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2
+                        presetMatchNb = 1;
+#endif
+                    } else {
                         prevStep = 0;                 /* for the next sequence `step` starts from 1. */
+#ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2
+                        presetMatchNb = 0;
+#endif
                     }
+#endif
 
                     break;   /* match found */
                 }
