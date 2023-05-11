@@ -50,14 +50,14 @@ using namespace std;
 #define TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(hcCur, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX) \
     AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(hcCur, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX)
 
-#define TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, hashTable, hcCur, prevVal, hashIdx, \
+#define TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, hashTable, hcHeadPos, prevVal, hashIdx, \
     HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyHeadValue) \
-    AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, hashTable, hcCur, prevVal, hashIdx, \
+    AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, hashTable, hcHeadPos, prevVal, hashIdx, \
     HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyHeadValue)
 
-#define TEST_AOCL_COMMON_CEHCFIX_INSERT(chainTable, hashTable, hcCur, prevVal, val, hashIdx, \
+#define TEST_AOCL_COMMON_CEHCFIX_INSERT(chainTable, hashTable, hcHeadPos, prevVal, val, hashIdx, \
     HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX) \
-    AOCL_COMMON_CEHCFIX_INSERT(chainTable, hashTable, hcCur, prevVal, val, hashIdx, \
+    AOCL_COMMON_CEHCFIX_INSERT(chainTable, hashTable, hcHeadPos, prevVal, val, hashIdx, \
     HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX)
 
 #define TEST_AOCL_COMMON_CEHCFIX_GET(chainTable, hashTable, hcCur, prevVal, val, \
@@ -66,9 +66,9 @@ using namespace std;
     HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX)
 
 #define TEST_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcCur, val, \
-    HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyNodeValue) \
+    HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyNodeValue, hcHeadPos) \
     AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcCur, val, \
-    HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyNodeValue)
+    HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyNodeValue, hcHeadPos)
 
 /*********************************************
 * "Begin" of Common_CehcFix_circBuf
@@ -81,31 +81,31 @@ class Common_CehcFix_circBuf : public ::testing::Test
 {
 public:
     /* [headPtr | hcChain]
-    for hcHead = 1 to HASH_CHAIN_MAX, inc by 1
-    for hcHead = HASH_CHAIN_MAX, circle back to 1 */
+    for hcCur = 1 to HASH_CHAIN_MAX, inc by 1
+    for hcCur = HASH_CHAIN_MAX, circle back to 1 */
     void circular_buffer_inc_test(unsigned HASH_CHAIN_OBJECT_SZ, unsigned HASH_CHAIN_MAX) {
-        unsigned hcHead = 1, hcHeadNxt;
-        // run HASH_CHAIN_MAX times to ensure hcHead gets all possible values
-        for (int i = hcHead; i < HASH_CHAIN_MAX; ++i) {
-            hcHeadNxt = TEST_AOCL_COMMON_CEHCFIX_CIRC_INC_HEAD(hcHead, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
-            EXPECT_EQ(hcHeadNxt, (hcHead + 1));
-            hcHead = hcHeadNxt;
+        unsigned hcCur = 1, hcHeadNxt;
+        // run HASH_CHAIN_MAX times to ensure hcCur gets all possible values
+        for (int i = hcCur; i < HASH_CHAIN_MAX; ++i) {
+            hcHeadNxt = TEST_AOCL_COMMON_CEHCFIX_CIRC_INC_HEAD(hcCur, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
+            EXPECT_EQ(hcHeadNxt, (hcCur + 1));
+            hcCur = hcHeadNxt;
         }
-        hcHead = HASH_CHAIN_MAX;
-        hcHeadNxt = TEST_AOCL_COMMON_CEHCFIX_CIRC_INC_HEAD(hcHead, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
+        hcCur = HASH_CHAIN_MAX;
+        hcHeadNxt = TEST_AOCL_COMMON_CEHCFIX_CIRC_INC_HEAD(hcCur, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
         EXPECT_EQ(hcHeadNxt, 1);
     }
 
     void circular_buffer_dec_test(unsigned HASH_CHAIN_OBJECT_SZ, unsigned HASH_CHAIN_MAX) {
-        unsigned hcHead = HASH_CHAIN_MAX, hcHeadNxt;
-        // run HASH_CHAIN_MAX times to ensure hcHead gets all possible values
-        for (int i = hcHead; i > 1; --i) {
-            hcHeadNxt = TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(hcHead, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
-            EXPECT_EQ(hcHeadNxt, (hcHead - 1));
-            hcHead = hcHeadNxt;
+        unsigned hcCur = HASH_CHAIN_MAX, hcHeadNxt;
+        // run HASH_CHAIN_MAX times to ensure hcCur gets all possible values
+        for (int i = hcCur; i > 1; --i) {
+            hcHeadNxt = TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(hcCur, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
+            EXPECT_EQ(hcHeadNxt, (hcCur - 1));
+            hcCur = hcHeadNxt;
         }
-        hcHead = 1;
-        hcHeadNxt = TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(hcHead, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
+        hcCur = 1;
+        hcHeadNxt = TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(hcCur, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
         EXPECT_EQ(hcHeadNxt, HASH_CHAIN_MAX);
     }
 };
@@ -164,12 +164,12 @@ public:
 };
 
 
-/*********************************************
-* "Begin" of Common_CehcFix_chainHead
-*********************************************/
-/*
+ /*********************************************
+ * "Begin" of Common_CehcFix_chainHead
+ *********************************************/
+ /*
 * Fixture class for testing 'TEST_AOCL_COMMON_CEHCFIX_GET_HEAD' macro
-*/
+ */
 class Common_CehcFix_chainHead : public CehcTable
 {
 public:
@@ -181,10 +181,10 @@ public:
 TEST_F(Common_CehcFix_chainHead, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_GET_HEAD_emptyHead_common_1)
 {
     unsigned hashIdx = rand() % CHAIN_CNT;
-    unsigned hcHead;
-    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHead, 0, hashIdx,
+    unsigned hcCur;
+    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcCur, 0, hashIdx,
         HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue);
-    EXPECT_EQ(hcHead, head_on_init(hashIdx));
+    EXPECT_EQ(hcCur, head_on_init(hashIdx));
 }
 
 TEST_F(Common_CehcFix_chainHead, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_GET_HEAD_emptyHead_common_2)
@@ -193,26 +193,26 @@ TEST_F(Common_CehcFix_chainHead, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_GET
     memset(chainTable, 0xFF, ctSzBytes); //empty values all 1s (UINT32_MAX)
 
     unsigned hashIdx = rand() % CHAIN_CNT;
-    unsigned hcHead;
-    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHead, 0, hashIdx,
+    unsigned hcCur;
+    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcCur, 0, hashIdx,
         HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue);
-    EXPECT_EQ(hcHead, head_on_init(hashIdx));
+    EXPECT_EQ(hcCur, head_on_init(hashIdx));
 }
 
 TEST_F(Common_CehcFix_chainHead, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_GET_HEAD_nonEmptyHead_common_1)
 {
     unsigned hashIdx = rand() % CHAIN_CNT;
-    unsigned hcHead, val = 1;
-    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHead, 0, hashIdx,
+    unsigned hcHeadPos, val = 1;
+    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHeadPos, 0, hashIdx,
         HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue); //1st get, head is empty
 
-    TEST_AOCL_COMMON_CEHCFIX_INSERT(chainTable, 0, hcHead, 0, val, hashIdx,
+    TEST_AOCL_COMMON_CEHCFIX_INSERT(chainTable, 0, hcHeadPos, 0, val, hashIdx,
         HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX); //set node
 
-    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHead, 0, hashIdx,
+    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHeadPos, 0, hashIdx,
         HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue); //2nd get
 
-    EXPECT_EQ(hcHead, TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(head_on_init(hashIdx),
+    EXPECT_EQ(hcHeadPos, TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(head_on_init(hashIdx),
         HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX)); //prev pos as head moved on set node
 }
 
@@ -222,17 +222,17 @@ TEST_F(Common_CehcFix_chainHead, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_GET
     memset(chainTable, 0xFF, ctSzBytes); //empty values all 1s (UINT32_MAX)
 
     unsigned hashIdx = rand() % CHAIN_CNT;
-    unsigned hcHead, val =1;
-    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHead, 0, hashIdx,
+    unsigned hcHeadPos, val = 1;
+    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHeadPos, 0, hashIdx,
         HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue); //1st get, head is empty
 
-    TEST_AOCL_COMMON_CEHCFIX_INSERT(chainTable, 0, hcHead, 0, val, hashIdx,
+    TEST_AOCL_COMMON_CEHCFIX_INSERT(chainTable, 0, hcHeadPos, 0, val, hashIdx,
         HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX); //set node
 
-    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHead, 0, hashIdx,
+    TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHeadPos, 0, hashIdx,
         HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue); //2nd get
 
-    EXPECT_EQ(hcHead, TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(head_on_init(hashIdx),
+    EXPECT_EQ(hcHeadPos, TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(head_on_init(hashIdx),
         HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX)); //prev pos as head moved on set node
 }
 
@@ -282,10 +282,10 @@ TEST_F(Common_CehcFix_chainInsert, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_I
  * End of Common_CehcFix_chainInsert
  *********************************************/
 
-/*********************************************
+ /*********************************************
 * Begin of Common_CehcFix_chainSearch
-*********************************************/
-/*
+ *********************************************/
+ /*
 * Fixture class for testing `TEST_AOCL_COMMON_CEHCFIX_GET` and
 * `TEST_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT` macros
 * 
@@ -295,37 +295,37 @@ TEST_F(Common_CehcFix_chainInsert, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_I
 *    in the hash chain.
 * 3. Subsequently, keep calling AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT() 
 *    to move to next nodes in the chain and read values there.
-*/
+ */
 class Common_CehcFix_chainSearch : public CehcTable
 {
 public:
     void setup_block_chain(int count) {
         unsigned hashIdx = rand() % CHAIN_CNT;
         if (count == 0) { // just setup head. Do not insert node
-            TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHead, 0, hashIdx,
+            TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHeadPos, 0, hashIdx,
                 HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue);
         }
         else {
             int pos = 1;
             for (int i = 0; i < count; ++i) { // fill block chain
-                TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHead, 0, hashIdx,
+                TEST_AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0, hcHeadPos, 0, hashIdx,
                     HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue);
-                TEST_AOCL_COMMON_CEHCFIX_INSERT(chainTable, 0, hcHead, 0, pos, hashIdx,
+                TEST_AOCL_COMMON_CEHCFIX_INSERT(chainTable, 0, hcHeadPos, 0, pos, hashIdx,
                     HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
                 pos = get_next_circ(pos);
             }
         }
     }
 
-    unsigned get_next_circ(unsigned hcHead) {
-        return TEST_AOCL_COMMON_CEHCFIX_CIRC_INC_HEAD(hcHead, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
+    unsigned get_next_circ(unsigned hcCur) {
+        return TEST_AOCL_COMMON_CEHCFIX_CIRC_INC_HEAD(hcCur, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
     }
 
-    unsigned get_prev_circ(unsigned hcHead) {
-        return TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(hcHead, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
+    unsigned get_prev_circ(unsigned hcCur) {
+        return TEST_AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(hcCur, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
     }
 
-    unsigned hcHead;
+    unsigned hcHeadPos;
 };
 
 TEST_F(Common_CehcFix_chainSearch, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT_chainFull_common_1)
@@ -334,20 +334,21 @@ TEST_F(Common_CehcFix_chainSearch, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_M
     setup_block_chain(setNodes);
 
     unsigned pos;
-    unsigned hcHeadStart = hcHead;
+    unsigned hcHeadRef, hcCur;
+    hcHeadRef = hcCur = hcHeadPos;
     unsigned posCheck = setNodes;
-    TEST_AOCL_COMMON_CEHCFIX_GET(chainTable, 0, hcHead, 0,
+    TEST_AOCL_COMMON_CEHCFIX_GET(chainTable, 0, hcCur, 0,
         pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
-    EXPECT_EQ(hcHead, hcHeadStart);
+    EXPECT_EQ(hcCur, hcHeadRef);
     EXPECT_EQ(pos, posCheck);
 
     int i = 1;
-    for (; i < HASH_CHAIN_MAX; ++i) { // run HASH_CHAIN_MAX times to ensure hcHead gets all possible values
-        hcHeadStart = get_next_circ(hcHeadStart);
+    for (; i < HASH_CHAIN_MAX; ++i) { // run HASH_CHAIN_MAX times to ensure hcCur gets all possible values
+        hcHeadRef = get_next_circ(hcHeadRef);
         posCheck = get_prev_circ(posCheck);
-        TEST_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcHead, 
-            pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue);
-        EXPECT_EQ(hcHead, hcHeadStart);
+        TEST_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcCur,
+            pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue, hcHeadPos);
+        EXPECT_EQ(hcCur, hcHeadRef);
         EXPECT_EQ(pos, posCheck);
     }
     EXPECT_EQ(i, HASH_CHAIN_MAX); // ensure loop does not exit prematurely
@@ -358,16 +359,17 @@ TEST_F(Common_CehcFix_chainSearch, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_M
     setup_block_chain(0);
 
     unsigned pos;
-    unsigned hcHeadStart = hcHead;
-    TEST_AOCL_COMMON_CEHCFIX_GET(chainTable, 0, hcHead, 0,
+    unsigned hcHeadRef, hcCur;
+    hcHeadRef = hcCur = hcHeadPos;
+    TEST_AOCL_COMMON_CEHCFIX_GET(chainTable, 0, hcCur, 0,
         pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
-    EXPECT_EQ(hcHead, hcHeadStart);
+    EXPECT_EQ(hcCur, hcHeadRef);
     EXPECT_EQ(pos, kEmptyValue);
 
     int i = 1;
     for (int i = 1; i < HASH_CHAIN_MAX; ++i) {
-        TEST_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcHead,
-            pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue); // as there are no nodes in chain, this should exit loop.
+        TEST_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcCur,
+            pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue, hcHeadPos); // as there are no nodes in chain, this should exit loop.
     }
     EXPECT_EQ(i, 1); // ensure loop exited on 1st check
 }
@@ -378,23 +380,51 @@ TEST_F(Common_CehcFix_chainSearch, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_M
     setup_block_chain(setNodes);
 
     unsigned pos;
-    unsigned hcHeadStart = hcHead;
+    unsigned hcHeadRef, hcCur;
+    hcHeadRef = hcCur = hcHeadPos;
     unsigned posCheck = setNodes;
-    TEST_AOCL_COMMON_CEHCFIX_GET(chainTable, 0, hcHead, 0,
+    TEST_AOCL_COMMON_CEHCFIX_GET(chainTable, 0, hcCur, 0,
         pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
-    EXPECT_EQ(hcHead, hcHeadStart);
+    EXPECT_EQ(hcCur, hcHeadRef);
     EXPECT_EQ(pos, posCheck);
 
     int i = 1;
     for (; i < HASH_CHAIN_MAX; ++i) { // try to run HASH_CHAIN_MAX times. Loop must exit on end of chain.
-        hcHeadStart = get_next_circ(hcHeadStart);
+        hcHeadRef = get_next_circ(hcHeadRef);
         posCheck = get_prev_circ(posCheck);
-        TEST_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcHead,
-            pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue);
-        EXPECT_EQ(hcHead, hcHeadStart);
+        TEST_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcCur,
+            pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue, hcHeadPos);
+        EXPECT_EQ(hcCur, hcHeadRef);
         EXPECT_EQ(pos, posCheck);
     }
     EXPECT_EQ(i, setNodes); // ensure loop exited on Nth check
+}
+
+TEST_F(Common_CehcFix_chainSearch, AOCL_Compression_common_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT_rollOver_common_1)
+{
+    const unsigned setNodes = HASH_CHAIN_MAX; // set all nodes in chain
+    setup_block_chain(setNodes);
+
+    unsigned pos;
+    unsigned hcHeadRef, hcCur;
+    hcHeadRef = hcCur = hcHeadPos;
+    unsigned posCheck = setNodes;
+    TEST_AOCL_COMMON_CEHCFIX_GET(chainTable, 0, hcCur, 0,
+        pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX);
+    EXPECT_EQ(hcCur, hcHeadRef);
+    EXPECT_EQ(pos, posCheck);
+
+    int i = 1;
+    for (; i < HASH_CHAIN_MAX + 3; ++i) { // run > HASH_CHAIN_MAX times to test if rollOver check is triggered
+        hcHeadRef = get_next_circ(hcHeadRef);
+        posCheck = get_prev_circ(posCheck);
+        TEST_AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcCur,
+            pos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyValue, hcHeadPos);
+        EXPECT_EQ(hcCur, hcHeadRef);
+        EXPECT_EQ(pos, posCheck);
+    }
+    EXPECT_EQ(hcCur, hcHeadPos); // validate roll over check
+    EXPECT_EQ(i, HASH_CHAIN_MAX); // validate check was triggered before for loop condition evaluates to false
 }
 
 /*********************************************

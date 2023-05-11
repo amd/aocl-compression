@@ -45,6 +45,7 @@
 #include "algos/lzma/LzHash.h"
 #include "algos/lzma/LzmaEnc.h"
 #include "algos/lzma/LzmaDec.h"
+#include "algos/common/aoclHashChain.h"
 
 using namespace std;
 
@@ -701,16 +702,30 @@ TEST_F(LZMA_normalizeLzFind, AOCL_Compression_lzma_AOCL_MatchFinder_Normalize3_H
 #define SET_MATCH_OFFSET(inp) \
         matches[om] = SET_OFFSET(inp); om -= 2;
 
+//Add nodes to hash chain object in son
+#define ADD_NODE_TO_CHAIN(inp) { \
+    UInt32 val = inp.size(); \
+    UInt32 HASH_CHAIN_OBJECT_SZ = blockSz; \
+    UInt32 HASH_CHAIN_MAX = HASH_CHAIN_OBJECT_SZ - 1; \
+    UInt32 hashIdx = 0; \
+    AOCL_COMMON_CEHCFIX_GET_HEAD(son, 0, hcHead, 0, hashIdx, \
+    HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, 0); \
+    AOCL_COMMON_CEHCFIX_INSERT(son, 0, hcHead, 0, val, hashIdx, \
+    HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX) \
+}
+
 //We expect to get matches for these. Update offset value in matches[].
-#define ADD_MATCH_STR(i, str) \
-        son[i] = inp.size(); \
+#define ADD_MATCH_STR(i, str) { \
+        ADD_NODE_TO_CHAIN(inp) \
         SET_MATCH_OFFSET(inp); \
-        inp += str;
+        inp += str; \
+        }
 
 //We do not expect matches for these
-#define ADD_INP_STR(i, str) \
-        son[i] = inp.size(); \
-        inp += str;
+#define ADD_INP_STR(i, str) { \
+        ADD_NODE_TO_CHAIN(inp) \
+        inp += str; \
+        }
 
  /*
      Fixture class for testing AOCL_Hc_GetMatchesSpec_8, AOCL_Hc_GetMatchesSpec_16
@@ -761,7 +776,8 @@ public:
         const size_t cyclicBufferPos = 0; //not used
         unsigned maxLen = MIN_MATCH_LEN;
         bool match = true;
-        Test_Hc_GetMatchesSpec(lenLimit, hcHead, pos, (const Byte*)cur, son,
+        UInt32 hv = hcHead / blockSz;
+        Test_Hc_GetMatchesSpec(lenLimit, hcHead, hv, pos, (const Byte*)cur, son,
             cyclicBufferPos, cyclicBufferSize, CUT_VALUE, ldPairs, maxLen, blockSz);
         for (int i = 0; i < OUT_SIZE; ++i) {
             if (ldPairs[i] != matches[i]) {
@@ -786,6 +802,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     Init_Buffers(son, blockSz);
 
     //Setup input stream
+    UInt32 hcHead;
     std::string curstr = "qwertyabcd";
     std::vector<std::string> matchStrs =
     { "qwerty" , "qwertyab", "qwertyabcd" }; //strings we expect to get matches for
@@ -803,7 +820,6 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     inp += curstr; //current string to match against
     size_t lenLimit = SET_LENGTH(curstr);
 
-    UInt32 hcHead = blockSz - 1;
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
@@ -814,6 +830,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     Init_Buffers(son, blockSz);
 
     //Setup input stream
+    UInt32 hcHead;
     std::string curstr = "qwertyabcd";
     std::vector<std::string> matchStrs =
     { "qwertyabcd" }; //strings we expect to get matches for
@@ -831,7 +848,6 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     inp += curstr; //current string to match against
     size_t lenLimit = SET_LENGTH(curstr);
 
-    UInt32 hcHead = blockSz - 1;
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
@@ -842,6 +858,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     Init_Buffers(son, blockSz);
 
     //Setup input stream
+    UInt32 hcHead;
     std::string curstr = "qwertyabcde";
     std::vector<std::string> matchStrs =
     { "qwertya", "qwertyabc" }; //strings we expect to get matches for
@@ -865,7 +882,6 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     inp += curstr; //current string to match against
     size_t lenLimit = SET_LENGTH(curstr);
 
-    UInt32 hcHead = blockSz - 1;
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
@@ -876,6 +892,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     Init_Buffers(son, blockSz);
 
     //Setup input stream
+    UInt32 hcHead, hcBase = 0;
     std::string curstr = "qwertyabcd";
     std::vector<std::string> matchStrs =
     { "qwerty", "qwertyab" }; //strings we expect to get matches for
@@ -883,6 +900,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     set_match_lengths(matchStrs);
     std::string inp;
     int om = (matchStrs.size() * 2) - 1;
+    son[hcBase] = 4; //start with head at 4
     ADD_INP_STR(4, "qwertyabef");
     ADD_INP_STR(3, "qwertyabc7987");
     ADD_INP_STR(2, "qwerty ");
@@ -893,7 +911,6 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     inp += curstr; //current string to match against
     size_t lenLimit = SET_LENGTH(curstr);
 
-    UInt32 hcHead = 4;
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
@@ -904,6 +921,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     Init_Buffers(son, blockSz);
 
     //Setup input stream
+    UInt32 hcHead, hcBase = 0;
     std::string curstr = "qwertyabcd";
     std::vector<std::string> matchStrs =
     { "qwerty", "qwertyabc" }; //strings we expect to get matches for
@@ -911,6 +929,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     set_match_lengths(matchStrs);
     std::string inp;
     int om = (matchStrs.size() * 2) - 1;
+    son[hcBase] = 1; //start with head at 1
     ADD_INP_STR(1, "qwerty ");
     ADD_INP_STR(7, "qwerty#$%$%");
     ADD_INP_STR(6, "qwertyabe");
@@ -921,7 +940,6 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     inp += curstr; //current string to match against
     size_t lenLimit = SET_LENGTH(curstr);
 
-    UInt32 hcHead = 1;
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
@@ -933,6 +951,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     Init_Buffers(son, blockSz);
 
     //Setup input stream
+    UInt32 hcHead;
     std::string curstr = "qwertyabcd";
     std::vector<std::string> matchStrs =
     { "qwertyabcd" }; //strings we expect to get matches for
@@ -952,7 +971,6 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     inp += curstr; //current string to match against
     size_t curSz = SET_LENGTH(curstr);
 
-    UInt32 hcHead = blockSz - 1;
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, curSz);
 }
 
@@ -963,6 +981,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     Init_Buffers(son, blockSz);
 
     //Setup input stream
+    UInt32 hcHead;
     std::string curstr = "qwertyabcd";
     std::vector<std::string> matchStrs =
     { "qwerty", "qwertyab", "qwertyabcd" }; //strings we expect to get matches for
@@ -988,7 +1007,6 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     inp += curstr; //current string to match against
     size_t lenLimit = SET_LENGTH(curstr);
 
-    UInt32 hcHead = blockSz - 1;
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
@@ -999,6 +1017,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     Init_Buffers(son, blockSz);
 
     //Setup input stream
+    UInt32 hcHead, hcBase = 0;
     std::string curstr = "qwertyabcd";
     std::vector<std::string> matchStrs =
     { "qwerty", "qwertyab", "qwertyabcd" }; //strings we expect to get matches for
@@ -1006,6 +1025,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     set_match_lengths(matchStrs);
     std::string inp;
     int om = (matchStrs.size() * 2) - 1;
+    son[hcBase] = 9; //start with head at 9. Do not fill all nodes
     ADD_INP_STR(9, "qwert");
     ADD_MATCH_STR(8, matchStrs[2]);
     ADD_INP_STR(7, "qwerty123");
@@ -1018,7 +1038,6 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     inp += curstr; //current string to match against
     size_t lenLimit = SET_LENGTH(curstr);
 
-    UInt32 hcHead = blockSz - 1;
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 

@@ -28,6 +28,7 @@
 
 #include "LzFind.h"
 #include "LzHash.h"
+#include "algos/common/aoclHashChain.h"
 
 #define kBlockMoveAlign       (1 << 7)    // alignment for memmove()
 #define kBlockSizeAlign       (1 << 16)   // alignment for block allocation
@@ -1307,10 +1308,10 @@ UInt32 * GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byt
 exit_point:
 
 #define AOCL_HC_GETMATCHES_SPEC(HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) { \
-    UInt32 hcInsert = hcHead; /* ptr where pos must be inserted after search is completed. Next head of chain */ \
-    hcHead = CIRC_INC_HEAD(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX); \
-    UInt32 hcStart = hcHead; /* current head of chain */ \
-    UInt32 curMatch = son[hcHead]; \
+    UInt32 curMatch, hcCur; \
+    hcCur = hcHeadPos; /* set current node to head of chain */ \
+    AOCL_COMMON_CEHCFIX_GET(son, 0, hcCur, 0, curMatch, \
+        HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) \
     UInt32 delta = (pos - curMatch); \
     unsigned checkLen = maxLen - 1; /* to ensure cur does not access beyond lenLimit */ \
     \
@@ -1345,7 +1346,7 @@ exit_point:
                             d += 2; \
                             if (len == lenLimit) /* length of match reached lenlimit, no need to match further */ \
                             { \
-                                son[hcInsert] = pos; /* add pos to beginning of hash chain */ \
+                                AOCL_COMMON_CEHCFIX_INSERT(son, 0, hcHeadPos, 0, pos, hv, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) /* add pos to beginning of hash chain */ \
                                 return d; /* return <len, dist> pairs found */ \
                             } \
                             maxLen = len; \
@@ -1357,22 +1358,15 @@ exit_point:
                 } \
             } \
             \
-            /* move to next node in chain. Next match position is consecutive */ \
-            hcHead = CIRC_INC_HEAD(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX); \
-            if (hcHead == hcStart) \
-                break; /* finished one loop */ \
-            \
-            curMatch = son[hcHead]; \
-            if (curMatch == kEmptySonValue) \
-                break; /* empty node. i.e. end of chain */ \
-            \
+            AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(son, hcCur, curMatch, \
+                HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX, kEmptySonValue, hcHeadPos) \
             delta = pos - curMatch; \
             if (delta >= _cyclicBufferSize) \
                 break;  /* match offset further than max dictionary size allowed */ \
             \
         } while (--cutValue); /* limit number of nodes in hash chain to check */ \
     } \
-    son[hcInsert] = pos; /* add pos to beginning of hash chain */ \
+    AOCL_COMMON_CEHCFIX_INSERT(son, 0, hcHeadPos, 0, pos, hv, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) /* add pos to beginning of hash chain */ \
     return d; /* return <len, dist> pairs found */ \
 }
 
@@ -1415,7 +1409,7 @@ exit_point:
 * + cache efficient hash-chain blocks
 */
 //MY_FORCE_INLINE
-static UInt32* AOCL_Hc_GetMatchesSpec_8(size_t lenLimit, UInt32 hcHead, UInt32 pos,
+static UInt32* AOCL_Hc_GetMatchesSpec_8(size_t lenLimit, UInt32 hcHeadPos, UInt32 hv, UInt32 pos,
     const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
     UInt32 cutValue, UInt32* d, unsigned maxLen)
 {
@@ -1423,7 +1417,7 @@ static UInt32* AOCL_Hc_GetMatchesSpec_8(size_t lenLimit, UInt32 hcHead, UInt32 p
 }
 
 //MY_FORCE_INLINE
-static UInt32* AOCL_Hc_GetMatchesSpec_16(size_t lenLimit, UInt32 hcHead, UInt32 pos, 
+static UInt32* AOCL_Hc_GetMatchesSpec_16(size_t lenLimit, UInt32 hcHeadPos, UInt32 hv, UInt32 pos,
     const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
     UInt32 cutValue, UInt32* d, unsigned maxLen)
 {
@@ -1807,6 +1801,8 @@ static void MatchFinder_MovePos(CMatchFinder *p)
 
 #define MF_PARAMS(p)  lenLimit, curMatch, p->pos, p->buffer, p->son, p->cyclicBufferPos, p->cyclicBufferSize, p->cutValue
 
+#define AOCL_MF_PARAMS_CEHC(p)  lenLimit, curMatch, hv, p->pos, p->buffer, p->son, p->cyclicBufferPos, p->cyclicBufferSize, p->cutValue
+
 #define SKIP_FOOTER  SkipMatchesSpec(MF_PARAMS(p)); MOVE_POS; } while (--num);
 
 #define GET_MATCHES_FOOTER_BASE(_maxLen_, func) \
@@ -1864,14 +1860,18 @@ static void AOCL_MatchFinder_MovePos(CMatchFinder* p)
   distances = func(MF_PARAMS(p), \
   distances, (UInt32)_maxLen_); AOCL_MOVE_POS_RET;
 
+#define AOCL_GET_MATCHES_FOOTER_BASE_CEHC(_maxLen_, func) \
+  distances = func(AOCL_MF_PARAMS_CEHC(p), \
+  distances, (UInt32)_maxLen_); AOCL_MOVE_POS_RET;
+
 #define AOCL_GET_MATCHES_FOOTER_BT(_maxLen_) \
   AOCL_GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_GetMatchesSpec1)
 
 #define AOCL_GET_MATCHES_FOOTER_HC_8(_maxLen_) \
-  AOCL_GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_Hc_GetMatchesSpec_8)
+  AOCL_GET_MATCHES_FOOTER_BASE_CEHC(_maxLen_, AOCL_Hc_GetMatchesSpec_8)
 
 #define AOCL_GET_MATCHES_FOOTER_HC_16(_maxLen_) \
-  AOCL_GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_Hc_GetMatchesSpec_16)
+  AOCL_GET_MATCHES_FOOTER_BASE_CEHC(_maxLen_, AOCL_Hc_GetMatchesSpec_16)
 
 #define AOCL_GET_MATCHES_FOOTER_HC(_maxLen_) \
   AOCL_GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_Hc_GetMatchesSpec)
@@ -2492,13 +2492,6 @@ void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder2 *vTable)
     if (pos == p->posLimit) AOCL_MatchFinder_CheckLimits(p); \
     }} while(num);
 
-#define ASSIGN_SLOT_HC { \
-    if (curMatch == kEmptyHashValue) /* Hash does not have a slot assigned yet */ { \
-      curMatch = bucket+1; /* no circ inc here. At least 1 node for head and 1 for dict must exist */ \
-      p->son[curMatch] = 0; \
-    } \
-}
-
 /* Called when: algo = !btMode, cacheEfficientSearch = 1
 * HASH_CHAIN_SLOT_SZ: HASH_CHAIN_SLOT_SZ_8 (level < HASH_CHAIN_16_LEVEL), HASH_CHAIN_SLOT_SZ_16 (level >= HASH_CHAIN_16_LEVEL)
 * AOCL_HASH_CALC: AOCL_HASH4_CALC (numHashBytes <= 4), AOCL_HASH5_CALC (numHashBytes > 4) */
@@ -2516,14 +2509,9 @@ void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder2 *vTable)
     son = p->son; \
     \
     d2 = pos - hash[h2]; \
-    UInt32 bucket = hv * HASH_CHAIN_SLOT_SZ; \
-    curMatch = son[bucket]; /* 1st pos of bucket points to head of 
-                            hash chain within respective block */  \
-    \
-    ASSIGN_SLOT_HC; /* handle 1st assignment to a block */ \
-    \
+    AOCL_COMMON_CEHCFIX_GET_HEAD(son, 0, curMatch, 0, hv, \
+        HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX, kEmptySonValue) /* update head position pointer */ \
     hash[h2] = pos; \
-    son[bucket] = CIRC_DEC_HEAD(curMatch, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX); /* set to next head position */ \
     \
     SET_mmm \
     \
@@ -2546,7 +2534,7 @@ void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder2 *vTable)
         distances[-2] = (UInt32)maxLen; \
         if (maxLen == lenLimit) \
         { \
-            p->son[curMatch] = pos; \
+            AOCL_COMMON_CEHCFIX_INSERT(son, 0, curMatch, 0, pos, hv, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) /* set pos at current head */ \
             AOCL_MOVE_POS_RET; \
         } \
         break; \
@@ -2562,14 +2550,10 @@ void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder2 *vTable)
     \
     UInt32 h2; \
     AOCL_HASH_CALC; \
-    UInt32 bucket = hv * HASH_CHAIN_SLOT_SZ; \
-    curMatch = son[bucket]; \
-    \
-    ASSIGN_SLOT_HC; /* handle 1st assignment to a block */ \
-    \
+    AOCL_COMMON_CEHCFIX_GET_HEAD(son, 0, curMatch, 0, hv, \
+        HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX, kEmptySonValue) /* update head position pointer */ \
     hash[h2] = pos; \
-    son[bucket] = CIRC_DEC_HEAD(curMatch, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX); /* set to next head position */ \
-    son[curMatch] = pos; /* set pos at current head */ \
+    AOCL_COMMON_CEHCFIX_INSERT(son, 0, curMatch, 0, pos, hv, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX) /* set pos at current head */ \
     \
     AOCL_HC_SKIP_FOOTER
 
@@ -3055,16 +3039,16 @@ UInt32 Test_Circular_Dec(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_C
     return hcHead;
 }
 
-UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 pos,
+UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 hv, UInt32 pos,
     const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
     UInt32 cutValue, UInt32* d, unsigned maxLen, int blockSz) {
     if (blockSz == 8) {
-        UInt32* du = AOCL_Hc_GetMatchesSpec_8(lenLimit, hcHead, pos, cur, son,
+        UInt32* du = AOCL_Hc_GetMatchesSpec_8(lenLimit, hcHead, hv, pos, cur, son,
             _cyclicBufferPos, _cyclicBufferSize, cutValue, d, maxLen);
         return du - d;
     }
     else {
-        UInt32* du = AOCL_Hc_GetMatchesSpec_16(lenLimit, hcHead, pos, cur, son,
+        UInt32* du = AOCL_Hc_GetMatchesSpec_16(lenLimit, hcHead, hv, pos, cur, son,
             _cyclicBufferPos, _cyclicBufferSize, cutValue, d, maxLen);
         return du - d;
     }

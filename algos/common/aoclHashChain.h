@@ -131,13 +131,13 @@ typedef size_t chain_t;
     } \
 }
 
-// set node in hash chain
-#define AOCL_COMMON_CEHCFIX_INSERT(chainTable, hashTable, hcCur, prevVal, val, hashIdx, \
+// set node in hash chain. hcHeadPos must be obtained from AOCL_COMMON_CEHCFIX_GET_HEAD().
+#define AOCL_COMMON_CEHCFIX_INSERT(chainTable, hashTable, hcHeadPos, prevVal, val, hashIdx, \
     HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX) { \
     chain_t hcBase = (chain_t)hashIdx  * HASH_CHAIN_OBJECT_SZ; /* pointer to hash chain object */ \
-    hcCur = AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(hcCur, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX); /* move to next node in the chain */ \
-    chainTable[hcCur] = val; /* set val at new node */ \
-    chainTable[hcBase] = hcCur; /* update hcHeadPos to point to the new node */ \
+    hcHeadPos = AOCL_COMMON_CEHCFIX_CIRC_DEC_HEAD(hcHeadPos, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX); /* move to next node in the chain */ \
+    chainTable[hcHeadPos] = val; /* set val at new node */ \
+    chainTable[hcBase] = hcHeadPos; /* update hcHeadPos to point to the new node */ \
 }
 
 // get val at node in hash chain
@@ -147,9 +147,11 @@ typedef size_t chain_t;
 
 // move to next node in hash chain
 #define AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcCur, val, \
-    HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyNodeValue) \
+    HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX, kEmptyNodeValue, hcHeadPos) \
     /* move to next node in chain. Next node position is consecutive */ \
     hcCur = AOCL_COMMON_CEHCFIX_CIRC_INC_HEAD(hcCur, HASH_CHAIN_OBJECT_SZ, HASH_CHAIN_MAX); \
+    if (hcCur == hcHeadPos) /* check if one loop in circular buffer got completed */ \
+        break; \
     val = chainTable[hcCur]; \
     if (val == kEmptyNodeValue) /* no entry at this node */ \
         break; /* empty node. i.e. end of chain */

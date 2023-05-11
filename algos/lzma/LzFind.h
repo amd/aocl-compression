@@ -232,7 +232,7 @@ LZMALIB_API UInt32 Test_Circular_Inc(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, U
 
 LZMALIB_API UInt32 Test_Circular_Dec(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX);
 
-LZMALIB_API UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 pos,
+LZMALIB_API UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 hv, UInt32 pos,
     const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
     UInt32 cutValue, UInt32* d, unsigned maxLen, int blockSz);
 EXTERN_C_END
