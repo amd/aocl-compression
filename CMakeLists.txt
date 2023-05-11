@@ -190,6 +190,7 @@ set (ZSTD_SRC_FILES	${ALGOS_PATH}/zstd/lib/common/zstd_common.c
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
+set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h)
 file(GLOB UTILS_SRC_FILES utils/*.c utils/*.cpp utils/*.h)
 
 #set the expected path variables
@@ -326,6 +327,7 @@ set(SRC_FILES
         ${SNAPPY_SRC_FILES}
         ${ZLIB_SRC_FILES}
         ${ZSTD_SRC_FILES}
+        ${COMMON_SRC_FILES}
 	)
 set (BENCH_PATH test)
 

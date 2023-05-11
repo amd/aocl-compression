@@ -43,6 +43,7 @@ if(NOT googletest_POPULATED)
 endif()
 
 set (GTEST_SRC_FILES ${GTEST_SRC_FILES} ${CMAKE_SOURCE_DIR}/gtest/api/api_gtest.cpp)
+set (GTEST_SRC_FILES ${GTEST_SRC_FILES} ${CMAKE_SOURCE_DIR}/gtest/common/common_gtest.cpp)
 if (NOT AOCL_EXCLUDE_BZIP2)
     set (GTEST_SRC_FILES ${GTEST_SRC_FILES} ${CMAKE_SOURCE_DIR}/gtest/bzip2/bzip2_gtest.cpp)
 else ()
