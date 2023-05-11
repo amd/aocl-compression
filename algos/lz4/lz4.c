@@ -1335,6 +1335,8 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
     LZ4_putPosition(ip, cctx->hashTable, tableType, base);
     ip++; forwardH = LZ4_hashPosition(ip, tableType);
 
+    int prevStep = 0;
+
     /* Main Loop */
     for ( ; ; ) {
         const BYTE* match;
@@ -1386,7 +1388,8 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                 assert(forwardIp - base < (ptrdiff_t)(2 GB - 1));
                 ip = forwardIp;
                 forwardIp += step;
-                step = (searchMatchNb++ >> LZ4_skipTrigger);
+
+                step = (searchMatchNb++ >> LZ4_skipTrigger) + prevStep ;
 
                 if (unlikely(forwardIp > mflimitPlusOne)) goto _last_literals;
                 assert(ip < mflimitPlusOne);
@@ -1446,6 +1449,15 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                     ipPrevData.u = *(reg_t*)(ip - prevOffset);
 #endif
                     if (maybe_extMem) offset = current - matchIndex;
+
+                    if (step > AOCL_LZ4_MATCH_SKIPPING_THRESHOLD)                     
+                    {
+                        prevStep = (step / 2) - 1 ;   /* for the next sequence `step` starts from `half of current step` instead of 1. */
+                    }
+                    else{
+                        prevStep = 0;                 /* for the next sequence `step` starts from 1. */
+                    }
+
                     break;   /* match found */
                 }
 

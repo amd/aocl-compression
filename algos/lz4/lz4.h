@@ -141,6 +141,7 @@ LZ4LIB_API const char* LZ4_versionString (void);
 #define AOCL_LZ4_OPT
 #define AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
 //#define AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
+#define AOCL_LZ4_MATCH_SKIPPING_THRESHOLD 3
 
 /*-************************************
 *  Tuning parameter
