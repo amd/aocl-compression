@@ -96,8 +96,10 @@ public:
     // Destructor function.
     ~TestLoad_1()
     {
-        free(orig_data);
-        free(compressed_data);
+        if(orig_data != NULL) 
+            free(orig_data);
+        if(compressed_data != NULL)
+            free(compressed_data);
     }
 };
 
@@ -279,8 +281,10 @@ protected:
     // Destructor function of `LLZ4_compress_HC_extStateHC`.
     ~LZ4HC_LZ4_compress_HC_extStateHC()
     {
-        free(dst);
-        free(src);
+        if(dst != NULL)
+            free(dst);
+        if(src != NULL)
+            free(src);
     }
 };
 
@@ -658,11 +662,20 @@ TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_4) // 
     free(dict);
 }
 
-TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_5) // dictSize_0
+TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_5) // dictSize <= 4
 {
-    int dictSize = 0;
-    
-    EXPECT_EQ(LZ4_loadDictHC(stream, NULL, dictSize), -1);
+    int dictSize = 65560;
+    char *dict = (char *)malloc(dictSize);
+    //Initialize a dictionary.
+    for (int i = 0; i < dictSize; i++)
+    {
+        dict[i] = i % 255;
+    }
+
+    dictSize = 3;
+
+    EXPECT_EQ(LZ4_loadDictHC(stream, dict, dictSize), 3);
+    free(dict);
 }
 /*********************************************
  * "End" of LZ4_loadDictHC Tests

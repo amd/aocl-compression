@@ -336,6 +336,8 @@ LZMALIB_API SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* p
 #ifdef AOCL_LZMA_UNIT_TEST
 LZMALIB_API void Test_LzmaEncProps_Normalize_Dyn(CLzmaEncProps* p);
 LZMALIB_API SRes Test_SetProps_Dyn(CLzmaEncHandle pp, const CLzmaEncProps* props);
+LZMALIB_API SRes Test_Validate_NumFastBytes(CLzmaEncHandle pp, unsigned numFastBytes);
+LZMALIB_API SRes Test_Validate_NumHashBytes(CLzmaEncHandle pp, unsigned numHashBytes);
 LZMALIB_API UInt64 Test_SetDataSize(CLzmaEncHandle pp, UInt64 expectedDataSize);
 LZMALIB_API SRes Test_WriteProperties(CLzmaEncHandle pp, Byte* props, SizeT* size, UInt32 dictSize);
 LZMALIB_API unsigned Test_IsWriteEndMark(CLzmaEncHandle pp, unsigned wem);

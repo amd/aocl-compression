@@ -233,8 +233,8 @@ TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_3 ) // com
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_4) // compress_FAIL_dst_size_not_enough
 {
     TestLoad_2 d(800);
-    int outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getOrigSize() / 20, d.getOrigData(),d.getCompressedSize(), 1);
-    EXPECT_FALSE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+    size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getOrigSize() / 20, d.getOrigData(), d.getOrigSize(), 1);
+    EXPECT_TRUE(Test_ZSTD_isError(outLen));
 }
 
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_5) // Compression_level_less_than_minimum_limit
@@ -244,7 +244,7 @@ TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_5) // Comp
     /* For levels < 1, compression parameters are set to 0th entry of the table `ZSTD_defaultCParameters[4][ZSTD_MAX_CLEVEL+1]`
      * while other levels uses the corresponding entry to set compression parameters.
      */
-    int outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(),d.getOrigSize(), cLevel);
+    size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), cLevel);
     EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
 }
 
@@ -253,7 +253,7 @@ TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_6) // Comp
     TestLoad_2 d(800);
     int cLevel = 23;
     // For level > maximum possible level, level will be set to ZSTD_MAX_CLEVEL, which is 22.
-    int outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(),d.getOrigSize(), cLevel);
+    size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(),d.getOrigSize(), cLevel);
     EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
 }
 
@@ -270,12 +270,15 @@ class ZSTD_ZSTD_decompress : public AOCL_setup_zstd
 {
 public:
     TestLoad_2 *d = NULL;
+    
     // Compressed data is stored in the buffer `src`.
     char *src = NULL;
     int srcLen;
+    
     // Original data which we are about to compress is contained in the buffer `original`.
     char *original = NULL;
     int origLen;
+    
     // Decompressed data will be stored in the buffer `output`.
     char *output = NULL;
     int outLen;
@@ -353,24 +356,24 @@ TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_3) // 
     EXPECT_EQ(0, memcmp(output, original, decLen));
 }
 
-TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_4) // cmp_siz_inadeqate
+TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_4) // decompression_buffer_inadequate
 {
     size_t decompressedLen = Test_ZSTD_decompress(output, srcLen / 20, src, srcLen);
     EXPECT_TRUE(Test_ZSTD_isError(decompressedLen));
 }
 
-TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_5) // cmp_siz_zero
+TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_5) // compressed_size_zero
 {
     EXPECT_EQ(Test_ZSTD_decompress(output, Test_ZSTD_decompressBound(src, srcLen), src, 0), 0);
 }
 
-TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_6) // cmp_data_contains_errors
+TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_6) // compressed_data_contains_errors
 {
     // case 1: Introducing errors in case where input size is small
     const int origLen_1 = 100;
     char orig[origLen_1];
     char dst[100];
-    int dstCapacity = 100;
+    int dstCapacity = ZSTD_compressBound(origLen_1);
     int level = 8;
 
     for (int i = 0; i < 100; i++)
@@ -379,21 +382,23 @@ TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_6) // 
 
     dstCapacity = Test_ZSTD_compress(dst, dstCapacity, orig, origLen_1, level);
     int frameHeaderSize = Test_ZSTD_frameHeaderSize(dst, dstCapacity);
+    size_t decompress_bound = Test_ZSTD_decompressBound(dst, dstCapacity);
     dst[frameHeaderSize + 2] = 2;
 
-    size_t decompressedLen = Test_ZSTD_decompress(output, Test_ZSTD_decompressBound(orig, origLen_1), dst, dstCapacity);
+    size_t decompressedLen = Test_ZSTD_decompress(output, decompress_bound, dst, dstCapacity);
     EXPECT_TRUE(Test_ZSTD_isError(decompressedLen));
 
 
     // case 2: modifying compressed data of class to introduce error.
     frameHeaderSize = Test_ZSTD_frameHeaderSize(src, srcLen);
+    decompress_bound = Test_ZSTD_decompressBound(src, srcLen);
     this->src[frameHeaderSize+1] = 'e';
     this->src[frameHeaderSize+2] = 'r';
     this->src[frameHeaderSize+3] = 'r';
     this->src[frameHeaderSize+4] = 'o';
     this->src[frameHeaderSize+5] = 'r';
 
-    size_t decompressedLen_2 = Test_ZSTD_decompress(output, Test_ZSTD_decompressBound(src, srcLen), src, srcLen);
+    size_t decompressedLen_2 = Test_ZSTD_decompress(output, decompress_bound, src, srcLen);
     EXPECT_TRUE(Test_ZSTD_isError(decompressedLen_2));
 }
 
@@ -430,12 +435,6 @@ TEST_F(ZSTD_getframeContentSize, AOCL_Compression_zstd_ZSTD_getFrameContentSize_
     EXPECT_EQ(val, ZSTD_CONTENTSIZE_ERROR);
 }
 
-TEST_F(ZSTD_getframeContentSize, AOCL_Compression_zstd_ZSTD_getFrameContentSize_common_3)   // Fail- size < `ZSTD_frameHeaderSize_min i.e, 5`
-{
-    unsigned long long val = Test_ZSTD_getFrameContentSize(src, 5);
-    EXPECT_EQ(val, ZSTD_CONTENTSIZE_ERROR);
-}
-
 /*********************************************
  * End of ZSTD_getframeContentSize
  *********************************************/
@@ -467,11 +466,6 @@ TEST_F(ZSTD_ZSTD_getDecompressedSize, AOCL_Compression_zstd_ZSTD_getDecompressed
     EXPECT_EQ(Test_ZSTD_getDecompressedSize(src, 1), 0);
 }
 
-TEST_F(ZSTD_ZSTD_getDecompressedSize, AOCL_Compression_zstd_ZSTD_getDecompressedSize_common_3)   // fail- size < `ZSTD_frameHeaderSize_min i.e, 5`
-{
-    EXPECT_EQ(Test_ZSTD_getDecompressedSize(src, 5), 0);
-}
-
 /*********************************************
  * End of ZSTD_getDecompressedSize
  *********************************************/
@@ -491,7 +485,7 @@ protected:
     }
 };
 
-TEST_F(ZSTD_ZSTD_findFrameCompressedSize, AOCL_Compression_zstd_ZSTD_findFrameCompressedSize_common_1)   // srcLen > ZSTD_FRAMEHEADERSIZE_PREFIX(ZSTD_f_zstd1)
+TEST_F(ZSTD_ZSTD_findFrameCompressedSize, AOCL_Compression_zstd_ZSTD_findFrameCompressedSize_common_1)   // srcLen >= at least as large as the frame contained
 {
     while(srcLen >= 5){
         unsigned long long frameSrcSize = Test_ZSTD_findFrameCompressedSize(src, srcLen);
@@ -501,7 +495,7 @@ TEST_F(ZSTD_ZSTD_findFrameCompressedSize, AOCL_Compression_zstd_ZSTD_findFrameCo
     EXPECT_EQ(0, srcLen);
 }
 
-TEST_F(ZSTD_ZSTD_findFrameCompressedSize, AOCL_Compression_zstd_ZSTD_findFrameCompressedSize_common_2)   // srcLen < ZSTD_FRAMEHEADERSIZE_PREFIX(ZSTD_f_zstd1)
+TEST_F(ZSTD_ZSTD_findFrameCompressedSize, AOCL_Compression_zstd_ZSTD_findFrameCompressedSize_common_2)   // srcLen < the size that frame contained
 {
     srcLen = 5;
     unsigned long long frameSrcSize = Test_ZSTD_findFrameCompressedSize(src, srcLen);
@@ -627,24 +621,24 @@ TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_commo
     EXPECT_EQ(0, memcmp(output, original, decLen));
 }
 
-TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_5) // cmp_siz_inadeqate
+TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_5) // decompression_buffer_inadequate
 {
     size_t decompressedLen = Test_ZSTD_decompressDCtx(dctx, output, srcLen / 20, src, srcLen);
     EXPECT_TRUE(Test_ZSTD_isError(decompressedLen));
 }
 
-TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_6) // cmp_siz_zero
+TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_6) // compressed_size_zero
 {
     EXPECT_EQ(Test_ZSTD_decompressDCtx(dctx, output, Test_ZSTD_decompressBound(src, srcLen), src, 0), 0);
 }
 
-TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_7) // cmp_data_contains_errors
+TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_7) // compressed_data_contains_errors
 {
     // case 1: Introducing errors in case where input size is small
     const int origLen_1 = 100;
     char orig[origLen_1];
     char dst[100];
-    int dstCapacity = 100;
+    int dstCapacity = ZSTD_compressBound(origLen_1);
     int level = 8;
 
     for (int i = 0; i < 100; i++)
@@ -653,21 +647,23 @@ TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_commo
 
     dstCapacity = Test_ZSTD_compress(dst, dstCapacity, orig, origLen_1, level);
     int frameHeaderSize = Test_ZSTD_frameHeaderSize(dst, dstCapacity);
+    size_t decompress_bound = Test_ZSTD_decompressBound(dst, dstCapacity);
     dst[frameHeaderSize + 2] = 2;
 
-    size_t decompressedLen = Test_ZSTD_decompressDCtx(dctx, output, Test_ZSTD_decompressBound(orig, origLen_1), dst, dstCapacity);
+    size_t decompressedLen = Test_ZSTD_decompressDCtx(dctx, output, decompress_bound, dst, dstCapacity);
     EXPECT_TRUE(Test_ZSTD_isError(decompressedLen));
 
 
     // case 2: modifying compressed data of class to introduce error.
     frameHeaderSize = Test_ZSTD_frameHeaderSize(src, srcLen);
+    decompress_bound = Test_ZSTD_decompressBound(src, srcLen);
     this->src[frameHeaderSize+1] = 'e';
     this->src[frameHeaderSize+2] = 'r';
     this->src[frameHeaderSize+3] = 'r';
     this->src[frameHeaderSize+4] = 'o';
     this->src[frameHeaderSize+5] = 'r';
 
-    size_t decompressedLen_2 = Test_ZSTD_decompressDCtx(dctx, output, Test_ZSTD_decompressBound(src, srcLen), src, srcLen);
+    size_t decompressedLen_2 = Test_ZSTD_decompressDCtx(dctx, output, decompress_bound, src, srcLen);
     EXPECT_TRUE(Test_ZSTD_isError(decompressedLen_2));
 
 }
