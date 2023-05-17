@@ -271,17 +271,17 @@ public:
 
 TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_1) // src_NULL
 {
-    EXPECT_EQ(LZ4_decompress_safe(NULL, output, srcLen, LZ4_compressBound(srcLen)), -1);
+    EXPECT_EQ(LZ4_decompress_safe(NULL, output, srcLen, origLen), -1);
 }
 
 TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_2) // dst_NULL
 {
-    EXPECT_EQ(LZ4_decompress_safe(src, NULL, srcLen, LZ4_compressBound(srcLen)), -1);
+    EXPECT_EQ(LZ4_decompress_safe(src, NULL, srcLen, origLen), -1);
 }
 
 TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_3) // successfull_decompression
 {
-    int decLen = LZ4_decompress_safe(src, output, srcLen, LZ4_compressBound(srcLen));
+    int decLen = LZ4_decompress_safe(src, output, srcLen, origLen);
     ASSERT_EQ(origLen, decLen);
     EXPECT_EQ(0, memcmp(output, original, decLen));
 }
@@ -293,7 +293,7 @@ TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_4) 
 
 TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_5) // cmp_siz_zero
 {
-    EXPECT_EQ(LZ4_decompress_safe(src, output, 0, LZ4_compressBound(srcLen)), -1);
+    EXPECT_EQ(LZ4_decompress_safe(src, output, 0, origLen), -1);
 }
 
 TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_6 ) // cmp_data_contains_errors
@@ -309,7 +309,7 @@ TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_6 )
     dstCapacity = LZ4_compress_default(orig, dst, origLen, dstCapacity);
     dst[2] = 2;
 
-    EXPECT_LT(LZ4_decompress_safe(dst, output, dstCapacity, LZ4_compressBound(srcLen)), 0);
+    EXPECT_LT(LZ4_decompress_safe(dst, output, dstCapacity, origLen), 0);
 }
 
 /*********************************************
@@ -807,7 +807,7 @@ TEST(LZ4_createStream, AOCL_Compression_lz4_LZ4_createStream_common_1) // LZ4_fr
  *********************************************/
 
 /*********************************************
- * "Begin" of LZ4_createStream
+ * "Begin" of LZ4_freeStream
  *********************************************/
 
 TEST(LZ4_freeStream, AOCL_Compression_lz4_LZ4_freeStream_common_1) // NULL_ptr
@@ -823,7 +823,7 @@ TEST(LZ4_freeStream, AOCL_Compression_lz4_LZ4_freeStream_common_2) // free_legit
 }
 
 /*********************************************
- * End of LZ4_createStream
+ * End of LZ4_freeStream
  *********************************************/
 
 /*********************************************
@@ -1413,7 +1413,7 @@ TEST(LZ4_decoderRingBufferSize, AOCL_Compression_lz4_LZ4_decoderRingBufferSize_c
     EXPECT_EQ(LZ4_decoderRingBufferSize(INT_MAX), 0);
 }
 
-TEST(LZ4_decoderRingBufferSize, AOCL_Compression_lz4_LZ4_decoderRingBufferSize_common_4) // INPUT_128
+TEST(LZ4_decoderRingBufferSize, AOCL_Compression_lz4_LZ4_decoderRingBufferSize_common_4) // INPUT_100000
 {
     EXPECT_EQ(LZ4_decoderRingBufferSize(100000), 165550);
 }
@@ -1707,6 +1707,8 @@ TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
 {
     srcLen = LZ4_compress_default(original, src, origLen, srcLen);
     EXPECT_EQ(LZ4_decompress_safe_usingDict(src, output, srcLen, outLen, NULL, 0), origLen);
+
+    EXPECT_EQ(memcmp(output, original, origLen), 0);
 }
 
 TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_usingDict_common_4) // PassUsingDict

@@ -3534,7 +3534,8 @@ static void LzmaEnc_Construct(CLzmaEnc *p)
 
 CLzmaEncHandle LzmaEnc_Create(ISzAllocPtr alloc)
 {
-  void *p;
+  void *p = NULL;
+  if (alloc == NULL) return p;
   p = ISzAlloc_Alloc(alloc, sizeof(CLzmaEnc));
   if (p)
     LzmaEnc_Construct((CLzmaEnc *)p);
@@ -4263,7 +4264,7 @@ SRes LzmaEnc_Encode(CLzmaEncHandle pp, ISeqOutStream *outStream, ISeqInStream *i
 
 SRes LzmaEnc_WriteProperties(CLzmaEncHandle pp, Byte *props, SizeT *size)
 {
-  if (*size < LZMA_PROPS_SIZE)
+  if (pp == NULL || props == NULL || size == NULL || *size < LZMA_PROPS_SIZE)
     return SZ_ERROR_PARAM;
   *size = LZMA_PROPS_SIZE;
   {
@@ -4306,7 +4307,7 @@ unsigned LzmaEnc_IsWriteEndMark(CLzmaEncHandle pp)
 SRes LzmaEnc_MemEncode(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
-  if (src == NULL || srcLen == 0 || dest == NULL)
+  if (pp == NULL || src == NULL || srcLen == 0 || dest == NULL || destLen == NULL)
       return SZ_ERROR_PARAM;
 
   SRes res;
@@ -4481,4 +4482,21 @@ SRes Test_SetProps_Dyn(CLzmaEncHandle pp, const CLzmaEncProps* props) {
 #endif
     return res;
 }
+
+SRes Test_Validate_NumFastBytes(CLzmaEncHandle pp, unsigned numFastBytes) {
+    CLzmaEnc* p = (CLzmaEnc*)pp;
+    if (p->numFastBytes == numFastBytes)
+        return SZ_OK;
+    else
+        return SZ_ERROR_DATA;
+}
+
+SRes Test_Validate_NumHashBytes(CLzmaEncHandle pp, unsigned numHashBytes) {
+    CLzmaEnc* p = (CLzmaEnc*)pp;
+    if (p->matchFinderBase.numHashBytes == numHashBytes)
+        return SZ_OK;
+    else
+        return SZ_ERROR_DATA;
+}
+
 #endif

@@ -279,7 +279,7 @@ bool checkUncompressedLength(string compressed, uint32_t *length)
 
 // Append a string `literal` to an existing compressed string pointed
 // by the pointer `dst` in snappy compressed format.
-void AppendLiteral(std::string *dst, const std::string &literal)
+void AppendLiteral(std::string &dst, const std::string &literal)
 {
     if (literal.empty())
         return;
@@ -287,7 +287,7 @@ void AppendLiteral(std::string *dst, const std::string &literal)
     if (n < 60)
     {
         // Fit length in tag byte
-        dst->push_back(0 | (n << 2));
+        dst.push_back(0 | (n << 2));
     }
     else
     {
@@ -299,17 +299,17 @@ void AppendLiteral(std::string *dst, const std::string &literal)
             number[count++] = n & 0xff;
             n >>= 8;
         }
-        dst->push_back(0 | ((59 + count) << 2));
-        *dst += std::string(number, count);
+        dst.push_back(0 | ((59 + count) << 2));
+        dst.append(std::string(number, count));
     }
-    *dst += literal;
+    dst.append(literal);
 }
 
 // This function inserts data into a compressed string pointed
 // by pointer `dst` such that, the data instructs the decompresser
 // to copy data from `offset` position from the end of the current
 // compressed string of length `length`. 
-void AppendCopy(std::string *dst, int offset, int length)
+void AppendCopy(std::string &dst, unsigned offset, int length)
 {
     while (length > 0)
     {
@@ -332,22 +332,22 @@ void AppendCopy(std::string *dst, int offset, int length)
         if ((to_copy >= 4) && (to_copy < 12) && (offset < 2048))
         {
             assert(to_copy - 4 < 8); // Must fit in 3 bits
-            dst->push_back(1 | ((to_copy - 4) << 2) | ((offset >> 8) << 5));
-            dst->push_back(offset & 0xff);
+            dst.push_back(1 | ((to_copy - 4) << 2) | ((offset >> 8) << 5));
+            dst.push_back(offset & 0xff);
         }
         else if (offset < 65536)
         {
-            dst->push_back(2 | ((to_copy - 1) << 2));
-            dst->push_back(offset & 0xff);
-            dst->push_back(offset >> 8);
+            dst.push_back(2 | ((to_copy - 1) << 2));
+            dst.push_back(offset & 0xff);
+            dst.push_back(offset >> 8);
         }
         else
         {
-            dst->push_back(3 | ((to_copy - 1) << 2));
-            dst->push_back(offset & 0xff);
-            dst->push_back((offset >> 8) & 0xff);
-            dst->push_back((offset >> 16) & 0xff);
-            dst->push_back((offset >> 24) & 0xff);
+            dst.push_back(3 | ((to_copy - 1) << 2));
+            dst.push_back(offset & 0xff);
+            dst.push_back((offset >> 8) & 0xff);
+            dst.push_back((offset >> 16) & 0xff);
+            dst.push_back((offset >> 24) & 0xff);
         }
     }
 }
@@ -371,14 +371,14 @@ pair<string, string> fourByteOffset()
     std::string compressed;
 
     SNAPPY_Gtest_Util::Append32(&compressed, length);
-    AppendLiteral(&compressed, fragment1);
+    AppendLiteral(compressed, fragment1);
     std::string src = fragment1;
     for (int i = 0; i < n2; ++i)
     {
-        AppendLiteral(&compressed, fragment2);
+        AppendLiteral(compressed, fragment2);
         src += fragment2;
     }
-    AppendCopy(&compressed, src.size(), fragment1.size());
+    AppendCopy(compressed, src.size(), fragment1.size());
     src += fragment1;
 
     return {compressed, src};
@@ -391,7 +391,6 @@ vector<pair<string, string>> uncompress_pass_cases()
     aocl_setup_snappy_test();
     vector<string> v = pass_cases();
     vector<pair<string, string>> cmpr_orig;
-    std::string compressed;
 
     for (auto &element : v)
     {
@@ -412,14 +411,37 @@ vector<pair<string, string>> uncompress_pass_cases()
 
     // Check that we do not read past end of input
     // Make a compressed string that ends with a single-byte literal
+    std::string compressed;
     SNAPPY_Gtest_Util::Append32(&compressed, 1);
-    AppendLiteral(&compressed, "x");
+    AppendLiteral(compressed, "x");
     // AOCL_Compression_snappy_Uncompress_common_15
     // AOCL_Compression_snappy_Uncompress_src_common_15
     // AOCL_Compression_snappy_UncompressAsMuchAsPossible_common_15
     // AOCL_Compression_snappy_RawUncompress_common_15
     // AOCL_Compression_snappy_RawUncompress_src_common_15
     cmpr_orig.push_back({compressed, "x"});
+
+    // Test for Copies 01, 10 and 11.
+    compressed.clear();
+    SNAPPY_Gtest_Util::Append32(&compressed, 65547); //total size to alloc for compressed data: 3+2+65540+2
+    string original = "abc";
+    AppendLiteral(compressed, original); //literal [abc]
+    AppendCopy(compressed, 3, 2); //10 copy [abc][ab]
+    original += "ab";
+    const string next10 = "ababababab";
+    // create offset > 65536 by appending more copies 
+    for (int i = 65540; i > 0; i -= 10) {
+        AppendCopy(compressed, 2, 10); //01 copies [abc][ab][ababababab]...[ababababab]
+        original += next10;
+    }
+    AppendCopy(compressed, 65540, 2); //11 copy [abc][ab][ababababab]...[ababababab][ab]
+    original += "ab";
+    // AOCL_Compression_snappy_Uncompress_common_19
+    // AOCL_Compression_snappy_Uncompress_src_common_19
+    // AOCL_Compression_snappy_UncompressAsMuchAsPossible_common_19
+    // AOCL_Compression_snappy_RawUncompress_common_19
+    // AOCL_Compression_snappy_RawUncompress_src_common_19
+    cmpr_orig.push_back({ compressed, original });
 
     return cmpr_orig;
 }
@@ -670,7 +692,7 @@ TEST_F(SNAPPY_GetUncompressedLength_source, failure_cases)
     delete src;
 }
 
-TEST_F(SNAPPY_GetUncompressedLength_source, pass_cases)
+TEST_F(SNAPPY_GetUncompressedLength_source, pass_cases_UncompressedLength)
 {
     string s = "Hello world";
     string result;
@@ -700,13 +722,13 @@ TEST(SNAPPY_RawUncompressToIOVec, IOVecSinkEdgeCases)   // AOCL_Compression_snap
 
     // A literal whose output crosses three blocks.
     // [ab] [c] [123 ] [        ] [        ]
-    AppendLiteral(&compressed, "abc123");
+    AppendLiteral(compressed, "abc123");
 
     // A copy whose output crosses two blocks (source and destination
     // segments marked).
     // [ab] [c] [1231] [23      ] [        ]
     //           ^--^   --
-    AppendCopy(&compressed, 3, 3);
+    AppendCopy(compressed, 3, 3);
 
     // A copy where the input is, at first, in the block before the output:
     //
@@ -721,7 +743,7 @@ TEST(SNAPPY_RawUncompressToIOVec, IOVecSinkEdgeCases)   // AOCL_Compression_snap
     // in the same block as the input pointer:
     // [ab] [c] [1231] [23123123] [123     ]
     //                    ^--      ^--
-    AppendCopy(&compressed, 6, 9);
+    AppendCopy(compressed, 6, 9);
 
     // Finally, a copy where the input is from several blocks back,
     // and it also crosses three blocks:
@@ -732,7 +754,7 @@ TEST(SNAPPY_RawUncompressToIOVec, IOVecSinkEdgeCases)   // AOCL_Compression_snap
     //       ^                         ^
     // [ab] [c] [1231] [23123123] [123bc12 ]
     //           ^-                     ^-
-    AppendCopy(&compressed, 17, 4);
+    AppendCopy(compressed, 17, 4);
 
     EXPECT_TRUE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), iov, ARRAYSIZE(iov)));
     EXPECT_EQ(0, memcmp(iov[0].iov_base, "ab", 2));
@@ -759,7 +781,7 @@ TEST(SNAPPY_RawUncompressToIOVec, IOVecLiteralOverflow) // AOCL_Compression_snap
     // We are constructing a compressed string of length 8.
     SNAPPY_Gtest_Util::Append32(&compressed, 8);
 
-    AppendLiteral(&compressed, "12345678");
+    AppendLiteral(compressed, "12345678");
 
     // Total length of iovec is 7 but uncompressed length is 8 so overflow occurs.
     EXPECT_FALSE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), iov, ARRAYSIZE(iov)));
@@ -782,8 +804,8 @@ TEST(SNAPPY_RawUncompressToIOVec, IOVecCopyOverflow)    // AOCL_Compression_snap
     // We are constructing a compressed string of length 8.
     SNAPPY_Gtest_Util::Append32(&compressed, 8);
 
-    AppendLiteral(&compressed, "123");
-    AppendCopy(&compressed, 3, 5);
+    AppendLiteral(compressed, "123");
+    AppendCopy(compressed, 3, 5);
 
     // Total length of iovec is 7 but uncompressed length is 8 so overflow occurs.
     EXPECT_FALSE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), iov, ARRAYSIZE(iov)));
@@ -803,10 +825,10 @@ TEST(SNAPPY_RawUncompressToIOVec_source, fail_cases)
     iov_init(iov, kLengths, ARRAYSIZE(kLengths));
 
     SNAPPY_Gtest_Util::Append32(&compressed, 22);
-    AppendLiteral(&compressed, "abc123");
-    AppendCopy(&compressed, 3, 3);
-    AppendCopy(&compressed, 6, 9);
-    AppendCopy(&compressed, 17, 4);
+    AppendLiteral(compressed, "abc123");
+    AppendCopy(compressed, 3, 3);
+    AppendCopy(compressed, 6, 9);
+    AppendCopy(compressed, 17, 4);
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
 
     EXPECT_FALSE(snappy::RawUncompressToIOVec(NULL, iov, ARRAYSIZE(iov)));  // AOCL_Compression_snappy_RawUncompressToIoVec_src_4
@@ -828,10 +850,10 @@ TEST(SNAPPY_RawUncompressToIOVec, fail_cases)
     iov_init(iov, kLengths, ARRAYSIZE(kLengths));
     
     SNAPPY_Gtest_Util::Append32(&compressed, 22);
-    AppendLiteral(&compressed, "abc123");
-    AppendCopy(&compressed, 3, 3);
-    AppendCopy(&compressed, 6, 9);
-    AppendCopy(&compressed, 17, 4);
+    AppendLiteral(compressed, "abc123");
+    AppendCopy(compressed, 3, 3);
+    AppendCopy(compressed, 6, 9);
+    AppendCopy(compressed, 17, 4);
 
     EXPECT_FALSE(snappy::RawUncompressToIOVec(NULL, compressed.size(), iov, ARRAYSIZE(iov)));               //  AOCL_Compression_snappy_RawUncompressToIoVec_common_4
     EXPECT_FALSE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), NULL, ARRAYSIZE(iov))); //  AOCL_Compression_snappy_RawUncompressToIoVec_common_5
@@ -859,13 +881,13 @@ TEST(SNAPPY_RawUncompressToIOVec_source, IOVecSinkEdgeCases)    //  AOCL_Compres
 
     // A literal whose output crosses three blocks.
     // [ab] [c] [123 ] [        ] [        ]
-    AppendLiteral(&compressed, "abc123");
+    AppendLiteral(compressed, "abc123");
 
     // A copy whose output crosses two blocks (source and destination
     // segments marked).
     // [ab] [c] [1231] [23      ] [        ]
     //           ^--^   --
-    AppendCopy(&compressed, 3, 3);
+    AppendCopy(compressed, 3, 3);
 
     // A copy where the input is, at first, in the block before the output:
     //
@@ -880,7 +902,7 @@ TEST(SNAPPY_RawUncompressToIOVec_source, IOVecSinkEdgeCases)    //  AOCL_Compres
     // in the same block as the input pointer:
     // [ab] [c] [1231] [23123123] [123     ]
     //                    ^--      ^--
-    AppendCopy(&compressed, 6, 9);
+    AppendCopy(compressed, 6, 9);
 
     // Finally, a copy where the input is from several blocks back,
     // and it also crosses three blocks:
@@ -891,7 +913,7 @@ TEST(SNAPPY_RawUncompressToIOVec_source, IOVecSinkEdgeCases)    //  AOCL_Compres
     //       ^                         ^
     // [ab] [c] [1231] [23123123] [123bc12 ]
     //           ^-                     ^-
-    AppendCopy(&compressed, 17, 4);
+    AppendCopy(compressed, 17, 4);
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
 
     EXPECT_TRUE(snappy::RawUncompressToIOVec(src, iov, ARRAYSIZE(iov)));
@@ -917,7 +939,7 @@ TEST(SNAPPY_RawUncompressToIOVec_source, IOVecLiteralOverflow)  // AOCL_Compress
 
     // We are constructing a compressed string of length 8.
     SNAPPY_Gtest_Util::Append32(&compressed, 8);
-    AppendLiteral(&compressed, "12345678");
+    AppendLiteral(compressed, "12345678");
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
 
     // Total length of iovec is 7 but uncompressed length is 8 so overflow occurs.
@@ -939,8 +961,8 @@ TEST(SNAPPY_RawUncompressToIOVec_source, IOVecCopyOverflow) //  AOCL_Compression
 
     // We are constructing a compressed string of length 8.
     SNAPPY_Gtest_Util::Append32(&compressed, 8);
-    AppendLiteral(&compressed, "123");
-    AppendCopy(&compressed, 3, 5);
+    AppendLiteral(compressed, "123");
+    AppendCopy(compressed, 3, 5);
 
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
 
@@ -1049,7 +1071,7 @@ TEST_F(SNAPPY_Uncompress_f, pass_case) // AOCL_Compression_snappy_Uncompress_com
     std::string uncompressed;
 
     SNAPPY_Gtest_Util::Append32(&compressed, 1);
-    AppendLiteral(&compressed, "x");
+    AppendLiteral(compressed, "x");
     string c(compressed);
 
     EXPECT_TRUE(snappy::Uncompress(c.data(), c.size(), &uncompressed));
@@ -1338,11 +1360,11 @@ TEST_P(SNAPPY_Compress_, using_source)
     EXPECT_TRUE(snappy::Uncompress(src, sink));
     EXPECT_EQ(uncompressed, input);
 
-    free(source);
-    free(c);
-    delete compressed;
     delete src;
     delete sink;
+    delete compressed;
+    free(c);
+    free(source);
 }
 
 class SNAPPY_Compress_using_source : public AOCL_setup_snappy {
@@ -1403,9 +1425,9 @@ TEST_P(SNAPPY_RawCompress_, pass_cases)
     EXPECT_TRUE(snappy::Uncompress(src, sink));
     EXPECT_EQ(uncompressed, input);
 
-    free(c);
     delete src;
     delete sink;
+    free(c);
 }
 
 class SNAPPY_RawCompress : public AOCL_setup_snappy {
@@ -1418,7 +1440,7 @@ TEST_F(SNAPPY_RawCompress, fail_case1)    // AOCL_Compression_snappy_RawCompress
 
     RawCompress(NULL, 0, compressed, &c_len);
 
-    EXPECT_EQ(c_len, -1);
+    EXPECT_EQ(c_len, (size_t)(-1));
 }
 
 TEST_F(SNAPPY_RawCompress, fail_case2)    // AOCL_Compression_snappy_RawCompress_common_6
@@ -1428,7 +1450,7 @@ TEST_F(SNAPPY_RawCompress, fail_case2)    // AOCL_Compression_snappy_RawCompress
 
     RawCompress(src, 10, NULL, &c_len);
 
-    EXPECT_EQ(c_len, -1);
+    EXPECT_EQ(c_len, (size_t)(-1));
 }
 
 TEST_F(SNAPPY_RawCompress, fail_case3)    // AOCL_Compression_snappy_RawCompress_common_7

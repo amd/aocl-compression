@@ -1536,6 +1536,9 @@ When the decoder lookahead, and the lookahead symbol is not end_marker, we have 
 SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* srcLen,
     ELzmaFinishMode finishMode, ELzmaStatus* status)
 {
+    if (p == NULL || src == NULL || srcLen == NULL || status == NULL)
+        return SZ_ERROR_PARAM;
+
     SizeT inSize = *srcLen;
     (*srcLen) = 0;
     *status = LZMA_STATUS_NOT_SPECIFIED;
@@ -1882,6 +1885,9 @@ static SRes LzmaDec_AllocateProbs2(CLzmaDec* p, const CLzmaProps* propNew, ISzAl
 
 SRes LzmaDec_AllocateProbs(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAllocPtr alloc)
 {
+    if (p == NULL || props == NULL || alloc == NULL)
+        return SZ_ERROR_PARAM;
+
     CLzmaProps propNew;
     RINOK(LzmaProps_Decode(&propNew, props, propsSize));
     RINOK(LzmaDec_AllocateProbs2(p, &propNew, alloc));
@@ -1891,6 +1897,9 @@ SRes LzmaDec_AllocateProbs(CLzmaDec* p, const Byte* props, unsigned propsSize, I
 
 SRes LzmaDec_Allocate(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAllocPtr alloc)
 {
+    if (p == NULL || props == NULL || alloc == NULL)
+        return SZ_ERROR_PARAM;
+
     CLzmaProps propNew;
     SizeT dicBufSize;
     RINOK(LzmaProps_Decode(&propNew, props, propsSize));
