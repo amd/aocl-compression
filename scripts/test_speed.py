@@ -123,8 +123,8 @@ def remove_file_folder(path):
 def get_percentage_inc_dec(first_num, second_num):
     try:
         return ((first_num / second_num) - 1) * 100
-    except ZeroDivisionError as e:
-        return error + str(e)
+    except ZeroDivisionError:
+        return 0
 
 # Get Geometric mean
 def geo_mean(itr):
