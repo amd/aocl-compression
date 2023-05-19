@@ -68,7 +68,7 @@ option (AOCL_TEST_COVERAGE "Enable GTest and AOCL test bench based CTest suite (
 option (BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)
 option (ZLIB_DEFLATE_FAST_MODE_2 "Enable optimization for deflate fast using Z_FIXED strategy (Disabled by default)" OFF)
 option (ZLIB_DEFLATE_FAST_MODE_3 "Enable ZLIB deflate quick strategy (Disabled by default)" OFF)
-option (AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 "Enable LZ4 match skipping optimization strategy-1 based on a larger base step size (Enabled by default)" ON)
+option (AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 "Enable LZ4 match skipping optimization strategy-1 based on a larger base step size (Disabled by default)" OFF)
 option (AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2 "Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1 (Disabled by default)" OFF)
 
 if(ZLIB_DEFLATE_FAST_MODE_2 AND ZLIB_DEFLATE_FAST_MODE_3)
