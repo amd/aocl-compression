@@ -554,11 +554,11 @@ if __name__ == '__main__':
         
     # Linux specific library configuration and installation commands with default flags
     compression_cmds = {
-        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIBS=OFF -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
+        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
         'install_cmd': 'cmake --build build -v -j --target uninstall --target install'}
     # Windows specific library configuration and installation commands with default flags
     compression_cmds_windows = {
-        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
+        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
         'install_cmd': 'cmake --build ./build --config Release --target INSTALL'
     }
                 
@@ -569,8 +569,17 @@ if __name__ == '__main__':
         """
         # Add all the optional flags if specified by the user
         for flag in optionalFlags:
-            cmds["config_cmd"] = cmds["config_cmd"] + \
-                " " + "-D{}".format(flag)
+            # Handle the duplication of the configuration flags 
+            if flag not in cmds["config_cmd"]:
+                if flag.split("=")[0] in cmds["config_cmd"]: 
+                    flag_input = 'ON'
+                    if flag.split("=")[1] == 'ON':
+                        flag_input = 'OFF'
+                    # Replace the configuration flags based on user input
+                    cmds["config_cmd"] = cmds["config_cmd"].replace(flag.split("=")[0] + '=' + flag_input, flag)
+                else:
+                    cmds["config_cmd"] = cmds["config_cmd"] + " " + "-D{}".format(flag)   
+
         print("\nConfiguring AOCL-Compression for the installation .....\n")
         for k, val in cmds.items():
             # Check if the user passed a custom compiler path 
@@ -613,7 +622,7 @@ if __name__ == '__main__':
                 run_command(val, 'build_logs.log', True, True)
             else:
                 run_command(val, 'build_logs.log', True, False)
-
+        
     # Check if test files are accessible
     if not os.path.exists(args.dataset) and not os.path.isfile(args.dataset):
         os.mkdir(args.dataset)
@@ -677,3 +686,4 @@ if __name__ == '__main__':
                        args.optimization, args.comparewith, args.ipp)
 
     print("Compression benchmarking tests are completed. Please check the generated reports for details.")
+    
