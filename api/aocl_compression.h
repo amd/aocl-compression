@@ -28,7 +28,7 @@
  
  /** @file aocl_compression.h
  *  
- *  @brief Interface APIs and data structures of AOCL Compression library
+ *  @brief Interface APIs and data structures of AOCL-Compression library
  *
  *  This file contains the unified interface API set and associated
  *  data structure.
@@ -59,7 +59,7 @@ extern "C" {
 
 /**
  * \addtogroup API
- *  @brief Interface APIs and data structures of AOCL Compression library
+ *  @brief Interface APIs and data structures of AOCL Compression library are described in this section.
  *
  *  This file contains the unified interface API set and associated data structure.
  * @{
@@ -86,16 +86,16 @@ extern "C" {
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
  /**
-  * @brief Error codes supported by unified APIs of the AOCL Compression library.
+  * @brief Error codes supported by unified APIs of AOCL-Compression library.
   *
   * 
   */
 typedef enum
 {
-    ERR_UNSUPPORTED_METHOD = -3,     ///<compression method not supported by the library
-    ERR_EXCLUDED_METHOD,             ///<compression method excluded from this library build
-    ERR_COMPRESSION_FAILED,          ///<failure in compression/decompression
-    ERR_COMPRESSION_INVALID_OUTPUT   ///<invalid compression/decompression output
+    ERR_UNSUPPORTED_METHOD = -3,     ///<Compression method not supported by the library
+    ERR_EXCLUDED_METHOD,             ///<Compression method excluded from this library build
+    ERR_COMPRESSION_FAILED,          ///<Failure during compression/decompression
+    ERR_COMPRESSION_INVALID_OUTPUT   ///<Invalid compression/decompression output
 } aocl_error_type;
 
 /**
@@ -154,14 +154,14 @@ typedef struct
  * 
  * | Parameters | Direction   | Description |
  * |:-----------|:-----------:|:------------|
- * | \b handle     | in,out  | This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info. |
- * | \b codec_type | in      | Select the algorithm you want to use for compression, choose from aocl_compression_type. |
+ * | \b handle     | in,out  | This acts as a handle for compression and decompression. For more information, refer to aocl_compression_desc. |
+ * | \b codec_type | in      | Select the algorithm to be used for compression, choose from aocl_compression_type. |
  * 
  * 
  * @return 
  * | Result     | Description |
  * |:-----------|:------------|
- * | Success    |Numbers of bytes decompressed     |
+ * | Success    |Number of bytes decompressed      |
  * | Fail       |`ERR_COMPRESSION_FAILED`          |
  * | ^          |`ERR_COMPRESSION_INVALID_OUTPUT`  |
  */
@@ -173,8 +173,8 @@ EXPORT_SYM_DYN int64_t aocl_llc_compress(aocl_compression_desc *handle,
  * 
  * | Parameters | Direction   | Description |
  * |:-----------|:-----------:|:------------|
- * | \b handle     | in,out  | This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info. |
- * | \b codec_type | in      | Select the algorithm you want to use for compression, choose from aocl_compression_type. |
+ * | \b handle     | in,out  | This acts as a handle for compression and decompression. For more information, refer to aocl_compression_desc. |
+ * | \b codec_type | in      | Select the algorithm to be used for compression, choose from aocl_compression_type. |
  * 
  * @return 
  * | Result     | Description |
@@ -193,8 +193,8 @@ EXPORT_SYM_DYN int64_t aocl_llc_decompress(aocl_compression_desc *handle,
  * 
  * | Parameters | Direction   | Description |
  * |:-----------|:-----------:|:------------|
- * | \b handle     | in,out  | This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info. |
- * | \b codec_type | in      | Select the algorithm you want to use for compression, choose from aocl_compression_type. |
+ * | \b handle     | in,out  | This acts as a handle for compression and decompression. For more information, refer to aocl_compression_desc. |
+ * | \b codec_type | in      | Select the algorithm to be used for compression, choose from aocl_compression_type. |
  * 
  * @return 
  * | Result     | Description |
@@ -213,15 +213,15 @@ EXPORT_SYM_DYN int32_t aocl_llc_setup(aocl_compression_desc *handle,
  * 
  * | Parameters | Direction   | Description |
  * |:-----------|:-----------:|:------------|
- * | \b handle     | in,out  | This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info. |
- * | \b codec_type | in      | Select the algorithm you want to use for compression, choose from aocl_compression_type. |
+ * | \b handle     | in,out  | This acts as a handle for compression and decompression. For more information, refer to aocl_compression_desc. |
+ * | \b codec_type | in      | Select the algorithm to be used for compression, choose from aocl_compression_type. |
  * 
  * @return void 
  */
 EXPORT_SYM_DYN void aocl_llc_destroy(aocl_compression_desc *handle,
                         aocl_compression_type codec_type);
 /**
- * @brief Interface API to get compression library version string.
+ * @brief Interface API to get the compression library version string.
  * 
  * @return AOCL library version 
  */

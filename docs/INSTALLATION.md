@@ -3,20 +3,20 @@
 
 
 
-INSTALLATION
+Installation
 ------------
 
-1. Download the latest stable release from the Github repository:
+1. Download the latest stable release from the Github repository:<br>
 https://github.amd.com/AOCL/aocl-compression
-2. Install cmake on the machine where the sources are to be compiled.
-3. Make available any one of the compilers GCC or Clang on the machine.
-4. Then, use the cmake based build system to compile and generate AOCL Compression
-library and testsuite binary as explained below for Linux and Windows platforms.
+2. Install CMake on the machine where the sources are to be compiled.
+3. Make any one of the compilers GCC or Clang available on the machine.
+4. Then, use the cmake based build system to compile and generate AOCL-Compression <br>
+library and testsuite binary as explained below for Linux® and Windows® platforms.
 
-BUILDING ON LINUX
+Building on Linux
 -----------------
 
-1. To create a build directory and configure the build system in it, run the below command:
+1. To create a build directory and configure the build system in it, run the following:
    ```
     cmake -B <build directory> <CMakeList.txt filepath>
    ```
@@ -26,69 +26,69 @@ BUILDING ON LINUX
       -DCMAKE_INSTALL_PREFIX=<install path> 
       -DCMAKE_BUILD_TYPE=<Debug or Release> 
       -DBUILD_STATIC_LIBS=ON
-      -DBUILD_DOC=ON
+      <Additional Library Build Options>
    ```
 
-   To use clang compiler for the build, specify -DCMAKE_C_COMPILER=clang as the option.
-2. Compile using the below command:
+   To use clang compiler for the build, specify `-DCMAKE_C_COMPILER=clang` as the option.
+2. Compile using the following command:
    ```
    cmake --build <build directory> --target install -j
    ```
-   The library will be generated in the "lib" directory.
-   The test bench executable will be generated inside "build" directory itself.
-   The additional option 
-
-   `--target install`
-   will install the library, binary and interface header files in the installation path as specified with -DCMAKE_INSTALL_PREFIX option or in the local system path otherwise.
-   The option "-j" will run the compilation process using multiple cores.
-3. To uninstall the installed files, run the below custom command provided:
+   The library is generated in "lib" directory. <br>
+   The test bench executable is generated in "build". <br>
+   The additional option `--target install` will install the library, binary, and <br>
+   interface header files in the installation path as specified with <br>
+   `-DCMAKE_INSTALL_PREFIX` option or in the local system path. <br>
+   The option `-j` will run the compilation process using multiple cores.
+3. To uninstall the installed files, run the following custom command:
    ```
    cmake --build <build directory> --target uninstall
    ```
-   To uninstall and then install the build package, run the below command:
+   To uninstall and then install the build package, run the following command:
    ```
    cmake --build <build directory> --target uninstall --target install -j -v
    ```
    The option `-v` will print verbose build logs on the console.
 4. To clear or delete the build folder or files, manually remove the build directory or its files.
 
-Note: When using cmake with version lesser than 3.15, `-B` option is not supported,
-so the build folder needs to be created manually.
-The option `-v` is also not supported in cmake with version lesser than 3.15.
+__Note:__ When using cmake version older than 3.15, `-B` option is not supported. <br>
+So the build folder must be created manually. <br>
+The option `-v` is also not supported in cmake version older than 3.15.
 
 
-BUILDING ON WINDOWS
+Building on Windows
 -------------------
-As the prerequisites, make available Microsoft Visual Studio along with it's
-   "Desktop development with C++" toolset that includes the Clang compiler.
+As a prerequisite, make Microsoft Visual Studio® available along with <br>
+__Desktop development with C++__ toolset that includes the Clang compiler.
 
-BUILDING WITH VISUAL STUDIO IDE (GUI)
+Building with Visual Studio IDE (GUI)
 -------------------------------------
 1. Launch CMake GUI and set the locations for source package and build output.
-   Click the configure option and choose:
-   Generator as the installed Visual Studio version,
-   Platform as x64,
-   Optional toolset as ClangCl.
-   Choose additional library config and build options.
-   Configure CMAKE_INSTALL_PREFIX appropriately.
-   Click the Generate option.
-   After Microsoft Visual Studio project is generated, click "Open Project".
-   This will launch the Microsoft Visual Studio project for the source package.
-2. Build the entire solution or the required projects accordingly.
+2.  Click __Configure__ option and select:
+      - __Generator__ as the Installed Microsoft Visual Studio Version
+      - __Platform__ as __x64__
+      - __Optional toolset__ as __ClangCl__
+3. Select additional library config and build options.
+4. Configure CMAKE_INSTALL_PREFIX appropriately.
+5. Click __Generate__.
+   Microsoft Visual Studio project is generated.
+6. Click __Open Project__.
+   Microsoft Visual Studio project for the source package __is launched__.
+7. Build the entire solution or the required projects.
 
-BUILDING WITH VISUAL STUDIO IDE (command line)
+Building with Visual Studio IDE (command line)
 ----------------------------------------------
-1. Go to aocl-compression source package and create a folder named build.
+1. Go to AOCL-Compression source package and create a folder named build.
 2. Go to the build folder.
-3. Use the below command to configure and build the library and test bench executable.
+3. Use the following command to configure and build the library to test bench executable.
 ```
 cmake .. -T ClangCl -G <installed Visual Studio version> && cmake --build . --config Release --target INSTALL
 ```
-      Additional library config and build options can be passed to the above command.
+You can pass additional library configuration and build options in the command.
 
-ADDITIONAL LIBRARY BUILD OPTIONS
+Additional Library Build Options
 --------------------------------
-You can use the following additional options for configuring your build.
+Use the following additional options to configure your build:
 
 Option                              |  Description
 ------------------------------------|----------------------------------------------------------------------------------------
@@ -98,7 +98,7 @@ LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
 AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER  |  Enable 4-byte comparison for finding a potential better match candidate with Lazy2 compressor (Disabled by default)
 AOCL_TEST_COVERAGE                  |  Enable GTest and AOCL test bench based CTest suite (Disabled by default)
-BUILD_DOC                           |  Build documentation for this library (Defult value is off)
+BUILD_DOC                           |  Build documentation for this library (Disabled by default)
 ZLIB_DEFLATE_FAST_MODE_2            |  Enable optimization for deflate fast using Z_FIXED strategy. Do not combine with ZLIB_DEFLATE_FAST_MODE_3 (Disabled by default)
 ZLIB_DEFLATE_FAST_MODE_3            |  Enable ZLIB deflate quick strategy. Do not combine with ZLIB_DEFLATE_FAST_MODE_2 (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1  |  Enable LZ4 match skipping optimization strategy-1 based on a larger base step size applied for long distance search (Disabled by default)
@@ -111,49 +111,51 @@ AOCL_EXCLUDE_SNAPPY                 |  Exclude SNAPPY compression method from th
 AOCL_EXCLUDE_ZLIB                   |  Exclude ZLIB compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_ZSTD                   |  Exclude ZSTD compression method from the library build (Disabled by default)
 
-RUNNING AOCL COMPRESSION TEST BENCH ON LINUX
---------------------------------------
+Running AOCL-Compression Test Bench On Linux
+--------------------------------------------
 
 Test bench supports several options to validate, benchmark or debug the supported
 compression methods.
-It uses the unified API set to invoke the compression methods supported by AOCL Compression.
+It uses the unified API set to invoke the compression methods supported by AOCL-Compression.
 Test bench can invoke and benchmark some of the IPP's compression methods as well.
 
-* To check various options supported by the test bench, use the command:
-  `aocl_compression_bench -h`
-   Or,
+* To check various options supported by the test bench, use one of the following commands:<br>
+  `aocl_compression_bench -h`  
   `aocl_compression_bench --help`
-* To check all the supported compression methods, use the command:
+
+* To check all the supported compression methods, use the command:<br>
   `aocl_compression_bench -l`
 
-* To run the test bench with requested number of iterations, use the command:
+* To run the test bench with requested number of iterations, use the command:<br>
   `aocl_compression_bench -i`
 
-* To run the test bench and check the performance of all the supported
-compression and decompression methods for a given input file, use the command:
+* To run the test bench to check the performance of all the supported compression <br>
+   and decompression methods for a given input file, use the command:<br>
    `aocl_compression_bench -a -p <input filename>`
 
-* To run the test bench and validate the outputs from all the supported
-compression and decompression methods for a given input file, use the command:
+* To run the test bench to validate the outputs from all the supported compression <br>
+   and decompression methods for a given input file, use the command:<br>
    `aocl_compression_bench -a -t <input filename>`
 
-* To run the test bench and check the performance of a particular
-compression and decompression method for a given input file, use the command:
-   `aocl_compression_bench -ezstd:5:0 -p <input filename>`
+* To run the test bench to check the performance of a compression and decompression <br>
+   method for a given input file, use the command:<br>
+   `aocl_compression_bench -ezstd:5:0 -p <input filename>`<br>
 Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
 
 
-* To run the test bench and validate the output of a particular
-compression and decompression method for a given input file, use the command:
-   `aocl_compression_bench -ezstd:5:0 -t <input filename>`
-Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
+* To run the test bench to validate the output of a compression and decompression <br>
+   method for a given input file, use the command:<br>
+   `aocl_compression_bench -ezstd:5:0 -t <input filename>`<br>
+   Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
   
 
-
-* To run the test bench with error/debug/trace/info logs, use the command:
-   `aocl_compression_bench -a -t -v <input filename>`
-Here, `-v` can be passed with a number like v<n> that can take values: 
-	1 for Error (default), 2 for Info, 3 for Debug, 4 for Trace.
+* To run the test bench with error/debug/trace/info logs, use the command:<br>
+   `aocl_compression_bench -a -t -v <input filename>`<br>
+   Here, `-v` can be passed with a number such as v<n> that can take values:
+      * 1 for Error (default)
+      * 2 for Info
+      * 3 for Debug
+      * 4 for Trace.
 
 ---
   
@@ -161,20 +163,20 @@ To test and benchmark the performance of IPP's compression methods, use the
 test bench option `-c` along with other relevant options (as explained above).
 IPP's lz4, lz4hc, zlib and bzip2 methods are supported by the test bench.
 Check the following details for the exact steps:
-1. Set the library path environment variable (export LD_LIBRARY_PATH on
-   Linux) to point to the installed IPP library path.
-   Alternatively, one can also run vars.sh that comes along with the
+1. Set the library path environment variable (export LD_LIBRARY_PATH on <br>
+   Linux) to point to the installed IPP library path. <br>
+   Alternatively, you can also run vars.sh that comes along with the <br>
    IPP installation to setup the environment variable.
 2. Download lz4-1.9.3, zlib-1.2.11 and bzip2-1.0.8 source packages.
-3. Apply IPP's patch files as per below command:
+3. Apply IPP patch files using the command:<br>
    `patch -p1 < path to corresponding patch file>`
 
-4. Build the patched IPP lz4, zlib and bzip2 libraries as per the steps given
-   in IPP's readme files present in the corresponding patch file
+4. Build the patched IPP lz4, zlib and bzip2 libraries per the steps <br>
+   in the IPP readme files in the corresponding patch file <br>
    locations for these compression methods.
-5. Set the library path environment variable (export LD_LIBRARY_PATH on
-   Linux) to point to patched IPP lz4, zlib and bzip2 libraries.
-6. Run the test bench as given below to benchmark IPP library methods:
+5. Set the library path environment variable (export LD_LIBRARY_PATH on <br>
+   Linux) to point to the patched IPP lz4, zlib and bzip2 libraries.
+6. Run the test bench to benchmark the IPP library methods as follows:
 ```
     aocl_compression_bench -a -p -c <input filename>
     aocl_compression_bench -elz4 -p -c <input filename>
@@ -183,18 +185,18 @@ Check the following details for the exact steps:
     aocl_compression_bench -ebzip2 -p -c <input filename>
 ```
 
-RUNNING AOCL COMPRESSION TEST BENCH ON WINDOWS
-----------------------------------------
+Running AOCL-Compression Test Bench On Windows
+----------------------------------------------
 
-Test bench on Windows supports all the user options as supported on Linux
-except for the "-c" option to link and test IPP's compression methods.
-Refer the previous section on Linux to learn about the various user options.
+Test bench on Windows supports all the user options as Linux,
+except for the `-c` option to link and test IPP compression methods.
+For more information on various user options, refer to the previous section on Linux.
 To set and launch the test bench with a specific user option,
-go to project aocl_compression_bench -> Properties -> Debugging and
+go to project aocl_compression_bench -> Properties -> Debugging;
 specify the user options and the input test file.
 
-GENERATING DOCUMENTATION
+Generating Documentation
 ------------------------
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
-- Documents will be generated in HTML format inside the folder __docs/html__ , you can open the index.html file with any browser to view the documentation.
-- CMake will use the existing Doxygen if available or else it will download the respective Doxygen binaries according to the OS you are using to build the documentation.
+- Documents will be generated in HTML format in the folder __docs/html__ . Open the index.html file in any browser to view the documentation.
+- CMake will use the existing Doxygen if available. Else, it will download the required Doxygen binaries according to the respective operating system you are using to build the documentation.
