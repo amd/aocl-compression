@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
  
- /** @file api.h
+ /** @file aocl_compression.h
  *  
  *  @brief Interface APIs and data structures of AOCL Compression library
  *
@@ -36,8 +36,11 @@
  *  @author S. Biplab Raut
  */
  
-#ifndef API_H
-#define API_H
+#ifndef AOCL_COMPRESSION_H
+#define AOCL_COMPRESSION_H
+
+#include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -78,7 +81,7 @@ extern "C" {
 #define EXPORT_SYM_DYN
 #endif
 
-#define LIBRARY_VERSION "AOCL-COMPRESSION 4.0.1"
+#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 4.0.1"
 #define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 2.0"
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 

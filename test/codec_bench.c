@@ -40,7 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "api/types.h"
-#include "api/api.h"
+#include "api/aocl_compression.h"
 #include "utils/utils.h"
 #include "codec_bench.h"
 

@@ -31,7 +31,7 @@
  *  @brief Test cases for Unified APIs.
  *
  *  This file contains the test cases for unified apis exposed 
- *  by api/api.h.
+ *  by api/aocl_compression.h.
  *
  *  @author Ashish Sriram
  */
@@ -41,7 +41,7 @@
 #include <vector>
 #include "gtest/gtest.h"
 
-#include "api/api.h"
+#include "api/aocl_compression.h"
 #include "api/types.h"
 
 using namespace std;
@@ -280,7 +280,7 @@ void set_ACD_io_bufs(ACD* desc, TestLoadBase* t) {
  * Begin Version Tests
  *********************************************/
 TEST(API_Version, AOCL_Compression_aocl_llc_version_common_1) {
-    EXPECT_STREQ(aocl_llc_version(), (LIBRARY_VERSION " " AOCL_BUILD_VERSION));
+    EXPECT_STREQ(aocl_llc_version(), (AOCL_COMPRESSION_LIBRARY_VERSION " " AOCL_BUILD_VERSION));
 }
 /*********************************************
  * End Version Tests

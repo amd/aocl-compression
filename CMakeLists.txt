@@ -200,7 +200,7 @@ set(DEST_LIB_PATH aocl_compression/lib)
 set(DEST_INC_PATH aocl_compression/include)
 set(DEST_BIN_PATH aocl_compression/bin)
 
-set(INC_FILES api/api.h)
+set(INC_FILES api/aocl_compression.h)
 if (NOT AOCL_EXCLUDE_BZIP2)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/bzip2/bzlib.h)
 endif ()

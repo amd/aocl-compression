@@ -40,7 +40,6 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <string.h>
 
 typedef int64_t INT64;          //fixed signed 64 bits int
 typedef int32_t INT32;          //fixed signed 32 bits int : Use it for signed int

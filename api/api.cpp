@@ -38,7 +38,7 @@
  
 #include "types.h"
 #include "utils/utils.h"
-#include "api.h"
+#include "aocl_compression.h"
 #include "codec.h"
 
 static INT32 enableLogs = 0;
@@ -183,5 +183,5 @@ VOID aocl_llc_destroy(aocl_compression_desc *handle,
 //API to return the compression library version string
 const CHAR *aocl_llc_version(VOID)
 {
-    return (LIBRARY_VERSION " " AOCL_BUILD_VERSION);
+    return (AOCL_COMPRESSION_LIBRARY_VERSION " " AOCL_BUILD_VERSION);
 }

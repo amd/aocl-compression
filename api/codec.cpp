@@ -37,7 +37,7 @@
  */
  
 #include "types.h"
-#include "api.h"
+#include "aocl_compression.h"
 #include "codec.h"
 
 //bzip2

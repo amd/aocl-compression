@@ -44,7 +44,7 @@
 #include "algos/zlib/inflate.h"
 #include "algos/zlib/deflate.h"
 #include "algos/zlib/aocl_zlib_test.h"
-#include "api/api.h"
+#include "api/aocl_compression.h"
 #include "gtest/gtest.h"
 
 using namespace std;
