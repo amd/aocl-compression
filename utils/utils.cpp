@@ -37,7 +37,7 @@
  */
 
 #include "api/types.h"
-#include "api/api.h"
+#include "api/aocl_compression.h"
 #include "utils/utils.h"
 
 INTP is_SSE2_supported(aocl_compression_desc *aocl_codec_handle)
