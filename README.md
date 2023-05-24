@@ -211,6 +211,42 @@ To set and launch the test bench with a specific user option,
 go to project aocl_compression_bench -> Properties -> Debugging;
 specify the user options and the input test file.
 
+
+Running tests with CTest
+------------------------
+
+CTest is configured in CMake build system to run the test cases implemented with GTest and AOCL Test Bench for Silesia, Calgary, and Canterbury datasets.
+To enable testing with CTest, use AOCL_TEST_COVERAGE option while configuring the CMake build.
+
+Following are a few sample commands that can be executed in the build directory to run the test cases with CTest.
+
+ To run all the tests (GTest and Test bench)<br>
+ `ctest` 
+ 
+ To only run Test bench<br>
+ `ctest -R BENCH`
+ 
+ To run GTest test cases for a specific method<br>
+ `ctest -R <METHOD_NAME_IN_CAPITALS>`
+
+Running Performance Benchmarking
+--------------------------------
+
+Use test_speed.py script to benchmark performance and compare AOCL-Compression library with other 
+compression libraries such as open-source reference or IPP. It generates summary reports describing compression/decompression speeds and compression ratio.
+
+Following are a few sample commands to use the script available in the 'scripts' directory.
+
+ To print usage options<br>
+ `python3 test_speed.py --help` 
+ 
+ To run AOCL optimized vs Reference methods for lz4, snappy and zlib levels 1 and 2:<br>
+ `python3 test_speed.py --dataset $PATH_DATASETS_DIR -m lz4 snappy zlib:1 zlib:2 -cw vanilla`
+ 
+ To run AOCL optimized vs IPP for lz4 method:<br>
+ `python3 test_speed.py --dataset $PATH_DATASETS_DIR -m lz4 -cw ipp --ipp $IPP_PATCHED_LZ4_LIBS_PATH` 
+ 
+
 Generating Documentation
 ------------------------
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
