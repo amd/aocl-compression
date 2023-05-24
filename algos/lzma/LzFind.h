@@ -35,10 +35,16 @@ hcChain part is a circular buffer */
 #define HASH_CHAIN_SLOT_SZ_16 (HASH_CHAIN_MAX_16+1) // head_ptr and hash-chain
 #endif
 
-#define MIN_SIZE_FOR_CF_HC (kHashGuarentee * HASH_CHAIN_SLOT_SZ_8)
+/* Default strategy to enable cache efficient hash chain implementation:
+* input_size < MAX_SIZE_FOR_CE_HC_OFF : disabled
+* MAX_SIZE_FOR_CE_HC_OFF <= input_size < MIN_SIZE_FOR_CE_HC_ON : enabled/disabled based on other settings
+* input_size >= MIN_SIZE_FOR_CE_HC_ON : enabled */
+#define MAX_SIZE_FOR_CE_HC_OFF (32 * 1024) // 32KB
+#define MIN_SIZE_FOR_CE_HC_ON (kHashGuarentee * HASH_CHAIN_SLOT_SZ_8) //512KB
+
 
 // Condition to use cache efficient hash chains
-#define USE_CACHE_EFFICIENT_HASH_CHAIN (!p->btMode && p->expectedDataSize > MIN_SIZE_FOR_CF_HC)
+#define USE_CACHE_EFFICIENT_HASH_CHAIN (!p->btMode && p->cacheEfficientSearch)
 
 EXTERN_C_BEGIN
 
@@ -80,7 +86,15 @@ typedef struct _CMatchFinder
   UInt32 hashMask; // determines the max number of bits in the hash
   UInt32 cutValue; // hard limit on number of nodes to look at in BT/HC when searching for matches
 #ifdef AOCL_LZMA_OPT
-  int level; // 0 <= level <= 9
+  UInt16 level; // 0 <= level <= 9
+  /* Value of cacheEfficientSearch determines the function used for dictionary search.
+   * -----------------------------------------------------------------------|--------------------------|------------------------------------------------|
+   * Conditions when method is called                                       |Method                    | Description                                    |
+   * -----------------------------------------------------------------------|--------------------------|------------------------------------------------|
+   * cacheEfficientSearch = 1, algo = !btMode, level  < HASH_CHAIN_16_LEVEL |AOCL_Hc_GetMatchesSpec_8  | Cache efficient hash chains with block size 8  |
+   * cacheEfficientSearch = 1, algo = !btMode, level >= HASH_CHAIN_16_LEVEL |AOCL_Hc_GetMatchesSpec_16 | Cache efficient hash chains with block size 16 |
+   * cacheEfficientSearch = 0, algo = !btMode,                              |AOCL_Hc_GetMatchesSpec    | Reference style intervowen hash chains         | */
+  UInt16 cacheEfficientSearch; // 0: disabled, 1: cache efficient hash chains
 #endif
   Byte *bufferBase;
   ISeqInStream *stream;
@@ -199,7 +213,6 @@ EXTERN_C_END
 #define SetUi32(p, v) { *(UInt32 *)(void *)(p) = (v); }
 
 #ifdef AOCL_LZMA_UNIT_TEST
-/* Move these APIs within the scope of gtest once the framework is ready */
 EXTERN_C_BEGIN
 LZMALIB_API void Test_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
     Byte btMode, UInt32 fixedHashSize, UInt32 cyclicBufferSize, UInt32 hashSizeSum,

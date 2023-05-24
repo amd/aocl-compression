@@ -53,6 +53,7 @@ typedef struct _CLzmaEncProps
 
 #ifdef AOCL_LZMA_OPT
   size_t srcLen;
+  int cacheEfficientStrategy; /**< 0: disabled, 1 : enabled, -1: optimal defaults */
 #endif
 } CLzmaEncProps;
 
@@ -334,13 +335,27 @@ LZMALIB_API SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* p
 */
 
 #ifdef AOCL_LZMA_UNIT_TEST
+typedef struct { // struct to expose CLzmaEnc properties for unit testing
+    unsigned numFastBytes;
+    unsigned lc, lp, pb;
+    BoolInt fastMode;
+    BoolInt writeEndMark;
+    UInt32 dictSize;
+
+    //MFB params
+    Byte btMode;
+    UInt32 cutValue;
+    UInt16 level;
+    UInt16 cacheEfficientSearch;
+    UInt32 numHashBytes;
+} TestCLzmaEnc;
+
 LZMALIB_API void Test_LzmaEncProps_Normalize_Dyn(CLzmaEncProps* p);
 LZMALIB_API SRes Test_SetProps_Dyn(CLzmaEncHandle pp, const CLzmaEncProps* props);
-LZMALIB_API SRes Test_Validate_NumFastBytes(CLzmaEncHandle pp, unsigned numFastBytes);
-LZMALIB_API SRes Test_Validate_NumHashBytes(CLzmaEncHandle pp, unsigned numHashBytes);
 LZMALIB_API UInt64 Test_SetDataSize(CLzmaEncHandle pp, UInt64 expectedDataSize);
 LZMALIB_API SRes Test_WriteProperties(CLzmaEncHandle pp, Byte* props, SizeT* size, UInt32 dictSize);
 LZMALIB_API unsigned Test_IsWriteEndMark(CLzmaEncHandle pp, unsigned wem);
+LZMALIB_API TestCLzmaEnc Get_CLzmaEnc_Params(CLzmaEncHandle pp);
 #endif
 
 /**

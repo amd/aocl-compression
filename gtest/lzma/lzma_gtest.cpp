@@ -1291,6 +1291,17 @@ public:
         EXPECT_EQ(p->numHashBytes, 5);
         EXPECT_EQ(p->mc, 32);
     }
+
+    void validate_ces(int btMode, size_t srcLen, int numHashBytes, int ces, int expected_ces) {
+        CLzmaEncProps p;
+        LzmaEncProps_Init(&p);
+        p.btMode = btMode;
+        p.srcLen = srcLen;
+        p.numHashBytes = numHashBytes;
+        p.cacheEfficientStrategy = ces;
+        AOCL_LzmaEncProps_Normalize(&p);
+        EXPECT_EQ(p.cacheEfficientStrategy, expected_ces);
+    }
 };
 
 TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_defaults_common) //defaults
@@ -1323,7 +1334,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         for (int i = LZMA_MIN_LEVEL; i <= LZMA_MAX_LEVEL; ++i) {
             LzmaEncProps_Init(&p); //reset for each test
             p.level = i;
-            p.srcLen = MIN_SIZE_FOR_CF_HC + 1; //for expectedDataSize > MIN_SIZE_FOR_CF_HC, USE_CACHE_EFFICIENT_HASH_CHAIN
+            p.cacheEfficientStrategy = 1;
             AOCL_LzmaEncProps_Normalize(&p);
             EXPECT_EQ(p.dictSize, dictSizes[i]); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_dictSizeOpt_common_11 - 20
         }
@@ -1334,12 +1345,33 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         for (int i = LZMA_MIN_LEVEL; i <= LZMA_MAX_LEVEL; ++i) {
             LzmaEncProps_Init(&p); //reset for each test
             p.level = i;
-            p.srcLen = MIN_SIZE_FOR_CF_HC;
+            p.cacheEfficientStrategy = 0;
             AOCL_LzmaEncProps_Normalize(&p);
             EXPECT_EQ(p.dictSize, dictSizes[i]); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_dictSizeOpt_common_21 - 30
         }
     }
 #endif
+}
+
+TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_ces_common) //cache efficient settings
+{
+    /* Test strategy to enable cache efficient hash chain implementation:
+    * If ces = -1, use this strategy:
+    *   srcLen < MAX_SIZE_FOR_CE_HC_OFF : disabled
+    *   MAX_SIZE_FOR_CE_HC_OFF <= srcLen < MIN_SIZE_FOR_CE_HC_ON : enabled/disabled based on numHashBytes
+    *   srcLen >= MIN_SIZE_FOR_CE_HC_ON : enabled
+    * else
+    *   ces as set by user
+    */
+    //validate_ces(btMode, srcLen, numHashBytes, ces, expected_ces)
+    validate_ces(1,    MIN_SIZE_FOR_CE_HC_ON, 5, -1, 0); //btMode=1
+    validate_ces(0,                        0, 5, -1, 0); //srcLen=0
+    validate_ces(0, MAX_SIZE_FOR_CE_HC_OFF-1, 5, -1, 0); //srcLen<MAX_SIZE_FOR_CE_HC_OFF
+    validate_ces(0,   MAX_SIZE_FOR_CE_HC_OFF, 5, -1, 0); //MAX_SIZE_FOR_CE_HC_OFF <= srcLen < MIN_SIZE_FOR_CE_HC_ON, numHashBytes=5
+    validate_ces(0,   MAX_SIZE_FOR_CE_HC_OFF, 4, -1, 1); //MAX_SIZE_FOR_CE_HC_OFF <= srcLen < MIN_SIZE_FOR_CE_HC_ON, numHashBytes=4
+    validate_ces(0,    MIN_SIZE_FOR_CE_HC_ON, 5, -1, 1); //srcLen>=MIN_SIZE_FOR_CE_HC_ON
+    validate_ces(0,    MIN_SIZE_FOR_CE_HC_ON, 5,  1, 1); //ces=1
+    validate_ces(0,    MIN_SIZE_FOR_CE_HC_ON, 5,  0, 0); //ces=0
 }
 
 TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_reduceSize_common) //reduceSize
@@ -1412,7 +1444,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         p.btMode = 0;
         p.dictSize = kHashGuarentee;
         p.level = HASH_CHAIN_16_LEVEL - 1;
-        p.srcLen = MIN_SIZE_FOR_CF_HC + 1; //for expectedDataSize > MIN_SIZE_FOR_CF_HC, USE_CACHE_EFFICIENT_HASH_CHAIN
+        p.cacheEfficientStrategy = 1;
         AOCL_LzmaEncProps_Normalize(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_minDictSize_common_1
         EXPECT_EQ(p.dictSize, kHashGuarentee * HASH_CHAIN_SLOT_SZ_8);
     }
@@ -1422,7 +1454,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         p.btMode = 0;
         p.dictSize = kHashGuarentee;
         p.level = HASH_CHAIN_16_LEVEL;
-        p.srcLen = MIN_SIZE_FOR_CF_HC + 1; //for expectedDataSize > MIN_SIZE_FOR_CF_HC, USE_CACHE_EFFICIENT_HASH_CHAIN
+        p.cacheEfficientStrategy = 1;
         AOCL_LzmaEncProps_Normalize(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_minDictSize_common_2
         EXPECT_EQ(p.dictSize, kHashGuarentee * HASH_CHAIN_SLOT_SZ_16);
     }
@@ -1514,6 +1546,23 @@ TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_valid_commo
     LzmaEncProps_Init(&props); //necessary, else props might have invalid values
     SRes res = Test_SetProps_Dyn(p, &props);
     EXPECT_EQ(res, SZ_OK);
+    TestCLzmaEnc params = Get_CLzmaEnc_Params(p);
+
+    //These params are same across reference and optimized versions
+    EXPECT_EQ(params.numFastBytes, 32);
+    EXPECT_EQ(params.lc, 3);
+    EXPECT_EQ(params.lp, 0);
+    EXPECT_EQ(params.pb, 2);
+    EXPECT_EQ(params.fastMode, 0);
+    EXPECT_EQ(params.writeEndMark, 0);
+    EXPECT_EQ(params.btMode, 1);
+    EXPECT_EQ(params.cutValue, 32);
+    EXPECT_EQ(params.level, 5);
+    EXPECT_EQ(params.numHashBytes, 4);
+    
+    //These params differ between reference and optimized versions
+    //EXPECT_EQ(params.dictSize, 0);
+    //EXPECT_EQ(params.cacheEfficientSearch, 0);
 }
 
 TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_invalid_common_1)
@@ -1546,69 +1595,69 @@ TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_invalid_com
     }*/
 }
 
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_fbLow_common_1)
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_fbLow_common_1) //test numFastBytes setting
 {
     LzmaEncProps_Init(&props); //necessary, else props might have invalid values
     props.fb = 4; // fb < 5
     SRes res = Test_SetProps_Dyn(p, &props);
     EXPECT_EQ(res, SZ_OK);
-    res = Test_Validate_NumFastBytes(p, 5);
-    EXPECT_EQ(res, SZ_OK);
+    TestCLzmaEnc params = Get_CLzmaEnc_Params(p);
+    EXPECT_EQ(params.numFastBytes, 5);
 }
 
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_fbHigh_common_1)
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_fbHigh_common_1) //test numFastBytes setting
 {
     LzmaEncProps_Init(&props); //necessary, else props might have invalid values
     const unsigned c_LZMA_MATCH_LEN_MAX = 273; //#define LZMA_MATCH_LEN_MAX (LZMA_MATCH_LEN_MIN + kLenNumSymbolsTotal - 1) // max match len 273
     props.fb = c_LZMA_MATCH_LEN_MAX + 1; // fb > LZMA_MATCH_LEN_MAX
     SRes res = Test_SetProps_Dyn(p, &props);
     EXPECT_EQ(res, SZ_OK);
-    res = Test_Validate_NumFastBytes(p, c_LZMA_MATCH_LEN_MAX);
-    EXPECT_EQ(res, SZ_OK);
+    TestCLzmaEnc params = Get_CLzmaEnc_Params(p);
+    EXPECT_EQ(params.numFastBytes, c_LZMA_MATCH_LEN_MAX);
 }
 
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_nhb1_common_1)
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_nhb_common_1) //test numHashBytes setting
 {
-    LzmaEncProps_Init(&props); //necessary, else props might have invalid values
-    props.btMode = 1; // btMode
-    props.numHashBytes = 1; // < 2
-    SRes res = Test_SetProps_Dyn(p, &props);
-    EXPECT_EQ(res, SZ_OK);
-    res = Test_Validate_NumHashBytes(p, 2); // if (props.numHashBytes < 2) then 2
-    EXPECT_EQ(res, SZ_OK);
+    unsigned nhb_expected[7] = { 2,2,2,3,4,5,5 }; // SetProps should set nhb values to these
+    for (unsigned nhb = 0; nhb < 7; ++nhb) {
+        LzmaEncProps_Init(&props); //necessary, else props might have invalid values
+        props.btMode = 1; // btMode
+        props.numHashBytes = nhb;
+        SRes res = Test_SetProps_Dyn(p, &props);
+        EXPECT_EQ(res, SZ_OK);
+        TestCLzmaEnc params = Get_CLzmaEnc_Params(p);
+        EXPECT_EQ(params.numHashBytes, nhb_expected[nhb]); //p->numHashBytes should be set to expected values
+    }
 }
 
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_nhb3_common_1)
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_ces_common_1) //test cacheEfficientSearch setting
 {
-    LzmaEncProps_Init(&props); //necessary, else props might have invalid values
-    props.btMode = 1; // btMode
-    props.numHashBytes = 3; // < 4
-    SRes res = Test_SetProps_Dyn(p, &props);
-    EXPECT_EQ(res, SZ_OK);
-    res = Test_Validate_NumHashBytes(p, 3); // if (props.numHashBytes < 4) then props.numHashBytes
-    EXPECT_EQ(res, SZ_OK);
-}
-
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_nhb4_common_1)
-{
-    LzmaEncProps_Init(&props); //necessary, else props might have invalid values
-    props.btMode = 1; // btMode
-    props.numHashBytes = 4; // = 4
-    SRes res = Test_SetProps_Dyn(p, &props);
-    EXPECT_EQ(res, SZ_OK);
-    res = Test_Validate_NumHashBytes(p, 4); // props.numHashBytes
-    EXPECT_EQ(res, SZ_OK);
-}
-
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_nhb5_common_1)
-{
-    LzmaEncProps_Init(&props); //necessary, else props might have invalid values
-    props.btMode = 1; // btMode
-    props.numHashBytes = 6; // >= 5
-    SRes res = Test_SetProps_Dyn(p, &props);
-    EXPECT_EQ(res, SZ_OK);
-    res = Test_Validate_NumHashBytes(p, 5); // if (props.numHashBytes >= 5) then 5
-    EXPECT_EQ(res, SZ_OK);
+    {
+        LzmaEncProps_Init(&props); //necessary, else props might have invalid values
+        props.cacheEfficientStrategy = 0;
+        SRes res = Test_SetProps_Dyn(p, &props);
+        EXPECT_EQ(res, SZ_OK);
+        TestCLzmaEnc params = Get_CLzmaEnc_Params(p);
+        EXPECT_EQ(params.cacheEfficientSearch, 0);
+    }
+    {
+        LzmaEncProps_Init(&props); //necessary, else props might have invalid values
+        props.cacheEfficientStrategy = 1;
+        props.btMode = 1;
+        SRes res = Test_SetProps_Dyn(p, &props);
+        EXPECT_EQ(res, SZ_OK);
+        TestCLzmaEnc params = Get_CLzmaEnc_Params(p);
+        EXPECT_EQ(params.cacheEfficientSearch, 0);
+    }
+    {
+        LzmaEncProps_Init(&props); //necessary, else props might have invalid values
+        props.cacheEfficientStrategy = 1;
+        props.btMode = 0;
+        SRes res = Test_SetProps_Dyn(p, &props);
+        EXPECT_EQ(res, SZ_OK);
+        TestCLzmaEnc params = Get_CLzmaEnc_Params(p);
+        EXPECT_EQ(params.cacheEfficientSearch, 1);
+    }
 }
 
 /*********************************************
@@ -1660,7 +1709,7 @@ private:
     const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
 };
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_LzmaEnc_WriteProperties_valid_common_1) //set value derived from pb,lp,lc in props
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_valid_common_1) //set value derived from pb,lp,lc in props
 {
     Byte props[LZMA_PROPS_SIZE];
     SizeT size = LZMA_PROPS_SIZE;
@@ -1670,7 +1719,7 @@ TEST_F(LZMA_writeProperties, AOCL_Compression_LzmaEnc_WriteProperties_valid_comm
     EXPECT_EQ(*((UInt32*)(props + 1)), ((UInt32)1 << 24));
 }
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_LzmaEnc_WriteProperties_invalidSz_common_1)
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_invalidSz_common_1)
 {
     Byte props[LZMA_PROPS_SIZE];
     SizeT size = 4; //invalid size
@@ -1678,7 +1727,7 @@ TEST_F(LZMA_writeProperties, AOCL_Compression_LzmaEnc_WriteProperties_invalidSz_
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_LzmaEnc_WriteProperties_nullCLzmaEncHandle_common_1)
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_nullCLzmaEncHandle_common_1)
 {
     Byte props[LZMA_PROPS_SIZE];
     SizeT size = LZMA_PROPS_SIZE;
@@ -1686,14 +1735,14 @@ TEST_F(LZMA_writeProperties, AOCL_Compression_LzmaEnc_WriteProperties_nullCLzmaE
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_LzmaEnc_WriteProperties_nullProps_common_1)
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_nullProps_common_1)
 {
     SizeT size = LZMA_PROPS_SIZE;
     SRes res = LzmaEnc_WriteProperties(p, NULL, &size);
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_LzmaEnc_WriteProperties_nullpropsSz_common_1)
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_nullpropsSz_common_1)
 {
     Byte props[LZMA_PROPS_SIZE];
     SRes res = LzmaEnc_WriteProperties(p, props, NULL);
@@ -1912,13 +1961,13 @@ TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_common)
 
 /*
 * Run all LZMA_memEncode tests for 2 settings:
-*   + USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize > MIN_SIZE_FOR_CF_HC: 1 MB (1024 * 1024)
-*   + Not USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize <= MIN_SIZE_FOR_CF_HC:  MIN_SIZE_FOR_CF_HC
+*   + Not USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize < MAX_SIZE_FOR_CE_HC_OFF
+*   + USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize >= MIN_SIZE_FOR_CE_HC_ON
 */
 INSTANTIATE_TEST_SUITE_P(
     LZMA_encode,
     LZMA_memEncode,
-    ::testing::Values((size_t)(1024 * 1024), (size_t)(MIN_SIZE_FOR_CF_HC)));
+    ::testing::Values((size_t)(MAX_SIZE_FOR_CE_HC_OFF-1), (size_t)(MIN_SIZE_FOR_CE_HC_ON)));
 /*********************************************
 * End of LZMA_memEncode
 *********************************************/
@@ -2326,13 +2375,13 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noHeader_common_1)
 
 /*
 * Run all LZMA_encodeFile tests for 2 settings:
-*   + USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize > MIN_SIZE_FOR_CF_HC: 1 MB (1024 * 1024)
-*   + Not USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize <= MIN_SIZE_FOR_CF_HC:  MIN_SIZE_FOR_CF_HC
+*   + Not USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize < MAX_SIZE_FOR_CE_HC_OFF
+*   + USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize >= MIN_SIZE_FOR_CE_HC_ON
 */
 INSTANTIATE_TEST_SUITE_P(
     LZMA_encode,
     LZMA_encodeFile,
-    ::testing::Values((size_t)(1024 * 1024), (size_t)(MIN_SIZE_FOR_CF_HC)));
+    ::testing::Values((size_t)(MAX_SIZE_FOR_CE_HC_OFF-1), (size_t)(MIN_SIZE_FOR_CE_HC_ON)));
 
 /*********************************************
 * End of LZMA_encodeFile

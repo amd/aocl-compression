@@ -79,6 +79,7 @@ void LzmaEncProps_Init(CLzmaEncProps *p)
   p->affinity = 0;
 #ifdef AOCL_LZMA_OPT
   p->srcLen = 0;
+  p->cacheEfficientStrategy = -1;
 #endif
 }
 
@@ -136,17 +137,49 @@ void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
   int level = p->level;
   if (level < 0) level = 5;
   p->level = level;
-  
-  if (p->srcLen > 0 && p->srcLen <= MIN_SIZE_FOR_CF_HC) { //use reference settings
-      if (p->dictSize == 0)
-          p->dictSize =
-              ( level <= 3 ? ((UInt32)1 << (level * 2 + 16)) :
-              ( level <= 6 ? ((UInt32)1 << (level + 19)) :
-              ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
-              )));
+
+  if (p->lc < 0) p->lc = 3;
+  if (p->lp < 0) p->lp = 0;
+  if (p->pb < 0) p->pb = 2;
+
+  if (p->algo < 0) p->algo = (level < 5 ? 0 : 1);
+  if (p->fb < 0) p->fb = (level < 7 ? 32 : 64);
+  if (p->btMode < 0) p->btMode = (p->algo == 0 ? 0 : 1);
+  if (p->numHashBytes < 0) p->numHashBytes = (p->btMode ? 4 : 5);
+  if (p->mc == 0) p->mc = (16 + ((unsigned)p->fb >> 1)) >> (p->btMode ? 0 : 1);
+
+  if (!p->btMode) { // cache efficient implementation is available only for hash chain mode
+      if (p->cacheEfficientStrategy < 0) { // if not explicitly set by user
+          if (p->srcLen > 0) {
+              if (p->srcLen < MAX_SIZE_FOR_CE_HC_OFF) { // file size too small to benefit from cehc
+                  p->cacheEfficientStrategy = 0;
+              }
+              else if (p->srcLen >= MAX_SIZE_FOR_CE_HC_OFF && p->srcLen < MIN_SIZE_FOR_CE_HC_ON) { // for mid size files, set based on numHashBytes
+                  if (p->numHashBytes < 5) {
+                      // Lower numHashBytes result in more collisions. This produces longer hash chains.
+                      // Cehc benefits are primarily seen when more time is spent searching through the
+                      // dictionary, which happens when chains are longer.
+                      p->cacheEfficientStrategy = 1;
+                  }
+                  else {
+                      p->cacheEfficientStrategy = 0;
+                  }
+              }
+              else { // p->srcLen >= MIN_SIZE_FOR_CE_HC_ON
+                  p->cacheEfficientStrategy = 1; // file lize large enought to benefit from cehc
+              }
+          }
+          else {
+              p->cacheEfficientStrategy = 0;
+          }
+      }
   }
-  else { //use cache efficient settings for lower levels
-      /* Using larger dictionaries for level <= 4 to compensate for compression drop 
+  else {
+      p->cacheEfficientStrategy = 0;
+  }
+
+  if (p->cacheEfficientStrategy) { // use cache efficient settings
+      /* Using larger dictionaries to compensate for compression drop
        * due to unused slots in cache efficient dictionary blocks */
       if (p->dictSize == 0) 
           p->dictSize =
@@ -155,6 +188,14 @@ void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
           ( level <= 6 ? ((UInt32)1 << (level + 19)) :
           ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
           ))));
+  }
+  else { // use reference settings
+      if (p->dictSize == 0)
+          p->dictSize =
+              ( level <= 3 ? ((UInt32)1 << (level * 2 + 16)) :
+              ( level <= 6 ? ((UInt32)1 << (level + 19)) :
+              ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
+              )));
   }
 
   if (p->dictSize > p->reduceSize)
@@ -167,17 +208,7 @@ void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
       p->dictSize = v;
   }
 
-  if (p->lc < 0) p->lc = 3;
-  if (p->lp < 0) p->lp = 0;
-  if (p->pb < 0) p->pb = 2;
-
-  if (p->algo < 0) p->algo = (level < 5 ? 0 : 1);
-  if (p->fb < 0) p->fb = (level < 7 ? 32 : 64);
-  if (p->btMode < 0) p->btMode = (p->algo == 0 ? 0 : 1);
-  if (p->numHashBytes < 0) p->numHashBytes = (p->btMode ? 4 : 5);
-  if (p->mc == 0) p->mc = (16 + ((unsigned)p->fb >> 1)) >> (p->btMode ? 0 : 1);
-
-  if (!p->btMode && p->srcLen > MIN_SIZE_FOR_CF_HC) {
+  if (p->cacheEfficientStrategy) {
       /* For hash chain algo, cache efficient hash chains with direct mapping
       * from hash to blocks are used. Size of the hash table is derived from dictSize.
       * Due to certain assumptions on the hashes, a minimum hash table size of 
@@ -822,6 +853,12 @@ SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* props2)
 
     MFB.cutValue = props.mc;
     MFB.level = props.level; // pass level to MFB
+    if (!props.btMode && props.cacheEfficientStrategy) {
+        MFB.cacheEfficientSearch = 1; // Search using cache efficient hash chains
+    }
+    else {
+        MFB.cacheEfficientSearch = 0; // Cache efficient search disabled
+    }
 
     p->writeEndMark = (BoolInt)props.writeEndMark;
 
@@ -4483,20 +4520,21 @@ SRes Test_SetProps_Dyn(CLzmaEncHandle pp, const CLzmaEncProps* props) {
     return res;
 }
 
-SRes Test_Validate_NumFastBytes(CLzmaEncHandle pp, unsigned numFastBytes) {
+TestCLzmaEnc Get_CLzmaEnc_Params(CLzmaEncHandle pp) {
     CLzmaEnc* p = (CLzmaEnc*)pp;
-    if (p->numFastBytes == numFastBytes)
-        return SZ_OK;
-    else
-        return SZ_ERROR_DATA;
+    TestCLzmaEnc params;
+    params.numFastBytes         = p->numFastBytes;
+    params.lc                   = p->lc;
+    params.lp                   = p->lp;
+    params.pb                   = p->pb;
+    params.fastMode             = p->fastMode;
+    params.writeEndMark         = p->writeEndMark;
+    params.dictSize             = p->dictSize;
+    params.btMode               = p->matchFinderBase.btMode;
+    params.cutValue             = p->matchFinderBase.cutValue;
+    params.level                = p->matchFinderBase.level;
+    params.cacheEfficientSearch = p->matchFinderBase.cacheEfficientSearch;
+    params.numHashBytes         = p->matchFinderBase.numHashBytes;
+    return params;
 }
-
-SRes Test_Validate_NumHashBytes(CLzmaEncHandle pp, unsigned numHashBytes) {
-    CLzmaEnc* p = (CLzmaEnc*)pp;
-    if (p->matchFinderBase.numHashBytes == numHashBytes)
-        return SZ_OK;
-    else
-        return SZ_ERROR_DATA;
-}
-
 #endif

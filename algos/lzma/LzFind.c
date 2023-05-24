@@ -8,13 +8,18 @@
 /*------------------------------------------------------------------------
 * Summary of all variants of AOCL dictionary search mechanisms implemented
 * ------------------------------------------------------------------------
-* Method                    | Description                                    | Default for levels | Conditions when method is called                                                     |
-* --------------------------|------------------------------------------------|--------------------|--------------------------------------------------------------------------------------|
-* AOCL_Hc_GetMatchesSpec_8  | Cache efficient hash chains with block size 8  | 0-1, large input   | algo = !btMode, level  < HASH_CHAIN_16_LEVEL, expectedDataSize >  MIN_SIZE_FOR_CF_HC |
-* AOCL_Hc_GetMatchesSpec_16 | Cache efficient hash chains with block size 16 | 2-4, large input   | algo = !btMode, level >= HASH_CHAIN_16_LEVEL, expectedDataSize >  MIN_SIZE_FOR_CF_HC |
-* AOCL_Hc_GetMatchesSpec    | Reference style intervowen hash chains         | 0-4, small input   | algo = !btMode,                               expectedDataSize <= MIN_SIZE_FOR_CF_HC |
-* AOCL_GetMatchesSpec1      | Reference style intervowen binary search trees | 5-9                | algo =  btMode                                                                       |
-* AOCL_SkipMatchesSpec      | Reference style intervowen binary search trees | 5-9                | algo =  btMode, skip operation. Add node and re-balance tree without searching dict  |
+* Method                    | Description                                    | Default for levels    | Conditions when method is called                                                    |
+* --------------------------|------------------------------------------------|-----------------------|-------------------------------------------------------------------------------------|
+* AOCL_Hc_GetMatchesSpec_8  | Cache efficient hash chains with block size 8  | 0-1, large input      | algo = !btMode, level  < HASH_CHAIN_16_LEVEL, cacheEfficientSearch = 1              |
+* AOCL_Hc_GetMatchesSpec_16 | Cache efficient hash chains with block size 16 | 2-4, large input      | algo = !btMode, level >= HASH_CHAIN_16_LEVEL, cacheEfficientSearch = 1              |
+* AOCL_Hc_GetMatchesSpec    | Reference style intervowen hash chains         | 0-4, small/mid input  | algo = !btMode,                               cacheEfficientSearch = 0              |
+* AOCL_GetMatchesSpec1      | Reference style intervowen binary search trees | 5-9                   | algo =  btMode                                                                      |
+* AOCL_SkipMatchesSpec      | Reference style intervowen binary search trees | 5-9                   | algo =  btMode, skip operation. Add node and re-balance tree without searching dict |
+* 
+* Non-default settings: If numHashBytes is set to 4 and level is < 5
+* AOCL_Hc_GetMatchesSpec_8  | Cache efficient hash chains with block size 8  | 0-1, large/mid input  | algo = !btMode, level  < HASH_CHAIN_16_LEVEL, cacheEfficientSearch = 1              |
+* AOCL_Hc_GetMatchesSpec_16 | Cache efficient hash chains with block size 16 | 2-4, large/mid input  | algo = !btMode, level >= HASH_CHAIN_16_LEVEL, cacheEfficientSearch = 1              |
+* AOCL_Hc_GetMatchesSpec    | Reference style intervowen hash chains         | 0-4, small input      | algo = !btMode,                               cacheEfficientSearch = 0              |
 * ------------------------------------------------------------------------*/
 
 #include "Precomp.h"
@@ -905,13 +910,13 @@ for (size_t i = 0; i < numSons; i += HASH_CHAIN_SLOT_SZ, items += HASH_CHAIN_SLO
 * will force Normalize calls before pos reaches UINT_MAX
 * 
 * Changes wrt MatchFinder_Normalize3
-* + In hc-mode, modified to suit cache efficient data structures
-* + In bt-mode calls MatchFinder_Normalize3 with same parameters as reference 
+* + If USE_CACHE_EFFICIENT_HASH_CHAIN, modified to suit cache efficient data structures
+* + Else calls MatchFinder_Normalize3 with same parameters as reference 
 */
 MY_NO_INLINE
 void AOCL_MatchFinder_Normalize3(UInt32 subValue, CMatchFinder* p)
 {
-    if (USE_CACHE_EFFICIENT_HASH_CHAIN) { // cache efficient data structures for hc-mode
+    if (USE_CACHE_EFFICIENT_HASH_CHAIN) { // normalize cache efficient data structures
         {
             // normalize fixed hash tables
             CLzRef* items = p->hash;
@@ -927,9 +932,10 @@ void AOCL_MatchFinder_Normalize3(UInt32 subValue, CMatchFinder* p)
             AOCL_NORMALIZE_HASH_CHAIN_TABLE(HASH_CHAIN_SLOT_SZ_16)
         }
     }
-    else { // reference data structures for bt-mode
+    else { // normalize reference data structures
         size_t numSonRefs = p->cyclicBufferSize;
-        numSonRefs <<= 1; //bt-mode, 2 values per node <l,r>
+        if (p->btMode)
+            numSonRefs <<= 1; //bt-mode, 2 values per node <l,r>
         MatchFinder_Normalize3(subValue, p->hash, (size_t)p->hashSizeSum + numSonRefs);
     }
 }
@@ -1868,7 +1874,7 @@ static void AOCL_MatchFinder_MovePos(CMatchFinder* p)
   AOCL_GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_Hc_GetMatchesSpec_16)
 
 #define AOCL_GET_MATCHES_FOOTER_HC(_maxLen_) \
-  GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_Hc_GetMatchesSpec)
+  AOCL_GET_MATCHES_FOOTER_BASE(_maxLen_, AOCL_Hc_GetMatchesSpec)
 #endif
 
 static UInt32* Bt2_MatchFinder_GetMatches(CMatchFinder *p, UInt32 *distances)
@@ -2493,7 +2499,7 @@ void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder2 *vTable)
     } \
 }
 
-/* Called when: algo = !btMode, expectedDataSize > MIN_SIZE_FOR_CF_HC
+/* Called when: algo = !btMode, cacheEfficientSearch = 1
 * HASH_CHAIN_SLOT_SZ: HASH_CHAIN_SLOT_SZ_8 (level < HASH_CHAIN_16_LEVEL), HASH_CHAIN_SLOT_SZ_16 (level >= HASH_CHAIN_16_LEVEL)
 * AOCL_HASH_CALC: AOCL_HASH4_CALC (numHashBytes <= 4), AOCL_HASH5_CALC (numHashBytes > 4) */
 #define AOCL_HC_MF_GETMATCHES(N, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX, AOCL_HASH_CALC, AOCL_GET_MATCHES_FOOTER_HC) \
@@ -2548,7 +2554,7 @@ void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder2 *vTable)
     \
     AOCL_GET_MATCHES_FOOTER_HC(maxLen); \
 
-/* Called when: algo = !btMode, expectedDataSize > MIN_SIZE_FOR_CF_HC
+/* Called when: algo = !btMode, cacheEfficientSearch = 1
 * HASH_CHAIN_SLOT_SZ: HASH_CHAIN_SLOT_SZ_8 (level < HASH_CHAIN_16_LEVEL), HASH_CHAIN_SLOT_SZ_16 (level >= HASH_CHAIN_16_LEVEL)
 * AOCL_HASH_CALC: AOCL_HASH4_CALC (numHashBytes <= 4), AOCL_HASH5_CALC (numHashBytes > 4) */
 #define AOCL_HC_MF_SKIP(N, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX, AOCL_HASH_CALC) \
@@ -2581,9 +2587,9 @@ void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder2 *vTable)
 * Changes wrt Hc4_MatchFinder_GetMatches:
 * + h3 hash table not used. Simplified if conditions to suit this.
 * 
-* Called when: algo = !btMode, level < HASH_CHAIN_16_LEVEL, numHashBytes <= 4, expectedDataSize > MIN_SIZE_FOR_CF_HC
+* Called when: algo = !btMode, level < HASH_CHAIN_16_LEVEL, numHashBytes <= 4, cacheEfficientSearch = 1
 * Calls: AOCL_Hc_GetMatchesSpec_8: Cache efficient hash chain with block size 8 */
-static UInt32* AOCL_Hc4_MatchFinder_GetMatches_8(CMatchFinder* p, UInt32* distances)
+static UInt32* AOCL_Hc4_MatchFinder_GetMatches_Cehc8(CMatchFinder* p, UInt32* distances)
 {
     AOCL_HC_MF_GETMATCHES(4, HASH_CHAIN_SLOT_SZ_8, HASH_CHAIN_MAX_8,
         AOCL_HASH4_CALC, AOCL_GET_MATCHES_FOOTER_HC_8)
@@ -2596,23 +2602,23 @@ static UInt32* AOCL_Hc4_MatchFinder_GetMatches_8(CMatchFinder* p, UInt32* distan
 * 
 * Changes wrt Hc4_MatchFinder_Skip:
 * + h3 hash table not used.*/
-static void AOCL_Hc4_MatchFinder_Skip_8(CMatchFinder* p, UInt32 num)
+static void AOCL_Hc4_MatchFinder_Skip_Cehc8(CMatchFinder* p, UInt32 num)
 {
     AOCL_HC_MF_SKIP(4, HASH_CHAIN_SLOT_SZ_8, HASH_CHAIN_MAX_8, AOCL_HASH4_CALC)
 }
 
-/* 16-node block equivalent of AOCL_Hc4_MatchFinder_GetMatches_8 
+/* 16-node block equivalent of AOCL_Hc4_MatchFinder_GetMatches_Cehc8 
 *
-* Called when: algo = !btMode, level >= HASH_CHAIN_16_LEVEL, numHashBytes <= 4, expectedDataSize > MIN_SIZE_FOR_CF_HC
+* Called when: algo = !btMode, level >= HASH_CHAIN_16_LEVEL, numHashBytes <= 4, cacheEfficientSearch = 1
 * Calls: AOCL_Hc_GetMatchesSpec_16: Cache efficient hash chain with block size 16 */
-static UInt32* AOCL_Hc4_MatchFinder_GetMatches_16(CMatchFinder* p, UInt32* distances)
+static UInt32* AOCL_Hc4_MatchFinder_GetMatches_Cehc16(CMatchFinder* p, UInt32* distances)
 {
     AOCL_HC_MF_GETMATCHES(4, HASH_CHAIN_SLOT_SZ_16, HASH_CHAIN_MAX_16,
         AOCL_HASH4_CALC, AOCL_GET_MATCHES_FOOTER_HC_16)
 }
 
-/* 16-node block equivalent of AOCL_Hc4_MatchFinder_Skip_8 */
-static void AOCL_Hc4_MatchFinder_Skip_16(CMatchFinder* p, UInt32 num)
+/* 16-node block equivalent of AOCL_Hc4_MatchFinder_Skip_Cehc8 */
+static void AOCL_Hc4_MatchFinder_Skip_Cehc16(CMatchFinder* p, UInt32 num)
 {
     AOCL_HC_MF_SKIP(4, HASH_CHAIN_SLOT_SZ_16, HASH_CHAIN_MAX_16, AOCL_HASH4_CALC)
 }
@@ -2632,7 +2638,7 @@ static void AOCL_Hc4_MatchFinder_Skip_16(CMatchFinder* p, UInt32 num)
 * + h3 hash table not used. Simplified if conditions to suit this.
 * + calls AOCL_Hc_GetMatchesSpec() to find matches 
 *
-* Called when: algo = !btMode, numHashBytes <= 4, expectedDataSize <= MIN_SIZE_FOR_CF_HC
+* Called when: algo = !btMode, numHashBytes <= 4, cacheEfficientSearch = 0
 * Calls: AOCL_Hc_GetMatchesSpec: Reference style hash chain */
 static UInt32* AOCL_Hc4_MatchFinder_GetMatches(CMatchFinder* p, UInt32* distances)
 {
@@ -2698,41 +2704,41 @@ static void AOCL_Hc4_MatchFinder_Skip(CMatchFinder* p, UInt32 num)
     HC_SKIP_FOOTER
 }
 
-/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_GetMatches_8 
+/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_GetMatches_Cehc8 
 *
-* Called when: algo = !btMode, level < HASH_CHAIN_16_LEVEL, numHashBytes > 4, expectedDataSize > MIN_SIZE_FOR_CF_HC
+* Called when: algo = !btMode, level < HASH_CHAIN_16_LEVEL, numHashBytes > 4, cacheEfficientSearch = 1
 * Calls: AOCL_Hc_GetMatchesSpec_8: Cache efficient hash chain with block size 8 */
-static UInt32* AOCL_Hc5_MatchFinder_GetMatches_8(CMatchFinder* p, UInt32* distances)
+static UInt32* AOCL_Hc5_MatchFinder_GetMatches_Cehc8(CMatchFinder* p, UInt32* distances)
 {
     AOCL_HC_MF_GETMATCHES(5, HASH_CHAIN_SLOT_SZ_8, HASH_CHAIN_MAX_8,
         AOCL_HASH5_CALC, AOCL_GET_MATCHES_FOOTER_HC_8)
 }
 
-/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_Skip_8 */
-static void AOCL_Hc5_MatchFinder_Skip_8(CMatchFinder* p, UInt32 num)
+/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_Skip_Cehc8 */
+static void AOCL_Hc5_MatchFinder_Skip_Cehc8(CMatchFinder* p, UInt32 num)
 {
     AOCL_HC_MF_SKIP(5, HASH_CHAIN_SLOT_SZ_8, HASH_CHAIN_MAX_8, AOCL_HASH5_CALC)
 }
 
-/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_GetMatches_16
+/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_GetMatches_Cehc16
 *
-* Called when: algo = !btMode, level >= HASH_CHAIN_16_LEVEL, numHashBytes > 4, expectedDataSize > MIN_SIZE_FOR_CF_HC
+* Called when: algo = !btMode, level >= HASH_CHAIN_16_LEVEL, numHashBytes > 4, cacheEfficientSearch = 1
 * Calls: AOCL_Hc_GetMatchesSpec_16: Cache efficient hash chain with block size 16 */
-static UInt32* AOCL_Hc5_MatchFinder_GetMatches_16(CMatchFinder* p, UInt32* distances)
+static UInt32* AOCL_Hc5_MatchFinder_GetMatches_Cehc16(CMatchFinder* p, UInt32* distances)
 {
     AOCL_HC_MF_GETMATCHES(5, HASH_CHAIN_SLOT_SZ_16, HASH_CHAIN_MAX_16,
         AOCL_HASH5_CALC, AOCL_GET_MATCHES_FOOTER_HC_16)
 }
 
-/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_Skip_16 */
-static void AOCL_Hc5_MatchFinder_Skip_16(CMatchFinder* p, UInt32 num)
+/* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_Skip_Cehc16 */
+static void AOCL_Hc5_MatchFinder_Skip_Cehc16(CMatchFinder* p, UInt32 num)
 {
     AOCL_HC_MF_SKIP(5, HASH_CHAIN_SLOT_SZ_16, HASH_CHAIN_MAX_16, AOCL_HASH5_CALC)
 }
 
 /* 5-byte hash equivalent of AOCL_Hc4_MatchFinder_GetMatches 
 *
-* Called when: algo = !btMode, numHashBytes > 4, expectedDataSize <= MIN_SIZE_FOR_CF_HC
+* Called when: algo = !btMode, numHashBytes > 4, cacheEfficientSearch = 0
 * Calls: AOCL_Hc_GetMatchesSpec: Reference style hash chain */
 static UInt32* AOCL_Hc5_MatchFinder_GetMatches(CMatchFinder* p, UInt32* distances)
 {
@@ -2919,7 +2925,7 @@ void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable) {
   vTable->GetPointerToCurrentPos = (Mf_GetPointerToCurrentPos_Func)MatchFinder_GetPointerToCurrentPos;
   if (!p->btMode)
   {
-      if (p->expectedDataSize <= MIN_SIZE_FOR_CF_HC) { //input file too small to benefit from cache efficient data structures
+      if (!p->cacheEfficientSearch) {
           if (p->numHashBytes <= 4) {
               vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches;
               vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip;
@@ -2933,23 +2939,23 @@ void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable) {
           if (p->numHashBytes <= 4)
           {
               if (p->level < HASH_CHAIN_16_LEVEL) {
-                  vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches_8;
-                  vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip_8;
+                  vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches_Cehc8;
+                  vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip_Cehc8;
               }
               else {
-                  vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches_16;
-                  vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip_16;
+                  vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches_Cehc16;
+                  vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip_Cehc16;
               }
           }
           else
           {
               if (p->level < HASH_CHAIN_16_LEVEL) {
-                  vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc5_MatchFinder_GetMatches_8;
-                  vTable->Skip = (Mf_Skip_Func)AOCL_Hc5_MatchFinder_Skip_8;
+                  vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc5_MatchFinder_GetMatches_Cehc8;
+                  vTable->Skip = (Mf_Skip_Func)AOCL_Hc5_MatchFinder_Skip_Cehc8;
               }
               else {
-                  vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc5_MatchFinder_GetMatches_16;
-                  vTable->Skip = (Mf_Skip_Func)AOCL_Hc5_MatchFinder_Skip_16;
+                  vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc5_MatchFinder_GetMatches_Cehc16;
+                  vTable->Skip = (Mf_Skip_Func)AOCL_Hc5_MatchFinder_Skip_Cehc16;
               }
           }
       }
@@ -2992,7 +2998,8 @@ void Test_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
     p.numRefs = numRefs;
     p.hashMask = hashMask;
     p.level = level;
-    p.expectedDataSize = MIN_SIZE_FOR_CF_HC + 1;
+    p.expectedDataSize = MIN_SIZE_FOR_CE_HC_ON;
+    p.cacheEfficientSearch = 1;
 
     size_t numSonRefs = p.cyclicBufferSize;
     if (p.btMode)
@@ -3013,7 +3020,8 @@ void Test_AOCL_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* 
     p.numRefs = numRefs;
     p.hashMask = hashMask;
     p.level = level;
-    p.expectedDataSize = MIN_SIZE_FOR_CF_HC + 1;
+    p.expectedDataSize = MIN_SIZE_FOR_CE_HC_ON;
+    p.cacheEfficientSearch = 1;
 
     AOCL_MatchFinder_Normalize3(subValue, &p);
 }
