@@ -421,41 +421,9 @@ if (BUILD_DOC)
 	find_package(Doxygen 1.9.6)
 	set(W_DIR "${CMAKE_CURRENT_SOURCE_DIR}/docs")
 	if(NOT (DOXYGEN_FOUND))
-		if (WIN32)
-			set(DOXYGEN "${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen-1.9.6/doxygen.exe")
-			if(NOT (EXISTS ${DOXYGEN}))
-				message(STATUS "so downloading doxygen executables")
-				file(DOWNLOAD https://github.com/doxygen/doxygen/releases/download/Release_1_9_6/doxygen-1.9.6.windows.x64.bin.zip ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.zip
-						SHOW_PROGRESS )
-				execute_process(COMMAND powershell Expand-Archive ./doxygen.zip ./doxygen-1.9.6 -Force
-						WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/)
-				file(REMOVE ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.zip)
-			endif()
-			execute_process(COMMAND "${DOXYGEN}" Doxyfile
-					WORKING_DIRECTORY ${W_DIR})
-		elseif (UNIX)
-			set(greater_than_version 2.28)
-			execute_process(COMMAND bash -c "ldd --version | head -n 1 | grep -o '....$'"
-					OUTPUT_VARIABLE ldd_version_output
-					ERROR_VARIABLE ldd_version_error)
-			if("${ldd_version_output}" VERSION_GREATER "${greater_than_version}")
-				set(DOXYGEN "${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen-1.9.6/bin/doxygen")
-				if(NOT (EXISTS ${DOXYGEN}))
-					message(STATUS "so downloading doxygen executables")
-					file(DOWNLOAD https://github.com/doxygen/doxygen/releases/download/Release_1_9_6/doxygen-1.9.6.linux.bin.tar.gz ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.gz
-							SHOW_PROGRESS )
-					execute_process(COMMAND tar -xf doxygen.gz
-							WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
-					file(REMOVE ${CMAKE_CURRENT_SOURCE_DIR}/build/doxygen.gz)
-				endif()
-				execute_process(COMMAND "${DOXYGEN}" Doxyfile
-						WORKING_DIRECTORY ${W_DIR})
-			else()
-				message(STATUS "Please install doxygen and try again.")
-			endif()
-		endif()
+		message(STATUS "Doxygen not found please install doxygen and try again.")
 	else()
-		execute_process(COMMAND doxygen Doxyfile
+		execute_process(COMMAND ${DOXYGEN_EXECUTABLE} Doxyfile
 				WORKING_DIRECTORY ${W_DIR}
 				COMMAND_ECHO STDOUT)
 	endif()
