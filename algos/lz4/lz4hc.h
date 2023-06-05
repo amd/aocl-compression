@@ -103,6 +103,11 @@ extern "C" {
  */
 LZ4LIB_API int LZ4_compress_HC (const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel);
 
+#ifdef AOCL_LZ4HC_OPT
+LZ4LIB_API int LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel);
+LZ4LIB_API int AOCL_LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel);
+#endif /* AOCL_LZ4HC_OPT */
+
 
 /* Note :
  *   Decompression functions are provided within "lz4.h" (BSD license)
@@ -137,6 +142,9 @@ LZ4LIB_API int LZ4_sizeofStateHC(void);
 */
 LZ4LIB_API int LZ4_compress_HC_extStateHC(void* stateHC, const char* src, char* dst, int srcSize, int maxDstSize, int compressionLevel);
 
+#ifdef AOCL_LZ4HC_OPT
+LZ4LIB_API int AOCL_LZ4_compress_HC_extStateHC(void* stateHC, const char* src, char* dst, int srcSize, int maxDstSize, int compressionLevel);
+#endif /* AOCL_LZ4HC_OPT */
 
 /*! 
  *  @brief Will compress as much data as possible from `src` to fit into `targetDstSize` budget.
@@ -184,7 +192,7 @@ LZ4LIB_API int LZ4_compress_HC_destSize(void* stateHC,
  */
 LZ4LIB_API char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
-#endif
+#endif /* AOCL_DYNAMIC_DISPATCHER */
 
 /*-************************************
  *  Streaming Compression
@@ -197,6 +205,7 @@ LZ4LIB_API char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize,
 
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
  typedef union LZ4_streamHC_u LZ4_streamHC_t;   /* incomplete type (defined later) */
+ typedef union AOCL_LZ4_streamHC_u AOCL_LZ4_streamHC_t;   /* incomplete type (defined later) */
  /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /* LZ4_createStreamHC() and LZ4_freeStreamHC() :
@@ -292,6 +301,10 @@ LZ4LIB_API int             LZ4_freeStreamHC (LZ4_streamHC_t* streamHCPtr);
  * 
  */
 LZ4LIB_API void LZ4_resetStreamHC_fast(LZ4_streamHC_t* streamHCPtr, int compressionLevel);   /* v1.9.0+ */
+
+#ifdef AOCL_LZ4HC_OPT
+LZ4LIB_API void AOCL_LZ4_resetStreamHC_fast(AOCL_LZ4_streamHC_t* streamHCPtr, int compressionLevel);   /* v1.9.0+ */
+#endif /* AOCL_LZ4HC_OPT */
 
 /*!
  * @brief A first "fictional block" can be designated as initial dictionary, using this function.
@@ -438,6 +451,24 @@ struct LZ4HC_CCtx_internal
     const LZ4HC_CCtx_internal* dictCtx; /**< Current context of dictionary */
 };
 
+typedef struct AOCL_LZ4HC_CCtx_internal AOCL_LZ4HC_CCtx_internal;
+struct AOCL_LZ4HC_CCtx_internal
+{
+    LZ4_u32   hashTable[LZ4HC_HASHTABLESIZE];
+    LZ4_u16   chainTable[LZ4HC_MAXD];
+    const LZ4_byte* end;       /**< Next block here to continue on current prefix */
+    const LZ4_byte* base;      /**< All index relative to this position */
+    const LZ4_byte* dictBase;  /**< Alternate base for extDict */
+    LZ4_u32   dictLimit;       /**< Below that point, need extDict */
+    LZ4_u32   lowLimit;        /**< Below that point, no more dict */
+    LZ4_u32   nextToUpdate;    /**< Index from which to continue dictionary update */
+    short     compressionLevel; /**< Is a measure of the compression quality */
+    LZ4_i8    favorDecSpeed;   /**< Favor decompression speed if this flag set,
+                                  otherwise, favor compression ratio */
+    LZ4_i8    dirty;           /**< Stream has to be fully reset if this flag is set */
+    const AOCL_LZ4HC_CCtx_internal* dictCtx; /**< Current context of dictionary */
+};
+
 
 /* Do not use these definitions directly !
  * Declare or allocate an LZ4_streamHC_t instead.
@@ -449,6 +480,11 @@ union LZ4_streamHC_u {
     void* table[LZ4_STREAMHCSIZE_VOIDP];
     LZ4HC_CCtx_internal internal_donotuse;
 }; /* previously typedef'd to LZ4_streamHC_t */
+
+union AOCL_LZ4_streamHC_u {
+    void* table[LZ4_STREAMHCSIZE_VOIDP];
+    AOCL_LZ4HC_CCtx_internal internal_donotuse;
+}; /* previously typedef'd to AOCL_LZ4_streamHC_t */
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
@@ -496,6 +532,10 @@ union LZ4_streamHC_u {
  * @warning Requires v1.9.0+. 
  */
 LZ4LIB_API LZ4_streamHC_t* LZ4_initStreamHC (void* buffer, size_t size);
+
+#ifdef AOCL_LZ4HC_OPT
+LZ4LIB_API AOCL_LZ4_streamHC_t* AOCL_LZ4_initStreamHC(void* buffer, size_t size);
+#endif /* AOCL_LZ4HC_OPT */
 
 /**
  * @}
@@ -636,6 +676,11 @@ extern "C" {
 LZ4LIB_STATIC_API void LZ4_setCompressionLevel(
     LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLevel);
 
+#ifdef AOCL_LZ4HC_OPT
+LZ4LIB_STATIC_API void AOCL_LZ4_setCompressionLevel(
+    AOCL_LZ4_streamHC_t* AOCL_LZ4_streamHCPtr, int compressionLevel);
+#endif /* AOCL_LZ4HC_OPT */
+
 /* LZ4_favorDecompressionSpeed() : v1.8.2+ (experimental)
  *  Opt. Parser will favor decompression speed over compression ratio.
  *  Only applicable to levels >= LZ4HC_CLEVEL_OPT_MIN.
@@ -685,6 +730,14 @@ LZ4LIB_STATIC_API int LZ4_compress_HC_extStateHC_fastReset (
     const char* src, char* dst,
     int srcSize, int dstCapacity,
     int compressionLevel);
+
+#ifdef AOCL_LZ4HC_OPT
+LZ4LIB_STATIC_API int AOCL_LZ4_compress_HC_extStateHC_fastReset(
+    void* state,
+    const char* src, char* dst,
+    int srcSize, int dstCapacity,
+    int compressionLevel);
+#endif /* AOCL_LZ4HC_OPT */
 
 /* LZ4_attach_HC_dictionary() :
  *  This is an experimental API that allows for the efficient use of a
