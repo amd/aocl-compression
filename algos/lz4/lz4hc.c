@@ -53,6 +53,8 @@
 #define LZ4_HC_STATIC_LINKING_ONLY
 #include "lz4hc.h"
 
+#include "algos/common/aoclHashChain.h"   /* required to implement cache efficient hash chain */
+
 
 /*===   Common definitions   ===*/
 #if defined(__GNUC__)
@@ -67,9 +69,27 @@
 #include "lz4.c"   /* LZ4_count, constants, mem */
 #endif
 
+/* The array to be used as HASH_CHAIN_SLOT_SIZE array for levels, 
+ * This strategy is only for level 6, 7, 8 and 9, So HASH_CHAIN_SLOT_SIZE
+ * for other levels are 0. */
+static const int AOCL_hashchain_slot[LZ4HC_CLEVEL_MAX + 1] = {
+           0,     /* 0, unused */
+           0,     /* 1, unused */
+           0,     /* 2, unused */
+           0,     /* 3 */
+           0,     /* 4 */
+           0,     /* 5 */
+          16,     /* 6 */
+          32,     /* 7 */
+          64,     /* 8 */
+         128,     /* 9 */
+           0,     /* 10==LZ4HC_CLEVEL_OPT_MIN */
+           0,     /* 11 */
+           0,     /* 12==LZ4HC_CLEVEL_MAX */
+};
 
 /*===   Enums   ===*/
-typedef enum { noDictCtx, usingDictCtxHc } dictCtx_directive;
+//typedef enum { noDictCtx, usingDictCtxHc } dictCtx_directive;
 
 
 /*===   Constants   ===*/
@@ -89,11 +109,13 @@ typedef enum { noDictCtx, usingDictCtxHc } dictCtx_directive;
 
 static U32 LZ4HC_hashPtr(const void* ptr) { return HASH_FUNCTION(LZ4_read32(ptr)); }
 
+#define kEmptyValue 0
+
 
 #ifdef AOCL_DYNAMIC_DISPATCHER
 static int (*LZ4_compress_HC_fp)(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel) = LZ4_compress_HC_internal;
 
-// function pointer to variants of the LZ4_compress_HC() function, used for integration
+// function pointer to variants to be used in LZ4_compress_HC() function, used for integration
 // with the dynamic dispatcher. 
 #endif /* AOCL_DYNAMIC_DISPATCHER */
 
@@ -107,9 +129,9 @@ static void LZ4HC_clearTables (LZ4HC_CCtx_internal* hc4)
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4HC_clearTables() used in Cache Efficient Hash Chain Strategy (6<= level <=9). */
 static void AOCL_LZ4HC_clearTables(AOCL_LZ4HC_CCtx_internal* hc4)
 {
-    MEM_INIT(hc4->hashTable, 0, sizeof(hc4->hashTable));
     MEM_INIT(hc4->chainTable, 0xFF, sizeof(hc4->chainTable));
 }
 #endif
@@ -131,6 +153,7 @@ static void LZ4HC_init_internal (LZ4HC_CCtx_internal* hc4, const BYTE* start)
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4HC_init_internal() used in Cache Efficient Hash Chain Strategy (6<= level <=9). */
 static void AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* start)
 {
     uptrval startingOffset = (uptrval)(hc4->end - hc4->base);
@@ -147,6 +170,14 @@ static void AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* 
     hc4->lowLimit = (U32)startingOffset;
 }
 #endif /* AOCL_LZ4HC_OPT */
+
+#ifdef AOCL_LZ4HC_UNIT_TEST
+/* Wrapper function to be used for Unit Testing. */
+void Test_AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* start)
+{
+    AOCL_LZ4HC_init_internal(hc4, start);
+}
+#endif
 
 /* Update chains up to ip (excluded) */
 LZ4_FORCE_INLINE void LZ4HC_Insert (LZ4HC_CCtx_internal* hc4, const BYTE* ip)
@@ -170,26 +201,35 @@ LZ4_FORCE_INLINE void LZ4HC_Insert (LZ4HC_CCtx_internal* hc4, const BYTE* ip)
 }
 
 #ifdef AOCL_LZ4HC_OPT
-LZ4_FORCE_INLINE void AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* ip)
+/* AOCL variant of LZ4HC_insert() to Update chain Table up to ip (excluded)
+ * used in Cache efficient Hash Chain strategy (6<= level <=9). */
+LZ4_FORCE_INLINE void AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* ip, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz)
 {
-    U16* const chainTable = hc4->chainTable;
-    U32* const hashTable = hc4->hashTable;
+    CHAIN_TYPE* const chainTable = hc4->chainTable;
     const BYTE* const base = hc4->base;
     U32 const target = (U32)(ip - base);
     U32 idx = hc4->nextToUpdate;
 
     while (idx < target) {
         U32 const h = LZ4HC_hashPtr(base + idx);
-        size_t delta = idx - hashTable[h];
-        if (delta > LZ4_DISTANCE_MAX) delta = LZ4_DISTANCE_MAX;
-        DELTANEXTU16(chainTable, idx) = (U16)delta;
-        hashTable[h] = idx;
+        CHAIN_TYPE hcHead = 0;
+        AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0 /* hashTable */, hcHead, 0, h,
+            Hash_Chain_Slot_Sz, Hash_Chain_Max, kEmptyValue)
+        AOCL_COMMON_CEHCFIX_INSERT(chainTable, 0 /* hashTable */,  hcHead, 0, idx, h,
+            Hash_Chain_Slot_Sz, Hash_Chain_Max)
         idx++;
     }
 
     hc4->nextToUpdate = target;
 }
 #endif /* AOCL_LZ4HC_OPT */
+
+#ifdef AOCL_LZ4HC_UNIT_TEST
+void Test_AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* ip, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz)
+{
+    AOCL_LZ4HC_Insert(hc4, ip, Hash_Chain_Max, Hash_Chain_Slot_Sz);
+}
+#endif /* AOCL_LZ4HC_UNIT_TEST */
 
 #ifdef AOCL_LZ4HC_OPT
 /* This function returns the number of leading zeros of the value passed.
@@ -350,7 +390,17 @@ int AOCL_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
 }
 #endif /* AOCL_LZ4HC_OPT */
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+static int (*LZ4HC_countBack_fp)(const BYTE* const ip, const BYTE* const match,
+    const BYTE* const iMin, const BYTE* const mMin) = LZ4HC_countBack;
+
+// function pointer to variants of the LZ4HC_countBack() function, used for integration
+// with the dynamic dispatcher. 
+#endif /* AOCL_DYNAMIC_DISPATCHER */
+
 #ifdef AOCL_LZ4HC_UNIT_TEST
+/* Wrapper functions for static inlined LZ4HC_countBack and AOCL_LZ4HC_countBack function for unit testing. */
+
 int Test_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
                     const BYTE* const iMin, const BYTE* const mMin)
 {
@@ -362,7 +412,7 @@ int Test_AOCL_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
 {
     return AOCL_LZ4HC_countBack(ip, match, iMin, mMin);
 }
-#endif
+#endif /* AOCL_LZ4HC_UNIT_TEST */
 
 #if defined(_MSC_VER)
 #  define LZ4HC_rotl32(x,r) _rotl(x,r)
@@ -442,7 +492,6 @@ static int LZ4HC_protectDictEnd(U32 const dictLimit, U32 const matchIndex)
 }
 
 typedef enum { rep_untested, rep_not, rep_confirmed } repeat_state_e;
-typedef enum { favorCompressionRatio=0, favorDecompressionSpeed } HCfavor_e;
 
 LZ4_FORCE_INLINE int
 LZ4HC_InsertAndGetWiderMatch (
@@ -496,7 +545,15 @@ LZ4HC_InsertAndGetWiderMatch (
             assert(longest >= 1);
             if (LZ4_read16(iLowLimit + longest - 1) == LZ4_read16(matchPtr - lookBackLength + longest - 1)) {
                 if (LZ4_read32(matchPtr) == pattern) {
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                    int const back = lookBackLength ? LZ4HC_countBack_fp(ip, matchPtr, iLowLimit, lowPrefixPtr) : 0;
+#else
+                    int const back = lookBackLength ? AOCL_LZ4HC_countBack(ip, matchPtr, iLowLimit, lowPrefixPtr) : 0;
+#endif
+#else
                     int const back = lookBackLength ? LZ4HC_countBack(ip, matchPtr, iLowLimit, lowPrefixPtr) : 0;
+#endif
                     matchLength = MINMATCH + (int)LZ4_count(ip+MINMATCH, matchPtr+MINMATCH, iHighLimit);
                     matchLength -= back;
                     if (matchLength > longest) {
@@ -517,7 +574,15 @@ LZ4HC_InsertAndGetWiderMatch (
                 matchLength = (int)LZ4_count(ip+MINMATCH, matchPtr+MINMATCH, vLimit) + MINMATCH;
                 if ((ip+matchLength == vLimit) && (vLimit < iHighLimit))
                     matchLength += LZ4_count(ip+matchLength, lowPrefixPtr, iHighLimit);
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                back = lookBackLength ? LZ4HC_countBack_fp(ip, matchPtr, iLowLimit, dictStart) : 0;
+#else
+                back = lookBackLength ? AOCL_LZ4HC_countBack(ip, matchPtr, iLowLimit, dictStart) : 0;
+#endif
+#else
                 back = lookBackLength ? LZ4HC_countBack(ip, matchPtr, iLowLimit, dictStart) : 0;
+#endif
 
                 matchLength -= back;
                 if (matchLength > longest) {
@@ -650,7 +715,15 @@ LZ4HC_InsertAndGetWiderMatch (
                 const BYTE* vLimit = ip + (dictEndOffset - dictMatchIndex);
                 if (vLimit > iHighLimit) vLimit = iHighLimit;
                 mlt = (int)LZ4_count(ip+MINMATCH, matchPtr+MINMATCH, vLimit) + MINMATCH;
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+                back = lookBackLength ? LZ4HC_countBack_fp(ip, matchPtr, iLowLimit, dictCtx->base + dictCtx->dictLimit) : 0;
+#else
+                back = lookBackLength ? AOCL_LZ4HC_countBack(ip, matchPtr, iLowLimit, dictCtx->base + dictCtx->dictLimit) : 0;
+#endif
+#else
                 back = lookBackLength ? LZ4HC_countBack(ip, matchPtr, iLowLimit, dictCtx->base + dictCtx->dictLimit) : 0;
+#endif
                 mlt -= back;
                 if (mlt > longest) {
                     longest = mlt;
@@ -670,6 +743,7 @@ LZ4HC_InsertAndGetWiderMatch (
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4HC_InsertAndGetWiderMatch() used in Cache Efficient Hash chain strategy (6<= level <=9). */
 LZ4_FORCE_INLINE int
 AOCL_LZ4HC_InsertAndGetWiderMatch(
     AOCL_LZ4HC_CCtx_internal* hc4,
@@ -683,10 +757,11 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
     const int patternAnalysis,
     const int chainSwap,
     const dictCtx_directive dict,
-    const HCfavor_e favorDecSpeed)
+    const HCfavor_e favorDecSpeed, 
+    int Hash_Chain_Max,
+    int Hash_Chain_Slot_Sz)
 {
-    U16* const chainTable = hc4->chainTable;
-    U32* const HashTable = hc4->hashTable;
+    CHAIN_TYPE* const chainTable = hc4->chainTable;
     const AOCL_LZ4HC_CCtx_internal* const dictCtx = hc4->dictCtx;
     const BYTE* const base = hc4->base;
     const U32 dictLimit = hc4->dictLimit;
@@ -695,21 +770,33 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
     const U32 lowestMatchIndex = (hc4->lowLimit + (LZ4_DISTANCE_MAX + 1) > ipIndex) ? hc4->lowLimit : ipIndex - LZ4_DISTANCE_MAX;
     const BYTE* const dictBase = hc4->dictBase;
     int const lookBackLength = (int)(ip - iLowLimit);
-    int nbAttempts = maxNbAttempts;
+
+    int nbAttempts = maxNbAttempts > Hash_Chain_Max ? Hash_Chain_Max : maxNbAttempts; //limit to max size of chain. No loop rollover checks required.
+
     U32 matchChainPos = 0;
     U32 const pattern = LZ4_read32(ip);
     U32 matchIndex;
     repeat_state_e repeat = rep_untested;
     size_t srcPatternLength = 0;
 
-    DEBUGLOG(7, "LZ4HC_InsertAndGetWiderMatch");
+    DEBUGLOG(7, "AOCL_LZ4HC_InsertAndGetWiderMatch");
     /* First Match */
-    AOCL_LZ4HC_Insert(hc4, ip);
-    matchIndex = HashTable[LZ4HC_hashPtr(ip)];
+    AOCL_LZ4HC_Insert(hc4, ip, Hash_Chain_Max, Hash_Chain_Slot_Sz);
+ 
+    U32 hashIp = LZ4HC_hashPtr(ip);
+    CHAIN_TYPE hcHead = 0;
+    CHAIN_TYPE hcHeadPos;
+    
+    AOCL_COMMON_CEHCFIX_GET_HEAD(chainTable, 0 /* HashTable */, hcHead, 0, hashIp, Hash_Chain_Slot_Sz, Hash_Chain_Max, kEmptyValue)
+    AOCL_COMMON_CEHCFIX_GET(chainTable, 0 /* HashTable */, hcHead, 0, matchIndex, Hash_Chain_Slot_Sz, Hash_Chain_Max)
+    hcHeadPos = hcHead;
+    if (matchIndex == kEmptyValue) return longest;
+
     DEBUGLOG(7, "First match at index %u / %u (lowestMatchIndex)",
         matchIndex, lowestMatchIndex);
 
     while ((matchIndex >= lowestMatchIndex) && (nbAttempts > 0)) {
+        if (matchIndex == kEmptyValue) break; //end of chain
         int matchLength = 0;
         nbAttempts--;
         assert(matchIndex < ipIndex);
@@ -754,35 +841,14 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
             }
         }
 
-        if (chainSwap && matchLength == longest) {    /* better match => select a better chain */
-            assert(lookBackLength == 0);   /* search forward only */
-            if (matchIndex + (U32)longest <= ipIndex) {
-                int const kTrigger = 4;
-                U32 distanceToNextMatch = 1;
-                int const end = longest - MINMATCH + 1;
-                int step = 1;
-                int accel = 1 << kTrigger;
-                int pos;
-                for (pos = 0; pos < end; pos += step) {
-                    U32 const candidateDist = DELTANEXTU16(chainTable, matchIndex + (U32)pos);
-                    step = (accel++ >> kTrigger);
-                    if (candidateDist > distanceToNextMatch) {
-                        distanceToNextMatch = candidateDist;
-                        matchChainPos = (U32)pos;
-                        accel = 1 << kTrigger;
-                    }
-                }
-                if (distanceToNextMatch > 1) {
-                    if (distanceToNextMatch > matchIndex) break;   /* avoid overflow */
-                    matchIndex -= distanceToNextMatch;
-                    continue;
-                }
-            }
-        }
+        {
+        CHAIN_TYPE incremented_head = AOCL_COMMON_CEHCFIX_CIRC_INC_HEAD(hcHead, Hash_Chain_Slot_Sz, Hash_Chain_Max);
+        CHAIN_TYPE const NextMatchIndex = chainTable[incremented_head];
+        if (patternAnalysis && NextMatchIndex == matchIndex - 1 && matchChainPos == 0) {
+            int jump_to_newMatchIndex = 0;
+            U32 matchCandidateIdx;
+            AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcHead, matchCandidateIdx, Hash_Chain_Slot_Sz, Hash_Chain_Max, kEmptyValue, hcHeadPos)
 
-        { U32 const distNextMatch = DELTANEXTU16(chainTable, matchIndex);
-        if (patternAnalysis && distNextMatch == 1 && matchChainPos == 0) {
-            U32 const matchCandidateIdx = matchIndex - 1;
             /* may be a repeated pattern */
             if (repeat == rep_untested) {
                 if (((pattern & 0xFFFF) == (pattern >> 16))
@@ -821,12 +887,14 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
                     if ((currentSegmentLength >= srcPatternLength)   /* current pattern segment large enough to contain full srcPatternLength */
                         && (forwardPatternLength <= srcPatternLength)) { /* haven't reached this position yet */
                         U32 const newMatchIndex = matchCandidateIdx + (U32)forwardPatternLength - (U32)srcPatternLength;  /* best position, full pattern, might be followed by more match */
+                        jump_to_newMatchIndex = srcPatternLength - forwardPatternLength;
                         if (LZ4HC_protectDictEnd(dictLimit, newMatchIndex))
                             matchIndex = newMatchIndex;
                         else {
                             /* Can only happen if started in the prefix */
                             assert(newMatchIndex >= dictLimit - 3 && newMatchIndex < dictLimit && !extDict);
                             matchIndex = dictLimit;
+                            jump_to_newMatchIndex -= dictLimit - newMatchIndex;
                         }
                     }
                     else {
@@ -837,6 +905,7 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
                         }
                         else {
                             matchIndex = newMatchIndex;
+                            jump_to_newMatchIndex = backLength;
                             if (lookBackLength == 0) {  /* no back possible */
                                 size_t const maxML = MIN(currentSegmentLength, srcPatternLength);
                                 if ((size_t)longest < maxML) {
@@ -847,9 +916,12 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
                                     *matchpos = base + matchIndex;   /* virtual pos, relative to ip, to retrieve offset */
                                     *startpos = ip;
                                 }
-                                {   U32 const distToNextPattern = DELTANEXTU16(chainTable, matchIndex);
-                                if (distToNextPattern > matchIndex) break;  /* avoid overflow */
-                                matchIndex -= distToNextPattern;
+                                {   jump_to_newMatchIndex = jump_to_newMatchIndex > Hash_Chain_Max ? Hash_Chain_Max : jump_to_newMatchIndex;
+                                    for (int i = 0; i < jump_to_newMatchIndex - 1; i++) hcHead = AOCL_COMMON_CEHCFIX_CIRC_INC_HEAD(hcHead, Hash_Chain_Slot_Sz, Hash_Chain_Max);
+                                    int NextPatternIdx;
+                                    AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcHead, NextPatternIdx, Hash_Chain_Slot_Sz, Hash_Chain_Max, kEmptyValue, hcHeadPos);
+                                    if (matchIndex - NextPatternIdx > 0) break;
+                                    matchIndex = NextPatternIdx;
                                 }
                             }
                         }
@@ -860,15 +932,23 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
         }   }   /* PA optimization */
 
         /* follow current chain */
-        matchIndex -= DELTANEXTU16(chainTable, matchIndex + matchChainPos);
+        AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(chainTable, hcHead, matchIndex, Hash_Chain_Slot_Sz, Hash_Chain_Max, kEmptyValue, hcHeadPos);
 
     }  /* while ((matchIndex>=lowestMatchIndex) && (nbAttempts)) */
-
+    
     if (dict == usingDictCtxHc
         && nbAttempts > 0
         && ipIndex - lowestMatchIndex < LZ4_DISTANCE_MAX) {
         size_t const dictEndOffset = (size_t)(dictCtx->end - dictCtx->base);
-        U32 dictMatchIndex = dictCtx->hashTable[LZ4HC_hashPtr(ip)];
+        
+        CHAIN_TYPE hcHead = 0;
+        U32 hashIdx = LZ4HC_hashPtr(ip);
+        U32 dictMatchIndex = 0;
+
+        AOCL_COMMON_CEHCFIX_GET_HEAD(dictCtx->chainTable, 0, hcHead, 0, hashIdx, Hash_Chain_Slot_Sz, Hash_Chain_Max, kEmptyValue)
+        CHAIN_TYPE hcHeadPos = hcHead;
+        AOCL_COMMON_CEHCFIX_GET(dictCtx->chainTable, 0, hcHead, 0, dictMatchIndex, Hash_Chain_Slot_Sz, Hash_Chain_Max)
+
         assert(dictEndOffset <= 1 GB);
         matchIndex = dictMatchIndex + lowestMatchIndex - (U32)dictEndOffset;
         while (ipIndex - matchIndex <= LZ4_DISTANCE_MAX && nbAttempts--) {
@@ -889,9 +969,11 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
                 }
             }
 
-            {   U32 const nextOffset = DELTANEXTU16(dictCtx->chainTable, dictMatchIndex);
-            dictMatchIndex -= nextOffset;
-            matchIndex -= nextOffset;
+            {
+                U32 newdictMatchIndex;
+                AOCL_COMMON_CEHCFIX_MOVE_TO_NEXT(dictCtx->chainTable, hcHead, newdictMatchIndex, Hash_Chain_Slot_Sz, Hash_Chain_Max, kEmptyValue, hcHeadPos)
+                U32 const nextOffset = dictMatchIndex - newdictMatchIndex;
+                matchIndex -= nextOffset;
             }
         }
     }
@@ -899,6 +981,28 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
     return longest;
 }
 #endif /* AOCL_LZ4HC_OPT */
+
+#ifdef AOCL_LZ4HC_UNIT_TEST
+int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
+    AOCL_LZ4HC_CCtx_internal* hc4,
+    const BYTE* const ip,
+    const BYTE* const iLowLimit,
+    const BYTE* const iHighLimit,
+    int longest,
+    const BYTE** matchpos,
+    const BYTE** startpos,
+    const int maxNbAttempts,
+    const int patternAnalysis,
+    const int chainSwap,
+    const dictCtx_directive dict,
+    const HCfavor_e favorDecSpeed,
+    int Hash_Chain_Max,
+    int Hash_Chain_Slot_Sz)
+{
+    return AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, iLowLimit, iHighLimit, longest, matchpos, startpos, maxNbAttempts,
+        patternAnalysis, chainSwap, dict, favorDecSpeed, Hash_Chain_Max, Hash_Chain_Slot_Sz);
+}
+#endif /* AOCL_LZ4HC_UNIT_TEST */
 
 LZ4_FORCE_INLINE
 int LZ4HC_InsertAndFindBestMatch(LZ4HC_CCtx_internal* const hc4,   /* Index table will be updated */
@@ -916,19 +1020,22 @@ int LZ4HC_InsertAndFindBestMatch(LZ4HC_CCtx_internal* const hc4,   /* Index tabl
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4HC_InsertAndFindBestMatch() used in Cache Efficient Hash chain strategy (6<= level <=9). */
 LZ4_FORCE_INLINE
 int AOCL_LZ4HC_InsertAndFindBestMatch(AOCL_LZ4HC_CCtx_internal* const hc4,   /* Index table will be updated */
     const BYTE* const ip, const BYTE* const iLimit,
     const BYTE** matchpos,
     const int maxNbAttempts,
     const int patternAnalysis,
-    const dictCtx_directive dict)
+    const dictCtx_directive dict, 
+    int Hash_Chain_Max, 
+    int Hash_Chain_Slot_Sz)
 {
     const BYTE* uselessPtr = ip;
     /* note : AOCL_LZ4HC_InsertAndGetWiderMatch() is able to modify the starting position of a match (*startpos),
      * but this won't be the case here, as we define iLowLimit==ip,
      * so AOCL_LZ4HC_InsertAndGetWiderMatch() won't be allowed to search past ip */
-    return AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, ip, iLimit, MINMATCH - 1, matchpos, &uselessPtr, maxNbAttempts, patternAnalysis, 0 /*chainSwap*/, dict, favorCompressionRatio);
+    return AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, ip, iLimit, MINMATCH - 1, matchpos, &uselessPtr, maxNbAttempts, patternAnalysis, 0 /*chainSwap*/, dict, favorCompressionRatio, Hash_Chain_Max, Hash_Chain_Slot_Sz);
 }
 #endif /* AOCL_LZ4HC_OPT */
 
@@ -1260,7 +1367,8 @@ _dest_overflow:
 
 
 #ifdef AOCL_LZ4HC_OPT
-/* AOCL variant of LZ4HC_compress_hashchain() which disables the Pattern Analysis for level 9 */
+/* AOCL variant of LZ4HC_compress_hashchain() which disables the Pattern Analysis for level 9
+ * and used in Cache Efficient Hash chain strategy. */
 LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
     AOCL_LZ4HC_CCtx_internal* const ctx,
     const char* const source,
@@ -1269,7 +1377,9 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
     int const maxOutputSize,
     int maxNbAttempts,
     const limitedOutput_directive limit,
-    const dictCtx_directive dict
+    const dictCtx_directive dict,
+    int Hash_Chain_Max,
+    int Hash_Chain_Slot_Sz
 )
 {
     const int inputSize = *srcSizePtr;
@@ -1305,7 +1415,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
 
     /* Main Loop */
     while (ip <= mflimit) {
-        ml = AOCL_LZ4HC_InsertAndFindBestMatch(ctx, ip, matchlimit, &ref, maxNbAttempts, patternAnalysis, dict);
+        ml = AOCL_LZ4HC_InsertAndFindBestMatch(ctx, ip, matchlimit, &ref, maxNbAttempts, patternAnalysis, dict, Hash_Chain_Max, Hash_Chain_Slot_Sz);
         if (ml < MINMATCH) { ip++; continue; }
 
         /* saved, in case we would skip too much */
@@ -1315,7 +1425,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
         if (ip + ml <= mflimit) {
             ml2 = AOCL_LZ4HC_InsertAndGetWiderMatch(ctx,
                 ip + ml - 2, ip + 0, matchlimit, ml, &ref2, &start2,
-                maxNbAttempts, patternAnalysis, 0, dict, favorCompressionRatio);
+                maxNbAttempts, patternAnalysis, 0, dict, favorCompressionRatio, Hash_Chain_Max, Hash_Chain_Slot_Sz);
         }
         else {
             ml2 = ml;
@@ -1362,7 +1472,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
         if (start2 + ml2 <= mflimit) {
             ml3 = AOCL_LZ4HC_InsertAndGetWiderMatch(ctx,
                 start2 + ml2 - 3, start2, matchlimit, ml2, &ref3, &start3,
-                maxNbAttempts, patternAnalysis, 0, dict, favorCompressionRatio);
+                maxNbAttempts, patternAnalysis, 0, dict, favorCompressionRatio, Hash_Chain_Max, Hash_Chain_Slot_Sz);
         }
         else {
             ml3 = ml2;
@@ -1517,16 +1627,6 @@ static int LZ4HC_compress_optimal( LZ4HC_CCtx_internal* ctx,
     const dictCtx_directive dict,
     const HCfavor_e favorDecSpeed);
 
-#ifdef AOCL_LZ4HC_OPT
-static int AOCL_LZ4HC_compress_optimal(AOCL_LZ4HC_CCtx_internal* ctx,
-    const char* const source, char* dst,
-    int* srcSizePtr, int dstCapacity,
-    int const nbSearches, size_t sufficient_len,
-    const limitedOutput_directive limit, int const fullUpdate,
-    const dictCtx_directive dict,
-    const HCfavor_e favorDecSpeed);
-#endif /* AOCL_LZ4HC_OPT */
-
 
 LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal (
     LZ4HC_CCtx_internal* const ctx,
@@ -1591,6 +1691,10 @@ LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal (
     }
 }
 
+/* This function is AOCL variant of LZ4HC_compress_generic_internal() 
+ * which uses Cache Efficient Hash Chain for performance improvement. 
+ * This strategy is implemented for compression level 6, 7, 8 and 9. 
+ * This function will return -1 if called for other compression levels. */
 #ifdef AOCL_LZ4HC_OPT
 LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_generic_internal(
     AOCL_LZ4HC_CCtx_internal* const ctx,
@@ -1603,28 +1707,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_generic_internal(
     const dictCtx_directive dict
 )
 {
-    typedef enum { lz4hc, lz4opt } lz4hc_strat_e;
-    typedef struct {
-        lz4hc_strat_e strat;
-        int nbSearches;
-        U32 targetLength;
-    } cParams_t;
-    static const cParams_t clTable[LZ4HC_CLEVEL_MAX + 1] = {
-        { lz4hc,     2, 16 },  /* 0, unused */
-        { lz4hc,     2, 16 },  /* 1, unused */
-        { lz4hc,     2, 16 },  /* 2, unused */
-        { lz4hc,     4, 16 },  /* 3 */
-        { lz4hc,     8, 16 },  /* 4 */
-        { lz4hc,    16, 16 },  /* 5 */
-        { lz4hc,    32, 16 },  /* 6 */
-        { lz4hc,    64, 16 },  /* 7 */
-        { lz4hc,   128, 16 },  /* 8 */
-        { lz4hc,   256, 16 },  /* 9 */
-        { lz4opt,   96, 64 },  /*10==LZ4HC_CLEVEL_OPT_MIN*/
-        { lz4opt,  512,128 },  /*11 */
-        { lz4opt,16384,LZ4_OPT_NUM },  /* 12==LZ4HC_CLEVEL_MAX */
-    };
-
+    assert(cLevel >=6 && cLevel <= 9);
     DEBUGLOG(4, "AOCL_LZ4HC_compress_generic(ctx=%p, src=%p, srcSize=%d, limit=%d)",
         ctx, src, *srcSizePtr, limit);
 
@@ -1634,23 +1717,32 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_generic_internal(
     ctx->end += *srcSizePtr;
     if (cLevel < 1) cLevel = LZ4HC_CLEVEL_DEFAULT;   /* note : convention is different from lz4frame, maybe something to review */
     cLevel = MIN(LZ4HC_CLEVEL_MAX, cLevel);
-    {   cParams_t const cParam = clTable[cLevel];
-    HCfavor_e const favor = ctx->favorDecSpeed ? favorDecompressionSpeed : favorCompressionRatio;
-    int result;
-
-    if (cParam.strat == lz4hc) {
-        result = AOCL_LZ4HC_compress_hashChain(ctx,
-            src, dst, srcSizePtr, dstCapacity,
-            cParam.nbSearches, limit, dict);
-    }
-    else {
-        assert(cParam.strat == lz4opt);
-        result = AOCL_LZ4HC_compress_optimal(ctx,
-        src, dst, srcSizePtr, dstCapacity,
-        cParam.nbSearches, cParam.targetLength, limit,
-        cLevel == LZ4HC_CLEVEL_MAX,  /* ultra mode */
-        dict, favor);
-    }
+    {   int result;
+        switch (cLevel) {
+            case 6:
+                result = AOCL_LZ4HC_compress_hashChain(ctx,
+                    src, dst, srcSizePtr, dstCapacity,
+                    32, limit, dict, 15, 16);
+                break;
+            case 7:
+                result = AOCL_LZ4HC_compress_hashChain(ctx,
+                    src, dst, srcSizePtr, dstCapacity,
+                    64, limit, dict, 31, 32);
+                break;
+            case 8:
+                result = AOCL_LZ4HC_compress_hashChain(ctx,
+                    src, dst, srcSizePtr, dstCapacity,
+                    128, limit, dict, 63, 64);
+                break;
+            case 9:
+                result = AOCL_LZ4HC_compress_hashChain(ctx,
+                    src, dst, srcSizePtr, dstCapacity,
+                    256, limit, dict, 127, 128);
+                break;
+            default:
+                result = -1;
+                break;
+            }
     if (result <= 0) ctx->dirty = 1;
     return result;
     }
@@ -1660,7 +1752,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_generic_internal(
 static void LZ4HC_setExternalDict(LZ4HC_CCtx_internal* ctxPtr, const BYTE* newBlock);
 
 #ifdef AOCL_LZ4HC_OPT
-static void AOCL_LZ4HC_setExternalDict(AOCL_LZ4HC_CCtx_internal* ctxPtr, const BYTE* newBlock);
+static void AOCL_LZ4HC_setExternalDict(AOCL_LZ4HC_CCtx_internal* ctxPtr, const BYTE* newBlock, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz);
 #endif /* AOCL_LZ4HC_OPT */
 
 static int
@@ -1679,6 +1771,9 @@ LZ4HC_compress_generic_noDictCtx (
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4HC_compress_generic_noDictCtx() which is used
+ * in Cache efficient hash chain strategy similar to 
+ * LZ4HC_compress_generic_noDictCtx, only difference is the type of ctx. */
 static int
 AOCL_LZ4HC_compress_generic_noDictCtx(
     AOCL_LZ4HC_CCtx_internal* const ctx,
@@ -1722,6 +1817,9 @@ LZ4HC_compress_generic_dictCtx (
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4HC_compress_generic_DictCtx() which is used
+ * in Cache efficient hash chain strategy similar to
+ * LZ4HC_compress_generic_DictCtx, only difference is the type of ctx. */
 static int
 AOCL_LZ4HC_compress_generic_dictCtx(
     AOCL_LZ4HC_CCtx_internal* const ctx,
@@ -1734,6 +1832,7 @@ AOCL_LZ4HC_compress_generic_dictCtx(
 )
 {
     const size_t position = (size_t)(ctx->end - ctx->base) - ctx->lowLimit;
+    if (cLevel < 6 || cLevel > 9) return -1;
     assert(ctx->dictCtx != NULL);
     if (position >= 64 KB) {
         ctx->dictCtx = NULL;
@@ -1741,7 +1840,7 @@ AOCL_LZ4HC_compress_generic_dictCtx(
     }
     else if (position == 0 && *srcSizePtr > 4 KB) {
         memcpy(ctx, ctx->dictCtx, sizeof(AOCL_LZ4HC_CCtx_internal));
-        AOCL_LZ4HC_setExternalDict(ctx, (const BYTE*)src);
+        AOCL_LZ4HC_setExternalDict(ctx, (const BYTE*)src, AOCL_hashchain_slot[cLevel] - 1, AOCL_hashchain_slot[cLevel]);
         ctx->compressionLevel = (short)cLevel;
         return AOCL_LZ4HC_compress_generic_noDictCtx(ctx, src, dst, srcSizePtr, dstCapacity, cLevel, limit);
     }
@@ -1770,6 +1869,9 @@ LZ4HC_compress_generic (
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4HC_compress_generic() which is used
+ * in Cache efficient hash chain strategy similar to
+ * LZ4HC_compress_generic, only difference is the type of ctx. */
 static int
 AOCL_LZ4HC_compress_generic(
     AOCL_LZ4HC_CCtx_internal* const ctx,
@@ -1791,6 +1893,9 @@ AOCL_LZ4HC_compress_generic(
 #endif
 
 int LZ4_sizeofStateHC(void) { return (int)sizeof(LZ4_streamHC_t); }
+#ifdef AOCL_LZ4HC_OPT
+int AOCL_LZ4_sizeofStateHC(void) { return (int)sizeof(AOCL_LZ4_streamHC_t); }
+#endif
 
 static size_t LZ4_streamHC_t_alignment(void)
 {
@@ -1803,6 +1908,9 @@ static size_t LZ4_streamHC_t_alignment(void)
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4_streamHC_t_alignment() which is used
+ * in Cache efficient hash chain strategy similar to
+ * LZ4_streamHC_t_alignment, only difference is the type of struct. */
 static size_t AOCL_LZ4_streamHC_t_alignment(void)
 {
 #if LZ4_ALIGN_TEST
@@ -1815,7 +1923,7 @@ static size_t AOCL_LZ4_streamHC_t_alignment(void)
 #endif /* AOCL_LZ4HC_OPT */
 
 /* state is presumed correctly initialized,
- * in which case its size and alignment have already been validate */
+ * in which case its size and alignment have already been validated */
 int LZ4_compress_HC_extStateHC_fastReset (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
     if(state==NULL || (src==NULL && srcSize!=0) || dst==NULL)
@@ -1831,6 +1939,11 @@ int LZ4_compress_HC_extStateHC_fastReset (void* state, const char* src, char* ds
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4_compress_HC_extStateHC_fastReset() which is used
+ * in Cache efficient hash chain strategy similar to
+ * LZ4_compress_HC_extStateHC_fastReset, only difference is the type of state.
+ * state is presumed correctly initialized,
+ * in which case its size and alignment have already been validate */
 int AOCL_LZ4_compress_HC_extStateHC_fastReset(void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
     if (state == NULL || (src == NULL && srcSize != 0) || dst == NULL)
@@ -1854,6 +1967,9 @@ int LZ4_compress_HC_extStateHC (void* state, const char* src, char* dst, int src
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4_compress_HC_extStateHC() which is used
+ * in Cache efficient hash chain strategy similar to
+ * LZ4_compress_HC_extStateHC, only difference is the type of state. */
 int AOCL_LZ4_compress_HC_extStateHC(void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
     AOCL_LZ4_streamHC_t* const ctx = AOCL_LZ4_initStreamHC(state, sizeof(*ctx));
@@ -1878,6 +1994,12 @@ int LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int dstCap
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* AOCL variant of LZ4_compress_HC_internal() which is used
+ * in Cache efficient hash chain strategy similar to
+ * LZ4_compress_HC_internal, only difference is the type of statePtr.
+ * This function is called for levels 6, 7, 8 and 9.
+ * 
+ * DO NOT CALL THIS FUNCTION FOR OTHER LEVELS. */
 int AOCL_LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
 #if defined(LZ4HC_HEAPMODE) && LZ4HC_HEAPMODE==1
@@ -1897,14 +2019,18 @@ int AOCL_LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int d
 int LZ4_compress_HC(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
 #ifdef AOCL_LZ4HC_OPT
+
+if(compressionLevel >= 6 && compressionLevel <=9)
 #ifdef AOCL_DYNAMIC_DISPATCHER
     return LZ4_compress_HC_fp(src, dst, srcSize, dstCapacity, compressionLevel);
 #else
     return AOCL_LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
-#endif
+#endif /* AOCL_DYNAMIC_DISPATCHER */
+else
+    return LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
 #else
     return LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
-#endif
+#endif /* AOCL_LZ4HC_OPT */
 }
 
 /* state is presumed sized correctly (>= sizeof(LZ4_streamHC_t)) */
@@ -1934,6 +2060,18 @@ LZ4_streamHC_t* LZ4_createStreamHC(void)
     return state;
 }
 
+#ifdef AOCL_LZ4HC_OPT
+/* This is AOCL variant of LZ4_createStreamHC() used to create stream of type AOCL_LZ4_StreamHC_t. */
+AOCL_LZ4_streamHC_t* AOCL_LZ4_createStreamHC(void)
+{
+    AOCL_LZ4_streamHC_t* const state =
+        (AOCL_LZ4_streamHC_t*)ALLOC_AND_ZERO(sizeof(AOCL_LZ4_streamHC_t));
+    if (state == NULL) return NULL;
+    AOCL_LZ4_setCompressionLevel(state, LZ4HC_CLEVEL_DEFAULT);
+    return state;
+}
+#endif
+
 int LZ4_freeStreamHC (LZ4_streamHC_t* LZ4_streamHCPtr)
 {
     DEBUGLOG(4, "LZ4_freeStreamHC(%p)", LZ4_streamHCPtr);
@@ -1942,6 +2080,16 @@ int LZ4_freeStreamHC (LZ4_streamHC_t* LZ4_streamHCPtr)
     return 0;
 }
 
+#ifdef AOCL_LZ4HC_OPT
+/* This is AOCL variant of LZ4_freeStreamHC() used to free the stream of type AOCL_LZ4_StreamHC_t. */
+int AOCL_LZ4_freeStreamHC(AOCL_LZ4_streamHC_t* LZ4_streamHCPtr)
+{
+    DEBUGLOG(4, "AOCL_LZ4_freeStreamHC(%p)", LZ4_streamHCPtr);
+    if (!LZ4_streamHCPtr) return 0;  /* support free on NULL */
+    FREEMEM(LZ4_streamHCPtr);
+    return 0;
+}
+#endif
 
 LZ4_streamHC_t* LZ4_initStreamHC (void* buffer, size_t size)
 {
@@ -1961,12 +2109,13 @@ LZ4_streamHC_t* LZ4_initStreamHC (void* buffer, size_t size)
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* This is AOCL variant of LZ4_initStreamHC() used to initialize the stream of type AOCL_LZ4_StreamHC_t. */
 AOCL_LZ4_streamHC_t* AOCL_LZ4_initStreamHC(void* buffer, size_t size)
 {
     AOCL_LZ4_streamHC_t* const AOCL_LZ4_streamHCPtr = (AOCL_LZ4_streamHC_t*)buffer;
     /* if compilation fails here, LZ4_STREAMHCSIZE must be increased */
-    LZ4_STATIC_ASSERT(sizeof(LZ4HC_CCtx_internal) <= LZ4_STREAMHCSIZE);     // --Not changed
-    DEBUGLOG(4, "AOCL_LZ4_initStreamHC(%p, %u)", buffer, (unsigned)size);   // --Not changed
+    LZ4_STATIC_ASSERT(sizeof(AOCL_LZ4HC_CCtx_internal) <= AOCL_LZ4_STREAMHCSIZE);
+    DEBUGLOG(4, "AOCL_LZ4_initStreamHC(%p, %u)", buffer, (unsigned)size);
     /* check conditions */
     if (buffer == NULL) return NULL;
     if (size < sizeof(AOCL_LZ4_streamHC_t)) return NULL;
@@ -2003,6 +2152,7 @@ void LZ4_resetStreamHC_fast (LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLev
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* This is AOCL variant of LZ4_resetStreamHC() used to reset the stream of type AOCL_LZ4_StreamHC_t. */
 void AOCL_LZ4_resetStreamHC_fast(AOCL_LZ4_streamHC_t* AOCL_LZ4_streamHCPtr, int compressionLevel)
 {
     if (AOCL_LZ4_streamHCPtr == NULL) return;
@@ -2030,6 +2180,7 @@ void LZ4_setCompressionLevel(LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLev
 }
 
 #ifdef AOCL_LZ4HC_OPT
+/* This is AOCL variant of LZ4_setCompressionLevel() used to set compression level in the streamPtr of type AOCL_LZ4_StreamHC_t. */
 void AOCL_LZ4_setCompressionLevel(AOCL_LZ4_streamHC_t* AOCL_LZ4_streamHCPtr, int compressionLevel)
 {
     DEBUGLOG(5, "AOCL_LZ4_setCompressionLevel(%p, %d)", AOCL_LZ4_streamHCPtr, compressionLevel);
@@ -2094,11 +2245,12 @@ static void LZ4HC_setExternalDict(LZ4HC_CCtx_internal* ctxPtr, const BYTE* newBl
 }
 
 #ifdef AOCL_LZ4HC_OPT
-static void AOCL_LZ4HC_setExternalDict(AOCL_LZ4HC_CCtx_internal* ctxPtr, const BYTE* newBlock)
+/* This is AOCL variant of LZ4HC_setExternalDict() used in Cache Efficient Hash chain strategy similar to LZ4HC_setExternalDict(). */
+static void AOCL_LZ4HC_setExternalDict(AOCL_LZ4HC_CCtx_internal* ctxPtr, const BYTE* newBlock, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz)
 {
     DEBUGLOG(4, "AOCL_LZ4HC_setExternalDict(%p, %p)", ctxPtr, newBlock);
     if (ctxPtr->end >= ctxPtr->base + ctxPtr->dictLimit + 4)
-        AOCL_LZ4HC_Insert(ctxPtr, ctxPtr->end - 3);   /* Referencing remaining dictionary content */
+        AOCL_LZ4HC_Insert(ctxPtr, ctxPtr->end - 3, Hash_Chain_Max, Hash_Chain_Slot_Sz);   /* Referencing remaining dictionary content */
 
     /* Only one memory segment for extDict, so any previous extDict is lost at this stage */
     ctxPtr->lowLimit = ctxPtr->dictLimit;
@@ -2328,30 +2480,6 @@ LZ4HC_FindLongerMatch(LZ4HC_CCtx_internal* const ctx,
     match.off = (int)(ip-matchPtr);
     return match;
 }
-
-#ifdef AOCL_LZ4HC_OPT
-LZ4_FORCE_INLINE LZ4HC_match_t
-AOCL_LZ4HC_FindLongerMatch(AOCL_LZ4HC_CCtx_internal* const ctx,
-    const BYTE* ip, const BYTE* const iHighLimit,
-    int minLen, int nbSearches,
-    const dictCtx_directive dict,
-    const HCfavor_e favorDecSpeed)
-{
-    LZ4HC_match_t match = { 0 , 0 };
-    const BYTE* matchPtr = NULL;
-    /* note : AOCL_LZ4HC_InsertAndGetWiderMatch() is able to modify the starting position of a match (*startpos),
-     * but this won't be the case here, as we define iLowLimit==ip,
-     * so AOCL_LZ4HC_InsertAndGetWiderMatch() won't be allowed to search past ip */
-    int matchLength = AOCL_LZ4HC_InsertAndGetWiderMatch(ctx, ip, ip, iHighLimit, minLen, &matchPtr, &ip, nbSearches, 1 /*patternAnalysis*/, 1 /*chainSwap*/, dict, favorDecSpeed);
-    if (matchLength <= minLen) return match;
-    if (favorDecSpeed) {
-        if ((matchLength > 18) & (matchLength <= 36)) matchLength = 18;   /* favor shortcut */
-    }
-    match.len = matchLength;
-    match.off = (int)(ip - matchPtr);
-    return match;
-}
-#endif /* AOCL_LZ4HC_OPT */
 
 static int LZ4HC_compress_optimal ( LZ4HC_CCtx_internal* ctx,
                                     const char* const source,
@@ -2656,323 +2784,12 @@ _return_label:
      return retval;
 }
 
-#ifdef AOCL_LZ4HC_OPT
-static int AOCL_LZ4HC_compress_optimal(AOCL_LZ4HC_CCtx_internal* ctx,
-    const char* const source,
-    char* dst,
-    int* srcSizePtr,
-    int dstCapacity,
-    int const nbSearches,
-    size_t sufficient_len,
-    const limitedOutput_directive limit,
-    int const fullUpdate,
-    const dictCtx_directive dict,
-    const HCfavor_e favorDecSpeed)
-{
-    int retval = 0;
-#define TRAILING_LITERALS 3
-#ifdef LZ4HC_HEAPMODE
-    LZ4HC_optimal_t* const opt = (LZ4HC_optimal_t*)ALLOC(sizeof(LZ4HC_optimal_t) * (LZ4_OPT_NUM + TRAILING_LITERALS));
-#else
-    LZ4HC_optimal_t opt[LZ4_OPT_NUM + TRAILING_LITERALS];   /* ~64 KB, which is a bit large for stack... */
-#endif
-
-    const BYTE* ip = (const BYTE*)source;
-    const BYTE* anchor = ip;
-    const BYTE* const iend = ip + *srcSizePtr;
-    const BYTE* const mflimit = iend - MFLIMIT;
-    const BYTE* const matchlimit = iend - LASTLITERALS;
-    BYTE* op = (BYTE*)dst;
-    BYTE* opSaved = (BYTE*)dst;
-    BYTE* oend = op + dstCapacity;
-    int ovml = MINMATCH;  /* overflow - last sequence */
-    const BYTE* ovref = NULL;
-
-    /* init */
-#ifdef LZ4HC_HEAPMODE
-    if (opt == NULL) goto _return_label;
-#endif
-    DEBUGLOG(5, "AOCL_LZ4HC_compress_optimal(dst=%p, dstCapa=%u)", dst, (unsigned)dstCapacity);
-    *srcSizePtr = 0;
-    if (limit == fillOutput) oend -= LASTLITERALS;   /* Hack for support LZ4 format restriction */
-    if (sufficient_len >= LZ4_OPT_NUM) sufficient_len = LZ4_OPT_NUM - 1;
-
-    /* Main Loop */
-    while (ip <= mflimit) {
-        int const llen = (int)(ip - anchor);
-        int best_mlen, best_off;
-        int cur, last_match_pos = 0;
-
-        LZ4HC_match_t const firstMatch = AOCL_LZ4HC_FindLongerMatch(ctx, ip, matchlimit, MINMATCH - 1, nbSearches, dict, favorDecSpeed);
-        if (firstMatch.len == 0) { ip++; continue; }
-
-        if ((size_t)firstMatch.len > sufficient_len) {
-            /* good enough solution : immediate encoding */
-            int const firstML = firstMatch.len;
-            const BYTE* const matchPos = ip - firstMatch.off;
-            opSaved = op;
-            if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), firstML, matchPos, limit, oend)) {  /* updates ip, op and anchor */
-                ovml = firstML;
-                ovref = matchPos;
-                goto _dest_overflow;
-            }
-            continue;
-        }
-
-        /* set prices for first positions (literals) */
-        {   int rPos;
-        for (rPos = 0; rPos < MINMATCH; rPos++) {
-            int const cost = LZ4HC_literalsPrice(llen + rPos);
-            opt[rPos].mlen = 1;
-            opt[rPos].off = 0;
-            opt[rPos].litlen = llen + rPos;
-            opt[rPos].price = cost;
-            DEBUGLOG(7, "rPos:%3i => price:%3i (litlen=%i) -- initial setup",
-                rPos, cost, opt[rPos].litlen);
-        }   }
-        /* set prices using initial match */
-        {   int mlen = MINMATCH;
-        int const matchML = firstMatch.len;   /* necessarily < sufficient_len < LZ4_OPT_NUM */
-        int const offset = firstMatch.off;
-        assert(matchML < LZ4_OPT_NUM);
-        for (; mlen <= matchML; mlen++) {
-            int const cost = LZ4HC_sequencePrice(llen, mlen);
-            opt[mlen].mlen = mlen;
-            opt[mlen].off = offset;
-            opt[mlen].litlen = llen;
-            opt[mlen].price = cost;
-            DEBUGLOG(7, "rPos:%3i => price:%3i (matchlen=%i) -- initial setup",
-                mlen, cost, mlen);
-        }   }
-        last_match_pos = firstMatch.len;
-        {   int addLit;
-        for (addLit = 1; addLit <= TRAILING_LITERALS; addLit++) {
-            opt[last_match_pos + addLit].mlen = 1; /* literal */
-            opt[last_match_pos + addLit].off = 0;
-            opt[last_match_pos + addLit].litlen = addLit;
-            opt[last_match_pos + addLit].price = opt[last_match_pos].price + LZ4HC_literalsPrice(addLit);
-            DEBUGLOG(7, "rPos:%3i => price:%3i (litlen=%i) -- initial setup",
-                last_match_pos + addLit, opt[last_match_pos + addLit].price, addLit);
-        }   }
-
-        /* check further positions */
-        for (cur = 1; cur < last_match_pos; cur++) {
-            const BYTE* const curPtr = ip + cur;
-            LZ4HC_match_t newMatch;
-
-            if (curPtr > mflimit) break;
-            DEBUGLOG(7, "rPos:%u[%u] vs [%u]%u",
-                cur, opt[cur].price, opt[cur + 1].price, cur + 1);
-            if (fullUpdate) {
-                /* not useful to search here if next position has same (or lower) cost */
-                if ((opt[cur + 1].price <= opt[cur].price)
-                    /* in some cases, next position has same cost, but cost rises sharply after, so a small match would still be beneficial */
-                    && (opt[cur + MINMATCH].price < opt[cur].price + 3/*min seq price*/))
-                    continue;
-            }
-            else {
-                /* not useful to search here if next position has same (or lower) cost */
-                if (opt[cur + 1].price <= opt[cur].price) continue;
-            }
-
-            DEBUGLOG(7, "search at rPos:%u", cur);
-            if (fullUpdate)
-                newMatch = AOCL_LZ4HC_FindLongerMatch(ctx, curPtr, matchlimit, MINMATCH - 1, nbSearches, dict, favorDecSpeed);
-            else
-                /* only test matches of minimum length; slightly faster, but misses a few bytes */
-                newMatch = AOCL_LZ4HC_FindLongerMatch(ctx, curPtr, matchlimit, last_match_pos - cur, nbSearches, dict, favorDecSpeed);
-            if (!newMatch.len) continue;
-
-            if (((size_t)newMatch.len > sufficient_len)
-                || (newMatch.len + cur >= LZ4_OPT_NUM)) {
-                /* immediate encoding */
-                best_mlen = newMatch.len;
-                best_off = newMatch.off;
-                last_match_pos = cur + 1;
-                goto encode;
-            }
-
-            /* before match : set price with literals at beginning */
-            {   int const baseLitlen = opt[cur].litlen;
-            int litlen;
-            for (litlen = 1; litlen < MINMATCH; litlen++) {
-                int const price = opt[cur].price - LZ4HC_literalsPrice(baseLitlen) + LZ4HC_literalsPrice(baseLitlen + litlen);
-                int const pos = cur + litlen;
-                if (price < opt[pos].price) {
-                    opt[pos].mlen = 1; /* literal */
-                    opt[pos].off = 0;
-                    opt[pos].litlen = baseLitlen + litlen;
-                    opt[pos].price = price;
-                    DEBUGLOG(7, "rPos:%3i => price:%3i (litlen=%i)",
-                        pos, price, opt[pos].litlen);
-                }
-            }   }
-
-            /* set prices using match at position = cur */
-            {   int const matchML = newMatch.len;
-            int ml = MINMATCH;
-
-            assert(cur + newMatch.len < LZ4_OPT_NUM);
-            for (; ml <= matchML; ml++) {
-                int const pos = cur + ml;
-                int const offset = newMatch.off;
-                int price;
-                int ll;
-                DEBUGLOG(7, "testing price rPos %i (last_match_pos=%i)",
-                    pos, last_match_pos);
-                if (opt[cur].mlen == 1) {
-                    ll = opt[cur].litlen;
-                    price = ((cur > ll) ? opt[cur - ll].price : 0)
-                        + LZ4HC_sequencePrice(ll, ml);
-                }
-                else {
-                    ll = 0;
-                    price = opt[cur].price + LZ4HC_sequencePrice(0, ml);
-                }
-
-                assert((U32)favorDecSpeed <= 1);
-                if (pos > last_match_pos + TRAILING_LITERALS
-                    || price <= opt[pos].price - (int)favorDecSpeed) {
-                    DEBUGLOG(7, "rPos:%3i => price:%3i (matchlen=%i)",
-                        pos, price, ml);
-                    assert(pos < LZ4_OPT_NUM);
-                    if ((ml == matchML)  /* last pos of last match */
-                        && (last_match_pos < pos))
-                        last_match_pos = pos;
-                    opt[pos].mlen = ml;
-                    opt[pos].off = offset;
-                    opt[pos].litlen = ll;
-                    opt[pos].price = price;
-                }
-            }   }
-            /* complete following positions with literals */
-            {   int addLit;
-            for (addLit = 1; addLit <= TRAILING_LITERALS; addLit++) {
-                opt[last_match_pos + addLit].mlen = 1; /* literal */
-                opt[last_match_pos + addLit].off = 0;
-                opt[last_match_pos + addLit].litlen = addLit;
-                opt[last_match_pos + addLit].price = opt[last_match_pos].price + LZ4HC_literalsPrice(addLit);
-                DEBUGLOG(7, "rPos:%3i => price:%3i (litlen=%i)", last_match_pos + addLit, opt[last_match_pos + addLit].price, addLit);
-            }   }
-        }  /* for (cur = 1; cur <= last_match_pos; cur++) */
-
-        assert(last_match_pos < LZ4_OPT_NUM + TRAILING_LITERALS);
-        best_mlen = opt[last_match_pos].mlen;
-        best_off = opt[last_match_pos].off;
-        cur = last_match_pos - best_mlen;
-
-    encode: /* cur, last_match_pos, best_mlen, best_off must be set */
-        assert(cur < LZ4_OPT_NUM);
-        assert(last_match_pos >= 1);  /* == 1 when only one candidate */
-        DEBUGLOG(6, "reverse traversal, looking for shortest path (last_match_pos=%i)", last_match_pos);
-        {   int candidate_pos = cur;
-        int selected_matchLength = best_mlen;
-        int selected_offset = best_off;
-        while (1) {  /* from end to beginning */
-            int const next_matchLength = opt[candidate_pos].mlen;  /* can be 1, means literal */
-            int const next_offset = opt[candidate_pos].off;
-            DEBUGLOG(7, "pos %i: sequence length %i", candidate_pos, selected_matchLength);
-            opt[candidate_pos].mlen = selected_matchLength;
-            opt[candidate_pos].off = selected_offset;
-            selected_matchLength = next_matchLength;
-            selected_offset = next_offset;
-            if (next_matchLength > candidate_pos) break; /* last match elected, first match to encode */
-            assert(next_matchLength > 0);  /* can be 1, means literal */
-            candidate_pos -= next_matchLength;
-        }   }
-
-        /* encode all recorded sequences in order */
-        {   int rPos = 0;  /* relative position (to ip) */
-        while (rPos < last_match_pos) {
-            int const ml = opt[rPos].mlen;
-            int const offset = opt[rPos].off;
-            if (ml == 1) { ip++; rPos++; continue; }  /* literal; note: can end up with several literals, in which case, skip them */
-            rPos += ml;
-            assert(ml >= MINMATCH);
-            assert((offset >= 1) && (offset <= LZ4_DISTANCE_MAX));
-            opSaved = op;
-            if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ip - offset, limit, oend)) {  /* updates ip, op and anchor */
-                ovml = ml;
-                ovref = ip - offset;
-                goto _dest_overflow;
-            }
-        }   }
-    }  /* while (ip <= mflimit) */
-
-_last_literals:
-    /* Encode Last Literals */
-    {   size_t lastRunSize = (size_t)(iend - anchor);  /* literals */
-    size_t llAdd = (lastRunSize + 255 - RUN_MASK) / 255;
-    size_t const totalSize = 1 + llAdd + lastRunSize;
-    if (limit == fillOutput) oend += LASTLITERALS;  /* restore correct value */
-    if (limit && (op + totalSize > oend)) {
-        if (limit == limitedOutput) { /* Check output limit */
-            retval = 0;
-            goto _return_label;
-        }
-        /* adapt lastRunSize to fill 'dst' */
-        lastRunSize = (size_t)(oend - op) - 1 /*token*/;
-        llAdd = (lastRunSize + 256 - RUN_MASK) / 256;
-        lastRunSize -= llAdd;
-    }
-    DEBUGLOG(6, "Final literal run : %i literals", (int)lastRunSize);
-    ip = anchor + lastRunSize; /* can be != iend if limit==fillOutput */
-
-    if (lastRunSize >= RUN_MASK) {
-        size_t accumulator = lastRunSize - RUN_MASK;
-        *op++ = (RUN_MASK << ML_BITS);
-        for (; accumulator >= 255; accumulator -= 255) *op++ = 255;
-        *op++ = (BYTE)accumulator;
-    }
-    else {
-        *op++ = (BYTE)(lastRunSize << ML_BITS);
-    }
-    memcpy(op, anchor, lastRunSize);
-    op += lastRunSize;
-    }
-
-    /* End */
-    *srcSizePtr = (int)(((const char*)ip) - source);
-    retval = (int)((char*)op - dst);
-    goto _return_label;
-
-_dest_overflow:
-    if (limit == fillOutput) {
-        /* Assumption : ip, anchor, ovml and ovref must be set correctly */
-        size_t const ll = (size_t)(ip - anchor);
-        size_t const ll_addbytes = (ll + 240) / 255;
-        size_t const ll_totalCost = 1 + ll_addbytes + ll;
-        BYTE* const maxLitPos = oend - 3; /* 2 for offset, 1 for token */
-        DEBUGLOG(6, "Last sequence overflowing (only %i bytes remaining)", (int)(oend - 1 - opSaved));
-        op = opSaved;  /* restore correct out pointer */
-        if (op + ll_totalCost <= maxLitPos) {
-            /* ll validated; now adjust match length */
-            size_t const bytesLeftForMl = (size_t)(maxLitPos - (op + ll_totalCost));
-            size_t const maxMlSize = MINMATCH + (ML_MASK - 1) + (bytesLeftForMl * 255);
-            assert(maxMlSize < INT_MAX); assert(ovml >= 0);
-            if ((size_t)ovml > maxMlSize) ovml = (int)maxMlSize;
-            if ((oend + LASTLITERALS) - (op + ll_totalCost + 2) - 1 + ovml >= MFLIMIT) {
-                DEBUGLOG(6, "Space to end : %i + ml (%i)", (int)((oend + LASTLITERALS) - (op + ll_totalCost + 2) - 1), ovml);
-                DEBUGLOG(6, "Before : ip = %p, anchor = %p", ip, anchor);
-                LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ovml, ovref, notLimited, oend);
-                DEBUGLOG(6, "After : ip = %p, anchor = %p", ip, anchor);
-            }
-        }
-        goto _last_literals;
-    }
-_return_label:
-#ifdef LZ4HC_HEAPMODE
-    FREEMEM(opt);
-#endif
-    return retval;
-}
-#endif /* AOCL_LZ4HC_OPT */
-
 #ifdef AOCL_DYNAMIC_DISPATCHER
 static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
     if (optOff)
     {
         LZ4_compress_HC_fp = LZ4_compress_HC_internal;
+        LZ4HC_countBack_fp = LZ4HC_countBack;
     }
     else
     {
@@ -2983,6 +2800,7 @@ static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
         case 2://AVX version
         case 3://AVX2 version
         default://AVX512 and other versions
+            LZ4HC_countBack_fp = AOCL_LZ4HC_countBack;
             LZ4_compress_HC_fp = AOCL_LZ4_compress_HC_internal;
             break;
         }
