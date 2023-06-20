@@ -2,6 +2,7 @@
    xxHash - Extremely Fast Hash algorithm
    Header File
    Copyright (C) 2012-2016, Yann Collet.
+   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -66,6 +67,11 @@ XXH32        6.8 GB/s            6.0 GB/s
 
 #ifndef XXHASH_H_5627135585666179
 #define XXHASH_H_5627135585666179 1
+
+/* Defining namespace here to avoid conflict with other modules using xxhash */
+#ifndef XXH_NAMESPACE
+# define XXH_NAMESPACE LZ4_
+#endif
 
 #if defined (__cplusplus)
 extern "C" {

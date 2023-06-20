@@ -37,7 +37,7 @@
 cmake_minimum_required(VERSION 3.10.0)
 
 #set the project name
-project(AOCL-COMPRESSION-LIBRARY)
+project(AOCL-COMPRESSION-LIBRARY CXX C ASM)
 message(STATUS "Building for AOCL COMPRESSION LIBRARY")
 
 string(TIMESTAMP TODAY "%Y%m%d")
@@ -100,7 +100,8 @@ set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXC
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
 set (LZ4_SRC_FILES	${ALGOS_PATH}/lz4/lz4.c
-					${ALGOS_PATH}/lz4/lz4.h)
+					${ALGOS_PATH}/lz4/lz4.h
+					${ALGOS_PATH}/lz4/xxhash.c)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
 endif ()
@@ -180,6 +181,7 @@ set (ZSTD_SRC_FILES	${ALGOS_PATH}/zstd/lib/common/zstd_common.c
 					${ALGOS_PATH}/zstd/lib/compress/hist.c
 					${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress.c
 					${ALGOS_PATH}/zstd/lib/decompress/huf_decompress.c
+					${ALGOS_PATH}/zstd/lib/decompress/huf_decompress_amd64.S
 					${ALGOS_PATH}/zstd/lib/decompress/zstd_ddict.c
 					${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block.c
 					${ALGOS_PATH}/zstd/lib/dictBuilder/cover.c
@@ -237,11 +239,6 @@ if (NOT AOCL_EXCLUDE_LZ4)
             set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
                                ${ALGOS_PATH}/lz4/lz4hc.c
                                ${ALGOS_PATH}/lz4/lz4hc.h)
-        endif()
-        if (AOCL_EXCLUDE_ZSTD)
-            set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
-                               ${ALGOS_PATH}/lz4/xxhash.c
-                               ${ALGOS_PATH}/lz4/xxhash.h)
         endif()
     endif()
 endif()
