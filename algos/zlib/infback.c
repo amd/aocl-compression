@@ -466,12 +466,21 @@ void FAR *out_desc;
                 break;
             }
 
+#ifndef AOCL_ZLIB_OPT
             /* build code tables -- note: do not change the lenbits or distbits
                values here (9 and 6) without reading the comments in inftrees.h
                concerning the ENOUGH constants, which depend on those values */
             state->next = state->codes;
             state->lencode = (code const FAR *)(state->next);
             state->lenbits = 9;
+#else
+            /* build code tables -- note: do not change the lenbits or distbits
+               values here (10 and 9) without reading the comments in inftrees.h
+               concerning the ENOUGH constants, which depend on those values */
+            state->next = state->codes;
+            state->lencode = (code const FAR *)(state->next);
+            state->lenbits = 10;
+#endif /* AOCL_ZLIB_OPT */
             ret = inflate_table(LENS, state->lens, state->nlen, &(state->next),
                                 &(state->lenbits), state->work);
             if (ret) {
@@ -480,7 +489,11 @@ void FAR *out_desc;
                 break;
             }
             state->distcode = (code const FAR *)(state->next);
+#ifndef AOCL_ZLIB_OPT
             state->distbits = 6;
+#else
+            state->distbits = 9;
+#endif /* AOCL_ZLIB_OPT */
             ret = inflate_table(DISTS, state->lens + state->nlen, state->ndist,
                             &(state->next), &(state->distbits), state->work);
             if (ret) {
