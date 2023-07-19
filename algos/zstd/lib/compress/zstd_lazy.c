@@ -1343,8 +1343,15 @@ size_t ZSTD_RowFindBestMatch(
 
 #ifdef AOCL_ZSTD_OPT
 /* AMD optimized row based match finder function.
- * Min number of bytes compared for the match candidates is 2-bytes or 4-bytes.
  * Gets called when aoclOptFlag is enabled.
+ * Changes wrt ZSTD_RowFindBestMatch:
+    * Min number of bytes compared for the match candidates is 4-bytes or 8-bytes. 
+    * Obtaining matchIndex and pattern matching done in a single loop.
+        * Overhead from storing and reading matchIndexs in matchBuffer overshadows
+          gains obtained from PREFETCH_L1 of match candidates in ZSTD_RowFindBestMatch
+        * Merged the 2 loops in ZSTD_RowFindBestMatch to avoid usage of temporary
+          matchBuffer.
+        * PREFETCH_L1s do not help in the current configuration. Hence removed.
 */
 FORCE_INLINE_TEMPLATE
 size_t AOCL_ZSTD_RowFindBestMatch(
@@ -1354,27 +1361,11 @@ size_t AOCL_ZSTD_RowFindBestMatch(
     const U32 mls, const ZSTD_dictMode_e dictMode,
     const U32 rowLog)
 {
-    U32* const hashTable = ms->hashTable;
-    BYTE* const tagTable = ms->tagTable;
-    U32* const hashCache = ms->hashCache;
-    const U32 hashLog = ms->rowHashLog;
     const ZSTD_compressionParameters* const cParams = &ms->cParams;
-    const BYTE* const base = ms->window.base;
-    const BYTE* const dictBase = ms->window.dictBase;
-    const U32 dictLimit = ms->window.dictLimit;
-    const BYTE* const prefixStart = base + dictLimit;
-    const BYTE* const dictEnd = dictBase + dictLimit;
-    const U32 curr = (U32)(ip - base);
-    const U32 maxDistance = 1U << cParams->windowLog;
-    const U32 lowestValid = ms->window.lowLimit;
-    const U32 withinMaxDistance = (curr - lowestValid > maxDistance) ? curr - maxDistance : lowestValid;
-    const U32 isDictionary = (ms->loadedDictEnd != 0);
-    const U32 lowLimit = isDictionary ? lowestValid : withinMaxDistance;
     const U32 rowEntries = (1U << rowLog);
     const U32 rowMask = rowEntries - 1;
     const U32 cappedSearchLog = MIN(cParams->searchLog, rowLog); /* nb of searches is capped at nb entries per row */
     const U32 groupWidth = ZSTD_row_matchMaskGroupWidth(rowEntries);
-    const U64 hashSalt = ms->hashSalt;
     U32 nbAttempts = 1U << cappedSearchLog;
     size_t ml = 4 - 1;
     U32 hash;
@@ -1411,6 +1402,18 @@ size_t AOCL_ZSTD_RowFindBestMatch(
     }
 
     /* Update the hashTable and tagTable up to (but not including) ip */
+    U32* const hashTable = ms->hashTable;
+    BYTE* const tagTable = ms->tagTable;
+    U32* const hashCache = ms->hashCache;
+    const U32 hashLog = ms->rowHashLog;
+    const BYTE* const base = ms->window.base;
+    const BYTE* const dictBase = ms->window.dictBase;
+    const U32 dictLimit = ms->window.dictLimit;
+    const BYTE* const prefixStart = base + dictLimit;
+    const BYTE* const dictEnd = dictBase + dictLimit;
+    const U64 hashSalt = ms->hashSalt;
+    const U32 curr = (U32)(ip - base);
+
     if (!ms->lazySkipping) {
         ZSTD_row_update_internal(ms, ip, mls, rowLog, rowMask, 1 /* useCache */);
         hash = ZSTD_row_nextCachedHash(hashCache, hashTable, tagTable, base, curr, hashLog, rowLog, mls, hashSalt);
@@ -1430,10 +1433,13 @@ size_t AOCL_ZSTD_RowFindBestMatch(
         U32* const row = hashTable + relRow;
         BYTE* tagRow = (BYTE*)(tagTable + relRow);
         U32 const headGrouped = (*tagRow & rowMask) * groupWidth;
-        U32 matchBuffer[ZSTD_ROW_HASH_MAX_ENTRIES];
-        size_t numMatches = 0;
-        size_t currMatch = 0;
         ZSTD_VecMask matches = ZSTD_row_getMatchMask(tagRow, (BYTE)tag, headGrouped, rowEntries);
+
+        const U32 maxDistance = 1U << cParams->windowLog;
+        const U32 lowestValid = ms->window.lowLimit;
+        const U32 withinMaxDistance = (curr - lowestValid > maxDistance) ? curr - maxDistance : lowestValid;
+        const U32 isDictionary = (ms->loadedDictEnd != 0);
+        const U32 lowLimit = isDictionary ? lowestValid : withinMaxDistance;
 
         /* Cycle through the matches and prefetch */
         for (; (matches > 0) && (nbAttempts > 0); matches &= (matches - 1)) {
@@ -1443,27 +1449,7 @@ size_t AOCL_ZSTD_RowFindBestMatch(
             assert(numMatches < rowEntries);
             if (matchIndex < lowLimit)
                 break;
-            if ((dictMode != ZSTD_extDict) || matchIndex >= dictLimit) {
-                PREFETCH_L1(base + matchIndex);
-            }
-            else {
-                PREFETCH_L1(dictBase + matchIndex);
-            }
-            matchBuffer[numMatches++] = matchIndex;
-            --nbAttempts;
-        }
 
-        /* Speed opt: insert current byte into hashtable too. This allows us to avoid one iteration of the loop
-           in ZSTD_row_update_internal() at the next search. */
-        {
-            U32 const pos = ZSTD_row_nextIndex(tagRow, rowMask);
-            tagRow[pos] = (BYTE)tag;
-            row[pos] = ms->nextToUpdate++;
-        }
-
-        /* Return the longest match */
-        for (; currMatch < numMatches; ++currMatch) {
-            U32 const matchIndex = matchBuffer[currMatch];
             size_t currentMl = 0;
             assert(matchIndex < curr);
             assert(matchIndex >= lowLimit);
@@ -1472,12 +1458,14 @@ size_t AOCL_ZSTD_RowFindBestMatch(
                 const BYTE* const match = base + matchIndex;
                 assert(matchIndex >= dictLimit);   /* ensures this is true if dictMode != ZSTD_extDict */
 #ifndef AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER
-                /* Find a potentially better match candidate using a 2-byte comparison at the previous best match length */
-                if (*(U16*)(match + ml) == *(U16*)(ip + ml))
+                /* Find a potentially better match candidate at the previous best match length.
+                * 2-prev bytes, current and 1-next byte used for comparison */
+                if (MEM_read32(match + ml - 2) == MEM_read32(ip + ml - 2))
                     currentMl = ZSTD_count(ip, match, iLimit);
 #else
-                /* Find a potentially better match candidate using a 4-byte comparison at the previous best match length */
-                if (*(U32*)(match + ml) == *(U32*)(ip + ml))
+                /* Find a potentially better match candidate at the previous best match length.
+                * 3-prev bytes, current and 4-next bytes used for comparison */
+                if (MEM_read64(match + ml - 3) == MEM_read64(ip + ml - 3))
                     currentMl = ZSTD_count(ip, match, iLimit);
 #endif
             }
@@ -1495,10 +1483,19 @@ size_t AOCL_ZSTD_RowFindBestMatch(
 #ifndef AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER
                 if ((ip + currentMl + 1) >= iLimit)
 #else
-                if ((ip + currentMl + 3) >= iLimit)
+                if ((ip + currentMl + 4) >= iLimit)
 #endif
                     break; /* best possible, avoids read overflow on next attempt */
             }
+            --nbAttempts;
+        }
+
+        /* Speed opt: insert current byte into hashtable too. This allows us to avoid one iteration of the loop
+        in ZSTD_row_update_internal() at the next search. */
+        {
+            U32 const pos = ZSTD_row_nextIndex(tagRow, rowMask);
+            tagRow[pos] = (BYTE)tag;
+            row[pos] = ms->nextToUpdate++;
         }
     }
 
