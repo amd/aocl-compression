@@ -159,6 +159,11 @@ size_t AOCL_ZSTD_compressBlock_lazy2_dedicatedDictSearch_row(
     void const* src, size_t srcSize);
 #endif
 
+#ifdef AOCL_ZSTD_UNIT_TEST
+ZSTDLIB_API U64 Test_AOCL_ZSTD_row_getMatchMask(const BYTE* const tagRow, const BYTE tag,
+    const U32 headGrouped, const U32 rowEntries);
+ZSTDLIB_API U64 Test_AOCL_reset_n_highest_set_bits(U64 matches, U32 rowEntries, U32 nbAttempts);
+#endif
 #if defined (__cplusplus)
 }
 #endif

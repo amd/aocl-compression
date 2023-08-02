@@ -43,6 +43,7 @@
 #ifndef AOCL_EXCLUDE_ZSTD
 #define ZSTD_STATIC_LINKING_ONLY
 #include "algos/zstd/lib/zstd.h"
+#include "algos/zstd/lib/compress/zstd_lazy.h"
 #endif
 
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
@@ -672,5 +673,242 @@ TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_commo
  * End of ZSTD_decompressDCtx
  *********************************************/
 
+/*********************************************
+ * Begin of ZSTD_AOCL_reset_n_highest_set_bits
+ *********************************************/
+// N = (rowEntries - nbAttempts) highest set bits must be reset
+// all 1s (16 bits)
+TEST(ZSTD_AOCL_RESET_N_HIGHEST_SET_BITS, AOCL_Compression_zstd_AOCL_RESET_N_HIGHEST_SET_BITS_allSet16_common_1) {
+    const uint32_t rowEntries = 16;
+    uint64_t matches = 0xFFFF;
+    uint64_t res[17] = { 0, 0x1u, 0x3u, 0x7u, 0xFu, 0x1Fu, 0x3Fu, 0x7Fu, 0xFFu, 0x1FFu,
+                            0x3FFu, 0x7FFu, 0xFFFu, 0x1FFFu, 0x3FFFu, 0x7FFFu, 0xFFFFu };
+    for (uint32_t nbAttempts = 1; nbAttempts <= rowEntries; nbAttempts++) {
+        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
+        EXPECT_EQ(matchesNew, res[nbAttempts]);
+    }
+}
 
+// all 1s (64 bits)
+TEST(ZSTD_AOCL_RESET_N_HIGHEST_SET_BITS, AOCL_Compression_zstd_AOCL_RESET_N_HIGHEST_SET_BITS_allSet64_common_1) {
+    const uint32_t rowEntries = 16;
+    uint64_t matches = -1;
+    uint64_t res[17] = { 0, 0x1ffffffffffffllu, 0x3ffffffffffffllu, 0x7ffffffffffffllu, 0xfffffffffffffllu,
+                            0x1fffffffffffffllu, 0x3fffffffffffffllu, 0x7fffffffffffffllu, 0xffffffffffffffllu,
+                            0x1ffffffffffffffllu, 0x3ffffffffffffffllu, 0x7ffffffffffffffllu, 0xfffffffffffffffllu,
+                            0x1fffffffffffffffllu, 0x3fffffffffffffffllu, 0x7fffffffffffffffllu, 0xffffffffffffffffllu };
+    for (uint32_t nbAttempts = 1; nbAttempts <= rowEntries; nbAttempts++) {
+        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
+        EXPECT_EQ(matchesNew, res[nbAttempts]);
+    }
+}
 
+// random patterns (16 bits)
+TEST(ZSTD_AOCL_RESET_N_HIGHEST_SET_BITS, AOCL_Compression_zstd_AOCL_RESET_N_HIGHEST_SET_BITS_random16_common_1) {
+    const uint32_t rowEntries = 16;
+    
+    {
+        const uint32_t nbAttempts = 12;
+        {
+            uint64_t matches = 0xE560; //0b 1110 0101 0110 0000
+            uint64_t expected = 0x160; //0b 0000 0001 0110 0000
+            uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
+            EXPECT_EQ(matchesNew, expected);
+        }
+
+        {
+            uint64_t matches = 0xAAAA; //0b 1010 1010 1010 1010
+            uint64_t expected = 0xAA;  //0b 0000 0000 1010 1010
+            uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
+            EXPECT_EQ(matchesNew, expected);
+        }
+    }
+
+    {
+        const uint32_t nbAttempts = 9;
+        {
+            uint64_t matches = 0xE560; //0b 1110 0101 0110 0000
+            uint64_t expected = 0;     //0b 0000 0000 0000 0000
+            uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
+            EXPECT_EQ(matchesNew, expected);
+        }
+
+        {
+            uint64_t matches = 0xAAAA; //0b 1010 1010 1010 1010
+            uint64_t expected = 0x02;  //0b 0000 0000 0000 0010
+            uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
+            EXPECT_EQ(matchesNew, expected);
+        }
+    }
+}
+
+// random patterns (64 bits)
+TEST(ZSTD_AOCL_RESET_N_HIGHEST_SET_BITS, AOCL_Compression_zstd_AOCL_RESET_N_HIGHEST_SET_BITS_random64_common_1) {
+    const uint32_t rowEntries = 64;
+    const uint32_t nbAttempts = 60;
+    {
+        uint64_t matches = 0xE560000000000000; //0b 1110 0101 0110 0000...0s
+        uint64_t expected = 0x0160000000000000; //0b 0000 0001 0110 0000...0s
+        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
+        EXPECT_EQ(matchesNew, expected);
+    }
+
+    {
+        uint64_t matches = 0xAAAA000000000000; //0b 1010 1010 1010 1010...0s
+        uint64_t expected = 0x00AA000000000000; //0b 0000 0000 1010 1010...0s
+        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
+        EXPECT_EQ(matchesNew, expected);
+    }
+}
+
+// none set, N=0
+TEST(ZSTD_AOCL_RESET_N_HIGHEST_SET_BITS, AOCL_Compression_zstd_AOCL_RESET_N_HIGHEST_SET_BITS_limits_common_1) {
+    const uint32_t rowEntries = 16;
+    {
+        const uint32_t nbAttempts = 12;
+        uint64_t matches = 0;
+        uint64_t expected = 0;
+        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
+        EXPECT_EQ(matchesNew, expected);
+    }
+
+    {
+        const uint32_t nbAttempts = rowEntries;
+        uint64_t matches = 0xAAAA;
+        uint64_t expected = matches;
+        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
+        EXPECT_EQ(matchesNew, expected);
+    }
+}
+
+/*********************************************
+ * End of ZSTD_AOCL_reset_n_highest_set_bits
+ *********************************************/
+
+ /*********************************************
+  * Begin of ZSTD_AOCL_ZSTD_row_getMatchMask
+  *********************************************/
+class ZSTD_AOCL_ZSTD_row_getMatchMask : public ::testing::TestWithParam<int> {
+public:
+    typedef unsigned char BYTE;
+    enum MATCH_TYPE { MATCH_TYPE_ALL, MATCH_TYPE_SOME, MATCH_TYPE_NONE };
+    void SetUp() override {
+        srand(0);
+        rowEntries = GetParam();
+        tagRow = (BYTE*)malloc(sizeof(BYTE) * rowEntries);
+        headRow = (BYTE*)malloc(sizeof(BYTE) * rowEntries);
+    }
+
+    void TearDown() override {
+        if (tagRow)
+            free(tagRow);
+        if (headRow)
+            free(headRow);
+    }
+
+    //Fill bytes in tagRow based on MATCH_TYPE selected
+    void setup_tag_row(BYTE tag, unsigned matchPos[], int matchSz, MATCH_TYPE type) {
+        if (type == MATCH_TYPE_ALL) {
+            for (int i = 0; i < rowEntries; ++i) { //fill all with tag bytes
+                tagRow[i] = tag;
+            }
+        }
+        else {
+            for (int i = 0; i < rowEntries; ++i) { //fill with random non-tag bytes
+                BYTE cur = rand() % 256;
+                if (cur == tag)
+                    cur++;
+                tagRow[i] = cur;
+            }
+        }
+
+        if (type == MATCH_TYPE_SOME) {
+            for (int i = 0; i < matchSz; ++i) { //set some bytes to tag
+                ASSERT_LT(matchPos[i], rowEntries);
+                tagRow[matchPos[i]] = tag;
+            }
+        }
+    }
+
+    //validate if expected mask is generated
+    void validate_mask(BYTE tag, U64 mask, int head) {
+        //rotate tagRow left by head and save in headRow
+        ASSERT_LT(head, rowEntries);
+        head = (rowEntries - head) % rowEntries;
+        for (int i = 0; i < rowEntries; ++i) {
+            int headpos = (head + i) % rowEntries;
+            headRow[headpos] = tagRow[i];
+        }
+        
+        //check each bit in mask
+        for (int i = 0; i < rowEntries; ++i) {
+            int curbit = mask & 0x01;
+            if (i == head) {
+                //test head pos bit. Should always be 0.
+                EXPECT_EQ(curbit, 0);
+            }
+            else {
+                //test rest of the mask
+                if (headRow[i] == tag) {
+                    EXPECT_EQ(curbit, 1);
+                }
+                else {
+                    EXPECT_EQ(curbit, 0);
+                }
+            }
+            mask >>= 1;
+        }
+    }
+
+    uint32_t rowEntries; //size of tag row
+    BYTE* tagRow; //input tag row bytes
+    BYTE* headRow; //temp buffer to hold rotated tag bytes
+};
+
+// all bytes set to tag
+TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_allMatch_common_1) {
+    BYTE tag = 'a';
+    const int head = 0;
+    setup_tag_row(tag, { 0 }, 0, MATCH_TYPE_ALL);
+    U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
+    validate_mask(tag, mask, head);
+}
+
+// some bytes set to tag
+TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_someMatch_common_1) {
+    BYTE tag = 'a';
+    const int head = 0;
+    unsigned matchPos[6] = { 1, 3, 7, 8, rowEntries - 3, rowEntries - 1 };
+    setup_tag_row(tag, matchPos, 6, MATCH_TYPE_SOME);
+    U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
+    validate_mask(tag, mask, head);
+}
+
+// no bytes set to tag
+TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_nonematch_common_1) {
+    BYTE tag = 'a';
+    const int head = 0;
+    setup_tag_row(tag, { 0 }, 0, MATCH_TYPE_NONE);
+    U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
+    validate_mask(tag, mask, head);
+}
+
+// test with head rotation
+TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_headRotated_common_1) {
+    BYTE tag = 'a';
+    for (int head = 1; head < rowEntries; ++head) {
+        unsigned matchPos[6] = { 1, 3, 7, 8, rowEntries - 3, rowEntries - 1 };
+        setup_tag_row(tag, matchPos, 6, MATCH_TYPE_ALL);
+        U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
+        validate_mask(tag, mask, head);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AOCL_ZSTD_row_getMatchMask_TEST,
+    ZSTD_AOCL_ZSTD_row_getMatchMask,
+    ::testing::ValuesIn({ 16, 32, 64 })); // 3 configurations supported for rowEntries
+
+/*********************************************
+ * End of ZSTD_AOCL_reset_n_highest_set_bits
+ *********************************************/

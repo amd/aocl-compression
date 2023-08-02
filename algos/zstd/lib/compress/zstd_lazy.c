@@ -1130,6 +1130,135 @@ ZSTD_row_getMatchMask(const BYTE* const tagRow, const BYTE tag, const U32 headGr
 #endif
 }
 
+#ifdef AOCL_ZSTD_OPT
+#define AOCL_U64_ALIGN_4 0xFFFFFFFFFFFFFFFCull
+
+#if defined(ZSTD_ARCH_X86_SSE2)
+/* Separated out from ZSTD_row_getMatchMask to allow more control over optimizations
+* specific to case with rowEntries=16. Also improves performance. */
+FORCE_INLINE_TEMPLATE ZSTD_VecMask
+AOCL_ZSTD_row_getSSEMask_1(const BYTE* const src, const BYTE tag, const U32 head)
+{
+    const __m128i comparisonMask = _mm_set1_epi8((char)tag);
+    const __m128i chunk = _mm_loadu_si128((const __m128i*)(const void*)(src));
+    const __m128i equalMask = _mm_cmpeq_epi8(chunk, comparisonMask);
+    /* & 0xFFFE: 0th bit is the head pos indicator. Removing this here,
+    eliminates having to check for it in AOCL_ZSTD_RowFindBestMatch
+    using matchPos==0 */
+    unsigned matches = _mm_movemask_epi8(equalMask) & 0xFFFEu;
+    return ZSTD_rotateRight_U16((U16)matches, head);
+}
+
+/* Separated out from ZSTD_row_getMatchMask to allow more control over optimizations
+* specific to case with rowEntries=32. Also improves performance. */
+FORCE_INLINE_TEMPLATE ZSTD_VecMask
+AOCL_ZSTD_row_getSSEMask_2(const BYTE* const src, const BYTE tag, const U32 head)
+{
+    const __m128i comparisonMask = _mm_set1_epi8((char)tag);
+    unsigned matches[2] = { 0 };
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        const __m128i chunk = _mm_loadu_si128((const __m128i*)(const void*)(src + 16 * i));
+        const __m128i equalMask = _mm_cmpeq_epi8(chunk, comparisonMask);
+        matches[i] = _mm_movemask_epi8(equalMask);
+    }
+    /* & 0xFFFFFFFE: 0th bit is the head pos indicator. Removing this here,
+    eliminates having to check for it in AOCL_ZSTD_RowFindBestMatch
+    using matchPos==0 */
+    U32 match = ((U32)matches[1] << 16 | (U32)matches[0]) & 0xFFFFFFFEu;
+    return ZSTD_rotateRight_U32(match, head);
+}
+
+/* Separated out from ZSTD_row_getMatchMask to allow more control over optimizations
+* specific to case with rowEntries=64. Also improves performance. */
+FORCE_INLINE_TEMPLATE ZSTD_VecMask
+AOCL_ZSTD_row_getSSEMask_4(const BYTE* const src, const BYTE tag, const U32 head)
+{
+    const __m128i comparisonMask = _mm_set1_epi8((char)tag);
+    int matches[4] = { 0 };
+    int i;
+
+    for (i = 0; i < 4; i++) {
+        const __m128i chunk = _mm_loadu_si128((const __m128i*)(const void*)(src + 16 * i));
+        const __m128i equalMask = _mm_cmpeq_epi8(chunk, comparisonMask);
+        matches[i] = _mm_movemask_epi8(equalMask);
+    }
+    /* & 0xFFFFFFFFFFFFFFFEllu: 0th bit is the head pos indicator. Removing this here,
+    eliminates having to check for it in AOCL_ZSTD_RowFindBestMatch
+    using matchPos==0 */
+    U64 match = ((U64)matches[3] << 48 | (U64)matches[2] << 32 | (U64)matches[1] << 16 | (U64)matches[0])
+                & 0xFFFFFFFFFFFFFFFEllu;
+    return ZSTD_rotateRight_U64(match, head);
+}
+#endif
+
+/* Changes wrt ZSTD_row_getMatchMask: 
+*   + Cases for rowEntries = 16, 32, 64 addressed separately
+*   + Supports x86 arch only */
+FORCE_INLINE_TEMPLATE ZSTD_VecMask
+AOCL_ZSTD_row_getMatchMask(const BYTE* const tagRow, const BYTE tag, const U32 headGrouped, const U32 rowEntries)
+{
+    const BYTE* const src = tagRow;
+    assert((rowEntries == 16) || (rowEntries == 32) || rowEntries == 64);
+    assert(rowEntries <= ZSTD_ROW_HASH_MAX_ENTRIES);
+    assert(ZSTD_row_matchMaskGroupWidth(rowEntries) * rowEntries <= sizeof(ZSTD_VecMask) * 8);
+
+#if defined(ZSTD_ARCH_X86_SSE2)
+    switch (rowEntries / 16) {
+    case 1:
+        return AOCL_ZSTD_row_getSSEMask_1(src, tag, headGrouped);
+    case 2:
+        return AOCL_ZSTD_row_getSSEMask_2(src, tag, headGrouped);
+    default: //case 4
+        return AOCL_ZSTD_row_getSSEMask_4(src, tag, headGrouped);
+#else
+    /* SWAR. Same as ZSTD_row_getMatchMask */
+    {   const int chunkSize = sizeof(size_t);
+        const size_t shiftAmount = ((chunkSize * 8) - chunkSize);
+        const size_t xFF = ~((size_t)0);
+        const size_t x01 = xFF / 0xFF;
+        const size_t x80 = x01 << 7;
+        const size_t splatChar = tag * x01;
+        ZSTD_VecMask matches = 0;
+        int i = rowEntries - chunkSize;
+        assert((sizeof(size_t) == 4) || (sizeof(size_t) == 8));
+        if (MEM_isLittleEndian()) { /* runtime check so have two loops */
+            const size_t extractMagic = (xFF / 0x7F) >> chunkSize;
+            do {
+                size_t chunk = MEM_readST(&src[i]);
+                chunk ^= splatChar;
+                chunk = (((chunk | x80) - x01) | chunk) & x80;
+                matches <<= chunkSize;
+                matches |= (chunk * extractMagic) >> shiftAmount;
+                i -= chunkSize;
+            } while (i >= 0);
+        } else { /* big endian: reverse bits during extraction */
+            const size_t msb = xFF ^ (xFF >> 1);
+            const size_t extractMagic = (msb / 0x1FF) | msb;
+            do {
+                size_t chunk = MEM_readST(&src[i]);
+                chunk ^= splatChar;
+                chunk = (((chunk | x80) - x01) | chunk) & x80;
+                matches <<= chunkSize;
+                matches |= ((chunk >> 7) * extractMagic) >> shiftAmount;
+                i -= chunkSize;
+            } while (i >= 0);
+        }
+        matches = ~matches;
+        if (rowEntries == 16) {
+            return ZSTD_rotateRight_U16((U16)matches, headGrouped);
+        } else if (rowEntries == 32) {
+            return ZSTD_rotateRight_U32((U32)matches, headGrouped);
+        } else {
+            return ZSTD_rotateRight_U64((U64)matches, headGrouped);
+        }
+    }
+#endif
+    }
+}
+#endif
+
 /* The high-level approach of the SIMD row based match finder is as follows:
  * - Figure out where to insert the new entry:
  *      - Generate a hash from a byte along with an additional 1-byte "short hash". The additional byte is our "tag"
@@ -1342,6 +1471,19 @@ size_t ZSTD_RowFindBestMatch(
 }
 
 #ifdef AOCL_ZSTD_OPT
+/* Reset N highest set bits in matches.
+ * N = (rowEntries - nbAttempts) */
+#define AOCL_RESET_N_HIGHEST_SET_BITS(matches, rowEntries, nbAttempts) \
+if (matches > 0) { \
+    U32 eliminate = (rowEntries - nbAttempts); \
+    for (int i = 0; i < eliminate; ++i) { \
+        int clz = ZSTD_countLeadingZeros64((U64)matches); \
+        U64 mask = (U64)1u << (64 - clz - 1); \
+        matches &= ~mask; \
+        if (matches == 0) break; \
+    } \
+}
+
 /* AMD optimized row based match finder function.
  * Gets called when aoclOptFlag is enabled.
  * Changes wrt ZSTD_RowFindBestMatch:
@@ -1352,6 +1494,10 @@ size_t ZSTD_RowFindBestMatch(
         * Merged the 2 loops in ZSTD_RowFindBestMatch to avoid usage of temporary
           matchBuffer.
         * PREFETCH_L1s do not help in the current configuration. Hence removed.
+    * Calls AOCL_ZSTD_row_getMatchMask. matchPos==0 check handled inside this.
+    * nbAttempts loop variable removed and handled outside
+    * prefetch match candidates at aligned locations
+    * reset tag candidates when (matchIndex < lowLimit)
 */
 FORCE_INLINE_TEMPLATE
 size_t AOCL_ZSTD_RowFindBestMatch(
@@ -1433,7 +1579,7 @@ size_t AOCL_ZSTD_RowFindBestMatch(
         U32* const row = hashTable + relRow;
         BYTE* tagRow = (BYTE*)(tagTable + relRow);
         U32 const headGrouped = (*tagRow & rowMask) * groupWidth;
-        ZSTD_VecMask matches = ZSTD_row_getMatchMask(tagRow, (BYTE)tag, headGrouped, rowEntries);
+        ZSTD_VecMask matches = AOCL_ZSTD_row_getMatchMask(tagRow, (BYTE)tag, headGrouped, rowEntries);
 
         const U32 maxDistance = 1U << cParams->windowLog;
         const U32 lowestValid = ms->window.lowLimit;
@@ -1441,14 +1587,28 @@ size_t AOCL_ZSTD_RowFindBestMatch(
         const U32 isDictionary = (ms->loadedDictEnd != 0);
         const U32 lowLimit = isDictionary ? lowestValid : withinMaxDistance;
 
-        /* Cycle through the matches and prefetch */
-        for (; (matches > 0) && (nbAttempts > 0); matches &= (matches - 1)) {
+        /* matches contains a bit mask to indicate candidates in 'row' that match current 'hash'.
+        * However, only nbAttempts matches need to be compared. If nbAttempts = rowEntries, 
+        * check for all candidates indicated by matches. If it is less, eliminate N oldest
+        * match candidates from matches */
+        if (UNLIKELY(nbAttempts < rowEntries)) { // default settings for all levels sets nbAttempts = rowEntries. Hence marked UNLIKELY.
+            AOCL_RESET_N_HIGHEST_SET_BITS(matches, rowEntries, nbAttempts)
+        }
+        for (; (matches > 0); matches &= (matches - 1)) {
             U32 const matchPos = ((headGrouped + ZSTD_VecMask_next(matches)) / groupWidth) & rowMask;
             U32 const matchIndex = row[matchPos];
-            if (matchPos == 0) continue;
-            assert(numMatches < rowEntries);
-            if (matchIndex < lowLimit)
+            
+            if (UNLIKELY(matchIndex < lowLimit)) {
+                /* All matches before matchIndex will also be < lowLimit.
+                * Reset tags corresponding to these older matches.
+                * Once reset, future matches for the same 'hash' will not match for
+                * these candidates, avoiding having to do this check again. */
+                for (; (matches > 0); matches &= (matches - 1)) {
+                    U32 const matchPos = ((headGrouped + ZSTD_VecMask_next(matches)) / groupWidth) & rowMask;
+                    tagRow[matchPos] = 0;
+                }
                 break;
+            }
 
             size_t currentMl = 0;
             assert(matchIndex < curr);
@@ -1456,6 +1616,10 @@ size_t AOCL_ZSTD_RowFindBestMatch(
 
             if ((dictMode != ZSTD_extDict) || matchIndex >= dictLimit) {
                 const BYTE* const match = base + matchIndex;
+                {
+                    const BYTE* const matchPref = (BYTE*)((size_t)match & AOCL_U64_ALIGN_4);
+                    PREFETCH_L1(matchPref); // prefetch match candidate at aligned location
+                }
                 assert(matchIndex >= dictLimit);   /* ensures this is true if dictMode != ZSTD_extDict */
 #ifndef AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER
                 /* Find a potentially better match candidate at the previous best match length.
@@ -1487,7 +1651,6 @@ size_t AOCL_ZSTD_RowFindBestMatch(
 #endif
                     break; /* best possible, avoids read overflow on next attempt */
             }
-            --nbAttempts;
         }
 
         /* Speed opt: insert current byte into hashtable too. This allows us to avoid one iteration of the loop
@@ -2774,3 +2937,15 @@ size_t ZSTD_compressBlock_lazy2_extDict_row(
 {
     return ZSTD_compressBlock_lazy_extDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 2);
 }
+
+#ifdef AOCL_ZSTD_UNIT_TEST
+U64 Test_AOCL_ZSTD_row_getMatchMask(const BYTE* const tagRow, const BYTE tag,
+    const U32 headGrouped, const U32 rowEntries) {
+    return AOCL_ZSTD_row_getMatchMask(tagRow, tag, headGrouped, rowEntries);
+}
+
+U64 Test_AOCL_reset_n_highest_set_bits(U64 matches, U32 rowEntries, U32 nbAttempts) {
+    AOCL_RESET_N_HIGHEST_SET_BITS(matches, rowEntries, nbAttempts);
+    return matches;
+}
+#endif
