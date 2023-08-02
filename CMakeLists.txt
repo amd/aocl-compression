@@ -127,6 +127,7 @@ if (NOT AOCL_EXCLUDE_SNAPPY)
 set (SNAPPY_SRC_FILES 	${ALGOS_PATH}/snappy/snappy-sinksource.cc
 						${ALGOS_PATH}/snappy/snappy-stubs-internal.cc
 						${ALGOS_PATH}/snappy/snappy.cc
+						${ALGOS_PATH}/snappy/snappy-c.cc
 						${ALGOS_PATH}/snappy/snappy.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
@@ -222,6 +223,7 @@ endif ()
 if (NOT AOCL_EXCLUDE_SNAPPY)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/snappy/snappy-stubs-public.h)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/snappy/snappy.h)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/snappy/snappy-c.h)
 endif ()
 if (NOT AOCL_EXCLUDE_ZLIB)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/zlib/zconf.h)

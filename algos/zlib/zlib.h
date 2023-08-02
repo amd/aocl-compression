@@ -3123,7 +3123,7 @@ ZEXTERN int            ZEXPORTVA gzvprintf Z_ARG((gzFile file,
 #ifdef AOCL_DYNAMIC_DISPATCHER
 /**
  * @brief AOCL-Compression defined zlib setup function that configures with the right
- * AMD optimized lz4 routines depending upon the detected CPU features.
+ * AMD optimized ZLIB routines depending upon the detected CPU features.
  * 
  * @param optOff Turn off all optimizations
  * @param optLevel Optimization level:0-NA,1-SSE2,2-AVX,3-AVX2,4-AVX512
@@ -3138,7 +3138,7 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib OF((int optOff, int optLevel,
 
 /**
  * @brief AOCL-Compression defined deflate setup function that configures with the right
- * AMD optimized lz4 routines depending upon the detected CPU features.
+ * AMD optimized ZLIB routines depending upon the detected CPU features.
  * 
  * @param optOff Turn off all optimizations
  * @param optLevel Optimization level:0-NA,1-SSE2,2-AVX,3-AVX2,4-AVX512
@@ -3155,7 +3155,7 @@ ZEXTERN char * ZEXPORT aocl_setup_inflate_fmv OF((int optOff, int optLevel,
 
 /**
  * @brief AOCL-Compression adler defined setup function that configures with the right
- * AMD optimized lz4 routines depending upon the detected CPU features.
+ * AMD optimized ZLIB routines depending upon the detected CPU features.
  * 
  * @param optOff Turn off all optimizations
  * @param optLevel Optimization level:0-NA,1-SSE2,2-AVX,3-AVX2,4-AVX512
