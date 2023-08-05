@@ -65,6 +65,7 @@ option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API 
 option (AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER "Enable 4-byte comparison when finding match candidates with Lazy2 compressor (Disabled by default)" OFF)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option (AOCL_TEST_COVERAGE "Enable GTest and AOCL test bench based CTest suite (Disabled by default)" OFF)
+option (CODE_COVERAGE "Enable source code coverage (only on Linux with GCC compiler)" OFF)
 option (BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)
 option (ZLIB_DEFLATE_FAST_MODE_2 "Enable optimization for deflate fast using Z_FIXED strategy (Disabled by default)" OFF)
 option (ZLIB_DEFLATE_FAST_MODE_3 "Enable ZLIB deflate quick strategy (Disabled by default)" OFF)
@@ -342,6 +343,17 @@ else()
 	set(ENABLE_STRICT_WARNINGS OFF)
 endif()
 
+# setup to get source code coverage(GCOV)
+if (CODE_COVERAGE)
+	if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${CMAKE_C_COMPILER_ID} STREQUAL "GNU"))
+		# Switch off GCOV: target not supported
+		set(CODE_COVERAGE OFF)
+		message(WARNING "Target not supported. Code coverage is only supported on Linux OS with GCC compiler")
+	else()
+		set(AOCL_TEST_COVERAGE ON)
+	endif()
+endif()
+
 #setup CTest for GoogleTest and aocl_compression_bench test
 if (AOCL_TEST_COVERAGE)
 	# enabling ctest
@@ -379,6 +391,12 @@ if (BUILD_STATIC_LIBS)
 else ()
 	add_library(${lib_name} SHARED ${SRC_FILES})
 	message(STATUS "Library type being built is: Shared")
+endif()
+
+# add the compiler and linker flags for code coverage
+if (CODE_COVERAGE)
+	target_compile_options(${lib_name} PUBLIC --coverage -fprofile-abs-path)
+	target_link_options(${lib_name} PUBLIC --coverage)		
 endif()
 
 set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
