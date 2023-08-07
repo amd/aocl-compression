@@ -7,6 +7,34 @@
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
  */
+
+ /**
+  * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions are met:
+  *
+  * 1. Redistributions of source code must retain the above copyright notice,
+  * this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright notice,
+  * this list of conditions and the following disclaimer in the documentation
+  * and/or other materials provided with the distribution.
+  * 3. Neither the name of the copyright holder nor the names of its
+  * contributors may be used to endorse or promote products derived from this
+  * software without specific prior written permission.
+  *
+  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+  * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  * POSSIBILITY OF SUCH DAMAGE.
+  */
 #if defined (__cplusplus)
 extern "C" {
 #endif
@@ -173,6 +201,41 @@ ZSTDLIB_API unsigned long long ZSTD_getDecompressedSize(const void* src, size_t 
  *        or an error code if input is invalid */
 ZSTDLIB_API size_t ZSTD_findFrameCompressedSize(const void* src, size_t srcSize);
 
+#define AOCL_ZSTD_OPT //Main AOCL optimization switch for ZSTD
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+/**
+ * @brief AOCL-Compression defined setup functions that configures ZSTD 
+ * compression with the right AMD optimized ZSTD routines depending upon the
+ * detected CPU features.
+ *
+ * @param optOff Turn off all optimizations .
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ *
+ * @return \b NULL
+ */
+ZSTDLIB_API char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,
+    size_t level, size_t windowLog);
+
+/**
+ * @brief AOCL-Compression defined setup functions that configures ZSTD
+ * decompression with the right AMD optimized ZSTD routines depending upon the
+ * detected CPU features.
+ *
+ * @param optOff Turn off all optimizations .
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ *
+ * @return \b NULL
+ */
+ZSTDLIB_API char* aocl_setup_zstd_decode(int optOff, int optLevel, size_t insize,
+    size_t level, size_t windowLog);
+#endif
 
 /*======  Helper functions  ======*/
 #define ZSTD_COMPRESSBOUND(srcSize)   ((srcSize) + ((srcSize)>>8) + (((srcSize) < (128<<10)) ? (((128<<10) - (srcSize)) >> 11) /* margin, from 64 to 0 */ : 0))  /* this formula ensures that bound(A) + bound(B) <= bound(A+B) as long as A and B >= 128 KB */

@@ -8,6 +8,34 @@
  * You may select, at your option, one of the above-listed licenses.
  */
 
+ /**
+   * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+   *
+   * Redistribution and use in source and binary forms, with or without
+   * modification, are permitted provided that the following conditions are met:
+   *
+   * 1. Redistributions of source code must retain the above copyright notice,
+   * this list of conditions and the following disclaimer.
+   * 2. Redistributions in binary form must reproduce the above copyright notice,
+   * this list of conditions and the following disclaimer in the documentation
+   * and/or other materials provided with the distribution.
+   * 3. Neither the name of the copyright holder nor the names of its
+   * contributors may be used to endorse or promote products derived from this
+   * software without specific prior written permission.
+   *
+   * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+   * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+   * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+   * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+   * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+   * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+   * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+   * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+   * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+   * POSSIBILITY OF SUCH DAMAGE.
+   */
+
 /*-*************************************
 *  Dependencies
 ***************************************/
@@ -77,6 +105,10 @@ struct ZSTD_CDict_s {
                                                      * the same greedy/lazy matchfinder at compression time.
                                                      */
 };  /* typedef'd to ZSTD_CDict within "zstd.h" */
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+static unsigned char aoclOptFlag = 0;
+#endif
 
 ZSTD_CCtx* ZSTD_createCCtx(void)
 {
@@ -2743,6 +2775,35 @@ ZSTD_blockCompressor ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_useRow
     assert(ZSTD_cParam_withinBounds(ZSTD_c_strategy, strat));
     DEBUGLOG(4, "Selected block compressor: dictMode=%d strat=%d rowMatchfinder=%d", (int)dictMode, (int)strat, (int)useRowMatchFinder);
     if (ZSTD_rowMatchFinderUsed(strat, useRowMatchFinder)) {
+#ifdef AOCL_ZSTD_OPT //Added new AMD optimized compressors
+        static const ZSTD_blockCompressor rowBasedBlockCompressors[4][4] = {
+            { ZSTD_compressBlock_greedy_row,
+            ZSTD_compressBlock_lazy_row,
+            ZSTD_compressBlock_lazy2_row,
+            AOCL_ZSTD_compressBlock_lazy2_row},
+            { ZSTD_compressBlock_greedy_extDict_row,
+            ZSTD_compressBlock_lazy_extDict_row,
+            ZSTD_compressBlock_lazy2_extDict_row,
+            ZSTD_compressBlock_lazy2_extDict_row},
+            { ZSTD_compressBlock_greedy_dictMatchState_row,
+            ZSTD_compressBlock_lazy_dictMatchState_row,
+            ZSTD_compressBlock_lazy2_dictMatchState_row,
+            ZSTD_compressBlock_lazy2_dictMatchState_row},
+            { ZSTD_compressBlock_greedy_dedicatedDictSearch_row,
+            ZSTD_compressBlock_lazy_dedicatedDictSearch_row,
+            ZSTD_compressBlock_lazy2_dedicatedDictSearch_row,
+            ZSTD_compressBlock_lazy2_dedicatedDictSearch_row}
+        };
+        DEBUGLOG(4, "Selecting a row-based matchfinder");
+        assert(useRowMatchFinder != ZSTD_urm_auto);
+        int select = (int)strat - (int)ZSTD_greedy;
+#ifdef AOCL_DYNAMIC_DISPATCHER
+        select = (select == 2) ? select + aoclOptFlag : select;
+#else
+        select = (select == 2) ? select + 1 : select;
+#endif
+        selectedCompressor = rowBasedBlockCompressors[(int)dictMode][select];
+#else
         static const ZSTD_blockCompressor rowBasedBlockCompressors[4][3] = {
             { ZSTD_compressBlock_greedy_row,
             ZSTD_compressBlock_lazy_row,
@@ -2760,6 +2821,7 @@ ZSTD_blockCompressor ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_useRow
         DEBUGLOG(4, "Selecting a row-based matchfinder");
         assert(useRowMatchFinder != ZSTD_urm_auto);
         selectedCompressor = rowBasedBlockCompressors[(int)dictMode][(int)strat - (int)ZSTD_greedy];
+#endif
     } else {
         selectedCompressor = blockCompressor[(int)dictMode][(int)strat];
     }
@@ -6391,3 +6453,37 @@ ZSTD_parameters ZSTD_getParams(int compressionLevel, unsigned long long srcSizeH
     if (srcSizeHint == 0) srcSizeHint = ZSTD_CONTENTSIZE_UNKNOWN;
     return ZSTD_getParams_internal(compressionLevel, srcSizeHint, dictSize, ZSTD_cpm_unknown);
 }
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+/* Dynamic dispatcher that sets up the optimized AMD function variant
+* */
+static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
+{
+    if (optOff)
+    {
+        //Unoptimized C version
+        aoclOptFlag = 0;
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case 0://Optimized C version
+        case 1://SSE version
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            aoclOptFlag = 1;
+            break;
+        }
+    }
+}
+/* AOCL-Compression setup API for invoking Dynamic dispatcher for compression
+* */
+char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,
+                      size_t level, size_t windowLog)
+{
+    aocl_register_zstd_compress_fmv(optOff, optLevel);
+    return NULL;
+}
+#endif
