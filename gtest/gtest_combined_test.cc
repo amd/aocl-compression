@@ -51,6 +51,7 @@
 #include <gtest/gtest.h>
 
 #include "algos/lz4/lz4.h"
+#include "algos/lz4/lz4hc.h"
 #include "algos/snappy/snappy.h"
 #include "algos/zlib/zlib.h"
 #include "algos/lzma/LzmaDec.h"
@@ -90,6 +91,9 @@ int setup(aocl_compression_type method, int optLevel)
          case LZMA:
             aocl_setup_lzma_encode(0, optLevel, 0, 0, 0);
             aocl_setup_lzma_decode(0, optLevel, 0, 0, 0);
+            break;
+         case LZ4HC:
+            aocl_setup_lz4hc(0, optLevel, 0, 0, 0);
             break;
          default:
              cout << "Error: Unsupported method\n";
@@ -136,7 +140,7 @@ string create_filter(vector<string> &prog)
       // if any other arguments are passed, error message shows up and exits from program.
       if (regex_match(s, match, regex("-lz4(:\\d)?")))
       {
-         filt += "*LZ4_*";
+         filt += "LZ4_*:LLZ4_*";
          s = (string)match[1];
          num = s.size()==2 ? s[1]-'0' : 0;
          method = LZ4;
@@ -162,7 +166,14 @@ string create_filter(vector<string> &prog)
           num = s.size() == 2 ? s[1] - '0' : 0;
           method = LZMA;
       }
-      else if (regex_match(s, match, regex("-(zstd|bzip2|lz4hc)(:\\d)?")))
+      else if (regex_match(s, match, regex("-lz4hc(:\\d)?")))
+      {
+         filt += "LZ4HC*";
+         s = (string)match[1];
+         num = s.size() == 2 ? s[1]-'0' : 0;
+         method = LZ4HC;
+      }
+      else if (regex_match(s, match, regex("-(zstd|bzip2)(:\\d)?")))
       {
          cout << "Error: Current testing framework for the method ";
          cout << match[1] << " is currently unsupported\n";
@@ -201,6 +212,7 @@ int main(int argc, char *argv[])
       prog.push_back("-snappy");
       prog.push_back("-zlib");
       prog.push_back("-lzma");
+      prog.push_back("-lz4hc");
    }
 
    string filt = create_filter(prog);
