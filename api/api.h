@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -62,6 +62,7 @@ extern "C" {
  * @{
  */
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 #ifdef _WINDOWS
 /**
  * You can export data, functions, classes, or class member functions from a DLL
@@ -79,10 +80,10 @@ extern "C" {
 
 #define LIBRARY_VERSION "AOCL-COMPRESSION 4.0.1"
 #define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 1.0"
-
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
  /**
-  * @brief Error codes supported in aocl-compression.
+  * @brief Error codes supported by unified APIs of the AOCL Compression library.
   *
   * 
   */
@@ -112,41 +113,54 @@ typedef enum
 } aocl_compression_type;
 
 /**
- * @brief This acts as a handle for compression and decompression of aocl library.
+ * @brief This acts as a handle for the compression and decompression of AOCL Compression library.
  * 
  */
 typedef struct
 {
-    char *inBuf;         ///<pointer to input buffer data
-    char *outBuf;        ///<pointer to output buffer data
-    char *workBuf;       ///<pointer to temporary work buffer
-    size_t inSize;       ///<input data length
-    size_t outSize;      ///<output data length
-    size_t level;        ///<requested compression level
-    size_t optVar;       ///<additional variables or parameters
-    int numThreads;      ///<number of threads available for multi-threading
-    int numMPIranks;     ///<number of available multi-core MPI ranks
-    size_t memLimit;     ///<maximum memory limit for compression/decompression
-    int measureStats;    ///<Measure speed and size of compression/decompression
-    uint64_t cSize;      ///<size of compressed output
-    uint64_t dSize;      ///<size of decompressed output
-    uint64_t cTime;      ///<time to compress input
-    uint64_t dTime;      ///<time to decompress input
-    float cSpeed;        ///<speed of compression
-    float dSpeed;        ///<speed of decompression
-    int optOff;          ///<Turn off all optimizations
-    int optLevel;        ///<Optimization level:0-NA,1-SSE2,2-AVX,3-AVX2,4-AVX512
-    int printDebugLogs;  ///<print debug logs
+    char *inBuf;         /**<  Pointer to input buffer data                           */
+    char *outBuf;        /**<  Pointer to output buffer data                          */
+    char *workBuf;       /**<  Pointer to temporary work buffer                       */
+    size_t inSize;       /**<  Input data length                                      */                      
+    size_t outSize;      /**<  Output data length                                     */ 
+    size_t level;        /**<  Requested compression level                            */
+    size_t optVar;       /**<  Additional variables or parameters                     */
+    int numThreads;      /**<  Number of threads available for multi-threading        */
+    int numMPIranks;     /**<  Number of available multi-core MPI ranks               */
+    size_t memLimit;     /**<  Maximum memory limit for compression/decompression     */
+    int measureStats;    /**<  Measure speed and size of compression/decompression    */
+    uint64_t cSize;      /**<  Size of compressed output                              */
+    uint64_t dSize;      /**<  Size of decompressed output                            */
+    uint64_t cTime;      /**<  Time to compress input                                 */
+    uint64_t dTime;      /**<  Time to decompress input                               */
+    float cSpeed;        /**<  Speed of compression                                   */
+    float dSpeed;        /**<  Speed of decompression                                 */
+    int optOff;          /**<  Turn off all optimizations                             */
+    int optLevel;        /**<  Optimization level:  \n
+                               0 - non-SIMD algorithmic optimizations, \n
+                               1 - SSE2 optimizations, \n
+                               2 - AVX optimizations, \n
+                               3 - AVX2 optimizations, \n
+                               4 - AVX512 optimizations                               */
+    int printDebugLogs;  /**<  Print debug logs                                       */
     //size_t chunk_size; //Unused variable
 } aocl_compression_desc;
 
 /**
  * @brief Interface API to compress data.
  * 
- * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
- * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
+ * | Parameters | Direction   | Description |
+ * |:-----------|:-----------:|:------------|
+ * | \b handle     | in,out  | This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info. |
+ * | \b codec_type | in      | Select the algorithm you want to use for compression, choose from aocl_compression_type. |
  * 
- * @return Numbers of bytes compressed on success. Error codes ERR_COMPRESSION_FAILED or ERR_COMPRESSION_INVALID_OUTPUT on failure.
+ * 
+ * @return 
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    |Numbers of bytes decompressed     |
+ * | Fail       |`ERR_COMPRESSION_FAILED`          |
+ * | ^          |`ERR_COMPRESSION_INVALID_OUTPUT`  |
  */
 EXPORT_SYM_DYN int64_t aocl_llc_compress(aocl_compression_desc *handle,
                             aocl_compression_type codec_type);
@@ -154,32 +168,50 @@ EXPORT_SYM_DYN int64_t aocl_llc_compress(aocl_compression_desc *handle,
 /**
  * @brief Interface API to decompress data.
  * 
- * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
- * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
+ * | Parameters | Direction   | Description |
+ * |:-----------|:-----------:|:------------|
+ * | \b handle     | in,out  | This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info. |
+ * | \b codec_type | in      | Select the algorithm you want to use for compression, choose from aocl_compression_type. |
  * 
- * @return Numbers of bytes decompressed on success. Error codes ERR_COMPRESSION_FAILED or ERR_COMPRESSION_INVALID_OUTPUT on failure.
+ * @return 
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    |Numbers of bytes decompressed     |
+ * | Fail       |`ERR_COMPRESSION_FAILED`          |
+ * | ^          |`ERR_COMPRESSION_INVALID_OUTPUT`  |
+ * 
  */
 
 EXPORT_SYM_DYN int64_t aocl_llc_decompress(aocl_compression_desc *handle,
                               aocl_compression_type codec_type);
 
 /**
- * @brief Interface API to setup the codec method.
+ * @brief Interface API to setup the compression method.
  * 
- * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
- * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
+ * | Parameters | Direction   | Description |
+ * |:-----------|:-----------:|:------------|
+ * | \b handle     | in,out  | This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info. |
+ * | \b codec_type | in      | Select the algorithm you want to use for compression, choose from aocl_compression_type. |
  * 
- * @return 0 on success. Error codes ERR_UNSUPPORTED_METHOD or ERR_EXCLUDED_METHOD on failure.
+ * @return 
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    | \b 0                           |
+ * | Fail       | `ERR_UNSUPPORTED_METHOD`       |
+ * | ^          | `ERR_EXCLUDED_METHOD`          |
+ * 
  */
 
 EXPORT_SYM_DYN int32_t aocl_llc_setup(aocl_compression_desc *handle,
                       aocl_compression_type codec_type);
 
 /**
- * @brief Interface API to destroy the codec method.
+ * @brief Interface API to destroy the compression method.
  * 
- * @param handle This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info.
- * @param codec_type Select the algorithm you want to use for compression, choose from aocl_compression_type.
+ * | Parameters | Direction   | Description |
+ * |:-----------|:-----------:|:------------|
+ * | \b handle     | in,out  | This acts as a handle for compression and decompression. Refer to aocl_compression_desc for more info. |
+ * | \b codec_type | in      | Select the algorithm you want to use for compression, choose from aocl_compression_type. |
  * 
  * @return void 
  */
@@ -188,7 +220,7 @@ EXPORT_SYM_DYN void aocl_llc_destroy(aocl_compression_desc *handle,
 /**
  * @brief Interface API to get compression library version string.
  * 
- * @return aocl library version 
+ * @return AOCL library version 
  */
 
 EXPORT_SYM_DYN const char *aocl_llc_version(void);
