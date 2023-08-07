@@ -125,7 +125,7 @@ extern block_state deflate_medium(deflate_state *s, int flush);
 block_state (*aocl_deflate_lvl1_fp)(deflate_state *s, int flush) = deflate_fast;
 extern block_state deflate_quick(deflate_state *s, int flush);
 #endif
-#endif
+#endif /* AOCL_ZLIB_OPT */
 
 /* ===========================================================================
  * Local data
@@ -247,8 +247,12 @@ local const config configuration_table_opt[10] = {
  * bit values at the expense of memory usage). We slide even when level == 0 to
  * keep the hash table consistent if we switch back to level > 0 later.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local void slide_hash(deflate_state *s)
+#else
 local void slide_hash(s)
     deflate_state *s;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned n, m;
     Posf *p;
@@ -325,11 +329,15 @@ ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv(int optOff, int optLevel, int insi
 #endif
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateInit_(z_streamp strm, int level, const char *version, int stream_size)
+#else
 int ZEXPORT deflateInit_(strm, level, version, stream_size)
     z_streamp strm;
     int level;
     const char *version;
     int stream_size;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return deflateInit2_(strm, level, Z_DEFLATED, MAX_WBITS, DEF_MEM_LEVEL,
                          Z_DEFAULT_STRATEGY, version, stream_size);
@@ -337,6 +345,10 @@ int ZEXPORT deflateInit_(strm, level, version, stream_size)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateInit2_(z_streamp strm, int  level, int  method, int  windowBits,
+    int  memLevel, int  strategy, const char *version, int stream_size)
+#else
 int ZEXPORT deflateInit2_(strm, level, method, windowBits, memLevel, strategy,
                   version, stream_size)
     z_streamp strm;
@@ -347,6 +359,7 @@ int ZEXPORT deflateInit2_(strm, level, method, windowBits, memLevel, strategy,
     int  strategy;
     const char *version;
     int stream_size;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     deflate_state *s;
     int wrap = 1;
@@ -468,8 +481,12 @@ else
 /* =========================================================================
  * Check for a valid deflate stream state. Return 0 if ok, 1 if not.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local int deflateStateCheck (z_streamp strm)
+#else
 local int deflateStateCheck (strm)
     z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     deflate_state *s;
     if (strm == Z_NULL ||
@@ -491,10 +508,14 @@ local int deflateStateCheck (strm)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateSetDictionary (z_streamp strm, const Bytef *dictionary, uInt  dictLength)
+#else
 int ZEXPORT deflateSetDictionary (strm, dictionary, dictLength)
     z_streamp strm;
     const Bytef *dictionary;
     uInt  dictLength;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
 #ifndef AOCL_ZLIB_OPT
     deflate_state *s;
@@ -570,10 +591,7 @@ int ZEXPORT deflateSetDictionary (strm, dictionary, dictLength)
 }
 
 #ifdef AOCL_ZLIB_OPT
-local int aocl_deflateSetDictionary_v1 (strm, dictionary, dictLength)
-    z_streamp strm;
-    const Bytef *dictionary;
-    uInt  dictLength;
+local int aocl_deflateSetDictionary_v1 (z_streamp strm, const Bytef *dictionary, uInt  dictLength)
 {
     deflate_state *s;
     uInt str, n;
@@ -639,10 +657,7 @@ local int aocl_deflateSetDictionary_v1 (strm, dictionary, dictLength)
 }
 
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
-local int aocl_deflateSetDictionary_v2 (strm, dictionary, dictLength)
-    z_streamp strm;
-    const Bytef *dictionary;
-    uInt  dictLength;
+local int aocl_deflateSetDictionary_v2 (z_streamp strm, const Bytef *dictionary, uInt  dictLength)
 {
     deflate_state *s;
     uInt str, n;
@@ -709,10 +724,14 @@ local int aocl_deflateSetDictionary_v2 (strm, dictionary, dictLength)
 #endif /* AOCL_ZLIB_OPT */
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateGetDictionary (z_streamp strm, Bytef *dictionary, uInt  *dictLength)
+#else
 int ZEXPORT deflateGetDictionary (strm, dictionary, dictLength)
     z_streamp strm;
     Bytef *dictionary;
     uInt  *dictLength;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     deflate_state *s;
     uInt len;
@@ -731,8 +750,12 @@ int ZEXPORT deflateGetDictionary (strm, dictionary, dictLength)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateResetKeep (z_streamp strm)
+#else
 int ZEXPORT deflateResetKeep (strm)
     z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     deflate_state *s;
 
@@ -773,8 +796,12 @@ int ZEXPORT deflateResetKeep (strm)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateReset (z_streamp strm)
+#else
 int ZEXPORT deflateReset (strm)
     z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int ret;
 
@@ -785,9 +812,13 @@ int ZEXPORT deflateReset (strm)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateSetHeader (z_streamp strm, gz_headerp head)
+#else
 int ZEXPORT deflateSetHeader (strm, head)
     z_streamp strm;
     gz_headerp head;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     if (deflateStateCheck(strm) || strm->state->wrap != 2)
         return Z_STREAM_ERROR;
@@ -796,10 +827,14 @@ int ZEXPORT deflateSetHeader (strm, head)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflatePending (z_streamp strm, unsigned *pending, int *bits)
+#else
 int ZEXPORT deflatePending (strm, pending, bits)
     unsigned *pending;
     int *bits;
     z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     if (deflateStateCheck(strm)) return Z_STREAM_ERROR;
     if (pending != Z_NULL)
@@ -810,10 +845,14 @@ int ZEXPORT deflatePending (strm, pending, bits)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflatePrime (z_streamp strm, int bits, int value)
+#else
 int ZEXPORT deflatePrime (strm, bits, value)
     z_streamp strm;
     int bits;
     int value;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     deflate_state *s;
     int put;
@@ -836,10 +875,14 @@ int ZEXPORT deflatePrime (strm, bits, value)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateParams(z_streamp strm, int level, int strategy)
+#else
 int ZEXPORT deflateParams(strm, level, strategy)
     z_streamp strm;
     int level;
     int strategy;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     deflate_state *s;
     compress_func func;
@@ -919,12 +962,16 @@ int ZEXPORT deflateParams(strm, level, strategy)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateTune(z_streamp strm, int good_length, int max_lazy, int nice_length, int max_chain)
+#else
 int ZEXPORT deflateTune(strm, good_length, max_lazy, nice_length, max_chain)
     z_streamp strm;
     int good_length;
     int max_lazy;
     int nice_length;
     int max_chain;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     deflate_state *s;
 
@@ -954,9 +1001,13 @@ int ZEXPORT deflateTune(strm, good_length, max_lazy, nice_length, max_chain)
  * upper bound of about 14% expansion does not seem onerous for output buffer
  * allocation.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+uLong ZEXPORT deflateBound(z_streamp strm, uLong sourceLen)
+#else
 uLong ZEXPORT deflateBound(strm, sourceLen)
     z_streamp strm;
     uLong sourceLen;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     deflate_state *s;
     uLong complen, wraplen;
@@ -1018,9 +1069,13 @@ uLong ZEXPORT deflateBound(strm, sourceLen)
  * IN assertion: the stream state is correct and there is enough room in
  * pending_buf.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local void putShortMSB (deflate_state *s, uInt b)
+#else
 local void putShortMSB (s, b)
     deflate_state *s;
     uInt b;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     put_byte(s, (Byte)(b >> 8));
     put_byte(s, (Byte)(b & 0xff));
@@ -1032,8 +1087,12 @@ local void putShortMSB (s, b)
  * applications may wish to modify it to avoid allocating a large
  * strm->next_out buffer and copying into it. (See also read_buf()).
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local void flush_pending(z_streamp strm)
+#else
 local void flush_pending(strm)
     z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned len;
     deflate_state *s = strm->state;
@@ -1065,9 +1124,13 @@ local void flush_pending(strm)
     } while (0)
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflate (z_streamp strm, int flush)
+#else
 int ZEXPORT deflate (strm, flush)
     z_streamp strm;
     int flush;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int old_flush; /* value of flush param for previous deflate call */
     deflate_state *s;
@@ -1393,8 +1456,12 @@ int ZEXPORT deflate (strm, flush)
 }
 
 /* ========================================================================= */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateEnd (z_streamp strm)
+#else
 int ZEXPORT deflateEnd (strm)
     z_streamp strm;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int status;
 
@@ -1419,9 +1486,13 @@ int ZEXPORT deflateEnd (strm)
  * To simplify the source, this is not supported for 16-bit MSDOS (which
  * doesn't have enough memory anyway to duplicate compression states).
  */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT deflateCopy (z_streamp dest, z_streamp source)
+#else
 int ZEXPORT deflateCopy (dest, source)
     z_streamp dest;
     z_streamp source;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
 #ifdef MAXSEG_64K
     return Z_STREAM_ERROR;
@@ -1481,10 +1552,14 @@ int ZEXPORT deflateCopy (dest, source)
  * allocating a large strm->next_in buffer and copying from it.
  * (See also flush_pending()).
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local unsigned read_buf(z_streamp strm, Bytef *buf, unsigned size)
+#else
 local unsigned read_buf(strm, buf, size)
     z_streamp strm;
     Bytef *buf;
     unsigned size;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned len = strm->avail_in;
 
@@ -1515,8 +1590,12 @@ local unsigned read_buf(strm, buf, size)
 /* ===========================================================================
  * Initialize the "longest match" routines for a new zlib stream
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local void lm_init (deflate_state *s)
+#else
 local void lm_init (s)
     deflate_state *s;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     s->window_size = (ulg)2L*s->w_size;
 
@@ -1571,9 +1650,13 @@ local void lm_init (s)
 /* For 80x86 and 680x0, an optimized version will be provided in match.asm or
  * match.S. The code will be functionally equivalent.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local uInt longest_match (deflate_state *s, IPos cur_match)
+#else
 local uInt longest_match(s, cur_match)
     deflate_state *s;
     IPos cur_match;                             /* current match */
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned chain_length = s->max_chain_length;/* max hash chain length */
     register Bytef *scan = s->window + s->strstart; /* current string */
@@ -1720,9 +1803,13 @@ local uInt longest_match(s, cur_match)
 /* ---------------------------------------------------------------------------
  * Optimized version for FASTEST only
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local uInt longest_match(deflate_state *s, IPos cur_match)
+#else
 local uInt longest_match(s, cur_match)
     deflate_state *s;
     IPos cur_match;                             /* current match */
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     register Bytef *scan = s->window + s->strstart; /* current string */
     register Bytef *match;                       /* matched string */
@@ -1783,10 +1870,14 @@ local uInt longest_match(s, cur_match)
 /* ===========================================================================
  * Check that the match at match_start is indeed a match.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local void check_match(deflate_state *s, IPos start, match, int length)
+#else
 local void check_match(s, start, match, length)
     deflate_state *s;
     IPos start, match;
     int length;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     /* check that the match is indeed a match */
     if (zmemcmp(s->window + match,
@@ -1817,8 +1908,12 @@ local void check_match(s, start, match, length)
  *    performed for at least two bytes (required for the zip translate_eol
  *    option -- not supported here).
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local void fill_window(deflate_state *s)
+#else
 local void fill_window(s)
     deflate_state *s;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
 #ifndef AOCL_ZLIB_OPT
     unsigned n;
@@ -1935,19 +2030,18 @@ local void fill_window(s)
            "not enough room for search");
 #else
 #ifdef AOCL_DYNAMIC_DISPATCHER
-    return aocl_fill_window_fp(s);
+    aocl_fill_window_fp(s);
 #elif defined(AOCL_ZLIB_AVX_OPT)
-    return aocl_fill_window_v2(s);
+    aocl_fill_window_v2(s);
 #else
-    return aocl_fill_window_v1(s);
+    aocl_fill_window_v1(s);
 #endif /* AOCL_DYNAMIC_DISPATCHER */
 
 #endif /* AOCL_ZLIB_OPT */
 }
 
 #ifdef AOCL_ZLIB_OPT
-local void aocl_fill_window_v1(s)
-    deflate_state *s;
+local void aocl_fill_window_v1(deflate_state *s)
 {
     unsigned n;
     unsigned more;    /* Amount of free space at the end of the window. */
@@ -2071,8 +2165,7 @@ local void aocl_fill_window_v1(s)
 }
 
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
-local void aocl_fill_window_v2(s)
-    deflate_state *s;
+local void aocl_fill_window_v2(deflate_state *s)
 {
     unsigned n;
     unsigned more;    /* Amount of free space at the end of the window. */
@@ -2219,9 +2312,13 @@ local void aocl_fill_window_v2(s)
  * copied. It is most efficient with large input and output buffers, which
  * maximizes the opportunites to have a single copy from next_in to next_out.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local block_state deflate_stored(deflate_state *s, int flush)
+#else
 local block_state deflate_stored(s, flush)
     deflate_state *s;
     int flush;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     /* Smallest worthy block size when not flushing or finishing. By default
      * this is 32K. This can be as small as 507 bytes for memLevel == 1. For
@@ -2400,9 +2497,13 @@ local block_state deflate_stored(s, flush)
  * new strings in the dictionary only for unmatched strings or for short
  * matches. It is used only for the fast compression options.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local block_state deflate_fast(deflate_state *s, int flush)
+#else
 local block_state deflate_fast(s, flush)
     deflate_state *s;
     int flush;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
 #ifndef AOCL_ZLIB_OPT
     IPos hash_head;       /* head of the hash chain */
@@ -2507,9 +2608,7 @@ local block_state deflate_fast(s, flush)
 }
 
 #ifdef AOCL_ZLIB_OPT
-local block_state aocl_deflate_fast_v1(s, flush)
-    deflate_state *s;
-    int flush;
+local block_state aocl_deflate_fast_v1(deflate_state *s, int flush)
 {
     IPos hash_head;       /* head of the hash chain */
     int bflush;           /* set if current block must be flushed */
@@ -2608,9 +2707,7 @@ local block_state aocl_deflate_fast_v1(s, flush)
 }
 
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
-local block_state aocl_deflate_fast_v2(s, flush)
-    deflate_state *s;
-    int flush;
+local block_state aocl_deflate_fast_v2(deflate_state *s, int flush)
 {
     IPos hash_head;       /* head of the hash chain */
     int bflush;           /* set if current block must be flushed */
@@ -2710,9 +2807,13 @@ local block_state aocl_deflate_fast_v2(s, flush)
  * evaluation for matches: a match is finally adopted only if there is
  * no better match at the next window position.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local block_state deflate_slow(deflate_state *s, int flush)
+#else
 local block_state deflate_slow(s, flush)
     deflate_state *s;
     int flush;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
 #ifndef AOCL_ZLIB_OPT
     IPos hash_head;          /* head of hash chain */
@@ -2846,9 +2947,7 @@ local block_state deflate_slow(s, flush)
 }
 
 #ifdef AOCL_ZLIB_OPT
-local block_state aocl_deflate_slow_v1(s, flush)
-    deflate_state *s;
-    int flush;
+local block_state aocl_deflate_slow_v1(deflate_state *s, int flush)
 {
     IPos hash_head;          /* head of hash chain */
     int bflush;              /* set if current block must be flushed */
@@ -2976,9 +3075,7 @@ local block_state aocl_deflate_slow_v1(s, flush)
 }
 
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
-local block_state aocl_deflate_slow_v2(s, flush)
-    deflate_state *s;
-    int flush;
+local block_state aocl_deflate_slow_v2(deflate_state *s, int flush)
 {
     IPos hash_head;          /* head of hash chain */
     int bflush;              /* set if current block must be flushed */
@@ -3112,9 +3209,13 @@ local block_state aocl_deflate_slow_v2(s, flush)
  * one.  Do not maintain a hash table.  (It will be regenerated if this run of
  * deflate switches away from Z_RLE.)
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local block_state deflate_rle(deflate_state *s, int flush)
+#else
 local block_state deflate_rle(s, flush)
     deflate_state *s;
     int flush;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int bflush;             /* set if current block must be flushed */
     uInt prev;              /* byte at distance one to match */
@@ -3185,9 +3286,13 @@ local block_state deflate_rle(s, flush)
  * For Z_HUFFMAN_ONLY, do not look for matches.  Do not maintain a hash table.
  * (It will be regenerated if this run of deflate switches away from Huffman.)
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local block_state deflate_huff(deflate_state *s, int flush)
+#else
 local block_state deflate_huff(s, flush)
     deflate_state *s;
     int flush;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     int bflush;             /* set if current block must be flushed */
 

@@ -55,7 +55,6 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH_AVX_FAMILY(deflate_state* s, IPos cur_match
     Posf *prev = s->prev;                       /* lists of the hash chains */
     uInt wmask = s->w_mask;
 
-    register Bytef *strend = s->window + s->strstart + MAX_MATCH-1;
         /* points to last byte for maximal-length scan */
     register ush scan_start = *(ushf*)scan;     /* 1st 2 bytes of scan */
     uInt scan_start32 = *(uIntf*)scan;          /* 1st 4 bytes of scan */

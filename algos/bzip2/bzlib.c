@@ -481,7 +481,7 @@ Bool copy_output_until_stop ( EState* s )
 }
 
 #ifdef AOCL_BZIP2_OPT
-
+#ifdef AOCL_BZIP2_AVX2_OPT
 #include <immintrin.h>
 __attribute__((__target__("avx2")))
 static inline void FastMemcopy64Bytes(UChar* dst, UChar* src) {
@@ -527,6 +527,7 @@ static Bool AOCL_copy_output_until_stop_avx2 ( EState* s ) {
    
    return progress_out;
 }
+#endif /* AOCL_BZIP2_AVX2_OPT */
 
 static Bool AOCL_copy_output_until_stop ( EState* s ) {
    Bool progress_out = False;
@@ -557,7 +558,7 @@ static Bool AOCL_copy_output_until_stop ( EState* s ) {
 
    return progress_out;
 }
-#endif
+#endif /* AOCL_BZIP2_OPT */
 
 /*---------------------------------------------------*/
 static
@@ -1607,7 +1608,11 @@ const char * BZ_API(BZ2_bzlibVersion)(void)
 #if defined(_WIN32) || defined(OS2) || defined(MSDOS)
 #   include <fcntl.h>
 #   include <io.h>
+#ifdef ENABLE_STRICT_WARNINGS
+#   define SET_BINARY_MODE(file) _setmode(_fileno(file),O_BINARY)
+#else
 #   define SET_BINARY_MODE(file) setmode(fileno(file),O_BINARY)
+#endif
 #else
 #   define SET_BINARY_MODE(file)
 #endif
@@ -1660,7 +1665,16 @@ BZFILE * bzopen_or_bzdopen
 #ifdef BZ_STRICT_ANSI
       fp = NULL;
 #else
-      fp = fdopen(fd,mode2);
+#ifdef _WIN32
+#ifdef ENABLE_STRICT_WARNINGS
+      fp = _fdopen(fd,mode2);
+#else
+      fp = fdopen(fd, mode2);
+#endif
+#else
+      fp = fdopen(fd, mode2);
+#endif
+
 #endif
    }
    if (fp == NULL) return NULL;

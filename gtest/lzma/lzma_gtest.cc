@@ -40,7 +40,6 @@
 #include <climits>
 #include "gtest/gtest.h"
 
-#define AOCL_DYNAMIC_DISPATCHER
 #include "algos/lzma/Alloc.h"
 #include "algos/lzma/LzFind.h"
 #include "algos/lzma/LzHash.h"
@@ -433,7 +432,7 @@ public:
     for hcHead = HASH_CHAIN_MAX, circle back to 1 */
     void circular_buffer_inc_test(UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX) {
         UInt32 hcHead = 1, hcHeadNxt;
-        for (int i = hcHead; i < HASH_CHAIN_MAX; ++i) {
+        for (int i = hcHead; i < (int)HASH_CHAIN_MAX; ++i) {
             hcHeadNxt = Test_Circular_Inc(hcHead, HASH_CHAIN_SLOT_SZ, HASH_CHAIN_MAX);
             EXPECT_EQ(hcHeadNxt, (hcHead + 1));
             hcHead = hcHeadNxt;
@@ -564,7 +563,7 @@ private:
     void setup_validation_map() {
         dict_m = util_alloc_refs(numRefs_r); //for validation
         ASSERT_NE(dict_m, nullptr);
-        for (int i = 0; i < numRefs_r; ++i) {
+        for (size_t i = 0; i < numRefs_r; ++i) {
             dict_m[i] = EMPTY_U32;
         }
     }
@@ -572,7 +571,7 @@ private:
     void fill_test_data(UInt32 flexHashSize, int UT_HASH_CHAIN_SLOT_SZ) {
         //Fill dictionary until cyclicBufferSize. Distribute among hashes
         size_t pos_cnt = 0;
-        for (size_t j = 1; j < UT_HASH_CHAIN_SLOT_SZ; ++j) {
+        for (size_t j = 1; j < (size_t)UT_HASH_CHAIN_SLOT_SZ; ++j) {
             for (size_t h = 0; h < flexHashSize; ++h) {
                 fill_slot_ref(hash_r + fixedHashSize, son_r, h, pos_cnt);
                 fill_slot_opt(son_o, UT_HASH_CHAIN_SLOT_SZ, h, j, pos_cnt);
@@ -583,7 +582,7 @@ private:
         }
 
         //Fill fixed hash table
-        for (int h = 0; h < fixedHashSize; ++h) {
+        for (UInt32 h = 0; h < fixedHashSize; ++h) {
             UInt32 val = rand() % cyclicBufferSize; // (cyclicBufferSize - h)
             hash_r[h] = hash_o[h] = val;
         }
@@ -768,7 +767,7 @@ public:
             ldPairs[i] = 0;
         }
         //son[0] = 0; //head ptr
-        for (int i = 0; i < blockSz; ++i) {
+        for (UInt32 i = 0; i < blockSz; ++i) {
             son[i] = 0;
         }
     }
@@ -776,7 +775,7 @@ public:
     //Supplied test inputs that expect to match, must ensure MIN_MATCH_LEN bytes match with curstr
     void validate_match_candidates(std::vector<std::string>& matchStrs, std::string& curstr) {
         ASSERT_GE(curstr.size(), MIN_MATCH_LEN);
-        for (int i = 0; i < matchStrs.size(); ++i) {
+        for (size_t i = 0; i < matchStrs.size(); ++i) {
             ASSERT_GE(matchStrs[i].size(), MIN_MATCH_LEN);
             for (int j = 0; j < MIN_MATCH_LEN; ++j) {
                 ASSERT_EQ(matchStrs[i][j], curstr[j]);
@@ -786,7 +785,7 @@ public:
 
     void set_match_lengths(std::vector<std::string>& matchStrs) {
         int lm = 0;
-        for (int i = 0; i < matchStrs.size(); ++i) {
+        for (size_t i = 0; i < matchStrs.size(); ++i) {
             SET_MATCH_LENGTH(matchStrs[i]);
         }
     }
@@ -886,7 +885,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     Init_Buffers(son, blockSz);
 
     //Setup input stream
-    std::string curstr = "qwertyabcd";
+    std::string curstr = "qwertyabcde";
     std::vector<std::string> matchStrs =
     { "qwertya", "qwertyabc" }; //strings we expect to get matches for
     validate_match_candidates(matchStrs, curstr);
@@ -896,7 +895,13 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     ADD_INP_STR(7, "qwertyabcd");
     ADD_INP_STR(6, "qwertyabced ");
     ADD_INP_STR(5, "qwerty ");
-    ADD_INP_STR(4, "qwertyabcd"); //does not match here due to UInt16 comparison optimization at maxLen
+    /* In general, in AOCL_HC_GETMATCHES_SPEC, as "qwertyabc" match is found, 
+    * "qwertyabcd" won't match, due to UInt16 comparison optimization: 
+    * "if (GetUi16(cur + checkLen) == GetUi16(cur + checkLen + diff) { ... }"
+    * However, when maxLen == (lenLimit - 1), checkLen gets set to (lenLimit - 2)
+    * allowing such a match to be possible. 
+    * This test case is designed so that maxLen != (lenLimit - 1) at this point.*/
+    ADD_INP_STR(4, "qwertyabcd"); //does not match here, 1-byte additional match only.
     ADD_MATCH_STR(3, matchStrs[1]);
     ADD_INP_STR(2, "qwerty ");
     ADD_MATCH_STR(1, matchStrs[0]);

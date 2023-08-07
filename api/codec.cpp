@@ -343,8 +343,12 @@ INT64 aocl_zstd_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 			(zstd_params->zparams.cParams.strategy == ZSTD_btopt) || 
 			(zstd_params->zparams.cParams.strategy == ZSTD_btultra));
     }
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     res = ZSTD_compress_advanced(zstd_params->cctx, outbuf, outsize, inbuf, 
                                 insize, NULL, 0, zstd_params->zparams);
+#pragma GCC diagnostic pop
 
     if (ZSTD_isError(res))
         return res;

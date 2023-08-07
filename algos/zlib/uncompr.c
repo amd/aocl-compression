@@ -1,5 +1,6 @@
 /* uncompr.c -- decompress a memory buffer
  * Copyright (C) 1995-2003, 2010, 2014, 2016 Jean-loup Gailly, Mark Adler
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -24,11 +25,15 @@
    Z_DATA_ERROR if the input data was corrupted, including if the input data is
    an incomplete zlib stream.
 */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT uncompress2 (Bytef *dest, uLongf *destLen, const Bytef *source, uLong *sourceLen)
+#else
 int ZEXPORT uncompress2 (dest, destLen, source, sourceLen)
     Bytef *dest;
     uLongf *destLen;
     const Bytef *source;
     uLong *sourceLen;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     if(destLen == NULL || sourceLen == NULL)
     {
@@ -88,11 +93,15 @@ int ZEXPORT uncompress2 (dest, destLen, source, sourceLen)
            err;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT uncompress (Bytef *dest, uLongf *destLen, const Bytef *source, uLong sourceLen)
+#else
 int ZEXPORT uncompress (dest, destLen, source, sourceLen)
     Bytef *dest;
     uLongf *destLen;
     const Bytef *source;
     uLong sourceLen;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return uncompress2(dest, destLen, source, &sourceLen);
 }

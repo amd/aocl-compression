@@ -1,5 +1,6 @@
 /* gzlib.c -- zlib functions common to reading and writing gzip files
  * Copyright (C) 2004-2017 Mark Adler
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -30,8 +31,12 @@ local gzFile gz_open OF((const void *, int, const char *));
 
    The gz_strwinerror function does not change the current setting of
    GetLastError. */
+#ifdef ENABLE_STRICT_WARNINGS
+char ZLIB_INTERNAL *gz_strwinerror (DWORD error)
+#else
 char ZLIB_INTERNAL *gz_strwinerror (error)
      DWORD error;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     static char buf[1024];
 
@@ -72,8 +77,12 @@ char ZLIB_INTERNAL *gz_strwinerror (error)
 #endif /* UNDER_CE */
 
 /* Reset gzip file state */
+#ifdef ENABLE_STRICT_WARNINGS
+local void gz_reset(gz_statep state)
+#else
 local void gz_reset(state)
     gz_statep state;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     state->x.have = 0;              /* no output data available */
     if (state->mode == GZ_READ) {   /* for reading ... */
@@ -88,10 +97,14 @@ local void gz_reset(state)
 }
 
 /* Open a gzip file either by name or file descriptor. */
+#ifdef ENABLE_STRICT_WARNINGS
+local gzFile gz_open(const void *path, int fd, const char *mode)
+#else
 local gzFile gz_open(path, fd, mode)
     const void *path;
     int fd;
     const char *mode;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
     z_size_t len;
@@ -242,7 +255,7 @@ local gzFile gz_open(path, fd, mode)
 #ifdef WIDECHAR
         fd == -2 ? _wopen(path, oflag, 0666) :
 #endif
-        open((const char *)path, oflag, 0666));
+        AOCL_OPEN_GZ((const char *)path, oflag, 0666));
     if (state->fd == -1) {
         free(state->path);
         free(state);
@@ -267,25 +280,37 @@ local gzFile gz_open(path, fd, mode)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+gzFile ZEXPORT gzopen(const char *path, const char *mode)
+#else
 gzFile ZEXPORT gzopen(path, mode)
     const char *path;
     const char *mode;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return gz_open(path, -1, mode);
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+gzFile ZEXPORT gzopen64(const char *path, const char *mode)
+#else
 gzFile ZEXPORT gzopen64(path, mode)
     const char *path;
     const char *mode;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return gz_open(path, -1, mode);
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+gzFile ZEXPORT gzdopen(int fd, const char *mode)
+#else
 gzFile ZEXPORT gzdopen(fd, mode)
     int fd;
     const char *mode;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     char *path;         /* identifier for error messages */
     gzFile gz;
@@ -304,18 +329,26 @@ gzFile ZEXPORT gzdopen(fd, mode)
 
 /* -- see zlib.h -- */
 #ifdef WIDECHAR
+#ifdef ENABLE_STRICT_WARNINGS
+gzFile ZEXPORT gzopen_w(const wchar_t *path, const char *mode)
+#else
 gzFile ZEXPORT gzopen_w(path, mode)
     const wchar_t *path;
     const char *mode;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     return gz_open(path, -2, mode);
 }
 #endif
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzbuffer(gzFile file, unsigned size)
+#else
 int ZEXPORT gzbuffer(file, size)
     gzFile file;
     unsigned size;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -340,8 +373,12 @@ int ZEXPORT gzbuffer(file, size)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzrewind(gzFile file)
+#else
 int ZEXPORT gzrewind(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -363,10 +400,14 @@ int ZEXPORT gzrewind(file)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+z_off64_t ZEXPORT gzseek64(gzFile file, z_off64_t offset, int whence)
+#else
 z_off64_t ZEXPORT gzseek64(file, offset, whence)
     gzFile file;
     z_off64_t offset;
     int whence;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     unsigned n;
     z_off64_t ret;
@@ -440,10 +481,14 @@ z_off64_t ZEXPORT gzseek64(file, offset, whence)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+z_off_t ZEXPORT gzseek(gzFile file, z_off_t offset, int whence)
+#else
 z_off_t ZEXPORT gzseek(file, offset, whence)
     gzFile file;
     z_off_t offset;
     int whence;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     z_off64_t ret;
 
@@ -452,8 +497,12 @@ z_off_t ZEXPORT gzseek(file, offset, whence)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+z_off64_t ZEXPORT gztell64(gzFile file)
+#else
 z_off64_t ZEXPORT gztell64(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -469,8 +518,12 @@ z_off64_t ZEXPORT gztell64(file)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+z_off_t ZEXPORT gztell(gzFile file)
+#else
 z_off_t ZEXPORT gztell(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     z_off64_t ret;
 
@@ -479,8 +532,12 @@ z_off_t ZEXPORT gztell(file)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+z_off64_t ZEXPORT gzoffset64(gzFile file)
+#else
 z_off64_t ZEXPORT gzoffset64(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     z_off64_t offset;
     gz_statep state;
@@ -502,8 +559,12 @@ z_off64_t ZEXPORT gzoffset64(file)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+z_off_t ZEXPORT gzoffset(gzFile file)
+#else
 z_off_t ZEXPORT gzoffset(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     z_off64_t ret;
 
@@ -512,8 +573,12 @@ z_off_t ZEXPORT gzoffset(file)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+int ZEXPORT gzeof(gzFile file)
+#else
 int ZEXPORT gzeof(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -529,9 +594,13 @@ int ZEXPORT gzeof(file)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+const char * ZEXPORT gzerror(gzFile file, int *errnum)
+#else
 const char * ZEXPORT gzerror(file, errnum)
     gzFile file;
     int *errnum;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -550,8 +619,12 @@ const char * ZEXPORT gzerror(file, errnum)
 }
 
 /* -- see zlib.h -- */
+#ifdef ENABLE_STRICT_WARNINGS
+void ZEXPORT gzclearerr(gzFile file)
+#else
 void ZEXPORT gzclearerr(file)
     gzFile file;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     gz_statep state;
 
@@ -576,10 +649,14 @@ void ZEXPORT gzclearerr(file)
    memory).  Simply save the error message as a static string.  If there is an
    allocation failure constructing the error message, then convert the error to
    out of memory. */
+#ifdef ENABLE_STRICT_WARNINGS
+void ZLIB_INTERNAL gz_error(gz_statep state, int err, const char *msg)
+#else
 void ZLIB_INTERNAL gz_error(state, err, msg)
     gz_statep state;
     int err;
     const char *msg;
+#endif /* ENABLE_STRICT_WARNINGS */
 {
     /* free previously allocated message and clear */
     if (state->msg != NULL) {

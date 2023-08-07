@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Yann Collet, Facebook, Inc.
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -314,6 +315,7 @@ static void ZSTDMT_setNbSeq(ZSTDMT_seqPool* const seqPool, size_t const nbSeq)
   ZSTDMT_setBufferSize(seqPool, nbSeq * sizeof(rawSeq));
 }
 
+#ifdef ZSTD_MULTITHREAD
 static ZSTDMT_seqPool* ZSTDMT_createSeqPool(unsigned nbWorkers, ZSTD_customMem cMem)
 {
     ZSTDMT_seqPool* const seqPool = ZSTDMT_createBufferPool(nbWorkers, cMem);
@@ -321,6 +323,7 @@ static ZSTDMT_seqPool* ZSTDMT_createSeqPool(unsigned nbWorkers, ZSTD_customMem c
     ZSTDMT_setNbSeq(seqPool, 0);
     return seqPool;
 }
+#endif
 
 static void ZSTDMT_freeSeqPool(ZSTDMT_seqPool* seqPool)
 {
@@ -529,6 +532,7 @@ ZSTDMT_serialState_reset(serialState_t* serialState,
     return 0;
 }
 
+#ifdef ZSTD_MULTITHREAD
 static int ZSTDMT_serialState_init(serialState_t* serialState)
 {
     int initError = 0;
@@ -539,6 +543,7 @@ static int ZSTDMT_serialState_init(serialState_t* serialState)
     initError |= ZSTD_pthread_cond_init(&serialState->ldmWindowCond, NULL);
     return initError;
 }
+#endif
 
 static void ZSTDMT_serialState_free(serialState_t* serialState)
 {
@@ -804,7 +809,9 @@ typedef struct {
                      */
 } roundBuff_t;
 
+#ifdef ZSTD_MULTITHREAD
 static const roundBuff_t kNullRoundBuff = {NULL, 0, 0};
+#endif
 
 #define RSYNC_LENGTH 32
 
@@ -898,6 +905,7 @@ static size_t ZSTDMT_CCtxParam_setNbWorkers(ZSTD_CCtx_params* params, unsigned n
     return ZSTD_CCtxParams_setParameter(params, ZSTD_c_nbWorkers, (int)nbWorkers);
 }
 
+#ifdef ZSTD_MULTITHREAD
 MEM_STATIC ZSTDMT_CCtx* ZSTDMT_createCCtx_advanced_internal(unsigned nbWorkers, ZSTD_customMem cMem, ZSTD_threadPool* pool)
 {
     ZSTDMT_CCtx* mtctx;
@@ -951,7 +959,7 @@ ZSTDMT_CCtx* ZSTDMT_createCCtx_advanced(unsigned nbWorkers, ZSTD_customMem cMem,
     return NULL;
 #endif
 }
-
+#endif
 
 /* ZSTDMT_releaseAllJobResources() :
  * note : ensure all workers are killed first ! */

@@ -1,4 +1,4 @@
-# Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -57,14 +57,12 @@ else ()
     message(FATAL_ERROR "Compiler not supported! Library has only been tested with Clang and GCC.")
 endif ()
 
-if (WIN32)
 option (BUILD_STATIC_LIBS "Build static library (Default build type is shared library)" OFF)
 option (AOCL_LZ4_OPT_PREFETCH_BACKWARDS "Enable LZ4 optimizations related to backward prefetching of data" OFF)
 option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Disabled by default)" OFF)
 option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Disabled by default)" OFF)
 option (AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER "Enable 4-byte comparison when finding match candidates with Lazy2 compressor (Disabled by default)" OFF)
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
-endif()
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option(GTEST_ENABLE "Enable gtest based test suite (Disabled by default)" OFF)
 option(BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)
@@ -220,17 +218,157 @@ endif()
 if (WIN32)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /fp:fast /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /fp:fast /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
-message(STATUS "C Compiler flags used for this windows build are: ${CMAKE_C_FLAGS}")
-message(STATUS "C++ Compiler flags used for this windows build are: ${CMAKE_CXX_FLAGS}")
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_EXPECT=1")
 elseif (UNIX)
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_FLAGS "-msse4.1 -mavx -mbmi2")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing -ffast-math")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing -ffast-math")
-message(STATUS "C Compiler flags used for this Unix build are: ${CMAKE_C_FLAGS}")
-message(STATUS "C++ Compiler flags used for this Unix build are: ${CMAKE_CXX_FLAGS}")
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
 endif()
+
+if (AOCL_LZ4_OPT_PREFETCH_BACKWARDS)
+    set_source_files_properties(${LZ4_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DAOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS")
+endif()
+if (SNAPPY_MATCH_SKIP_OPT)
+    set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_MATCH_SKIP_OPT")
+endif()
+if (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS)
+    set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS")
+endif()
+if (AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER)
+    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER")
+endif()
+
+add_compile_definitions(CCompiler="${CMAKE_C_COMPILER}")
+add_compile_definitions(CXXCompiler="${CMAKE_CXX_COMPILER}")
+add_compile_definitions(CFLAGS_SET2="${CMAKE_C_FLAGS}")
+
+#set library and sources
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
+set (lib_name aocl_compression)
+set(SRC_FILES 
+        ${UTILS_SRC_FILES}
+        ${API_SRC_FILES}
+        ${BZIP2_SRC_FILES}
+        ${LZ4_SRC_FILES}
+        ${LZ4HC_SRC_FILES} 
+        ${LZMA_SRC_FILES}
+        ${SNAPPY_SRC_FILES}
+        ${ZLIB_SRC_FILES}
+        ${ZSTD_SRC_FILES}
+	)
+set (BENCH_PATH test)
+
+#common flag for aocl_compression_bench and gtest_combined_test
+set(AOCL_DYNAMIC_DISPATCHER ON)
+if (AOCL_DYNAMIC_DISPATCHER)
+	set_property(SOURCE ${SRC_FILES} ${BENCH_PATH}/codec_bench.c APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
+	option(ENABLE_STRICT_WARNINGS "Enable compiler flags to treat all warnings as errors (Enabled by default)" ON)
+else()
+	set(ENABLE_STRICT_WARNINGS OFF)
+endif()
+
+#setup gtest and build test executable
+if (GTEST_ENABLE)
+	include(FetchContent)
+	FetchContent_Declare(
+	    googletest
+	    # Specify the commit you depend on and update it regularly.
+	    URL https://github.com/google/googletest/archive/refs/tags/v1.13.0.zip
+	)
+	# For Windows: Prevent overriding the parent project's compiler/linker settings
+	set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+	FetchContent_GetProperties(googletest)
+	if(NOT googletest_POPULATED)
+  		FetchContent_Populate(googletest)
+  		add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
+	endif()
+        if(NOT BUILD_STATIC_LIBS AND WIN32)
+		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")
+		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DSNAPPY_DLL_EXPORT=1")
+		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DLL=1")
+		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZMA_DLL_EXPORT=1")
+        endif()
+	set_property(SOURCE ${LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
+
+	# gtest_combined_test is an executable generated inside build folder
+	set (GTEST_PATH gtest)
+	set(GTEST_SRC_FILES 
+        ${GTEST_PATH}/lz4/lz4_gtest.cc
+		${GTEST_PATH}/lzma/lzma_gtest.cc
+		${GTEST_PATH}/snappy/snappy_gtest.cc
+		${GTEST_PATH}/zlib/zlib_gtest.cc
+		${GTEST_PATH}/gtest_combined_test.cc
+	)
+	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
+	if (AOCL_DYNAMIC_DISPATCHER)
+		set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
+	endif()
+
+	add_executable(gtest_combined_test ${GTEST_SRC_FILES})
+	target_link_libraries(gtest_combined_test gtest_main ${lib_name})
+        string(REPLACE " " ";" CXX_FLAGS ${CMAKE_CXX_FLAGS})
+        target_compile_options(gtest_combined_test PRIVATE ${CXX_FLAGS})
+endif()
+
+#Enabling strict warnings
+if(ENABLE_STRICT_WARNINGS)
+	if (WIN32)
+		#suppress warnings suggesting to use fopen_s, ... in place of fopen, ...
+		set_property(SOURCE ${SRC_FILES} ${BENCH_PATH}/codec_bench.c APPEND PROPERTY COMPILE_OPTIONS "-D_CRT_SECURE_NO_WARNINGS")
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
+		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DENABLE_STRICT_WARNINGS")
+	else()
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wpedantic")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wpedantic")
+		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DENABLE_STRICT_WARNINGS")
+	endif()
+endif()
+
+#add library
+if (BUILD_STATIC_LIBS)
+	add_library(${lib_name} STATIC ${SRC_FILES})
+	message(STATUS "Library type being built is: Static")
+else ()
+	add_library(${lib_name} SHARED ${SRC_FILES})
+	message(STATUS "Library type being built is: Shared")
+endif()
+
+set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
+
+#add executable
+set (exe_name aocl_compression_bench)
+if (WIN32)
+message(STATUS "C Compiler flags used for this windows build are: ${CMAKE_C_FLAGS}")
+message(STATUS "C++ Compiler flags used for this windows build are: ${CMAKE_CXX_FLAGS}")
+add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/codec_bench.h)
+else ()
+message(STATUS "C Compiler flags used for this Unix build are: ${CMAKE_C_FLAGS}")
+message(STATUS "C++ Compiler flags used for this Unix build are: ${CMAKE_CXX_FLAGS}")
+add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/ipp_codec_bench.c ${BENCH_PATH}/codec_bench.h)
+endif()
+target_link_libraries(${exe_name} ${lib_name})
+target_link_libraries(${exe_name} ${CMAKE_DL_LIBS})
+
+#Install into destination path by using -DCMAKE_INSTALL_PREFIX=<path> while configuring cmake
+message(STATUS "AOCL COMPRESSION Library, Interface header files and Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")
+install(TARGETS ${exe_name} DESTINATION ${DEST_BIN_PATH})
+install(TARGETS ${lib_name} DESTINATION ${DEST_LIB_PATH})
+install(FILES ${INC_FILES} DESTINATION ${DEST_INC_PATH})
+
+#Uninstall the binary. library and header files using custom command
+add_custom_target("uninstall" COMMENT "Uninstalling the installed files from ${install_dir}")
+add_custom_command(
+    TARGET "uninstall"
+    POST_BUILD
+    COMMENT "Uninstall the installed files as per install_manifest.txt and from ${ROOT_DIR}/lib/"
+    COMMAND xargs rm -vf < install_manifest.txt || echo Nothing in
+            install_manifest.txt to be uninstalled!
+	COMMAND rm -vf ${ROOT_DIR}/lib/*
+	)
 
 if (BUILD_DOC)
 	find_package(Doxygen 1.9.6)
@@ -270,113 +408,3 @@ if (BUILD_DOC)
 		message(STATUS "Document generation failed.")
 	endif()
 endif()
-
-if (AOCL_LZ4_OPT_PREFETCH_BACKWARDS)
-    set_source_files_properties(${LZ4_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DAOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS")
-endif()
-if (SNAPPY_MATCH_SKIP_OPT)
-    set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_MATCH_SKIP_OPT")
-endif()
-if (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS)
-    set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS")
-endif()
-if (AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER)
-    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER")
-endif()
-
-add_compile_definitions(CCompiler="${CMAKE_C_COMPILER}")
-add_compile_definitions(CXXCompiler="${CMAKE_CXX_COMPILER}")
-add_compile_definitions(CFLAGS_SET2="${CMAKE_C_FLAGS}")
-
-#add library
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
-set (lib_name aocl_compression)
-set(SRC_FILES 
-        ${UTILS_SRC_FILES}
-        ${API_SRC_FILES}
-        ${BZIP2_SRC_FILES}
-        ${LZ4_SRC_FILES}
-        ${LZ4HC_SRC_FILES} 
-        ${LZMA_SRC_FILES}
-        ${SNAPPY_SRC_FILES}
-        ${ZLIB_SRC_FILES}
-        ${ZSTD_SRC_FILES}
-	)
-set (BENCH_PATH test)
-set_property(SOURCE ${SRC_FILES} ${BENCH_PATH}/codec_bench.c APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
-if (BUILD_STATIC_LIBS)
-	add_library(${lib_name} STATIC ${SRC_FILES})
-	message(STATUS "Library type being built is: Static")
-else ()
-	add_library(${lib_name} SHARED ${SRC_FILES})
-	message(STATUS "Library type being built is: Shared")
-endif()
-
-set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
-
-# add executable
-set (exe_name aocl_compression_bench)
-if (WIN32)
-add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/codec_bench.h)
-else ()
-add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/ipp_codec_bench.c ${BENCH_PATH}/codec_bench.h)
-endif()
-target_link_libraries(${exe_name} ${lib_name})
-target_link_libraries(${exe_name} ${CMAKE_DL_LIBS})
-
-if (GTEST_ENABLE)
-	include(FetchContent)
-	FetchContent_Declare(
-	    googletest
-	    # Specify the commit you depend on and update it regularly.
-	    URL https://github.com/google/googletest/archive/refs/tags/v1.13.0.zip
-	)
-	# For Windows: Prevent overriding the parent project's compiler/linker settings
-	set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-	FetchContent_GetProperties(googletest)
-	if(NOT googletest_POPULATED)
-  		FetchContent_Populate(googletest)
-  		add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
-	endif()
-    if(NOT BUILD_STATIC_LIBS AND WIN32)
-		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")
-		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DSNAPPY_DLL_EXPORT=1")
-		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DLL=1")
-		set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZMA_DLL_EXPORT=1")
-    endif()
-	set_property(SOURCE ${LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
-
-	# gtest_combined_test is an executable generated inside build folder
-	set (GTEST_PATH gtest)
-	set(GTEST_SRC_FILES 
-        ${GTEST_PATH}/lz4/lz4_gtest.cc
-		${GTEST_PATH}/lzma/lzma_gtest.cc
-		${GTEST_PATH}/snappy/snappy_gtest.cc
-		${GTEST_PATH}/zlib/zlib_gtest.cc
-		${GTEST_PATH}/gtest_combined_test.cc
-	)
-	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
-	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
-	
-	add_executable(gtest_combined_test ${GTEST_SRC_FILES})
-	target_link_libraries(gtest_combined_test gtest_main ${lib_name})
-endif()
-
-#Install into destination path by using -DCMAKE_INSTALL_PREFIX=<path> while configuring cmake
-message(STATUS "AOCL COMPRESSION Library, Interface header files and Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")
-install(TARGETS ${exe_name} DESTINATION ${DEST_BIN_PATH})
-install(TARGETS ${lib_name} DESTINATION ${DEST_LIB_PATH})
-install(FILES ${INC_FILES} DESTINATION ${DEST_INC_PATH})
-
-#Uninstall the binary. library and header files using custom command
-add_custom_target("uninstall" COMMENT "Uninstalling the installed files from ${install_dir}")
-add_custom_command(
-    TARGET "uninstall"
-    POST_BUILD
-    COMMENT "Uninstall the installed files as per install_manifest.txt and from ${ROOT_DIR}/lib/"
-    COMMAND xargs rm -vf < install_manifest.txt || echo Nothing in
-            install_manifest.txt to be uninstalled!
-	COMMAND rm -vf ${ROOT_DIR}/lib/*
-	)

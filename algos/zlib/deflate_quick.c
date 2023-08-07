@@ -2275,3 +2275,4 @@ local z_const unsigned quick_dist_codes[8192] = {
 	0x00ff9310, 0x00ffb310, 0x00ffd310, 0x00fff310,
 };
 #endif /* AOCL_ZLIB_DEFLATE_FAST_MODE_3 */
+

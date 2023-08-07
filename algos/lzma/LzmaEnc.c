@@ -2,7 +2,7 @@
 2022-07-15: Igor Pavlov : Public domain */
 
 /**
- * Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
  */
 
 #include "Precomp.h"
@@ -1378,7 +1378,7 @@ static unsigned ReadMatchDistances(CLzmaEnc *p, unsigned *numPairsRes)
   + GET_PRICE_1(p->isRep0Long[state][posState])) \
   + GET_PRICE_1(p->isRep[state]) \
   + GET_PRICE_0(p->isRepG0[state])
-  
+
 MY_FORCE_INLINE
 static UInt32 GetPrice_PureRep(const CLzmaEnc *p, unsigned repIndex, size_t state, size_t posState)
 {
@@ -2293,7 +2293,6 @@ if (len2 <= limit) \
         } \
 }
 
-#ifdef AOCL_LZMA_OPT
 // Compare bytes in data2 and data1 using UInt32 ptrs and __builtin_ctz
 #define AOCL_FIND_MATCHING_BYTES_LEN(len, limit, data1, data2) { \
 if (likely(limit >= 4)) { \
@@ -2317,7 +2316,6 @@ while (len < limit) { \
     len++; \
 } \
 }
-#endif
 
 MY_FORCE_INLINE
 static UInt32 AOCL_GetPrice_PureRep_Non0(const CLzmaEnc* p, unsigned repIndex, size_t state, size_t posState)

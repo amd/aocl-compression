@@ -48,7 +48,6 @@ static int emit_match(deflate_state *s, struct match match, IPos hash_head)
 /* It will insert the matches strings into the hash table based on match length */
 static void aocl_insert_match_v1(deflate_state *s, struct match match)
 {
-    IPos hash_head;
 
     if (UNLIKELY(s->lookahead <= match.match_length + MIN_MATCH))
         return;
@@ -61,7 +60,7 @@ static void aocl_insert_match_v1(deflate_state *s, struct match match)
 
             if (match.match_length) {
                 if (match.strstart >= match.orgstart) {
-                    INSERT_STRING(s, match.strstart, hash_head);
+                    INSERT_STRING2(s, match.strstart);
                 }
             }
         }
@@ -77,7 +76,7 @@ static void aocl_insert_match_v1(deflate_state *s, struct match match)
         do {
             match.strstart++;
             if (LIKELY(match.strstart >= match.orgstart)) {
-                INSERT_STRING(s, match.strstart, hash_head);
+                INSERT_STRING2(s, match.strstart);
             }
             /* strstart never exceeds WSIZE-MAX_MATCH, so there are
             * always MIN_MATCH bytes ahead.
@@ -89,8 +88,7 @@ static void aocl_insert_match_v1(deflate_state *s, struct match match)
         match.match_length = 0;
         s->ins_h = s->window[match.strstart];
         if (match.strstart >= 1) {
-            IPos hash_head = 0;
-            INSERT_STRING(s, match.strstart - 1, hash_head);
+            INSERT_STRING2(s, match.strstart - 1);
         }
 #if MIN_MATCH != 3
 #warning Call UPDATE_HASH() MIN_MATCH-3 more times
@@ -106,7 +104,6 @@ It uses INSERT_HASH_CRC optimized function */
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
 static void aocl_insert_match_v2(deflate_state *s, struct match match)
 {
-    IPos hash_head;
 
     if (UNLIKELY(s->lookahead <= match.match_length + MIN_MATCH))
         return;
@@ -119,7 +116,7 @@ static void aocl_insert_match_v2(deflate_state *s, struct match match)
 
             if (match.match_length) {
                 if (match.strstart >= match.orgstart) {
-                    INSERT_STRING_CRC(s, match.strstart, hash_head);
+                    INSERT_STRING_CRC2(s, match.strstart);
                 }
             }
         }
@@ -135,7 +132,7 @@ static void aocl_insert_match_v2(deflate_state *s, struct match match)
         do {
             match.strstart++;
             if (LIKELY(match.strstart >= match.orgstart)) {
-                INSERT_STRING_CRC(s, match.strstart, hash_head);
+                INSERT_STRING_CRC2(s, match.strstart);
             }
         /* strstart never exceeds WSIZE-MAX_MATCH, so there are
             * always MIN_MATCH bytes ahead.
@@ -147,8 +144,7 @@ static void aocl_insert_match_v2(deflate_state *s, struct match match)
         match.match_length = 0;
         s->ins_h = s->window[match.strstart];
         if (match.strstart >= 1) {
-            IPos hash_head = 0;
-            INSERT_STRING_CRC(s, match.strstart - 1, hash_head);
+            INSERT_STRING_CRC2(s, match.strstart - 1);
         }
 #if MIN_MATCH != 3
 #warning Call UPDATE_HASH() MIN_MATCH-3 more times

@@ -40,7 +40,6 @@
 #include <climits>
 #include "gtest/gtest.h"
 
-#define AOCL_DYNAMIC_DISPATCHER
 #include "algos/lz4/lz4.h"
 
 using namespace std;
@@ -113,14 +112,23 @@ public:
 bool check_uncompressed_equal_to_original(char *src, unsigned srcSize, char *compressed, unsigned compressedLen)
 {
     int uncompressedLen = srcSize + 10;
-    char uncompressed[uncompressedLen];
+    char* uncompressed = (char*)malloc(uncompressedLen * sizeof(char));
 
-    uncompressedLen = LZ4_decompress_safe(compressed, uncompressed, compressedLen, uncompressedLen);
+    int uncompressedLenRes = LZ4_decompress_safe(compressed, uncompressed, compressedLen, uncompressedLen);
 
-    if (!(srcSize == uncompressedLen))
+    if (uncompressedLenRes < 0) {//error code
+        free(uncompressed);
         return false;
+    }
 
-    return memcmp(src, uncompressed, srcSize) == 0;
+    if (!(srcSize == (unsigned)uncompressedLenRes)) {
+        free(uncompressed);
+        return false;
+    }
+
+    bool ret = (memcmp(src, uncompressed, srcSize) == 0);
+    free(uncompressed);
+    return ret;
 }
 
 /***********************************************
@@ -276,7 +284,7 @@ TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_5) 
 
 TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_6 ) // cmp_data_contains_errors
 {
-    int origLen = 100;
+    const int origLen = 100;
     char orig[origLen];
     char dst[100];
     int dstCapacity = 100;
@@ -1034,8 +1042,8 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
 {
     setSrcSize(100);
     setDstSize(150);
-    int dictSize = 64 * 1024;
-    char dict[dictSize+srcSize];
+    const int dictSize = 64 * 1024;
+    char* dict = (char*)malloc((dictSize + srcSize) * sizeof(char));
     //Initialize a dictionary.
     for (int i = 0; i < dictSize; i++)
     {
@@ -1055,13 +1063,14 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
     EXPECT_TRUE(check_uncompressed_equal_to_original(&dict[dictSize], srcSize, dst, compressedLen));
     
     free(d);
+    free(dict);
 }
 
 TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_continue_common_11) // using_LoadDict_less_64kb
 {
     setSrcSize(100);
     setDstSize(150);
-    int dictSize = 100;
+    const int dictSize = 100;
     char dict[dictSize];
     //Initialize a dictionary.
     for (int i = 0; i < dictSize; i++)
@@ -1080,7 +1089,7 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
 {
     setSrcSize(100);
     setDstSize(150);
-    int dictSize = 64 * 1024;
+    const int dictSize = 64 * 1024;
     char dict[dictSize];
     //Initialize a dictionary.
     for (int i = 0; i < dictSize; i++)
@@ -1099,7 +1108,7 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
 {
     setSrcSize(100);
     setDstSize(150);
-    int dictSize = 100;
+    const int dictSize = 100;
     char dict[dictSize];
     //Initialize a dictionary.
     for (int i = 0; i < dictSize; i++)
@@ -1123,7 +1132,7 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
 {
     setSrcSize(100);
     setDstSize(150);
-    int dictSize = 64 * 1024;
+    const int dictSize = 64 * 1024;
     char dict[dictSize];
     //Initialize a dictionary.
     for (int i = 0; i < dictSize; i++)
@@ -1147,7 +1156,7 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
 {
     setSrcSize(150);
     setDstSize(200);
-    int dictSize = 100;
+    const int dictSize = 100;
     char dict[200];
     
     memcpy(dict, src, 100);
@@ -1167,7 +1176,7 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
 {
     setSrcSize(150);
     setDstSize(200);
-    int dictSize = 65 * 1024;
+    const int dictSize = 65 * 1024;
     char dict[150 + dictSize];
     
     memcpy(dict, src, srcSize);
@@ -1559,10 +1568,10 @@ TEST_F(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     setDstSz(77000);
 
     // compression
-    int dLen = 64 * 1024;
+    const int dLen = 64 * 1024;
     LZ4_stream_t *lz = LZ4_createStream();
     LZ4_resetStream_fast(lz);
-    char dict_and_dest[dLen + outLen];
+    char* dict_and_dest = (char*)malloc((dLen + outLen) * sizeof(char));
     
     for (int i = 0; i < dLen; i++)
     {
@@ -1583,6 +1592,7 @@ TEST_F(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
 
     LZ4_freeStream(lz);
     LZ4_freeStreamDecode(decode);
+    free(dict_and_dest);
 }
 
 /*********************************************
@@ -1659,13 +1669,14 @@ public:
 TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_usingDict_common_1) // src_NULL
 {
     setDictSz(64000);
-    char out[dictLen + outLen];
+    char* out = (char*)malloc((dictLen + outLen) * sizeof(char));
     LZ4_loadDict(stream, dict, dictLen);
     
     srcLen = LZ4_compress_fast_continue(stream, original, src, origLen, srcLen, 5000);
     memcpy(out, dict, dictLen);
     
     ASSERT_EQ(LZ4_decompress_safe_usingDict(NULL, output, srcLen, outLen, dict, dictLen), -1);
+    free(out);
 }
 
 TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_usingDict_common_2) // output_NULL
@@ -1696,7 +1707,7 @@ TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
 TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_usingDict_common_5) // PassUsingDict_size_65000
 {
     setDictSz(65000);
-    char out[dictLen + outLen];
+    char* out = (char*)malloc((dictLen + outLen) * sizeof(char));
     
     LZ4_loadDict(stream, dict, dictLen);
     srcLen = LZ4_compress_fast_continue(stream, original, src, origLen, srcLen, 5000);
@@ -1704,12 +1715,13 @@ TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
     
     ASSERT_EQ(LZ4_decompress_safe_usingDict(src, out + dictLen, srcLen, outLen, out, dictLen), origLen);
     EXPECT_EQ(memcmp(out + dictLen, original, origLen), 0);
+    free(out);
 }
 
 TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_usingDict_common_6) // PassUsingDict_size_64000
 {
     setDictSz(64000);
-    char out[dictLen + outLen];
+    char* out = (char*)malloc((dictLen + outLen) * sizeof(char));
 
     LZ4_loadDict(stream, dict, dictLen);
     srcLen = LZ4_compress_fast_continue(stream, original, src, origLen, srcLen, 5000);
@@ -1717,6 +1729,7 @@ TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
     
     ASSERT_EQ(LZ4_decompress_safe_usingDict(src, out + dictLen, srcLen, outLen, out, dictLen), origLen);
     EXPECT_EQ(memcmp(out + dictLen, original, origLen), 0);
+    free(out);
 }
 
 

@@ -1,5 +1,6 @@
 /* gzguts.h -- zlib internal header definitions for gz* operations
  * Copyright (C) 2004, 2005, 2010, 2011, 2012, 2013, 2016 Mark Adler
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -215,4 +216,23 @@ char ZLIB_INTERNAL *gz_strwinerror OF((DWORD error));
 #else
 unsigned ZLIB_INTERNAL gz_intmax OF((void));
 #  define GT_OFF(x) (sizeof(int) == sizeof(z_off64_t) && (x) > gz_intmax())
+#endif
+
+#ifdef _WIN32
+#ifdef ENABLE_STRICT_WARNINGS
+    #define AOCL_OPEN_GZ _open
+    #define AOCL_CLOSE_GZ _close
+    #define AOCL_READ_GZ _read
+    #define AOCL_WRITE_GZ _write
+#else
+    #define AOCL_OPEN_GZ open
+    #define AOCL_CLOSE_GZ close
+    #define AOCL_READ_GZ read
+    #define AOCL_WRITE_GZ write
+#endif /* ENABLE_STRICT_WARNINGS */
+#else
+#define AOCL_OPEN_GZ open
+#define AOCL_CLOSE_GZ close
+#define AOCL_READ_GZ read
+#define AOCL_WRITE_GZ write
 #endif

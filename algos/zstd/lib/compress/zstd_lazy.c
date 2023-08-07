@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Yann Collet, Facebook, Inc.
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -1144,10 +1145,12 @@ FORCE_INLINE_TEMPLATE U32 ZSTD_row_nextIndex(BYTE* const tagRow, U32 const rowMa
 /* ZSTD_isAligned():
  * Checks that a pointer is aligned to "align" bytes which must be a power of 2.
  */
+#if (DEBUGLEVEL>=1) //assert enabled
 MEM_STATIC int ZSTD_isAligned(void const* ptr, size_t align) {
     assert((align & (align - 1)) == 0);
     return (((size_t)ptr) & (align - 1)) == 0;
 }
+#endif
 
 /* ZSTD_row_prefetch():
  * Performs prefetching for the hashTable and tagTable at a given row.

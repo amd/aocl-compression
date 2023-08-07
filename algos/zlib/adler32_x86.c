@@ -177,7 +177,7 @@ static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_
 
     return adler32_rem_len(sum_A | (sum_B << 16), buf, len);
 }
-#endif /* AOCL_ZLIB_SSE2_OPT */
+#endif /* AOCL_ZLIB_AVX_OPT */
 
 #ifdef AOCL_ZLIB_AVX2_OPT
 __attribute__((__target__("avx2")))

@@ -2,7 +2,7 @@
 2021-11-29 : Igor Pavlov : Public domain */
 
 /**
- * Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
  */
 
 #include "Precomp.h"
@@ -782,8 +782,9 @@ _PRF(;)
 
 typedef void (MY_FAST_CALL *LZFIND_SATUR_SUB_CODE_FUNC)(
     UInt32 subValue, CLzRef *items, const CLzRef *lim);
+#if defined(USE_SATUR_SUB_128) && !defined(FORCE_SATUR_SUB_128)
 static LZFIND_SATUR_SUB_CODE_FUNC g_LzFind_SaturSub;
-
+#endif
 // kEmptyHashValue must be zero
 // #define SASUB_32(i) v = items[i];  m = v - subValue;  if (v < subValue) m = kEmptyHashValue;  items[i] = m;
 #define SASUB_32(i) v = items[i];  if (v < subValue) v = subValue; items[i] = v - subValue;
@@ -1549,7 +1550,8 @@ static void AOCL_SkipMatchesSpec(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, c
         cmCheck = 0;
 
     if (// curMatch >= pos ||  // failure
-        cmCheck < curMatch) {
+        cmCheck < curMatch)
+        {
         do
         {
             const UInt32 delta = pos - curMatch;
@@ -1586,9 +1588,10 @@ static void AOCL_SkipMatchesSpec(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, c
                 }
             }
         } while (--cutValue && cmCheck < curMatch);
-    }
-    *ptr0 = *ptr1 = kEmptyHashValue;
-    return;
+        }
+
+        *ptr0 = *ptr1 = kEmptyHashValue;
+        return;
 }
 #endif
 
@@ -2729,8 +2732,9 @@ UInt32 Test_Compute_Hash_Mask(UInt32 sz, UInt32 block_cnt) {
 }
 
 UInt32 Test_Compute_Hash(Byte* cur, CMatchFinder* p) {
-    UInt32 h2, h3, hv;
-    AOCL_HASH5_CALC
+    UInt32 h2, hv;
+    AOCL_HASH5_CALC;
+    h2 -= h2; hv += h2; //dummy operations to suppress unused variable warning
     return hv;
 }
 

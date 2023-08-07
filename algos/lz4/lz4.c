@@ -1,6 +1,7 @@
 /*
    LZ4 - Fast LZ compression algorithm
    Copyright (C) 2011-present, Yann Collet.
+   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -303,14 +304,6 @@ typedef enum {
     fillOutput = 2
 } limitedOutput_directive;
 
-
-/* Function pointer holding the optimized function variant as per the detected
- * CPU features */
-#ifdef AOCL_DYNAMIC_DISPATCHER
-static int (*LZ4_compress_fast_extState_fp)(void* state, const char* source,
-    char* dest, int inputSize,
-    int maxOutputSize, int acceleration) = LZ4_compress_fast_extState;
-#endif
 
 
 /*-************************************
@@ -633,9 +626,20 @@ unsigned LZ4_count(const BYTE* pIn, const BYTE* pMatch, const BYTE* pInLimit)
     if ((pIn<pInLimit) && (*pMatch == *pIn)) pIn++;
     return (unsigned)(pIn - pStart);
 }
-
+ 
 
 #ifndef LZ4_COMMONDEFS_ONLY
+
+/* Function pointer holding the optimized function variant as per the detected
+ * CPU features */
+/* Function pointer definition placed inside #ifndef LZ4_COMMONDEFS_ONLY to avoid
+ warnings related to unused variable. */
+#ifdef AOCL_DYNAMIC_DISPATCHER
+static int (*LZ4_compress_fast_extState_fp)(void* state, const char* source,
+    char* dest, int inputSize,
+    int maxOutputSize, int acceleration) = LZ4_compress_fast_extState;
+#endif
+
 /*-************************************
 *  Local Constants
 **************************************/

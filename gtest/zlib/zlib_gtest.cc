@@ -38,8 +38,6 @@
 
 #include <string>
 
-#define AOCL_DYNAMIC_DISPATCHER
-
 #include "algos/zlib/zlib.h"
 #include "algos/zlib/zutil.h"
 #include "algos/zlib/inftrees.h"
@@ -60,18 +58,24 @@ z_streamp nzp()
   return strm;
 }
 
+// This is to free z_stream
+void fzp(z_streamp strm)
+{
+    delete strm;
+}
+
 // This releases memory that is dynamically allocated for deflate pointers
 void rstd(z_streamp strm)
 {
   deflateEnd(strm);
-  free(strm);
+  fzp(strm);
 }
 
 // This releases memory that is dynamically allocated pointers
 void rsti(z_streamp strm)
 {
   inflateEnd(strm);
-  free(strm);
+  fzp(strm);
 }
 
 // comparision of two different data types
@@ -155,7 +159,7 @@ TEST(ZLIB_deflateInit, Z_STREAM_ERROR_)
   EXPECT_EQ(deflateInit(NULL, 3), Z_STREAM_ERROR);// AOCL_Compression_zlib_deflateInit_common_6
 
   deflateEnd(zp);
-  free(zp);
+  fzp(zp);
 }
 
 TEST(ZLIB_deflateInit_, fail_cases)
@@ -172,7 +176,7 @@ TEST(ZLIB_deflateInit_, fail_cases)
   EXPECT_EQ(deflateInit_(zp, 10, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit__common_6
 
   deflateEnd(zp);
-  free(zp);
+  fzp(zp);
 }
 
 TEST(ZLIB_deflateInit_, pass_cases)
@@ -200,7 +204,7 @@ TEST(ZLIB_deflateEnd, Z_OK_)
 
   EXPECT_EQ(deflateEnd(zp), Z_OK);  // AOCL_Compression_zlib_deflateEnd_common_1
 
-  free(zp);
+  fzp(zp);
 }
 
 TEST(ZLIB_deflateEnd, Z_STREAM_ERROR_)
@@ -210,7 +214,7 @@ TEST(ZLIB_deflateEnd, Z_STREAM_ERROR_)
   EXPECT_EQ(deflateEnd(NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateEnd_common_2
   EXPECT_EQ(deflateEnd(zp), Z_STREAM_ERROR);    // AOCL_Compression_zlib_deflateEnd_common_3
 
-  free(zp);
+  fzp(zp);
 }
 
 TEST(ZLIB_inflateInit, Z_OK_)
@@ -220,7 +224,7 @@ TEST(ZLIB_inflateInit, Z_OK_)
   EXPECT_EQ(inflateInit(zp), Z_OK); // AOCL_Compression_zlib_inflateInit_common_1
 
   inflateEnd(zp);
-  free(zp);
+  fzp(zp);
 }
 
 TEST(ZLIB_inflateInit, Z_STREAM_ERROR_)
@@ -239,7 +243,7 @@ TEST(ZLIB_inflateInit_, fail_cases)
   EXPECT_EQ(inflateInit_(zp, ZLIB_VERSION, 3), Z_VERSION_ERROR);  // AOCL_Compression_zlib_inflateInit__common_4
 
   inflateEnd(zp);
-  free(zp);
+  fzp(zp);
 }
 
 TEST(ZLIB_inflateInit_, pass_cases)
@@ -249,7 +253,7 @@ TEST(ZLIB_inflateInit_, pass_cases)
   EXPECT_EQ(inflateInit_(zp, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_inflateInit__common_5
 
   inflateEnd(zp);
-  free(zp);
+  fzp(zp);
 }
 
 TEST(ZLIB_inflateEnd, Z_OK_)
@@ -259,7 +263,7 @@ TEST(ZLIB_inflateEnd, Z_OK_)
 
   EXPECT_EQ(inflateEnd(zp), Z_OK);  // AOCL_Compression_zlib_inflateEnd_common_1
 
-  free(zp);
+  fzp(zp);
 }
 
 TEST(ZLIB_inflateEnd, Z_STREAM_ERROR_)
@@ -269,7 +273,7 @@ TEST(ZLIB_inflateEnd, Z_STREAM_ERROR_)
   EXPECT_EQ(inflateEnd(NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateEnd_common_2
   EXPECT_EQ(inflateEnd(zp), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateEnd_common_3
 
-  free(zp);
+  fzp(zp);
 }
 
 TEST(ZLIB_compressBound, basic)
@@ -300,33 +304,39 @@ TEST(ZLIB_compress, fail_cases)
 TEST(ZLIB_compress, pass)
 {
   uLong srcLen = 11;
-  unsigned long destLen = compressBound(11);
-  uLong uncompress_len = 100;
-  Bytef uncompressed[uncompress_len];
   char c[11] = "helloWorld";
+
+  uLong destLen = compressBound(11);
+  const uLong uncompressAlloc = 100;
+  uLong uncompressLen = uncompressAlloc;
+  Bytef uncompressed[uncompressAlloc];
   Bytef *src = (Bytef *)c;
-  Bytef dest[destLen];
+  Bytef* dest = (Bytef*)malloc(destLen * sizeof(Bytef));
 
   EXPECT_EQ(compress(dest, &destLen, src, srcLen), Z_OK); // AOCL_Compression_zlib_compress_common_6
-  EXPECT_EQ(uncompress(uncompressed, &uncompress_len, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompress_len, srcLen);
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
+  ASSERT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
+  free(dest);
 }
 
 TEST(ZLIB_compress, pass2)
 {
-  unsigned long destLen = compressBound(11);
   char c[11] = "";
-  Bytef *src = (Bytef *)c;
   uLong srcLen = 1;
-  Bytef dest[destLen];
-  uLong uncompress_len = 100;
-  Bytef uncompressed[uncompress_len];
+  
+  uLong destLen = compressBound(11);
+  const uLong uncompressAlloc = 100;
+  uLong uncompressLen = uncompressAlloc;
+  Bytef uncompressed[uncompressAlloc];
+  Bytef* src = (Bytef*)c;
+  Bytef* dest = (Bytef*)malloc(destLen * sizeof(Bytef));
 
   EXPECT_EQ(compress(dest, &destLen, src, srcLen), Z_OK); // AOCL_Compression_zlib_compress_common_7
-  EXPECT_EQ(uncompress(uncompressed, &uncompress_len, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompress_len, srcLen);
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
+  ASSERT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
+  free(dest);
 }
 
 TEST(ZLIB_compress2, fail_cases)
@@ -334,7 +344,7 @@ TEST(ZLIB_compress2, fail_cases)
   const uLong srcLen = 10;
   Bytef src[srcLen + 1] = "helloWorld";
   unsigned long destLen = compressBound(srcLen);
-  Bytef dest[destLen];
+  Bytef* dest = (Bytef*)malloc(destLen * sizeof(destLen));
 
   EXPECT_EQ(compress2(NULL, &destLen, src, srcLen, 6), Z_STREAM_ERROR); // AOCL_Compression_zlib_compress2_common_1
   EXPECT_EQ(compress2(dest,NULL,src,srcLen,6),Z_STREAM_ERROR); // AOCL_Compression_zlib_compress2_common_2
@@ -344,114 +354,129 @@ TEST(ZLIB_compress2, fail_cases)
   EXPECT_EQ(compress2(dest, &destLen, src, 0, 6), Z_BUF_ERROR); // AOCL_Compression_zlib_compress2_common_6
   destLen = 3;
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, 6), Z_BUF_ERROR);  // AOCL_Compression_zlib_compress2_common_7
+  free(dest);
 }
 
 TEST(ZLIB_compress2, pass)
 {
   uLong srcLen = 11;
-  unsigned long destLen = compressBound(11);
-  uLong uncompress_len = 100;
-  Bytef uncompressed[uncompress_len];
   char c[11] = "helloWorld";
+
+  unsigned long destLen = compressBound(11);
+  const uLong uncompressAlloc = 100;
+  uLong uncompressLen = uncompressAlloc;
+  Bytef uncompressed[uncompressAlloc];
   Bytef *src = (Bytef *)c;
-  Bytef dest[destLen];
+  Bytef* dest = (Bytef*)malloc(destLen * sizeof(Bytef));
 
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, 6), Z_OK); // AOCL_Compression_zlib_compress2_common_8
-  EXPECT_EQ(uncompress(uncompressed, &uncompress_len, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompress_len, srcLen);
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
+  ASSERT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
+  free(dest);
 }
 
 TEST(ZLIB_compress2, pass2)
 {
-  unsigned long destLen = compressBound(11);
-  char c[11] = "";
-  Bytef *src = (Bytef *)c;
   uLong srcLen = 1;
-  Bytef dest[destLen];
-  uLong uncompress_len = 100;
-  Bytef uncompressed[uncompress_len];
+  char c[11] = "";
+  
+  unsigned long destLen = compressBound(11);
+  const uLong uncompressAlloc = 100;
+  uLong uncompressLen = uncompressAlloc;
+  Bytef uncompressed[uncompressAlloc];
+  Bytef* src = (Bytef*)c;
+  Bytef* dest = (Bytef*)malloc(destLen * sizeof(Bytef));
 
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, 6), Z_OK); // AOCL_Compression_zlib_compress2_common_9
-  EXPECT_EQ(uncompress(uncompressed, &uncompress_len, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompress_len, srcLen);
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
+  ASSERT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
+  free(dest);
 }
 
 TEST(ZLIB_uncompress2, fail_cases)
 {
   string source = "helloWorld";
-  uLong compressedLen = 100;
-  Bytef compressed[compressedLen];
+  const uLong compressedAlloc = 100;
+  uLong compressedLen = compressedAlloc;
+  Bytef compressed[compressedAlloc];
   compress(compressed, &compressedLen, (Bytef *)source.data(), source.size());
 
-  uLong uncompressed_len = 100;
-  Bytef uncompressed[uncompressed_len];
+  const uLong uncompressAlloc = 100;
+  uLong uncompressLen = uncompressAlloc;
+  Bytef uncompressed[uncompressAlloc];
   int temp = compressedLen;
   compressedLen = 3;
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressed_len, compressed, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_1
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_1
   compressedLen = temp;
   Bytef t = compressed[3];
   compressed[3] = 4;
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressed_len, compressed, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_2
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_2
   compressed[3] = t;
-  uncompressed_len = 3;
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressed_len, compressed, &compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_3
-  EXPECT_EQ(uncompress2(NULL, &uncompressed_len, compressed, &compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_4
+  uncompressLen = 3;
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_3
+  EXPECT_EQ(uncompress2(NULL, &uncompressLen, compressed, &compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_4
   EXPECT_EQ(uncompress2(uncompressed,NULL,compressed,&compressedLen),Z_STREAM_ERROR); // AOCL_Compression_zlib_uncompress2_common_5
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressed_len, NULL, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_6
-  EXPECT_EQ(uncompress2(uncompressed,&uncompressed_len,compressed,NULL),Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, NULL, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_6
+  EXPECT_EQ(uncompress2(uncompressed,&uncompressLen,compressed,NULL),Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
 }
 
 TEST(ZLIB_uncompress2, pass)
 {
   string source = "helloWorld";
-  uLong compressedLen = 100;
-  Bytef compressed[compressedLen];
+  const uLong compressedAlloc = 100;
+  uLong compressedLen = compressedAlloc;
+  Bytef compressed[compressedAlloc];
   compress(compressed, &compressedLen, (Bytef *)source.data(), source.size());
-  uLong uncompressed_len = 100;
-  Bytef uncompressed[uncompressed_len];
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressed_len, compressed, &compressedLen), Z_OK);  // AOCL_Compression_zlib_uncompress2_common_8
-  EXPECT_EQ(uncompressed_len, source.size());
+  const uLong uncompressAlloc = 100;
+  uLong uncompressLen = uncompressAlloc;
+  Bytef uncompressed[uncompressAlloc];
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_OK);  // AOCL_Compression_zlib_uncompress2_common_8
+  EXPECT_EQ(uncompressLen, source.size());
   EXPECT_TRUE(cmpr(source.data(), (char *)uncompressed, source.size()));
 }
 
 TEST(ZLIB_uncompress, fail_cases)
 {
   string source = "helloWorld";
-  uLong compressedLen = 100;
-  Bytef compressed[compressedLen];
+  const uLong compressedAlloc = 100;
+  uLong compressedLen = compressedAlloc;
+  Bytef compressed[compressedAlloc];
   compress(compressed, &compressedLen, (Bytef *)source.data(), source.size());
 
-  uLong uncompressed_len = 100;
-  Bytef uncompressed[uncompressed_len];
+  const uLong uncompressAlloc = 100;
+  uLong uncompressLen = uncompressAlloc;
+  Bytef uncompressed[uncompressAlloc];
   int temp = compressedLen;
   compressedLen = 3;
-  EXPECT_EQ(uncompress(uncompressed, &uncompressed_len, compressed, compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress_common_1
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress_common_1
   compressedLen = temp;
   Bytef t = compressed[3];
   compressed[3] = 4;
-  EXPECT_EQ(uncompress(uncompressed, &uncompressed_len, compressed, compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress_common_2
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress_common_2
   compressed[3] = t;
-  uncompressed_len = 3;
-  EXPECT_EQ(uncompress(uncompressed, &uncompressed_len, compressed, compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress_common_3
-  EXPECT_EQ(uncompress(NULL, &uncompressed_len, compressed, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_4
+  uncompressLen = 3;
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress_common_3
+  EXPECT_EQ(uncompress(NULL, &uncompressLen, compressed, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_4
   EXPECT_EQ(uncompress(uncompressed, NULL, compressed, compressedLen),Z_STREAM_ERROR); // AOCL_Compression_zlib_uncompress_common_5
-  EXPECT_EQ(uncompress(uncompressed, &uncompressed_len, NULL, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
-  EXPECT_EQ(uncompress(uncompressed, &uncompressed_len, compressed, 0), Z_DATA_ERROR); // AOCL_Compression_zlib_uncompress_common_7
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, NULL, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, 0), Z_DATA_ERROR); // AOCL_Compression_zlib_uncompress_common_7
 }
 
 TEST(ZLIB_uncompress, pass)
 {
   string source = "helloWorld";
-  uLong compressedLen = 100;
-  Bytef compressed[compressedLen];
+  const uLong compressedAlloc = 100;
+  uLong compressedLen = compressedAlloc;
+  Bytef compressed[compressedAlloc];
   compress(compressed, &compressedLen, (Bytef *)source.data(), source.size());
-  uLong uncompressed_len = 100;
-  Bytef uncompressed[uncompressed_len];
+  const uLong uncompressAlloc = 100;
+  uLong uncompressLen = uncompressAlloc;
+  Bytef uncompressed[uncompressAlloc];
 
-  EXPECT_EQ(uncompress(uncompressed, &uncompressed_len, compressed, compressedLen), Z_OK);  // AOCL_Compression_zlib_uncompress_common_8
-  EXPECT_EQ(uncompressed_len, source.size());
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_OK);  // AOCL_Compression_zlib_uncompress_common_8
+  EXPECT_EQ(uncompressLen, source.size());
   EXPECT_TRUE(cmpr(source.data(), (char *)uncompressed, source.size()));
 }
 
@@ -511,9 +536,9 @@ TEST(ZLIB_deflateInit2, pass_cases)
 TEST(ZLIB_deflateInit2_, fail_cases)
 {
   z_streamp strm = nzp();
-  int memLevel = 5;
-  int strategy = 2;
-  int windowBits = 11;
+  const int memLevel = 5;
+  const int strategy = 2;
+  const int windowBits = 11;
 
   EXPECT_EQ(deflateInit2_(NULL, 6, Z_DEFLATED, windowBits, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_1
   EXPECT_EQ(deflateInit2_(strm, -2, Z_DEFLATED, windowBits, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2__common_2
@@ -606,7 +631,7 @@ TEST(ZLIB_deflate, pass_cases)
   EXPECT_EQ(deflate(strm, Z_NO_FLUSH), Z_OK);
 
   deflateEnd(strm);
-  free(strm);
+  fzp(strm);
 }
 */
 
@@ -639,9 +664,9 @@ TEST(ZLIB_deflateSetDictionary, pass_case)
 {
   z_streamp strm = nzp();
   Bytef *sDict;
-  uLong sDictLen = 4000;
+  const uLong sDictLen = 4000;
   char cc[sDictLen];
-  for (int i = 0; i < sDictLen; i++)
+  for (uLong i = 0; i < sDictLen; i++)
   {
     cc[i] = rand() % 255;
   }
@@ -662,7 +687,7 @@ TEST(ZLIB_deflateSetDictionary, pass_case)
 
 TEST(ZLIB_deflateGetDictionary, fail_cases)
 {
-  Bytef *dict;
+  Bytef *dict = nullptr;
   uInt dictLen;
   z_streamp strm = nzp();
 
@@ -689,7 +714,7 @@ TEST(ZLIB_deflateGetDictionary, pass_cases)
   EXPECT_TRUE(cmpr(c, (char *)dict, dictLen));
 
   deflateEnd(strm);
-  free(strm);
+  fzp(strm);
   free(dict);
 }
 
@@ -702,8 +727,8 @@ TEST(ZLIB_deflateCopy, fail_cases)
   EXPECT_EQ(deflateCopy(NULL, src), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateCopy_common_2
   EXPECT_EQ(deflateCopy(dest, src), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateCopy_common_3
 
-  free(dest);
-  free(src);
+  fzp(dest);
+  fzp(src);
   // deflateCopy()
 }
 
@@ -803,7 +828,7 @@ TEST(ZLIB_deflateParams, pass_cases)
   level = 1;
   strategy = 2;
   state->matches = 2;
-  for (int i = 0; i < state->hash_size; i++)
+  for (uInt i = 0; i < state->hash_size; i++)
   {
     state->head[i] = 1;
   }
@@ -811,7 +836,7 @@ TEST(ZLIB_deflateParams, pass_cases)
   EXPECT_EQ(state->level, level);
   EXPECT_EQ(state->strategy, strategy);
 
-  for (int i = 0; i < state->hash_size; i++)
+  for (uInt i = 0; i < state->hash_size; i++)
   {
     cnt += state->head[i] == 0;
   }
@@ -1090,8 +1115,9 @@ TEST(ZLIB_inflateSetDictionary, pass_cases)
 TEST(ZLIB_inflateGetDictionary, fail_cases)
 {
   z_streamp strm = nzp();
-  uInt dictLen = 10;
-  char dict[dictLen];
+  const uInt dictAlloc = 10;
+  uInt dictLen = dictAlloc;
+  char dict[dictAlloc];
 
   EXPECT_EQ(inflateGetDictionary(strm, (Bytef *)dict, &dictLen), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateGetDictionary_common_1
 
@@ -1127,7 +1153,7 @@ TEST(ZLIB_adler32_z, all_cases)
 {
   size_t len = 5552;
   Bytef *buf = (Bytef *)malloc(len);
-  for (int i = 0; i < len; i++)
+  for (size_t i = 0; i < len; i++)
   {
     buf[len - i - 1] = i % 255;
   }
@@ -1140,7 +1166,7 @@ TEST(ZLIB_adler32_z, all_cases)
   len = 10;
   EXPECT_EQ(adler32_z(adler, NULL, len), 1);  // AOCL_Compression_zlib_adler32_z_common_2
 
-  adler = (1L << 31) - 1;
+  adler = ((uLong)1L << 31) - 1;
   len = 1;
   EXPECT_EQ(adler32_z(adler, buf, len), 2161180882);  // AOCL_Compression_zlib_adler32_z_common_3
 
@@ -1160,7 +1186,7 @@ TEST(ZLIB_adler32, all_cases)
 {
   size_t len = 5552;
   Bytef *buf = (Bytef *)malloc(len);
-  for (int i = 0; i < len; i++)
+  for (size_t i = 0; i < len; i++)
   {
     buf[len - i - 1] = i % 255;
   }
@@ -1173,7 +1199,7 @@ TEST(ZLIB_adler32, all_cases)
   len = 10;
   EXPECT_EQ(adler32(adler, NULL, len), 1);  // AOCL_Compression_zlib_adler32_common_2
 
-  adler = (1L << 31) - 1;
+  adler = ((uLong)1L << 31) - 1;
   len = 1;
   EXPECT_EQ(adler32(adler, buf, len), 2161180882);  // AOCL_Compression_zlib_adler32_common_3
 
@@ -1203,7 +1229,7 @@ TEST(ZLIB_crc32_combine, all_cases)
 
 TEST(ZLIB_crc32, all_cases)
 {
-  int len = 100000;
+  const int len = 100000;
   unsigned char c[len];
   for (int i = 0; i < len; i++)
   {
@@ -1216,7 +1242,7 @@ TEST(ZLIB_crc32, all_cases)
 
 TEST(ZLIB_crc32_z, all_cases)
 {
-  int len = 100000;
+  const int len = 100000;
   unsigned char c[len];
 
   for (int i = 0; i < len; i++)
@@ -1269,8 +1295,8 @@ TEST(ZLIB_inflateSync, pass_cases)
   inflate_state *s = (inflate_state *)strm->state;
   s->bits = 9;
   char c[4];
-  c[0] = c[1] = 0;
-  c[2] = c[3] = 0xff;
+  c[0] = c[1] = (char)0;
+  c[2] = c[3] = (char)0xff;
   strm->next_in = (Bytef *)c;
   strm->avail_in = 4;
 
@@ -1291,7 +1317,7 @@ TEST(ZLIB_inflateCopy, fail_cases)
 
   EXPECT_EQ(inflateCopy(NULL, strm), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateCopy_common_3
 
-  free(dest);
+  delete dest;
   rsti(strm);
 }
 
@@ -1331,7 +1357,7 @@ TEST(ZLIB_inflateCopy, pass_cases)
 
   rsti(dest);
   rsti(strm);
-  free(temp_dstate);
+  delete temp_dstate;
 }
 
 TEST(ZLIB_inflateReset, fail_cases)
@@ -1487,7 +1513,7 @@ TEST(ZLIB_inflateGetHeader, pass_cases)
 TEST(ZLIB_inflateBackInit, fail_cases)
 {
   z_streamp strm = nzp();
-  int windowBits = 12;
+  const int windowBits = 12;
   unsigned char window[1 << windowBits];
 
   EXPECT_EQ(inflateBackInit(NULL, windowBits, window), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateBackInit_common_1
@@ -1501,19 +1527,19 @@ TEST(ZLIB_inflateBackInit, fail_cases)
 TEST(ZLIB_inflateBackInit, pass_cases)
 {
   z_streamp strm = nzp();
-  int windowBits = 9;
+  const int windowBits = 9;
   unsigned char window[1 << windowBits];
 
   EXPECT_EQ(inflateBackInit(strm, windowBits, window), Z_OK); // AOCL_Compression_zlib_inflateBackInit_common_5
 
   inflateBackEnd(strm);
-  free(strm);
+  fzp(strm);
 }
 
 TEST(ZLIB_inflateBackInit_, fail_cases)
 {
   z_streamp strm = nzp();
-  int windowBits = 9;
+  const int windowBits = 9;
   unsigned char window[1 << windowBits];
 
   EXPECT_EQ(inflateBackInit_(NULL, windowBits, window, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateBackInit__common_1
@@ -1528,25 +1554,25 @@ TEST(ZLIB_inflateBackInit_, fail_cases)
   EXPECT_EQ(inflateBackInit_(strm, windowBits, window, ZLIB_VERSION, 2), Z_VERSION_ERROR);  // AOCL_Compression_zlib_inflateBackInit__common_7
 
   inflateBackEnd(strm);
-  free(strm);
+  fzp(strm);
 }
 
 TEST(ZLIB_inflateBackInit_, pass_cases)
 {
   z_streamp strm = nzp();
-  int windowBits = 9;
+  const int windowBits = 9;
   unsigned char window[1 << windowBits];
 
   EXPECT_EQ(inflateBackInit_(strm, windowBits, window, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_inflateBackInit__common_8
 
   inflateBackEnd(strm);
-  free(strm);
+  fzp(strm);
 }
 
 TEST(ZLIB_inflateBackEnd, all_cases)
 {
   z_streamp strm = nzp();
-  int windowBits = 9;
+  const int windowBits = 9;
   unsigned char window[1 << windowBits];
   void *v;
 
@@ -1571,7 +1597,7 @@ TEST(ZLIB_inflateBackEnd, all_cases)
   EXPECT_EQ(inflateBackEnd(strm), Z_OK);
   EXPECT_EQ(strm->state, (internal_state *)NULL); // AOCL_Compression_zlib_inflateBackEnd_common_5
 
-  free(strm);
+  fzp(strm);
 }
 
 TEST(ZLIB_inflateSyncPoint, fail_cases)

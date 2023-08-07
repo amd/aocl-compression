@@ -91,6 +91,9 @@ int setup(aocl_compression_type method, int optLevel)
             aocl_setup_lzma_encode(0, optLevel, 0, 0, 0);
             aocl_setup_lzma_decode(0, optLevel, 0, 0, 0);
             break;
+         default:
+             cout << "Error: Unsupported method\n";
+             break;
       }
 #endif
    }
@@ -102,51 +105,69 @@ int setup(aocl_compression_type method, int optLevel)
    return 0;
 }
 
+void print_filter_help() {
+    cout << "There are two ways to run this program:\n\n";
+    cout << "1.<program name> -<method name>:<optLevel>\n";
+    cout << "2.<program name> -<method name>\n\n";
+    cout << "You can also pass multiple methods as arguments,\n";
+    cout << "by default it will run all supported method's tests if no arguemnts are passed.\n\n";
+    cout << "Supported methods are\n";
+    cout << "1. lz4\n";
+    cout << "2. snappy\n";
+    cout << "3. zlib\n";
+    cout << "4. lzma\n\n";
+    cout << "Examples:\n";
+    cout << "gtest_combined_test -lz4\n";
+    cout << "gtest_combined_test -snappy:2 -zlib:0\n";
+}
+
 // A filter is created and aocl_setup_<method> is called for respective methods 
 // that is passed as input arguments to this executable.
 string create_filter(vector<string> &prog)
 {
    string filt;
-   int num;
+   int num = 0;
    smatch match;
-   aocl_compression_type method;
+   aocl_compression_type method = AOCL_COMPRESSOR_ALGOS_NUM;
 
    for (auto s : prog)
    {
-      // matches if argument is either --<method name> or --<method name>:<optLevel>
+      // matches if argument is either -<method name> or -<method name>:<optLevel>
       // if any other arguments are passed, error message shows up and exits from program.
-      if (regex_match(s, match, regex("--lz4(:\\d)?")))
+      if (regex_match(s, match, regex("-lz4(:\\d)?")))
       {
          filt += "*LZ4_*";
          s = (string)match[1];
          num = s.size()==2 ? s[1]-'0' : 0;
          method = LZ4;
       }
-      else if (regex_match(s, match, regex("--snappy(:\\d)?")))
+      else if (regex_match(s, match, regex("-snappy(:\\d)?")))
       {
          filt += "SNAPPY*";
          s = (string)match[1];
          num = s.size()==2 ? s[1]-'0' : 0;
          method = SNAPPY;
       }
-      else if (regex_match(s, match, regex("--zlib(:\\d)?")))
+      else if (regex_match(s, match, regex("-zlib(:\\d)?")))
       {
          filt += "ZLIB*";
          s = (string)match[1];
          num = s.size()==2 ? s[1]-'0' : 0;
          method = ZLIB;
       }
-      else if (regex_match(s, match, regex("--lzma(:\\d)?")))
+      else if (regex_match(s, match, regex("-lzma(:\\d)?")))
       {
           filt += "LZMA*";
           s = (string)match[1];
           num = s.size() == 2 ? s[1] - '0' : 0;
           method = LZMA;
       }
-      else if (regex_match(s, match, regex("--(zstd|bzip2|lz4hc)(:\\d)?")))
+      else if (regex_match(s, match, regex("-(zstd|bzip2|lz4hc)(:\\d)?")))
       {
          cout << "Error: Current testing framework for the method ";
          cout << match[1] << " is currently unsupported\n";
+         print_filter_help();
+         exit(0);
       }
       else
       {
@@ -154,19 +175,7 @@ string create_filter(vector<string> &prog)
          {
             cout << "Error: Unsupported way of passing arguments.\n\n";
          }
-         cout << "There are two ways to run this program:\n\n";
-         cout << "1.<program name> --<method name>:<optLevel>\n";
-         cout << "2.<program name> --<method name>\n\n";
-         cout << "You can also pass multiple methods as arguments,\n";
-         cout << "by default it will run all supported method's tests if no arguemnts are passed.\n\n";
-         cout << "Supported methods are\n";
-         cout << "1. lz4\n";
-         cout << "2. snappy\n";
-         cout << "3. zlib\n";
-         cout << "4. lzma\n\n";
-         cout << "Examples:\n";
-         cout << "gtest_combined_test --lz4\n";
-         cout << "gtest_combined_test --snappy:2 --zlib:0\n";
+         print_filter_help();
          exit(0);
       }
       setup(method, num);
@@ -188,10 +197,10 @@ int main(int argc, char *argv[])
    // If no arguments are passed all methods would be executed.
    if (prog.size() == 0)
    {
-      prog.push_back("--lz4");
-      prog.push_back("--snappy");
-      prog.push_back("--zlib");
-      prog.push_back("--lzma");
+      prog.push_back("-lz4");
+      prog.push_back("-snappy");
+      prog.push_back("-zlib");
+      prog.push_back("-lzma");
    }
 
    string filt = create_filter(prog);

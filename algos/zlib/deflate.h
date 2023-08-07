@@ -381,10 +381,19 @@ extern void (*check_match_fp) (deflate_state *s, IPos start, IPos match,
    (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
     match_head = s->head[s->ins_h], \
     s->head[s->ins_h] = (Pos)(str))
+
+#define INSERT_STRING2(s, str, match_head) \
+   (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
+    s->head[s->ins_h] = (Pos)(str))
 #else
 #define INSERT_STRING(s, str, match_head) \
    (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
     match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
+    s->head[s->ins_h] = (Pos)(str))
+
+#define INSERT_STRING2(s, str) \
+   (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
+    s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
     s->head[s->ins_h] = (Pos)(str))
 #endif
 
@@ -398,10 +407,19 @@ extern uint32_t mask;
    (UPDATE_HASH_CRC(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
     match_head = s->head[s->ins_h], \
     s->head[s->ins_h] = (Pos)(str))
+
+#define INSERT_STRING_CRC2(s, str) \
+   (UPDATE_HASH_CRC(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
+    s->head[s->ins_h] = (Pos)(str))
 #else
 #define INSERT_STRING_CRC(s, str, match_head) \
    (UPDATE_HASH_CRC(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
     match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
+    s->head[s->ins_h] = (Pos)(str))
+
+#define INSERT_STRING_CRC2(s, str) \
+   (UPDATE_HASH_CRC(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
+    s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
     s->head[s->ins_h] = (Pos)(str))
 #endif /* FASTEST */
 #endif /* AOCL_ZLIB_AVX_OPT */
