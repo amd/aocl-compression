@@ -45,6 +45,7 @@ add_compile_definitions(AOCL_BUILD_VERSION="Build ${TODAY}")
 
 if (WIN32)
 option (BUILD_STATIC_LIBS "Build static library (Default build type is shared library)" OFF)
+option (AOCL_LZ4_OPT_PREFETCH_BACKWARDS "Enable LZ4 optimizations related to backward prefetching of data" OFF)
 option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Disabled by default)" OFF)
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
 endif()
@@ -179,10 +180,12 @@ message(STATUS "C++ Compiler flags used for this Unix build are: ${CMAKE_CXX_FLA
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
 endif()
 
+if (AOCL_LZ4_OPT_PREFETCH_BACKWARDS)
+set_source_files_properties(${LZ4_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DAOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS")
+endif()
 if (SNAPPY_MATCH_SKIP_OPT)
   set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_MATCH_SKIP_OPT")
 endif()
-
 
 add_compile_definitions(CCompiler="${CMAKE_C_COMPILER}")
 add_compile_definitions(CXXCompiler="${CMAKE_CXX_COMPILER}")

@@ -112,6 +112,10 @@ extern "C" {
 LZ4LIB_API int LZ4_versionNumber (void);  /**< library version number; useful to check dll version */
 LZ4LIB_API const char* LZ4_versionString (void);   /**< library version string; useful to check dll version */
 
+/*----- AOCL Optimization flags -----*/
+#define AOCL_LZ4_OPT
+#define AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
+//#define AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
 
 /*-************************************
 *  Tuning parameter
@@ -201,6 +205,13 @@ LZ4LIB_API int LZ4_compress_fast (const char* src, char* dst, int srcSize, int d
 LZ4LIB_API int LZ4_sizeofState(void);
 LZ4LIB_API int LZ4_compress_fast_extState (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int acceleration);
 
+/* AOCL optimized fast compress LZ4 function that gets selected by default.
+ */
+#ifdef AOCL_LZ4_OPT
+LZ4LIB_API int AOCL_LZ4_compress_fast_extState(void* state, const char* source,
+    char* dest, int inputSize,
+    int maxOutputSize, int acceleration);
+#endif
 
 /*! LZ4_compress_destSize() :
  *  Reverse the logic : compresses as much data as possible from 'src' buffer
@@ -266,7 +277,8 @@ LZ4LIB_API int LZ4_decompress_safe_partial (const char* src, char* dst, int srcS
 
 
 /* AOCL-Compression defined setup function that configures with the right
-*  AMD optimized lz4 routines depending upon the detected CPU features. */
+ * AMD optimized lz4 routines depending upon the detected CPU features.
+ */
 #ifdef AOCL_DYNAMIC_DISPATCHER
 char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
