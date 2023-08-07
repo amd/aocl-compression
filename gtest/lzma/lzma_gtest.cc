@@ -3029,6 +3029,75 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_invalidCompressedInp_co
 
     EXPECT_NE(res, SZ_OK);
 }
+
+TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_srcNull_common_1)
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
+    size_t d_outSize = inSize;
+    SizeT outLen = d_outSize;
+    SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+
+    //src = nullptr
+    SRes res = decode((uint8_t*)decompPtr, &outLen, nullptr,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
+
+    EXPECT_NE(res, SZ_OK);
+}
+
+TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_srcSzZero_common_1)
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    //size_t d_inSize = LZMA_PROPS_SIZE + outLen;
+    size_t d_outSize = inSize;
+    SizeT outLen = d_outSize;
+    //SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+
+    //srcLen = 0
+    SRes res = decode((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        0, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
+
+    EXPECT_NE(res, SZ_OK);
+}
+
+TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_dstNull_common_1)
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
+    size_t d_outSize = inSize;
+    SizeT outLen = d_outSize;
+    SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+
+    //dest = nullptr
+    SRes res = decode(nullptr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
+
+    EXPECT_NE(res, SZ_OK);
+}
+
+TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_headerNull_common_1)
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
+    size_t d_outSize = inSize;
+    SizeT outLen = d_outSize;
+    SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+
+    //propData = nullptr
+    SRes res = decode((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, nullptr, LZMA_PROPS_SIZE);
+
+    EXPECT_NE(res, SZ_OK);
+}
+
 /*********************************************
 * End of LZMA_decodeFile
 *********************************************/

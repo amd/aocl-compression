@@ -42,6 +42,7 @@ if(NOT googletest_POPULATED)
   add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
+set (GTEST_SRC_FILES ${GTEST_SRC_FILES} ${CMAKE_SOURCE_DIR}/gtest/api/api_gtest.cc)
 if (NOT AOCL_EXCLUDE_LZ4)
     set (GTEST_SRC_FILES ${GTEST_SRC_FILES} ${CMAKE_SOURCE_DIR}/gtest/lz4/lz4_gtest.cc)
 else ()
