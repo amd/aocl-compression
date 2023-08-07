@@ -251,7 +251,7 @@ Generating Documentation
 ------------------------
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
 - Documents will be generated in HTML format in the folder __docs/html__ . Open the index.html file in any browser to view the documentation.
-- CMake will use the existing Doxygen if available. Else, it will download the required Doxygen binaries according to the respective operating system you are using to build the documentation.
+- CMake will use the existing Doxygen if available. Else, it will prompt the user to install doxygen and try again.
 
 
 CONTACTS
