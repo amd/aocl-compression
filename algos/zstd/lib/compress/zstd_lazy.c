@@ -1385,8 +1385,15 @@ size_t AOCL_ZSTD_RowFindBestMatch_generic(
             if ((dictMode != ZSTD_extDict) || matchIndex >= dictLimit) {
                 const BYTE* const match = base + matchIndex;
                 assert(matchIndex >= dictLimit);   /* ensures this is true if dictMode != ZSTD_extDict */
-                if (match[ml] == ip[ml])   /* potentially better */
+#ifndef AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER
+                /* Find a potentially better match candidate using a 2-byte comparison at the previous best match length */
+                if (*(U16*)(match + ml) == *(U16*)(ip + ml))
                     currentMl = ZSTD_count(ip, match, iLimit);
+#else
+                /* Find a potentially better match candidate using a 4-byte comparison at the previous best match length */
+                if (*(U32*)(match + ml) == *(U32*)(ip + ml))
+                    currentMl = ZSTD_count(ip, match, iLimit);
+#endif
             } else {
                 const BYTE* const match = dictBase + matchIndex;
                 assert(match + 4 <= dictEnd);
