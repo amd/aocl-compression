@@ -914,6 +914,7 @@ INPUT                  = ../api \
                          ../algos/lz4 \
                          ../algos/snappy \
                          ../algos/zlib \
+                         ../algos/bzip2 \
                          ../algos/lzma
 
 # This tag can be used to specify the character encoding of the source files
@@ -2376,6 +2377,8 @@ PREDEFINED             = OF(x)=x \
                          LZ4LIB_API= \
                          Z_ARG(x)=x \
                          LZ4_DEPRECATED(x)= \
+                         BZ_EXTERN= \
+                         BZ_API(x)=x \
                          LZMALIB_API=
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
