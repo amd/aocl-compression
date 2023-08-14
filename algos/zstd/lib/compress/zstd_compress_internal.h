@@ -32,6 +32,9 @@ extern "C" {
 /*-*************************************
 *  Constants
 ***************************************/
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DOUBLE_FAST
+    #define kSearchStrengthDoubleFast      5
+#endif
 #define kSearchStrength      8
 #define HASH_READ_SIZE       8
 #define ZSTD_DUBT_UNSORTED_MARK 1   /* For btlazy2 strategy, index ZSTD_DUBT_UNSORTED_MARK==1 means "unsorted".
@@ -771,6 +774,31 @@ MEM_STATIC size_t ZSTD_count(const BYTE* pIn, const BYTE* pMatch, const BYTE* co
     if ((pIn<pInLimit) && (*pMatch == *pIn)) pIn++;
     return (size_t)(pIn - pStart);
 }
+
+#ifdef AOCL_ZSTD_OPT
+// This variant of ZSTD_count tags its first if condition with an UNLIKELY.
+// Empirical evidence suggests that it provides a small but noticeable speed increase.
+MEM_STATIC size_t AOCL_ZSTD_count(const BYTE* pIn, const BYTE* pMatch, const BYTE* const pInLimit)
+{
+    const BYTE* const pStart = pIn;
+    const BYTE* const pInLoopLimit = pInLimit - (sizeof(size_t)-1);
+
+    if (UNLIKELY(pIn < pInLoopLimit)) {
+        { size_t const diff = MEM_readST(pMatch) ^ MEM_readST(pIn);
+          if (diff) return ZSTD_NbCommonBytes(diff); }
+        pIn+=sizeof(size_t); pMatch+=sizeof(size_t);
+        while (pIn < pInLoopLimit) {
+            size_t const diff = MEM_readST(pMatch) ^ MEM_readST(pIn);
+            if (!diff) { pIn+=sizeof(size_t); pMatch+=sizeof(size_t); continue; }
+            pIn += ZSTD_NbCommonBytes(diff);
+            return (size_t)(pIn - pStart);
+    }   }
+    if (MEM_64bits() && (pIn<(pInLimit-3)) && (MEM_read32(pMatch) == MEM_read32(pIn))) { pIn+=4; pMatch+=4; }
+    if ((pIn<(pInLimit-1)) && (MEM_read16(pMatch) == MEM_read16(pIn))) { pIn+=2; pMatch+=2; }
+    if ((pIn<pInLimit) && (*pMatch == *pIn)) pIn++;
+    return (size_t)(pIn - pStart);
+}
+#endif /* AOCL_ZSTD_OPT */
 
 /** ZSTD_count_2segments() :
  *  can count match length with `ip` & `match` in 2 different segments.
@@ -1529,4 +1557,12 @@ size_t ZSTD_compressEnd_public(ZSTD_CCtx* cctx,
 size_t ZSTD_compressBlock_deprecated(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+/* ===============================================================
+ * Internal function used for setting the function pointers to the
+ * appropriate functions for compression in double fast mode when
+ * the dynamic dispatcher is used.
+ * =============================================================== */
+void aocl_register_compressdoublefast_fmv(int optOff, int optLevel);
+#endif /* AOCL_DYNAMIC_DISPATCHER */
 #endif /* ZSTD_COMPRESS_H */

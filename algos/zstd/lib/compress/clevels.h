@@ -28,8 +28,15 @@ static const ZSTD_compressionParameters ZSTD_defaultCParameters[4][ZSTD_MAX_CLEV
     { 19, 12, 13,  1,  6,  1, ZSTD_fast    },  /* base for negative levels */
     { 19, 13, 14,  1,  7,  0, ZSTD_fast    },  /* level  1 */
     { 20, 15, 16,  1,  6,  0, ZSTD_fast    },  /* level  2 */
+#ifdef AOCL_ZSTD_OPT
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DOUBLE_FAST
+   { 23, 16, 17,  1,  5,  0, ZSTD_dfast   },  /* level  3 */
+   { 23, 18, 18,  1,  5,  0, ZSTD_dfast   },  /* level  4 */
+#else
     { 21, 16, 17,  1,  5,  0, ZSTD_dfast   },  /* level  3 */
     { 21, 18, 18,  1,  5,  0, ZSTD_dfast   },  /* level  4 */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DOUBLE_FAST */
+#endif /* AOCL_ZSTD_OPT */ 
     { 21, 18, 19,  3,  5,  2, ZSTD_greedy  },  /* level  5 */
     { 21, 18, 19,  3,  5,  4, ZSTD_lazy    },  /* level  6 */
     { 21, 19, 20,  4,  5,  8, ZSTD_lazy    },  /* level  7 */

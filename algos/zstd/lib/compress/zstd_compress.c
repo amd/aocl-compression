@@ -7127,6 +7127,7 @@ char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog)
 {
     aocl_register_zstd_compress_fmv(optOff, optLevel);
+    aocl_register_compressdoublefast_fmv(optOff, optLevel);
     return NULL;
 }
 #endif
