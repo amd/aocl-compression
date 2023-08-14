@@ -139,12 +139,16 @@ LZ4LIB_API const char* LZ4_versionString (void);
 
 /**----- AOCL Optimization flags -----*/
 #define AOCL_LZ4_OPT
+
+#ifdef AOCL_LZ4_OPT
 #define AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
 //#define AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
 //#define AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
 #ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
 #define AOCL_LZ4_MATCH_SKIPPING_THRESHOLD 3
-#endif
+#endif /* AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 */
+#define AOCL_LZ4_AVX2_OPT
+#endif /* AOCL_LZ4_OPT */
 
 /*-************************************
 *  Tuning parameter
@@ -231,6 +235,14 @@ LZ4LIB_API int LZ4_decompress_safe (const char* src, char* dst, int compressedSi
 /**
  * @}
  */
+
+
+#ifdef AOCL_LZ4_OPT
+#ifdef AOCL_LZ4_UNIT_TEST
+/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX2 function for unit testing. */
+LZ4LIB_API void Test_AOCL_LZ4_wildCopy64_AVX2(void*dstPtr, const void* srcPtr, void*dstEnd);
+#endif /* AOCL_LZ4_UNIT_TEST */
+#endif /* AOCL_LZ4_OPT */
 
 /*-************************************
 *  Advanced Functions

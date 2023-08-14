@@ -1754,3 +1754,145 @@ TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
 /*********************************************
  * End of LZ4_decompress_safe_usingDict
  *********************************************/
+
+/*********************************************
+ * "Begin" of LZ4_AOCL_LZ4_wildCopy64_AVX2
+ *********************************************/
+
+/*
+* AOCL_LZ4_wildCopy64_AVX2() is AVX2 implementation of wildCopy that copies two times 32 bytes in an iteration. 
+*/
+#ifdef AOCL_LZ4_OPT
+class LZ4_AOCL_LZ4_wildCopy64_AVX2 : public AOCL_setup_lz4
+{
+protected:
+    
+    char* srcPtr = NULL;
+    char* dstPtr = NULL;
+    
+    // Initialize pointers.
+    void SetUp() override
+    {
+        int srcLen = 500;    
+        srcPtr = (char *)malloc(srcLen);
+        for (int i = 0; i < srcLen; i++)
+        {
+            // random numbers from 1 to 250
+            srcPtr[i] = (rand() % 250) + 1;
+        }
+
+        int dstLen = 500;   
+        dstPtr = (char *)malloc(dstLen);
+        for (int i = 0; i < dstLen; i++)
+        {
+            // Null (NULL)
+            dstPtr[i] = 0;
+        }
+    }
+    
+    // Destructor function of `LZ4_AOCL_LZ4_wildCopy64_AVX2` class.
+    ~LZ4_AOCL_LZ4_wildCopy64_AVX2()
+    {
+        if (srcPtr) { free(srcPtr); }            
+        if (dstPtr) { free(dstPtr); }
+    }
+};
+
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX2_common_1) // len_multiple_of_64
+{
+    // case1: When no. of bytes to copy is multiple of 64
+    //        exact no. of bytes are copied
+    int length = 64;
+
+    Test_AOCL_LZ4_wildCopy64_AVX2(dstPtr, srcPtr, dstPtr+length);
+    EXPECT_EQ(memcmp(dstPtr, srcPtr, length), 0);
+    EXPECT_NE(memcmp(dstPtr, srcPtr, length+1), 0); 
+}
+
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX2_common_2) // len_NOT_multiple_of_64
+{
+    // case2: When no. of bytes to copy is not a multiple of 64
+    //        additional byte/s is/are copied 
+    int length = 1;
+
+    Test_AOCL_LZ4_wildCopy64_AVX2(dstPtr, srcPtr, dstPtr+length);                 
+    EXPECT_EQ(memcmp(dstPtr, srcPtr, 64), 0);          // additional 63 bytes are copied            
+    EXPECT_NE(memcmp(dstPtr, srcPtr, 65), 0);                
+
+    length = 127;
+
+    Test_AOCL_LZ4_wildCopy64_AVX2(dstPtr, srcPtr, dstPtr+length);               
+    EXPECT_EQ(memcmp(dstPtr, srcPtr, 128), 0);         // additional 1 byte is copied                 
+    EXPECT_NE(memcmp(dstPtr, srcPtr, 129), 0); 
+}
+
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX2_common_3) // offset_less_than_32
+{
+    // case 1: offset < 32 
+
+    // The function cannot be called to copy 100 bytes starting from `src` to `dst` which is 31 bytes apart,
+    // with an expectation that 100 bytes from `dst` must be same as 100 bytes from `src` after the function call.
+
+    // Since offset < 32, there is an overlap between `src` and `dst`
+    // due to which length (100) bytes from `dst` is not same as length
+    // (100) bytes from `src`.
+
+    // There occurs no overlap between `src` and `dst` when (offset >= 32).
+
+    int length = 100;
+    int offset = 31;
+
+    // fill valid (not NULL) data in dstPtr (until dst+offset) to copy
+    char c = 'A';
+    for(int i=0; i<offset; i++){
+        dstPtr[i] = c++;
+    }
+
+    char* src = dstPtr;             
+    char* dst = dstPtr+offset;
+
+    Test_AOCL_LZ4_wildCopy64_AVX2(dst, src, dst+length);
+    EXPECT_NE(memcmp(dst, src, length), 0);
+}
+
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX2_common_4) // offset_equal_32
+{
+    // case 2: offset = 32
+    int length = 100;
+    int offset = 32;
+
+    char c = 'A';
+    for(int i=0; i<offset; i++){
+        dstPtr[i] = c++;
+    }
+
+    char* src = dstPtr;
+    char* dst = dstPtr+offset;
+
+    Test_AOCL_LZ4_wildCopy64_AVX2(dst, src, dst+length);
+    EXPECT_EQ(memcmp(dst, src, length), 0);
+}
+
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX2_common_5) // offset_greater_than_32
+{
+    // case 3: offset > 32
+    int length = 100;
+    int offset = 33;
+
+    char c = 'A';
+    for(int i=0; i<offset; i++){
+        dstPtr[i] = c++;
+    }
+
+    char* src = dstPtr;
+    char* dst = dstPtr+offset;
+
+    Test_AOCL_LZ4_wildCopy64_AVX2(dst, src, dst+length);
+    EXPECT_EQ(memcmp(dst, src, length), 0);
+}
+
+#endif /* AOCL_LZ4_OPT */
+
+/*********************************************
+ * End of LZ4_AOCL_LZ4_wildCopy64_AVX2
+ *********************************************/
