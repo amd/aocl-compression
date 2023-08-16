@@ -46,6 +46,10 @@
 
 //Input test file name
 CHAR inFile[MAX_FILENAME_LEN];
+CHAR dumpFile[MAX_FILENAME_LEN];
+INTP dumpEnabled = 0;
+CHAR valFile[MAX_FILENAME_LEN];
+INTP valEnabled = 0;
 
 void print_user_options (void)
 {
@@ -67,6 +71,9 @@ void print_user_options (void)
 #ifdef AOCL_DYNAMIC_DISPATCHER
     printf("-o          Turn off all optimizations\n");
 #endif
+    printf("-r          Run particular operation only. Supported options are 'compress' and 'decompress'.\n\n");
+    printf("-d          File to dump output data. Based on -r, saves compressed/decompressed data.\n\n");
+    printf("-f          Input uncompressed file to be used for validation in -rdecompress mode.\n\n");
     printf("-v<>        Enable verbosity. Allowed values: 1 for Error (default), 2 for Info, 3 for Debug, 4 for Trace.\n");
     printf("-c          Run IPP library methods. Make sure to set the library path with LD_LIBRARY_PATH.\n\n");
 }
@@ -167,10 +174,14 @@ INTP read_user_options (INTP argc,
     codec_bench_handle->print_stats = 0;
     codec_bench_handle->optVar = UNINIT_OPT_VAR;
     codec_bench_handle->inPtr = NULL;
-    codec_bench_handle->compPtr = NULL;
+    codec_bench_handle->outPtr = NULL;
     codec_bench_handle->decompPtr = NULL;
     codec_bench_handle->optOff = 0;
     codec_bench_handle->useIPP = 0;
+    codec_bench_handle->dumpFp = NULL;
+    codec_bench_handle->valFp = NULL;
+    codec_bench_handle->val_file_size = 0;
+    codec_bench_handle->runOperation = RUN_OPERATION_DEFAULT;
     
     while (cnt < argc)
     {
@@ -246,6 +257,50 @@ INTP read_user_options (INTP argc,
                 case 'c':
                     codec_bench_handle->useIPP = 1;
                 break;
+
+                case 'r': /* Select operation to run. If not specified, run both. */
+                    if (codec_bench_handle->runOperation != RUN_OPERATION_DEFAULT) 
+                    { //r option was already processed once
+                        printf("Multiple -r options are not allowed.\n\n");
+                        ret = -1;
+                        break;
+                    }
+                    if (strcasecmp(&argv[cnt][2], "compress") == 0) 
+                    {
+                        codec_bench_handle->runOperation = RUN_OPERATION_COMPRESS;
+                    }
+                    else if (strcasecmp(&argv[cnt][2], "decompress") == 0) 
+                    {
+                        codec_bench_handle->runOperation = RUN_OPERATION_DECOMPRESS;
+                    }
+                    else 
+                    {
+                        printf("Invalid -r option. Valid options are 'compress' and 'decompress'\n\n");
+                        ret = -1;
+                    }
+                    break;
+
+                case 'd': /* file to dump output data */
+                    if (dumpEnabled) 
+                    {
+                        printf("Multiple -d options are not allowed.\n\n");
+                        ret = -1;
+                        break;
+                    }
+                    memcpy(dumpFile, &argv[cnt][2], MAX_FILENAME_LEN);
+                    dumpEnabled = 1;
+                    break;
+
+                case 'f': /* file for validation in decompress only mode */
+                    if (valEnabled) 
+                    {
+                        printf("Multiple -f options are not allowed.\n\n");
+                        ret = -1;
+                        break;
+                    }
+                    memcpy(valFile, &argv[cnt][2], MAX_FILENAME_LEN);
+                    valEnabled = 1;
+                    break;
  
                 default:
                     ret = -1;
@@ -294,14 +349,27 @@ INTP init(aocl_codec_bench_info *codec_bench_handle,
     codec_bench_handle->inSize = 
          (codec_bench_handle->file_size > codec_bench_handle->mem_limit) ?
          codec_bench_handle->mem_limit : codec_bench_handle->file_size;
-    codec_bench_handle->outSize = compression_bound(codec_bench_handle->inSize);
-    codec_bench_handle->inPtr = 
-        (char *)allocMem(codec_bench_handle->inSize, 0);
-    codec_bench_handle->compPtr = 
-        (char *)allocMem(codec_bench_handle->outSize, 0);
-    codec_bench_handle->decompPtr = 
-        (char *)allocMem(codec_bench_handle->inSize, 0);
-    
+    codec_bench_handle->inPtr =
+        (char*)allocMem(codec_bench_handle->inSize, 0);
+
+    if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
+        codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS) 
+    {
+        codec_bench_handle->outSize = compression_bound(codec_bench_handle->inSize);
+        codec_bench_handle->outPtr =
+            (char*)allocMem(codec_bench_handle->outSize, 0); // ptr to hold compressed data
+        codec_bench_handle->decompPtr =
+            (char*)allocMem(codec_bench_handle->inSize, 0); // get size of decompressed data from input
+    }
+    else 
+    { // codec_bench_handle->runOperation == RUN_OPERATION_DECOMPRESS
+        codec_bench_handle->outSize = codec_bench_handle->val_file_size;
+        codec_bench_handle->outPtr =
+            (char*)allocMem(codec_bench_handle->outSize, 0); // ptr to hold decompressed data
+        codec_bench_handle->decompPtr =
+            (char*)allocMem(codec_bench_handle->outSize, 0); // get size of decompressed data from output
+    }
+
     codec_bench_handle->cTime = 0;
     codec_bench_handle->cSize = 0;
     codec_bench_handle->cSpeed = 0.0;
@@ -319,7 +387,7 @@ INTP init(aocl_codec_bench_info *codec_bench_handle,
 
     LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
 
-    if (!codec_bench_handle->inPtr || !codec_bench_handle->compPtr ||
+    if (!codec_bench_handle->inPtr || !codec_bench_handle->outPtr ||
         !codec_bench_handle->decompPtr)
     {
         return -1;
@@ -330,16 +398,306 @@ INTP init(aocl_codec_bench_info *codec_bench_handle,
     }
 }
 
+/* Run for a particular codec and level */
+INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
+    aocl_codec_bench_info* codec_bench_handle,
+    aocl_compression_type codec, INTP level) 
+{
+    INTP status = 0;
+    UINTP inSize, file_size;
+    FILE* inFp = codec_bench_handle->fp;
+    INT64 resultComp = 0;
+    INT64 resultDecomp = 0;
+
+    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+
+    codec_bench_handle->cTime = 0;
+    codec_bench_handle->cSize = 0;
+    codec_bench_handle->dTime = 0;
+    codec_bench_handle->dSize = 0;
+    codec_bench_handle->cBestTime = 0;
+    codec_bench_handle->dBestTime = 0;
+    aocl_codec_handle->level = level;
+
+    //setup the codec method
+    if (aocl_llc_setup(aocl_codec_handle, codec) != 0)
+    {
+        LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+            "Setup failed for codec [%s].", codec_list[codec].codec_name);
+        return -2;
+    }
+
+    for (INTP k = 0; k < codec_bench_handle->iterations; k++)
+    {
+        inSize = codec_bench_handle->inSize;
+        file_size = codec_bench_handle->file_size;
+
+        if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT /* Compress and decompress */ ||
+            codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS /* Compress only */) 
+        {
+            while (inSize)
+            {
+                inSize = fread(codec_bench_handle->inPtr, 1, inSize, inFp); // read data in blocks of inSize
+
+                // compress
+                aocl_codec_handle->inSize = inSize;
+                aocl_codec_handle->outSize = codec_bench_handle->outSize;
+                aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
+                aocl_codec_handle->outBuf = codec_bench_handle->outPtr;
+                resultComp = aocl_llc_compress(aocl_codec_handle, codec);
+                if (resultComp <= 0)
+                {
+                    printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Compression: failed\n",
+                        codec_list[codec].codec_name,
+                        level, codec_bench_handle->fName);
+                    status = -1;
+                    break;
+                }
+
+                if (dumpEnabled && k == 0 /* dump only during 1st iteration */) 
+                {
+                    // dump compressed data to file
+                    size_t written = fwrite(aocl_codec_handle->outBuf, sizeof(char), resultComp,
+                        codec_bench_handle->dumpFp);
+                    if (written < resultComp) 
+                    {
+                        printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Dump: failed\n",
+                            codec_list[codec].codec_name,
+                            level, codec_bench_handle->fName);
+                    }
+                }
+
+                if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT) 
+                {
+                    // decompress
+                    // use file compressed above as input
+                    aocl_codec_handle->inSize = resultComp;
+                    aocl_codec_handle->outSize = inSize;
+                    aocl_codec_handle->inBuf = codec_bench_handle->outPtr;
+                    aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
+
+                    resultDecomp = aocl_llc_decompress(aocl_codec_handle, codec);
+                    if (resultDecomp <= 0)
+                    {
+                        printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Decompression: failed\n",
+                            codec_list[codec].codec_name,
+                            level, codec_bench_handle->fName);
+                        status = -1;
+                        break;
+                    }
+
+                    if (codec_bench_handle->verify) // verification supported only if decompress is enabled
+                    {
+                        if (memcmp(codec_bench_handle->inPtr,
+                            codec_bench_handle->decompPtr, inSize) != 0)
+                        {
+                            printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: failed\n",
+                                codec_list[codec].codec_name,
+                                level, codec_bench_handle->fName);
+                            status = -1;
+                            break;
+                        }
+                    }
+                }
+
+                if (codec_bench_handle->print_stats) 
+                {
+                    // compression stats
+                    codec_bench_handle->cTime += aocl_codec_handle->cTime;
+                    codec_bench_handle->cSize += aocl_codec_handle->cSize;
+                    codec_bench_handle->cBestTime =
+                        (codec_bench_handle->cBestTime == 0) ?
+                        aocl_codec_handle->cTime :
+                        (codec_bench_handle->cBestTime >
+                            aocl_codec_handle->cTime) ?
+                        aocl_codec_handle->cTime :
+                        codec_bench_handle->cBestTime;
+
+                    if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT) 
+                    {
+                        // decompression stats if both are enabled
+                        codec_bench_handle->dTime += aocl_codec_handle->dTime;
+                        codec_bench_handle->dSize += aocl_codec_handle->dSize;
+                        codec_bench_handle->dBestTime =
+                            (codec_bench_handle->dBestTime == 0) ?
+                            aocl_codec_handle->dTime :
+                            (codec_bench_handle->dBestTime >
+                                aocl_codec_handle->dTime) ?
+                            aocl_codec_handle->dTime :
+                            codec_bench_handle->dBestTime;
+                    }
+                }
+                file_size -= inSize;
+                inSize = (file_size > inSize) ? inSize : file_size;
+            }
+        }
+        else 
+        {   /* Decompress only */
+            /* In this mode, 
+            * inFp is the input compressed data.
+            * valFp is the decompressed data for validation.
+            * Decompression is done in a single block. Hence,
+            * max file size of decompressed data supported 
+            * is MAX_MEM_SIZE_FOR_FILE_READ */
+            FILE* valFp = codec_bench_handle->valFp;
+
+            // load input compressed file
+            inSize = fread(codec_bench_handle->inPtr, 1, inSize, inFp);
+
+            // decompress
+            aocl_codec_handle->inSize = inSize;
+            aocl_codec_handle->outSize = codec_bench_handle->outSize;
+            aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
+            aocl_codec_handle->outBuf = codec_bench_handle->outPtr;
+            resultDecomp = aocl_llc_decompress(aocl_codec_handle, codec);
+            if (resultDecomp <= 0)
+            {
+                printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Decompression: failed\n",
+                    codec_list[codec].codec_name,
+                    level, codec_bench_handle->fName);
+                status = -1;
+                break;
+            }
+
+            if (dumpEnabled && k == 0 /* dump only during 1st iteration */) 
+            {
+                // dump decompressed data to file
+                size_t written = fwrite(aocl_codec_handle->outBuf, sizeof(char), resultDecomp,
+                    codec_bench_handle->dumpFp);
+                if (written < resultDecomp) 
+                {
+                    printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Dump: failed\n",
+                        codec_list[codec].codec_name,
+                        level, codec_bench_handle->fName);
+                }
+            }
+
+            if (codec_bench_handle->verify)
+            {
+                if (valFp == NULL) 
+                {
+                    printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] verification file not provided\n",
+                        codec_list[codec].codec_name,
+                        level, codec_bench_handle->fName);
+                    status = -1;
+                    break;
+                }
+                // load decompressed file for validation
+                codec_bench_handle->outSize = fread(codec_bench_handle->decompPtr,
+                    1, codec_bench_handle->outSize, valFp);
+
+                if (memcmp(codec_bench_handle->outPtr,
+                    codec_bench_handle->decompPtr, codec_bench_handle->outSize) != 0)
+                {
+                    printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: failed\n",
+                        codec_list[codec].codec_name,
+                        level, codec_bench_handle->fName);
+                    status = -1;
+                    break;
+                }
+            }
+
+            if (codec_bench_handle->print_stats)
+            { // decompression stats
+                codec_bench_handle->dTime += aocl_codec_handle->dTime;
+                codec_bench_handle->dSize += aocl_codec_handle->dSize;
+                codec_bench_handle->dBestTime =
+                    (codec_bench_handle->dBestTime == 0) ?
+                    aocl_codec_handle->dTime :
+                    (codec_bench_handle->dBestTime >
+                        aocl_codec_handle->dTime) ?
+                    aocl_codec_handle->dTime :
+                    codec_bench_handle->dBestTime;
+            }
+        }
+
+        rewind(inFp);
+        if (status != 0)
+            break;
+    }
+
+    //destroy the codec method
+    aocl_llc_destroy(aocl_codec_handle, codec);
+
+    if (status != 0)
+    {
+        LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+            "Compression/Decompression/Verification operation failed for codec [%s].", codec_list[codec].codec_name);
+        return status;
+    }
+
+    if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
+        codec_bench_handle->runOperation == RUN_OPERATION_DECOMPRESS) 
+    {
+        if (codec_bench_handle->verify)
+        {
+            printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: passed\n",
+                codec_list[codec].codec_name,
+                level, codec_bench_handle->fName);
+
+        }
+    }
+
+    if (codec_bench_handle->print_stats)
+    {
+        printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] -------------------------------------\n",
+            codec_list[codec].codec_name,
+            level, codec_bench_handle->fName);
+
+        if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
+            codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS) 
+        {
+            codec_bench_handle->cSpeed = (codec_bench_handle->inSize *
+                codec_bench_handle->iterations * 1000.0) /
+                codec_bench_handle->cTime;
+            codec_bench_handle->cBestSpeed =
+                (codec_bench_handle->inSize * 1000.0) /
+                codec_bench_handle->cBestTime;
+            printf("Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
+                codec_bench_handle->cSpeed,
+                codec_bench_handle->cTime /
+                (codec_bench_handle->iterations * 1000000.0),
+                codec_bench_handle->cSize / codec_bench_handle->iterations,
+                codec_bench_handle->cBestSpeed,
+                codec_bench_handle->cBestTime / 1000000.0);
+        }
+
+        if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
+            codec_bench_handle->runOperation == RUN_OPERATION_DECOMPRESS) 
+        {
+            codec_bench_handle->dSpeed = (codec_bench_handle->inSize *
+                codec_bench_handle->iterations * 1000.0) /
+                codec_bench_handle->dTime;
+            codec_bench_handle->dBestSpeed =
+                (codec_bench_handle->inSize * 1000.0) /
+                codec_bench_handle->dBestTime;
+            printf("Decompression:       speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
+                codec_bench_handle->dSpeed,
+                codec_bench_handle->dTime /
+                (codec_bench_handle->iterations * 1000000.0),
+                codec_bench_handle->dSize / codec_bench_handle->iterations,
+                codec_bench_handle->dBestSpeed,
+                codec_bench_handle->dBestTime / 1000000.0);
+        }
+
+        if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
+            codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS) 
+        {
+            printf("Ratio:               %.2f\n",
+                (((codec_bench_handle->cSize * 100.0) /
+                    codec_bench_handle->iterations) /
+                    codec_bench_handle->inSize));
+        }
+    }
+
+    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    return status;
+}
+
 INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                    aocl_codec_bench_info *codec_bench_handle)
 {
-    INT64 resultComp = 0;
-    INT64 resultDecomp = 0;
-    UINTP inSize, file_size;
-    aocl_compression_type i; 
-    INTP j, k, l;
-    INTP status = 0, retStatus = 0;
-    FILE *inFp = codec_bench_handle->fp;
+    INTP retStatus = 0;
 
     LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
 
@@ -349,167 +707,31 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
         codec_bench_handle->verify == 1)
         codec_bench_handle->iterations = 1;
 
-    if (codec_bench_handle->codec_method < 0)
+    if (codec_bench_handle->runOperation == RUN_OPERATION_DECOMPRESS
+        && codec_bench_handle->codec_method < 0) 
     {
-        for (i = LZ4; i < AOCL_COMPRESSOR_ALGOS_NUM; i++)
+        /* data decompressed using a certain codec can only be decompressed
+         * by that particular codec. Run-all-codecs mode is not supported in this case */
+        LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+            "Codec not specified. Specify codec using -e when running -rdecompress mode.");
+        printf("Codec not specified. Specify codec using -e when running -rdecompress mode.\n\n");
+        return -2;
+    }
+
+    if (codec_bench_handle->codec_method < 0) // run for multiple codecs
+    {
+        for (aocl_compression_type codec = LZ4; codec < AOCL_COMPRESSOR_ALGOS_NUM; codec++)
         {
-            aocl_codec_handle->optVar = codec_list[i].extra_param;
-            for (l = codec_list[i].lower_level;
-                 l <= codec_list[i].upper_level; l++)
+            aocl_codec_handle->optVar = codec_list[codec].extra_param;
+            for (INTP level = codec_list[codec].lower_level; level <= codec_list[codec].upper_level; level++)
             {
-                codec_bench_handle->cTime = 0;
-                codec_bench_handle->cSize = 0;
-                codec_bench_handle->dTime = 0;
-                codec_bench_handle->dSize = 0;
-                codec_bench_handle->cBestTime = 0;
-                codec_bench_handle->dBestTime = 0;
-                aocl_codec_handle->level = l;
-                status = 0;
-                
-                //setup the codec method
-                if (aocl_llc_setup(aocl_codec_handle, i) != 0)
-                {
-                    retStatus = -2;
-                    break;
-                }
-
-                for (k = 0; k < codec_bench_handle->iterations; k++)
-                {
-                    inSize = codec_bench_handle->inSize;
-                    file_size = codec_bench_handle->file_size;
-                    while (inSize)
-                    {
-                        inSize = fread(codec_bench_handle->inPtr, 1,
-                                       inSize, inFp);
-
-                        //compress
-                        aocl_codec_handle->inSize = inSize;
-                        aocl_codec_handle->outSize = codec_bench_handle->outSize;
-                        aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
-                        aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
-                        resultComp = aocl_llc_compress(aocl_codec_handle, i);
-                        if (resultComp <= 0)
-                        {
-                            printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Compression: failed\n",
-                                codec_list[i].codec_name,
-                                l, codec_bench_handle->fName);
-                            status = -1;
-                            break;
-                        }
-
-                        //decompress
-                        aocl_codec_handle->inSize = resultComp;
-                        aocl_codec_handle->outSize = inSize;
-                        aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
-                        aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
-                        resultDecomp = aocl_llc_decompress(aocl_codec_handle,
-                                                             i);
-                        if (resultDecomp <= 0)
-                        {
-                            printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Decompression: failed\n",
-                                codec_list[i].codec_name,
-                                l, codec_bench_handle->fName);
-                            status = -1;
-                            break;
-                        }
-
-                        if (codec_bench_handle->verify)
-                        {
-                            j = memcmp(codec_bench_handle->inPtr,
-                                       codec_bench_handle->decompPtr, inSize);
-                            if (j != 0)
-                            {
-                                printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: failed\n",
-                                    codec_list[i].codec_name,
-                                    l, codec_bench_handle->fName);
-                                status = -1;
-                                break;
-                            }
-                        }
-                        if (codec_bench_handle->print_stats)
-                        {
-                            codec_bench_handle->cTime +=
-                                aocl_codec_handle->cTime;
-                            codec_bench_handle->cSize +=
-                                aocl_codec_handle->cSize;
-                            codec_bench_handle->dTime +=
-                                aocl_codec_handle->dTime;
-                            codec_bench_handle->dSize +=
-                                aocl_codec_handle->dSize;
-                            codec_bench_handle->cBestTime = 
-                                (codec_bench_handle->cBestTime == 0) ? 
-                                aocl_codec_handle->cTime :
-                                (codec_bench_handle->cBestTime > 
-                                aocl_codec_handle->cTime) ?
-                                aocl_codec_handle->cTime : 
-                                codec_bench_handle->cBestTime;
-                            codec_bench_handle->dBestTime = 
-                                (codec_bench_handle->dBestTime == 0) ? 
-                            aocl_codec_handle->dTime :
-                                (codec_bench_handle->dBestTime > 
-                                aocl_codec_handle->dTime) ?
-                                aocl_codec_handle->dTime : 
-                                codec_bench_handle->dBestTime;
-                        }
-                        file_size -= inSize;
-                        inSize = (file_size > inSize) ? inSize : file_size;
-                    }
-                    rewind(inFp);
-                    if (status != 0)
-                        break;
-                }
-
-                //destroy the codec method
-                aocl_llc_destroy(aocl_codec_handle, i);
-
-                if (status != 0)
+                INTP status = aocl_bench_codec_run(aocl_codec_handle, codec_bench_handle, 
+                    codec, level);
+                if (status < 0) 
                 {
                     retStatus = status;
-                    continue;
-                }
-
-                if (codec_bench_handle->verify)
-                {
-                    printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: passed\n",
-                        codec_list[i].codec_name,
-                        l, codec_bench_handle->fName);
-
-                }
-                if (codec_bench_handle->print_stats)
-                {
-                    codec_bench_handle->cSpeed = (codec_bench_handle->inSize * 
-                        codec_bench_handle->iterations * 1000.0) / 
-                        codec_bench_handle->cTime;
-                    codec_bench_handle->dSpeed = (codec_bench_handle->inSize * 
-                        codec_bench_handle->iterations * 1000.0) / 
-                        codec_bench_handle->dTime;
-                    codec_bench_handle->cBestSpeed = 
-                        (codec_bench_handle->inSize * 1000.0) / 
-                        codec_bench_handle->cBestTime;
-                    codec_bench_handle->dBestSpeed = 
-                        (codec_bench_handle->inSize * 1000.0) / 
-                        codec_bench_handle->dBestTime;
-                    printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] -------------------------------------\n",
-                        codec_list[i].codec_name,
-                        l, codec_bench_handle->fName);
-                    printf("Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
-                        codec_bench_handle->cSpeed,
-                        codec_bench_handle->cTime/
-                        (codec_bench_handle->iterations * 1000000.0),
-                        codec_bench_handle->cSize/codec_bench_handle->iterations,
-                        codec_bench_handle->cBestSpeed,
-                        codec_bench_handle->cBestTime/1000000.0);
-                    printf("Decompression:       speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n", 
-                        codec_bench_handle->dSpeed,
-                        codec_bench_handle->dTime/
-                        (codec_bench_handle->iterations * 1000000.0),
-                        codec_bench_handle->dSize/codec_bench_handle->iterations,
-                        codec_bench_handle->dBestSpeed,
-                        codec_bench_handle->dBestTime/1000000.0);
-                    printf("Ratio:               %.2f\n",
-                        (((codec_bench_handle->cSize*100.0)/
-                        codec_bench_handle->iterations)/
-                        codec_bench_handle->inSize));
+                    if (status == -2)
+                        break;
                 }
             }
             
@@ -534,161 +756,31 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
         if (aocl_codec_handle->optVar == UNINIT_OPT_VAR)
             aocl_codec_handle->optVar = 
                 codec_list[codec_bench_handle->codec_method].extra_param;
-                
-        for (l = lower_level; l <= upper_level; l++)
+
+        if (codec_bench_handle->runOperation == RUN_OPERATION_DECOMPRESS) 
         {
-            codec_bench_handle->cTime = 0;
-            codec_bench_handle->cSize = 0;
-            codec_bench_handle->dTime = 0;
-            codec_bench_handle->dSize = 0;
-            codec_bench_handle->cBestTime = 0;
-            codec_bench_handle->dBestTime = 0;
-            aocl_codec_handle->level = l;
-            status = 0;
-
-            //setup the codec method
-            if (aocl_llc_setup(aocl_codec_handle,
-                codec_bench_handle->codec_method) != 0)
-            {
-                retStatus = -2;
-                break;
-            }
-        
-            for (k = 0; k < codec_bench_handle->iterations; k++)
-            {
-                inSize = codec_bench_handle->inSize;
-                file_size = codec_bench_handle->file_size;
-                while (inSize)
-                {
-                    inSize = fread(codec_bench_handle->inPtr, 1, inSize, inFp);
-
-                    //compress
-                    aocl_codec_handle->inSize = inSize;
-                    aocl_codec_handle->outSize = codec_bench_handle->outSize;
-                    aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
-                    aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
-                    resultComp = aocl_llc_compress(aocl_codec_handle,
-                                            codec_bench_handle->codec_method);
-                    if (resultComp <= 0)
-                    {
-                        printf("AOCL-COMPRESSION [%s-%zu] [Filename:%s] Compression: failed\n",
-                            codec_list[codec_bench_handle->codec_method].codec_name,
-                            aocl_codec_handle->level, codec_bench_handle->fName);
-                        status = -1;
-                        break;
-                    }
-
-                    //decompress
-                    aocl_codec_handle->inSize = resultComp;
-                    aocl_codec_handle->outSize = inSize;
-                    aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
-                    aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
-                    resultDecomp = aocl_llc_decompress(aocl_codec_handle,
-                                        codec_bench_handle->codec_method);
-                    if (resultDecomp <= 0)
-                    {
-                        printf("AOCL-COMPRESSION [%s-%zu] [Filename:%s] Decompression: failed\n",
-                            codec_list[codec_bench_handle->codec_method].codec_name,
-                            aocl_codec_handle->level, codec_bench_handle->fName);
-                        status = -1;
-                        break;
-                    }
-
-                    if (codec_bench_handle->verify)
-                    {
-                        j = memcmp(codec_bench_handle->inPtr,
-                                codec_bench_handle->decompPtr, inSize);
-                        if (j != 0)
-                        {
-                            printf("AOCL-COMPRESSION [%s-%zu] [Filename:%s] verification: failed\n",
-                                codec_list[codec_bench_handle->codec_method].
-                                codec_name,
-                                aocl_codec_handle->level,
-                                codec_bench_handle->fName);
-                            status = -1;
-                            break;
-                        }
-                    }
-                    if (codec_bench_handle->print_stats)
-                    {
-                        codec_bench_handle->cTime += aocl_codec_handle->cTime;
-                        codec_bench_handle->cSize += aocl_codec_handle->cSize;
-                        codec_bench_handle->dTime += aocl_codec_handle->dTime;
-                        codec_bench_handle->dSize += aocl_codec_handle->dSize;
-                        codec_bench_handle->cBestTime = 
-                            (codec_bench_handle->cBestTime == 0) ? 
-                            aocl_codec_handle->cTime : 
-                            (codec_bench_handle->cBestTime > 
-                            aocl_codec_handle->cTime) ?
-                            aocl_codec_handle->cTime : 
-                            codec_bench_handle->cBestTime;
-                        codec_bench_handle->dBestTime = 
-                            (codec_bench_handle->dBestTime == 0) ? 
-                            aocl_codec_handle->dTime :
-                            (codec_bench_handle->dBestTime > 
-                            aocl_codec_handle->dTime) ?
-                            aocl_codec_handle->dTime : 
-                            codec_bench_handle->dBestTime;
-                    }
-                    file_size -= inSize;
-                    inSize = (file_size > inSize) ? inSize : file_size;
-                }
-                rewind(inFp);
-                if (status != 0)
-                    break;
-            }
-
-            //destroy the codec method
-            aocl_llc_destroy(aocl_codec_handle,
-                               codec_bench_handle->codec_method);
-
-            if (status != 0)
+            /* In decompress only mode, given input file is decompressed.
+             * Level information is not used. Run only once. */
+            INTP status = aocl_bench_codec_run(aocl_codec_handle, codec_bench_handle,
+                codec_bench_handle->codec_method, def_level);
+            if (status < 0) 
             {
                 retStatus = status;
-                continue;
+                return retStatus;
             }
-
-            if (codec_bench_handle->verify)
+        }
+        else 
+        {
+            for (INTP level = lower_level; level <= upper_level; level++) // run for requested levels
             {
-                printf("AOCL-COMPRESSION [%s-%zu] [Filename:%s] verification: passed\n", 
-                    codec_list[codec_bench_handle->codec_method].codec_name,
-                    aocl_codec_handle->level,
-                    codec_bench_handle->fName);
-    
-            }
-            if (codec_bench_handle->print_stats)
-            {        
-                codec_bench_handle->cSpeed = (codec_bench_handle->inSize * 
-                    codec_bench_handle->iterations * 1000.0) /
-                    codec_bench_handle->cTime;
-                codec_bench_handle->dSpeed = (codec_bench_handle->inSize * 
-                    codec_bench_handle->iterations * 1000.0) /
-                    codec_bench_handle->dTime;
-                codec_bench_handle->cBestSpeed = (codec_bench_handle->inSize * 
-                    1000.0) / codec_bench_handle->cBestTime;
-                codec_bench_handle->dBestSpeed = (codec_bench_handle->inSize * 
-                    1000.0) / codec_bench_handle->dBestTime;
-                printf("AOCL-COMPRESSION [%s-%zu] [Filename:%s] -------------------------------------\n",
-                        codec_list[codec_bench_handle->codec_method].codec_name,
-                        aocl_codec_handle->level, codec_bench_handle->fName);
-                printf("Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
-                        codec_bench_handle->cSpeed,
-                        codec_bench_handle->cTime/
-                        (codec_bench_handle->iterations * 1000000.0),
-                        codec_bench_handle->cSize/codec_bench_handle->iterations,
-                        codec_bench_handle->cBestSpeed,
-                        codec_bench_handle->cBestTime/1000000.0);
-                printf("Decompression:       speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n", 
-                        codec_bench_handle->dSpeed,
-                        codec_bench_handle->dTime/
-                        (codec_bench_handle->iterations * 1000000.0),
-                        codec_bench_handle->dSize/codec_bench_handle->iterations,
-                        codec_bench_handle->dBestSpeed,
-                        codec_bench_handle->dBestTime/1000000.0);
-                printf("Ratio:               %.2f\n",
-                        (((codec_bench_handle->cSize*100.0)/
-                        codec_bench_handle->iterations)/
-                        codec_bench_handle->inSize));
+                INTP status = aocl_bench_codec_run(aocl_codec_handle, codec_bench_handle,
+                    codec_bench_handle->codec_method, level);
+                if (status < 0) 
+                {
+                    retStatus = status;
+                    if (status == -2)
+                        break;
+                }
             }
         }
     }
@@ -703,8 +795,8 @@ void destroy(aocl_codec_bench_info *codec_bench_handle)
 
     if (codec_bench_handle->inPtr)
         free(codec_bench_handle->inPtr);
-    if (codec_bench_handle->compPtr)
-        free(codec_bench_handle->compPtr);
+    if (codec_bench_handle->outPtr)
+        free(codec_bench_handle->outPtr);
     if (codec_bench_handle->decompPtr)
         free(codec_bench_handle->decompPtr);
 
@@ -716,7 +808,7 @@ INT32 main (INT32 argc, CHAR **argv)
     aocl_codec_bench_info codec_bench_handle;
     aocl_compression_desc aocl_codec_ds;
     aocl_compression_desc *aocl_codec_handle = &aocl_codec_ds;
-    FILE *inFp = NULL;
+    FILE* inFp = NULL, * dumpFp = NULL, * valFp = NULL;
     INTP result = 0;
     INTP ret;
 
@@ -749,7 +841,7 @@ INT32 main (INT32 argc, CHAR **argv)
         printf("Unsupported option passed. Use -l to know supported methods and -h for exact user options.\n");
 		goto exit;
     }
-    else if (ret == 2)
+    else if (ret == 2) // user option requested help information
         goto exit;
 
     if (!(inFp = fopen(inFile, "rb")))
@@ -761,6 +853,77 @@ INT32 main (INT32 argc, CHAR **argv)
     fseek(inFp, 0L, SEEK_END);
     codec_bench_handle.file_size = ftell(inFp);
     rewind(inFp);
+
+    if (dumpEnabled) 
+    {
+        // handle invalid cases
+        if (codec_bench_handle.codec_method < 0) 
+        {
+            LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                "Arg -d ignored. Specify codec and level using -e to avail this feature.");
+            printf("Arg -d ignored. Specify codec and level using -e to avail this feature.\n\n");
+            dumpEnabled = 0;
+        }
+        else if (codec_bench_handle.codec_level == UNINIT_LEVEL && codec_bench_handle.runOperation != RUN_OPERATION_DECOMPRESS) 
+        {
+            // Level must be specified in non-decompress only modes, as dump is for a single run only.
+            LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                "Arg -d ignored. Specify codec level with -e arg to avail this feature.");
+            printf("Arg -d ignored. Specify codec level with -e arg to avail this feature.\n\n");
+            dumpEnabled = 0;
+        }
+        else 
+        {
+            // append extension
+            size_t len = strlen(dumpFile);
+            if (len > (MAX_FILENAME_LEN - 8)) len = (MAX_FILENAME_LEN - 8);
+            if (codec_bench_handle.runOperation == RUN_OPERATION_DECOMPRESS) 
+            {
+                memcpy(dumpFile + len, ".decomp\0", 8);
+            }
+            else 
+            {
+                memcpy(dumpFile + len, ".comp\0", 6);
+            }
+            // open file to dump compressed/decompressed data
+            if (!(dumpFp = fopen(dumpFile, "wb")))
+            {
+                LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                    "Error in opening output file [%s].", dumpFile);
+                goto exit;
+            }
+            codec_bench_handle.dumpFp = dumpFp;
+        }
+    }
+
+    if (valEnabled) 
+    {
+        if (codec_bench_handle.runOperation != RUN_OPERATION_DECOMPRESS) 
+        {
+            LOG_UNFORMATTED(INFO, aocl_codec_handle->printDebugLogs,
+                "-f option ignored. It is valid only when -rdecompress is passed.");
+        }
+        // open file with reference decompressed data for validation
+        if (!(valFp = fopen(valFile, "rb")))
+        {
+            LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                "Error in opening validation file [%s].", valFile);
+            goto exit;
+        }
+        fseek(valFp, 0L, SEEK_END);
+        codec_bench_handle.val_file_size = ftell(valFp);
+        rewind(valFp);
+        codec_bench_handle.valFp = valFp;
+    }
+
+    if (codec_bench_handle.runOperation == RUN_OPERATION_DECOMPRESS) 
+    {
+        if (codec_bench_handle.val_file_size == 0 /* no file provided for validation */ ||
+            codec_bench_handle.val_file_size > MAX_MEM_SIZE_FOR_FILE_READ /* validation file too big */) 
+        {
+            codec_bench_handle.val_file_size = MAX_MEM_SIZE_FOR_FILE_READ; // set to max supported size
+        }
+    }
 
     if (init(&codec_bench_handle, aocl_codec_handle) < 0)
     {
@@ -790,6 +953,10 @@ INT32 main (INT32 argc, CHAR **argv)
 exit:
     if (inFp)
         fclose(inFp);
+    if (dumpFp)
+        fclose(dumpFp);
+    if (valFp)
+        fclose(valFp);
     LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
     return result;
 }

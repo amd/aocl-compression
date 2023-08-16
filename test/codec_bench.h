@@ -64,6 +64,10 @@
 //Minimum compressed buffer size
 #define MIN_PAD_SIZE (16*1024)
 
+#define RUN_OPERATION_DEFAULT 0     // run compress and decompress
+#define RUN_OPERATION_COMPRESS 1    // run compress only
+#define RUN_OPERATION_DECOMPRESS 2  // run decompress only
+
 //Data structure for storing levels and other parametric details of compressors
 typedef struct
 {
@@ -91,8 +95,8 @@ static const codec_list_t codec_list[AOCL_COMPRESSOR_ALGOS_NUM] =
 typedef struct
 {
     CHAR *inPtr;            //buffer containing input data
-    CHAR *compPtr;          //buffer containing compressed data
-    CHAR *decompPtr;        //buffer containing decompressed data
+    CHAR *outPtr;           //buffer containing output data
+    CHAR *decompPtr;        //buffer containing decompressed data for validation
     UINTP inSize;           //input data length
     UINTP outSize;          //output data length
     UINTP optVar;           //optional param used by compression method
@@ -119,6 +123,10 @@ typedef struct
     FLOAT32 dSpeed;         //speed of decompression
     FLOAT32 cBestSpeed;     //best speed to compress
     FLOAT32 dBestSpeed;     //best speed to decompress
+    FILE* dumpFp;           //optional file for saving output data
+    FILE* valFp;            //optional file for loading validation data in decompress only mode
+    UINTP val_file_size;    //size of valFp
+    INTP runOperation;      //operation to run: compress, decompress, both (default)
 } aocl_codec_bench_info;
 
 //Function declarations

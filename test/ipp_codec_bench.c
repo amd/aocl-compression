@@ -252,7 +252,7 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_handle->inSize = inSize;
             aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
-            aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->outBuf = codec_bench_handle->outPtr;
             getTime(startTime);
             resultComp = fCompDL(aocl_codec_handle->inBuf,
                                  aocl_codec_handle->outBuf,
@@ -270,7 +270,7 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
             //decompress
             aocl_codec_handle->inSize = resultComp;
             aocl_codec_handle->outSize = inSize;
-            aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->inBuf = codec_bench_handle->outPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
             getTime(startTime);
             resultDecomp = fDecompDL(aocl_codec_handle->inBuf,
@@ -372,7 +372,7 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_handle->inSize = inSize;
             aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
-            aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->outBuf = codec_bench_handle->outPtr;
             getTime(startTime);
             resultComp = fCompDL(aocl_codec_handle->inBuf,
                                  aocl_codec_handle->outBuf,
@@ -391,7 +391,7 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
             //decompress
             aocl_codec_handle->inSize = resultComp;
             aocl_codec_handle->outSize = inSize;
-            aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->inBuf = codec_bench_handle->outPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
             getTime(startTime);
             resultDecomp = fDecompDL(aocl_codec_handle->inBuf,
@@ -493,7 +493,7 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_handle->inSize = inSize;
             aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
-            aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->outBuf = codec_bench_handle->outPtr;
             getTime(startTime);
             ret = fCompDL((UINT8 *)aocl_codec_handle->outBuf,
                           (uLongf *)&aocl_codec_handle->outSize,
@@ -512,7 +512,7 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
             //decompress
             aocl_codec_handle->inSize = resultComp;
             aocl_codec_handle->outSize = inSize;
-            aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->inBuf = codec_bench_handle->outPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
             getTime(startTime);
             ret = fDecompDL((UINT8 *)aocl_codec_handle->outBuf,
@@ -614,7 +614,7 @@ INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_handle->inSize = inSize;
             aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
-            aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->outBuf = codec_bench_handle->outPtr;
             getTime(startTime);
             ret = fCompDL((CHAR *)aocl_codec_handle->outBuf,
                           (UINT32 *)&aocl_codec_handle->outSize,
@@ -633,7 +633,7 @@ INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
             //decompress
             aocl_codec_handle->inSize = resultComp;
             aocl_codec_handle->outSize = inSize;
-            aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->inBuf = codec_bench_handle->outPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
             getTime(startTime);
             ret = fDecompDL((CHAR *)aocl_codec_handle->outBuf,

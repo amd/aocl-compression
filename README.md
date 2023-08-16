@@ -173,6 +173,23 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
       * 3 for Debug
       * 4 for Trace.
 
+* To run the test bench but only compression or decompression <br>
+   for a given input file, use the command:<br>
+   `aocl_compression_bench -rcompress <input filename>` or <br>
+   `aocl_compression_bench -rdecompress -ezstd <compressed input filename>` or <br>
+   `aocl_compression_bench -rdecompress -ezstd -t -f<uncompressed file for validation> <compressed input filename>` <br>
+   Note: In -rdecompress mode, compression method must be specified using -e option. <br>
+   If validation of decompressed data is needed, specify -t and -f options additionally.
+
+* To run the test bench and dump output data generated <br>
+   for a given input file, use the command:<br>
+   `aocl_compression_bench -d<dump filename> -ezstd:1 <input filename>` or <br>
+   `aocl_compression_bench -d<dump filename> -rcompress -ezstd:1 <input filename>` or <br>
+   `aocl_compression_bench -d<dump filename> -rdecompress -ezstd <compressed input filename>` <br>
+   Here, when -rcompress operation is selected, compressed file gets dumped <br>
+   and when -rdecompress operation is selected, decompressed file gets dumped. <br>
+   Method name and level must be specified using -e for default and -rcompress modes. <br>
+   Method name must be specified using -e for -rdecompress mode.
 ---
   
 To test and benchmark the performance of IPP's compression methods, use the
