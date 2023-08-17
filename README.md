@@ -114,6 +114,9 @@ LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
 AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER  |  Enable 4-byte comparison for finding a potential better match candidate with Lazy2 compressor (Disabled by default)
 AOCL_TEST_COVERAGE                  |  Enable GTest and AOCL test bench based CTest suite (Disabled by default)
+CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
+ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
+VALGRIND                            |  Enable Valgrind checks. Only supported on Linux/Debug and incompatible with ASAN=ON (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Disabled by default)
 ZLIB_DEFLATE_FAST_MODE_2            |  Enable optimization for deflate fast using Z_FIXED strategy. Do not combine with ZLIB_DEFLATE_FAST_MODE_3 (Disabled by default)
 ZLIB_DEFLATE_FAST_MODE_3            |  Enable ZLIB deflate quick strategy. Do not combine with ZLIB_DEFLATE_FAST_MODE_2 (Disabled by default)
@@ -245,6 +248,27 @@ Following are a few sample commands that can be executed in the build directory 
  
  To run GTest test cases for a specific method<br>
  `ctest -R <METHOD_NAME_IN_CAPITALS>`
+
+Running source code coverage using GCOV
+---------------------------------------
+
+To measure source code coverage, use CODE_COVERAGE option while configuring the CMake build. Run CMake with the custom target option 'code-coverage' to execute tests and generate code coverage data. The code coverage reports are generated in the build directory under subdirectory called 'coverage/html_report'. Open the HTML files in browser to view the coverage information.
+
+Following is the sample command usage to run code coverage:
+`cmake --build <build directory> --target install code-coverage`
+
+Running Valgrind and ASAN memory checks using CTest
+---------------------------------------------------
+
+Use VALGRIND option for Valgrind memory check and ASAN option for ASAN memory check while configuring the CMake build. VALGRIND and ASAN options can not be enabled together.
+
+Following are the commands to execute in the 'build' directory to run memory checks.
+
+ To run Valgrind memory check<br>
+ `ctest -T memcheck` 
+ 
+ To run ASAN memory check<br>
+ `ctest`
 
 Running Performance Benchmarking
 --------------------------------

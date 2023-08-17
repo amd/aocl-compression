@@ -67,6 +67,8 @@ option (AOCL_ZSTD_SEARCH_SKIP_OPT_DOUBLE_FAST "Enable ZSTD match skipping optimi
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option (AOCL_TEST_COVERAGE "Enable GTest and AOCL test bench based CTest suite (Disabled by default)" OFF)
 option (CODE_COVERAGE "Enable source code coverage (only on Linux with GCC compiler)" OFF)
+option (ASAN "Enable Address Sanitizer checks (only on Linux/Debug build)" OFF)
+option (VALGRIND "Enable Valgrind checks (only on Linux/Debug. Incompatible with ASAN=ON)" OFF)
 option (BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)
 option (ZLIB_DEFLATE_FAST_MODE_2 "Enable optimization for deflate fast using Z_FIXED strategy (Disabled by default)" OFF)
 option (ZLIB_DEFLATE_FAST_MODE_3 "Enable ZLIB deflate quick strategy (Disabled by default)" OFF)
@@ -353,9 +355,29 @@ if (CODE_COVERAGE)
 		# Switch off GCOV: target not supported
 		set(CODE_COVERAGE OFF)
 		message(WARNING "Target not supported. Code coverage is only supported on Linux OS with GCC compiler")
-	else()
-		set(AOCL_TEST_COVERAGE ON)
 	endif()
+endif()
+
+# setup to run memory check using AddressSanitizer 
+if (ASAN)
+	if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug"))
+  		# Switch off ASAN: target not supported
+  		set(ASAN OFF)
+		message(WARNING "Target not supported. ASAN is only supported on Linux/Debug build")
+	endif()
+endif()
+
+# setup to run memory check using Valgrind
+if (VALGRIND)
+	if ((NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug")) OR ASAN)
+		set(VALGRIND OFF)
+		message(WARNING "Target not supported. VALGRIND is only supported with Linux/Debug build and incompatible with ASAN=ON")
+	endif()
+endif()
+
+# Enable CTest for any of the cases
+if(VALGRIND OR ASAN OR CODE_COVERAGE)
+	set(AOCL_TEST_COVERAGE ON)
 endif()
 
 #setup CTest for GoogleTest and aocl_compression_bench test
@@ -401,6 +423,12 @@ endif()
 if (CODE_COVERAGE)
 	target_compile_options(${lib_name} PUBLIC --coverage -fprofile-abs-path)
 	target_link_options(${lib_name} PUBLIC --coverage)		
+endif()
+
+# add the compiler and linker flags for AddressSanitizer 
+if (ASAN)
+	target_compile_options(${lib_name} PUBLIC -fsanitize=address -O0 -gdwarf-5 -g3 )
+	target_link_options(${lib_name} PUBLIC -fsanitize=address)		
 endif()
 
 set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
