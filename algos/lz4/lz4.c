@@ -762,11 +762,44 @@ LZ4_FORCE_INLINE U32 LZ4_hash5(U64 sequence, tableType_t const tableType)
     }
 }
 
+#ifdef AOCL_LZ4_OPT
+/*
+ *   This function is a variant of LZ4_hash5 function, which uses a new prime number.
+ *   This improves Compression speed, with minimal loss in compression ratio.
+ */
+LZ4_FORCE_INLINE U32 AOCL_LZ4_hash5(U64 sequence, tableType_t const tableType)
+{
+    const U32 hashLog = (tableType == byU16) ? LZ4_HASHLOG+1 : LZ4_HASHLOG;
+    if (LZ4_isLittleEndian()) {
+        const U64 prime5bytes = 136444968149183ULL;
+        return (U32)(((sequence << 24) * prime5bytes) >> (64 - hashLog));
+    } else {
+        const U64 prime8bytes = 11400714785074694791ULL;
+        return (U32)(((sequence >> 24) * prime8bytes) >> (64 - hashLog));
+    }
+}
+
+#ifdef AOCL_LZ4_UNIT_TEST
+U32 Test_AOCL_LZ4_hash5(U64 sequence, int tableType)
+{
+    return AOCL_LZ4_hash5(sequence, tableType);
+}
+#endif /* AOCL_LZ4_UNIT_TEST */
+#endif /* AOCL_LZ4_OPT */
+
 LZ4_FORCE_INLINE U32 LZ4_hashPosition(const void* const p, tableType_t const tableType)
 {
     if ((sizeof(reg_t)==8) && (tableType != byU16)) return LZ4_hash5(LZ4_read_ARCH(p), tableType);
     return LZ4_hash4(LZ4_read32(p), tableType);
 }
+
+#ifdef AOCL_LZ4_OPT
+LZ4_FORCE_INLINE U32 AOCL_LZ4_hashPosition(const void* const p, tableType_t const tableType)
+{
+    if ((sizeof(reg_t)==8) && (tableType != byU16)) return AOCL_LZ4_hash5(LZ4_read_ARCH(p), tableType);
+    return LZ4_hash4(LZ4_read32(p), tableType);
+}
+#endif /* AOCL_LZ4_OPT */
 
 LZ4_FORCE_INLINE void LZ4_clearHash(U32 h, void* tableBase, tableType_t const tableType)
 {
@@ -811,6 +844,14 @@ LZ4_FORCE_INLINE void LZ4_putPosition(const BYTE* p, void* tableBase, tableType_
     LZ4_putPositionOnHash(p, h, tableBase, tableType, srcBase);
 }
 
+#ifdef AOCL_LZ4_OPT
+LZ4_FORCE_INLINE void AOCL_LZ4_putPosition(const BYTE* p, void* tableBase, tableType_t tableType, const BYTE* srcBase)
+{
+    U32 const h = AOCL_LZ4_hashPosition(p, tableType);
+    LZ4_putPositionOnHash(p, h, tableBase, tableType, srcBase);
+}
+#endif /* AOCL_LZ4_OPT */
+
 /* LZ4_getIndexOnHash() :
  * Index of match position registered in hash table.
  * hash position must be calculated by using base+index, or dictBase+index.
@@ -848,6 +889,17 @@ LZ4_getPosition(const BYTE* p,
     U32 const h = LZ4_hashPosition(p, tableType);
     return LZ4_getPositionOnHash(h, tableBase, tableType, srcBase);
 }
+
+#ifdef AOCL_LZ4_OPT
+LZ4_FORCE_INLINE const BYTE*
+AOCL_LZ4_getPosition(const BYTE* p,
+                const void* tableBase, tableType_t tableType,
+                const BYTE* srcBase)
+{
+    U32 const h = AOCL_LZ4_hashPosition(p, tableType);
+    return LZ4_getPositionOnHash(h, tableBase, tableType, srcBase);
+}
+#endif /* AOCL_LZ4_OPT */
 
 LZ4_FORCE_INLINE void
 LZ4_prepareTable(LZ4_stream_t_internal* const cctx,
@@ -1286,6 +1338,7 @@ _last_literals:
     return result;
 }
 
+#ifdef AOCL_LZ4_OPT
 /** AOCL_LZ4_compress_generic_validated() :
  *  inlined, to ensure branches are decided at compilation time.
  *  Presumed already validated at this stage:
@@ -1366,8 +1419,8 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
     if (inputSize<LZ4_minLength) goto _last_literals;        /* Input too small, no compression (all literals) */
 
     /* First Byte */
-    LZ4_putPosition(ip, cctx->hashTable, tableType, base);
-    ip++; forwardH = LZ4_hashPosition(ip, tableType);
+    AOCL_LZ4_putPosition(ip, cctx->hashTable, tableType, base);
+    ip++; forwardH = AOCL_LZ4_hashPosition(ip, tableType);
 
 #ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
     int prevStep = 0;
@@ -1399,7 +1452,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                 assert(ip < mflimitPlusOne);
 
                 match = LZ4_getPositionOnHash(h, cctx->hashTable, tableType, base);
-                forwardH = LZ4_hashPosition(forwardIp, tableType);
+                forwardH = AOCL_LZ4_hashPosition(forwardIp, tableType);
                 LZ4_putPositionOnHash(ip, h, cctx->hashTable, tableType, base);
 
             } while ( (match+LZ4_DISTANCE_MAX < ip)
@@ -1469,7 +1522,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
                 prevOffset = ((ip - anchor) > 8) ? 8 : (ip - anchor);
 #endif
-                forwardH = LZ4_hashPosition(forwardIp, tableType);
+                forwardH = AOCL_LZ4_hashPosition(forwardIp, tableType);
                 LZ4_putIndexOnHash(current, h, cctx->hashTable, tableType);
 
                 DEBUGLOG(7, "candidate at pos=%u  (offset=%u \n", matchIndex, current - matchIndex);
@@ -1623,7 +1676,7 @@ _next_match:
                         const BYTE* ptr;
                         DEBUGLOG(5, "Clearing %u positions", (U32)(filledIp - ip));
                         for (ptr = ip; ptr <= filledIp; ++ptr) {
-                            U32 const h = LZ4_hashPosition(ptr, tableType);
+                            U32 const h = AOCL_LZ4_hashPosition(ptr, tableType);
                             LZ4_clearHash(h, cctx->hashTable, tableType);
                         }
                     }
@@ -1655,20 +1708,20 @@ _next_match:
         if (ip >= mflimitPlusOne) break;
 
         /* Fill table */
-        LZ4_putPosition(ip-2, cctx->hashTable, tableType, base);
+        AOCL_LZ4_putPosition(ip-2, cctx->hashTable, tableType, base);
 
         /* Test next position */
         if (tableType == byPtr) {
 
-            match = LZ4_getPosition(ip, cctx->hashTable, tableType, base);
-            LZ4_putPosition(ip, cctx->hashTable, tableType, base);
+            match = AOCL_LZ4_getPosition(ip, cctx->hashTable, tableType, base);
+            AOCL_LZ4_putPosition(ip, cctx->hashTable, tableType, base);
             if ( (match+LZ4_DISTANCE_MAX >= ip)
               && (LZ4_read32(match) == LZ4_read32(ip)) )
             { token=op++; *token=0; goto _next_match; }
 
         } else {   /* byU32, byU16 */
 
-            U32 const h = LZ4_hashPosition(ip, tableType);
+            U32 const h = AOCL_LZ4_hashPosition(ip, tableType);
             U32 const current = (U32)(ip-base);
             U32 matchIndex = LZ4_getIndexOnHash(h, cctx->hashTable, tableType);
             assert(matchIndex < current);
@@ -1709,7 +1762,7 @@ _next_match:
         }
 
         /* Prepare next loop */
-        forwardH = LZ4_hashPosition(++ip, tableType);
+        forwardH = AOCL_LZ4_hashPosition(++ip, tableType);
 
     }
 
@@ -1750,6 +1803,7 @@ _last_literals:
     DEBUGLOG(5, "LZ4_compress_generic: compressed %i bytes into %i bytes", inputSize, result);
     return result;
 }
+#endif /* AOCL_LZ4_OPT */
 
 /** LZ4_compress_generic() :
  *  inlined, to ensure branches are decided at compilation time;

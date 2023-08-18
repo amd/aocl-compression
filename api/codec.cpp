@@ -124,8 +124,8 @@ CHAR *aocl_lz4_setup(INTP optOff, INTP optLevel,
 
 #if defined(__GNUC__) && defined(__x86_64__)
 /* Changes in code alignment affects performance of LZ4 compress
-* functions. Aligning to 32-bytes boundary to fix this instability.*/
-__asm__(".p2align 5");
+* functions. Aligning to 16-bytes boundary to fix this instability.*/
+__asm__(".p2align 4");
 #endif
 INT64 aocl_lz4_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                         UINTP outsize, UINTP level, UINTP, CHAR *)
@@ -133,6 +133,13 @@ INT64 aocl_lz4_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
     return LZ4_compress_default(inbuf, outbuf, insize, outsize);
 }
 
+#if defined(__GNUC__) && defined(__x86_64__)
+/* Changes in code alignment affects performance of LZ4 decompress
+* functions. Aligning to fix instability in decompression speed.*/
+__asm__(".p2align 4");
+__asm__("nop");
+__asm__(".p2align 5");
+#endif
 INT64 aocl_lz4_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                           UINTP outsize, UINTP level, UINTP, CHAR *)
 {

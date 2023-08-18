@@ -1895,4 +1895,68 @@ TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AV
 
 /*********************************************
  * End of LZ4_AOCL_LZ4_wildCopy64_AVX2
+ ********************************************/ 
+
+/*********************************************
+ * "Begin" of AOCL_LZ4_hash5
+ *********************************************/
+
+#ifdef AOCL_LZ4_OPT
+TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_1) // Simple edge cases, checking lowest and highest value behaviour
+{
+    unsigned long long seq = 0;
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq, 2), 0);
+
+    seq = 0xFFFFFFFFFFFFFFFF;
+    EXPECT_LE(Test_AOCL_LZ4_hash5(seq, 2), LZ4_HASH_SIZE_U32);
+}
+
+TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_2)
+{
+    // Least significant 5 bytes are same, Highest significant 3 bytes may vary
+    // Hash function output is expected to be same.
+
+    unsigned long long seq1 = 0xFFFFFFFF12345678; // 0xFFFFFF[FF12345678]
+    unsigned long long seq2 = 0xFFFFFEFF12345678; // 0xFFFFFE[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x000000FF12345678; // 0x000000[FF12345678]
+    seq2 = 0x000001FF12345678; // 0x000001[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x123456FF12345678; // 0x123456[FF12345678]
+    seq2 = 0xFEB123FF12345678; // 0xFEB123[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+}
+
+TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_3)
+{
+    // Most significant 5 bytes are same, but the Least significant 3 bytes differ
+    // Hash function output might vary.
+
+    unsigned long long seq1 = 0xFF12345678FFFFFF; // 0x[FF12345678]FFFFFF
+    unsigned long long seq2 = 0xFF12345678FFFFFE; // 0x[FF12345678]FFFFFE
+    EXPECT_NE(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0xFF12345678123456; // 0x[FF12345678]123456
+    seq2 = 0xFF12345678FEB123; // 0x[FF12345678]FEB123
+    EXPECT_NE(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+}
+
+TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_4)
+{
+    // Whatever random value is given as the input,
+    // Hash function output is expected to be less than Hash table size.
+    
+    unsigned long long seq = 0;
+    
+    for(int i=0; i<100000; i++)
+    {
+        seq = ((rand()*1ULL)<<32) | (rand()*1ULL); // For generating 64 bit random value.
+        EXPECT_LT(Test_AOCL_LZ4_hash5(seq, 2), LZ4_HASH_SIZE_U32);
+    }
+}
+#endif /* AOCL_LZ4_OPT */
+/*********************************************
+ * "End" of AOCL_LZ4_hash5
  *********************************************/

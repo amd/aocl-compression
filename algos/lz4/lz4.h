@@ -465,7 +465,18 @@ LZ4LIB_API int LZ4_decompress_safe_partial (const char* src, char* dst, int srcS
  */
 LZ4LIB_API char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
-#endif
+#endif /* AOCL_DYNAMIC_DISPATCHER */
+
+#ifdef AOCL_LZ4_OPT
+#ifdef AOCL_LZ4_UNIT_TEST
+#if defined(__cplusplus) || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */)
+# include <stdint.h>
+LZ4LIB_API unsigned int Test_AOCL_LZ4_hash5(uint64_t sequence, int tableType);
+#else
+LZ4LIB_API unsigned int Test_AOCL_LZ4_hash5(unsigned long long sequence, int tableType);
+#endif /* defined(__cplusplus) || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)) */
+#endif /* AOCL_LZ4_UNIT_TEST */
+#endif /* AOCL_LZ4_OPT */
 /**
  * @}
  */
