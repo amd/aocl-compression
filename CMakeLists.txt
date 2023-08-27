@@ -88,10 +88,17 @@ option (AOCL_EXCLUDE_ZLIB "Exclude ZLIB compression method from the library buil
 option (AOCL_EXCLUDE_ZSTD "Exclude ZSTD compression method from the library build (Disabled by default)" OFF)
 
 #list source files to be compiled for the library
-file(GLOB API_SRC_FILES api/*.c api/*.cpp api/*.h)
+set (API_SRC_FILES 	api/code_alignment.cpp
+					api/api.cpp
+					api/codec.cpp
+					api/aocl_compression.h
+					api/codec.h
+					api/types.h)
+
 set (ALGOS_PATH algos)
 if (NOT AOCL_EXCLUDE_BZIP2)
-set (BZIP2_SRC_FILES 	${ALGOS_PATH}/bzip2/blocksort.c
+set (BZIP2_SRC_FILES 	${ALGOS_PATH}/bzip2/code_alignment.c
+						${ALGOS_PATH}/bzip2/blocksort.c
 						${ALGOS_PATH}/bzip2/huffman.c
 						${ALGOS_PATH}/bzip2/crctable.c
 						${ALGOS_PATH}/bzip2/randtable.c
@@ -103,20 +110,23 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
-set (LZ4_SRC_FILES	${ALGOS_PATH}/lz4/lz4.c
+set (LZ4_SRC_FILES	${ALGOS_PATH}/lz4/code_alignment_lz4.c
+					${ALGOS_PATH}/lz4/lz4.c
 					${ALGOS_PATH}/lz4/lz4.h
 					${ALGOS_PATH}/lz4/xxhash.c)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4HC AND NOT AOCL_EXCLUDE_LZ4)
-set (LZ4HC_SRC_FILES	${ALGOS_PATH}/lz4/lz4hc.c
+set (LZ4HC_SRC_FILES	${ALGOS_PATH}/lz4/code_alignment_lz4hc.c
+						${ALGOS_PATH}/lz4/lz4hc.c
 						${ALGOS_PATH}/lz4/lz4hc.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
 endif ()
 if (NOT AOCL_EXCLUDE_LZMA)
-set (LZMA_SRC_FILES	${ALGOS_PATH}/lzma/LzFind.c
+set (LZMA_SRC_FILES	${ALGOS_PATH}/lzma/code_alignment.c
+					${ALGOS_PATH}/lzma/LzFind.c
 					${ALGOS_PATH}/lzma/LzmaDec.c
 					${ALGOS_PATH}/lzma/LzmaEnc.c
 					${ALGOS_PATH}/lzma/Alloc.c
@@ -128,7 +138,8 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
 endif ()
 if (NOT AOCL_EXCLUDE_SNAPPY)
-set (SNAPPY_SRC_FILES 	${ALGOS_PATH}/snappy/snappy-sinksource.cc
+set (SNAPPY_SRC_FILES 	${ALGOS_PATH}/snappy/code_alignment.cc
+						${ALGOS_PATH}/snappy/snappy-sinksource.cc
 						${ALGOS_PATH}/snappy/snappy-stubs-internal.cc
 						${ALGOS_PATH}/snappy/snappy.cc
 						${ALGOS_PATH}/snappy/snappy-c.cc
@@ -137,7 +148,8 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
 endif ()
 if (NOT AOCL_EXCLUDE_ZLIB)
-set (ZLIB_SRC_FILES	${ALGOS_PATH}/zlib/adler32.c
+set (ZLIB_SRC_FILES	${ALGOS_PATH}/zlib/code_alignment.c
+					${ALGOS_PATH}/zlib/adler32.c
 					${ALGOS_PATH}/zlib/adler32_x86.c
 					${ALGOS_PATH}/zlib/compress.c
 					${ALGOS_PATH}/zlib/crc32.c
@@ -163,7 +175,8 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()
 if (NOT AOCL_EXCLUDE_ZSTD)
-set (ZSTD_SRC_FILES	${ALGOS_PATH}/zstd/lib/common/zstd_common.c
+set (ZSTD_SRC_FILES	${ALGOS_PATH}/zstd/lib/common/code_alignment.c
+					${ALGOS_PATH}/zstd/lib/common/zstd_common.c
 					${ALGOS_PATH}/zstd/lib/common/fse_decompress.c
 					${ALGOS_PATH}/zstd/lib/common/xxhash.c
 					${ALGOS_PATH}/zstd/lib/common/error_private.c
@@ -198,7 +211,9 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
 set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h)
-file(GLOB UTILS_SRC_FILES utils/*.c utils/*.cpp utils/*.h)
+set (UTILS_SRC_FILES	utils/code_alignment.cpp
+						utils/utils.cpp
+						utils/utils.h)
 
 #set the expected path variables
 include_directories(.)

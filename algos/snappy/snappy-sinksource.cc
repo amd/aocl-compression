@@ -31,11 +31,6 @@
 
 #include "snappy-sinksource.h"
 
-#if defined(__x86_64__) && defined(__clang__)
-/* Changes in code alignment affects performance of Snappy
-* functions. Aligning to 64-bytes boundary to fix this instability.*/
-__asm__(".p2align 6");
-#endif
 namespace snappy {
 
 Source::~Source() = default;
