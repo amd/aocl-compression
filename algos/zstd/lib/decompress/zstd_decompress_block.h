@@ -69,5 +69,8 @@ size_t ZSTD_decompressBlock_deprecated(ZSTD_DCtx* dctx,
                             void* dst, size_t dstCapacity,
                       const void* src, size_t srcSize);
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+void aocl_setup_zstd_decompress_block(int optOff, int optLevel);
+#endif /* AOCL_DYNAMIC_DISPATCHER */
 
 #endif /* ZSTD_DEC_BLOCK_H */

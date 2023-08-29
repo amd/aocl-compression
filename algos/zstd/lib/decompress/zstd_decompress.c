@@ -2390,7 +2390,7 @@ size_t ZSTD_decompressStream_simpleArgs (
 char* aocl_setup_zstd_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog)
 {
-    //TODO
+    aocl_setup_zstd_decompress_block(optOff, optLevel);
     return NULL;
 }
 #endif
