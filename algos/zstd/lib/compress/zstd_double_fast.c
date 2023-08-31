@@ -390,6 +390,12 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
 
         /* Inner Loop: one iteration per search / position */
         do {
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DOUBLE_FAST
+            // Alternate between values 1 and 2 for step while searching for a match. In case
+            // the value of step exceeds 2 (this happens when the value of step is incremented
+            // when ip1 exceeds nextStep), we let step retain its value.
+            step = (step > 2) ? step : step ^ 3;
+#endif
             const size_t hs0 = ZSTD_hashPtr(ip, hBitsS, mls);
             const U32 idxs0 = hashSmall[hs0];
             curr = (U32)(ip-base);

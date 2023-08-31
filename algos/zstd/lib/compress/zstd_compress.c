@@ -7035,7 +7035,16 @@ static ZSTD_compressionParameters ZSTD_getCParams_internal(int compressionLevel,
     else if (compressionLevel > ZSTD_MAX_CLEVEL) row = ZSTD_MAX_CLEVEL;
     else row = compressionLevel;
 
-    {   ZSTD_compressionParameters cp = ZSTD_defaultCParameters[tableID][row];
+    {
+#ifdef AOCL_ZSTD_OPT
+#ifdef AOCL_DYNAMIC_DISPATCHER
+        ZSTD_compressionParameters cp = AOCL_ZSTD_defaultCParameters_used[tableID][row];
+#else
+        ZSTD_compressionParameters cp = AOCL_ZSTD_defaultCParameters[tableID][row];
+#endif // AOCL_DYNAMIC_DISPATCHER
+#else
+        ZSTD_compressionParameters cp = ZSTD_defaultCParameters[tableID][row];
+#endif // AOCL_ZSTD_OPT
         DEBUGLOG(5, "ZSTD_getCParams_internal selected tableID: %u row: %u strat: %u", tableID, row, (U32)cp.strategy);
         /* acceleration factor */
         if (compressionLevel < 0) {
@@ -7106,6 +7115,7 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
     {
         //Unoptimized C version
         aoclOptFlag = 0;
+        AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
     }
     else
     {
@@ -7117,6 +7127,7 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
         case 3://AVX2 version
         default://AVX512 and other versions
             aoclOptFlag = 1;
+            AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
             break;
         }
     }
