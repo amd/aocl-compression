@@ -76,19 +76,20 @@ typedef struct
     INTP upper_level;
     INTP extra_param;
     INTP max_block_size_param;
+    const CHAR* extension;
 } codec_list_t;
 
 //List of supported compression methods along with their parameters
 //The list is ordered as per the enum aocl_compression_type
 static const codec_list_t codec_list[AOCL_COMPRESSOR_ALGOS_NUM] =
 {
-    {"LZ4",    0, 0,  0, 0},
-    {"LZ4HC",  1, 12, 0, 0},
-    {"LZMA",   0, 9,  0, 0},
-    {"BZIP2",  1, 9,  0, 0},
-    {"SNAPPY", 0, 0,  0, 0},
-    {"ZLIB",   1, 9,  0, 0},
-    {"ZSTD",   1, 22, 0, 0}
+    {"LZ4",    0, 0,  0, 0, ".lz4"},
+    {"LZ4HC",  1, 12, 0, 0, ".lz4"},
+    {"LZMA",   0, 9,  0, 0, ".lzma"},
+    {"BZIP2",  1, 9,  0, 0, ".bz2"},
+    {"SNAPPY", 0, 0,  0, 0, ".snappy"},
+    {"ZLIB",   1, 9,  0, 0, ".zlib"},
+    {"ZSTD",   1, 22, 0, 0, ".zst"}
 };
 
 //Main data structure for Test bench functionality

@@ -44,6 +44,12 @@
 #include "utils/utils.h"
 #include "codec_bench.h"
 
+//Error codes
+#define ERR_CODEC_BENCH_ARGS -1
+#define ERR_CODEC_BENCH_METHOD -2
+#define ERR_CODEC_BENCH_FILE_IO -3
+#define ERR_CODEC_BENCH_MEM -4
+
 //Input test file name
 CHAR inFile[MAX_FILENAME_LEN];
 CHAR dumpFile[MAX_FILENAME_LEN];
@@ -202,7 +208,7 @@ INTP read_user_options (INTP argc,
                         ret = 2;
                     }
                     else
-                        ret = -1;
+                        ret = ERR_CODEC_BENCH_ARGS;
                 break;
                 
                 case 'l':
@@ -222,7 +228,7 @@ INTP read_user_options (INTP argc,
                 case 'e':
                     if (get_codec_method_level(&argv[cnt][2],
                         codec_bench_handle) < 0)
-                        ret = -2;
+                        ret = ERR_CODEC_BENCH_METHOD;
                 break;
                 
                 case 'i':
@@ -262,7 +268,7 @@ INTP read_user_options (INTP argc,
                     if (codec_bench_handle->runOperation != RUN_OPERATION_DEFAULT) 
                     { //r option was already processed once
                         printf("Multiple -r options are not allowed.\n\n");
-                        ret = -1;
+                        ret = ERR_CODEC_BENCH_ARGS;
                         break;
                     }
                     if (strcasecmp(&argv[cnt][2], "compress") == 0) 
@@ -276,7 +282,7 @@ INTP read_user_options (INTP argc,
                     else 
                     {
                         printf("Invalid -r option. Valid options are 'compress' and 'decompress'\n\n");
-                        ret = -1;
+                        ret = ERR_CODEC_BENCH_ARGS;
                     }
                     break;
 
@@ -284,7 +290,7 @@ INTP read_user_options (INTP argc,
                     if (dumpEnabled) 
                     {
                         printf("Multiple -d options are not allowed.\n\n");
-                        ret = -1;
+                        ret = ERR_CODEC_BENCH_ARGS;
                         break;
                     }
                     memcpy(dumpFile, &argv[cnt][2], MAX_FILENAME_LEN);
@@ -295,7 +301,7 @@ INTP read_user_options (INTP argc,
                     if (valEnabled) 
                     {
                         printf("Multiple -f options are not allowed.\n\n");
-                        ret = -1;
+                        ret = ERR_CODEC_BENCH_ARGS;
                         break;
                     }
                     memcpy(valFile, &argv[cnt][2], MAX_FILENAME_LEN);
@@ -303,7 +309,7 @@ INTP read_user_options (INTP argc,
                     break;
  
                 default:
-                    ret = -1;
+                    ret = ERR_CODEC_BENCH_ARGS;
                 break;
             }
         }
@@ -826,19 +832,22 @@ INT32 main (INT32 argc, CHAR **argv)
     {
         LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
         "Invalid option passed, ignoring more than one input file. Use -h to know supported user options.");
+        printf("Invalid option passed, ignoring more than one input file. Use -h to know supported user options.\n");
     }
-    else if (ret == -1)
+    else if (ret == ERR_CODEC_BENCH_ARGS)
     {
         LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
         "Invalid option passed. Use -h to know supported user options.");
         printf("Invalid option passed. Use -h to know supported user options.\n");
+        result = ret;
         goto exit;
     }
-    else if (ret == -2)
+    else if (ret == ERR_CODEC_BENCH_METHOD)
     {
         LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
         "Unsupported compression method or level specified. Use -l to know supported methods and -h for exact user options.");
         printf("Unsupported option passed. Use -l to know supported methods and -h for exact user options.\n");
+        result = ret;
 		goto exit;
     }
     else if (ret == 2) // user option requested help information
@@ -848,6 +857,8 @@ INT32 main (INT32 argc, CHAR **argv)
     {
         LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
         "Error in opening input file [%s].", inFile);
+        printf("Error in opening input file [%s].\n", inFile);
+        result = ERR_CODEC_BENCH_FILE_IO;
         goto exit;
     }
     fseek(inFp, 0L, SEEK_END);
@@ -864,7 +875,10 @@ INT32 main (INT32 argc, CHAR **argv)
             printf("Arg -d ignored. Specify codec and level using -e to avail this feature.\n\n");
             dumpEnabled = 0;
         }
-        else if (codec_bench_handle.codec_level == UNINIT_LEVEL && codec_bench_handle.runOperation != RUN_OPERATION_DECOMPRESS) 
+        else if (codec_bench_handle.codec_level == UNINIT_LEVEL &&
+            !(codec_bench_handle.runOperation == RUN_OPERATION_DECOMPRESS ||
+                (codec_list[codec_bench_handle.codec_method].lower_level
+                    == codec_list[codec_bench_handle.codec_method].upper_level /* method supports only 1 level */)))
         {
             // Level must be specified in non-decompress only modes, as dump is for a single run only.
             LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
@@ -883,13 +897,17 @@ INT32 main (INT32 argc, CHAR **argv)
             }
             else 
             {
-                memcpy(dumpFile + len, ".comp\0", 6);
+                size_t ext_len = strlen(codec_list[codec_bench_handle.codec_method].extension);
+                memcpy(dumpFile + len, codec_list[codec_bench_handle.codec_method].extension, ext_len);
+                dumpFile[len + ext_len] = '\0';
             }
             // open file to dump compressed/decompressed data
             if (!(dumpFp = fopen(dumpFile, "wb")))
             {
                 LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
                     "Error in opening output file [%s].", dumpFile);
+                printf("Error in opening output file [%s].\n", dumpFile);
+                result = ERR_CODEC_BENCH_FILE_IO;
                 goto exit;
             }
             codec_bench_handle.dumpFp = dumpFp;
@@ -908,6 +926,8 @@ INT32 main (INT32 argc, CHAR **argv)
         {
             LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
                 "Error in opening validation file [%s].", valFile);
+            printf("Error in opening validation file [%s].\n", valFile);
+            result = ERR_CODEC_BENCH_FILE_IO;
             goto exit;
         }
         fseek(valFp, 0L, SEEK_END);
@@ -929,6 +949,7 @@ INT32 main (INT32 argc, CHAR **argv)
     {
         LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
         "Error in allocating memory.");
+        result = ERR_CODEC_BENCH_MEM;
 		goto exit;
     }
     codec_bench_handle.fp = inFp;
