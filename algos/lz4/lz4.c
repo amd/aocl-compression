@@ -771,7 +771,11 @@ LZ4_FORCE_INLINE U32 AOCL_LZ4_hash5(U64 sequence, tableType_t const tableType)
 {
     const U32 hashLog = (tableType == byU16) ? LZ4_HASHLOG+1 : LZ4_HASHLOG;
     if (LZ4_isLittleEndian()) {
+#ifdef AOCL_LZ4_NEW_PRIME_NUMBER
         const U64 prime5bytes = 136444968149183ULL;
+#else
+        const U64 prime5bytes = 889523592379ULL;
+#endif /* AOCL_LZ4_NEW_PRIME_NUMBER */
         return (U32)(((sequence << 24) * prime5bytes) >> (64 - hashLog));
     } else {
         const U64 prime8bytes = 11400714785074694791ULL;
@@ -1846,6 +1850,7 @@ LZ4_FORCE_INLINE int LZ4_compress_generic(
                 tableType, dictDirective, dictIssue, acceleration);
 }
 
+#ifdef AOCL_LZ4_OPT
 /** AOCL_LZ4_compress_generic() :
  *  inlined, to ensure branches are decided at compilation time;
  *  takes care of src == (NULL, 0)
@@ -1886,6 +1891,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic(
         dstCapacity, outputDirective,
         tableType, dictDirective, dictIssue, acceleration);
 }
+#endif /* AOCL_LZ4_OPT */
 
 int LZ4_compress_fast_extState(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
@@ -1913,6 +1919,7 @@ int LZ4_compress_fast_extState(void* state, const char* source, char* dest, int 
     }
 }
 
+#ifdef AOCL_LZ4_OPT
 int AOCL_LZ4_compress_fast_extState(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
     if(state==NULL || (source==NULL && inputSize!=0) || dest==NULL)
@@ -1941,6 +1948,7 @@ int AOCL_LZ4_compress_fast_extState(void* state, const char* source, char* dest,
         }
     }
 }
+#endif /* AOCL_LZ4_OPT */
 
 /**
  * LZ4_compress_fast_extState_fastReset() :

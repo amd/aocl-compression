@@ -678,7 +678,7 @@ TEST_F(LLZ4_compress_fast_extState, AOCL_Compression_lz4_LZ4_compress_fast_extSt
 /*********************************************
  * "Begin" of LZ4_AOCL_LZ4_compress_fast_extState
  *********************************************/
-
+#ifdef AOCL_LZ4_OPT
 class LZ4_AOCL_LZ4_compress_fast_extState : public LLZ4_compress_fast_extState
 {
 };
@@ -786,7 +786,7 @@ TEST_F(LZ4_AOCL_LZ4_compress_fast_extState, AOCL_Compression_lz4_AOCL_LZ4_compre
 
     EXPECT_TRUE(check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
 }
-
+#endif /* AOCL_LZ4_OPT */
 /*********************************************
  * End of LZ4_compress_fast_extState
  *********************************************/

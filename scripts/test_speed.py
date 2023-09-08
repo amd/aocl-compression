@@ -554,11 +554,11 @@ if __name__ == '__main__':
         
     # Linux specific library configuration and installation commands with default flags
     compression_cmds = {
-        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
+        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
         'install_cmd': 'cmake --build build -v -j --target uninstall --target install'}
     # Windows specific library configuration and installation commands with default flags
     compression_cmds_windows = {
-        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
+        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
         'install_cmd': 'cmake --build ./build --config Release --target INSTALL'
     }
                 
