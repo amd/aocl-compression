@@ -190,7 +190,11 @@ local void write_table(out, table)
 /* =========================================================================
  * This function can be used by asm versions of crc32()
  */
+#ifdef ENABLE_STRICT_WARNINGS
+const z_crc_t FAR * ZEXPORT get_crc_table(void)
+#else
 const z_crc_t FAR * ZEXPORT get_crc_table()
+#endif /* ENABLE_STRICT_WARNINGS*/
 {
 #ifdef DYNAMIC_CRC_TABLE
     if (crc_table_empty)

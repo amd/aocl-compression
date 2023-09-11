@@ -250,7 +250,11 @@ local void send_bits(s, value, length)
 /* ===========================================================================
  * Initialize the various 'constant' tables.
  */
+#ifdef ENABLE_STRICT_WARNINGS
+local void tr_static_init(void)
+#else
 local void tr_static_init()
+#endif /* ENABLE_STRICT_WARNINGS */
 {
 #if defined(GEN_TREES_H) || !defined(STDC)
     static int static_init_done = 0;

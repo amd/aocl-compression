@@ -25,12 +25,20 @@ z_const char * const z_errmsg[10] = {
 };
 
 
+#ifdef ENABLE_STRICT_WARNINGS
+const char * ZEXPORT zlibVersion(void)
+#else
 const char * ZEXPORT zlibVersion()
+#endif /* ENABLE_STRICT_WARNINGS*/
 {
     return ZLIB_VERSION;
 }
 
+#ifdef ENABLE_STRICT_WARNINGS
+uLong ZEXPORT zlibCompileFlags(void)
+#else
 uLong ZEXPORT zlibCompileFlags()
+#endif /* ENABLE_STRICT_WARNINGS*/
 {
     uLong flags;
 
