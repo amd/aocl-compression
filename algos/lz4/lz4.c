@@ -1528,20 +1528,20 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                 DEBUGLOG(7, "candidate at pos=%u  (offset=%u \n", matchIndex, current - matchIndex);
                 if ((dictIssue == dictSmall) && (matchIndex < prefixIdxLimit)) { continue; }    /* match outside of valid area */
                 assert(matchIndex < current);
-                if ( ((tableType != byU16) || (LZ4_DISTANCE_MAX < LZ4_DISTANCE_ABSOLUTE_MAX))
-                  && (matchIndex+LZ4_DISTANCE_MAX < current)) {
-                    continue;
-                } /* too far */
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
                 matchData=*(U32*)match;
-#endif
-                assert((current - matchIndex) <= LZ4_DISTANCE_MAX);  /* match now expected within distance */
 
-#ifdef AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
                 if (matchData == ipData) {
 #else
                 if (LZ4_read32(match) == LZ4_read32(ip)) {
 #endif
+                    /* The below conditional is moved inside `if(matchData == ipData)` for performance improvement */
+                    if ( ((tableType != byU16) || (LZ4_DISTANCE_MAX < LZ4_DISTANCE_ABSOLUTE_MAX))
+                        && (matchIndex+LZ4_DISTANCE_MAX < current)) {
+                        continue;
+                    } /* too far */
+                    assert((current - matchIndex) <= LZ4_DISTANCE_MAX);  /* match now expected within distance */
+
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
                     ipPrevData.u = *(reg_t*)(ip - prevOffset);
 #endif
