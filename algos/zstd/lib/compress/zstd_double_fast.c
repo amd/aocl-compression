@@ -311,6 +311,7 @@ _match_stored:
         - unnecessary prefetching is avoided when increasing step size
     - in search_next_long, the condition is wrapped with an UNLIKELY() to improve branch prediction
     - AOCL_ZSTD_count is called in place of ZSTD_count
+    - More complementary insertions to improve ratio 
 */
 FORCE_INLINE_TEMPLATE
 size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
@@ -512,10 +513,20 @@ _match_stored:
             /* Complementary insertion */
             /* done after iLimit test, as candidates could be > iend-8 */
             {   U32 const indexToInsert = curr+2;
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DOUBLE_FAST
+                /* More complementary insertions to improve ratio */
+                hashLong[ZSTD_hashPtr(base+indexToInsert, hBitsL, 8)] = indexToInsert;
+                hashLong[ZSTD_hashPtr(ip-2, hBitsL, 8)] = (U32)(ip-2-base);
+                hashLong[ZSTD_hashPtr(ip-1, hBitsL, 8)] = (U32)(ip-1-base);
+                hashSmall[ZSTD_hashPtr(base+indexToInsert, hBitsS, mls)] = indexToInsert;
+                hashSmall[ZSTD_hashPtr(ip-2, hBitsS, mls)] = (U32)(ip-2-base);
+                hashSmall[ZSTD_hashPtr(ip-1, hBitsS, mls)] = (U32)(ip-1-base);
+#else
                 hashLong[ZSTD_hashPtr(base+indexToInsert, hBitsL, 8)] = indexToInsert;
                 hashLong[ZSTD_hashPtr(ip-2, hBitsL, 8)] = (U32)(ip-2-base);
                 hashSmall[ZSTD_hashPtr(base+indexToInsert, hBitsS, mls)] = indexToInsert;
                 hashSmall[ZSTD_hashPtr(ip-1, hBitsS, mls)] = (U32)(ip-1-base);
+#endif
             }
 
             /* check immediate repcode */
