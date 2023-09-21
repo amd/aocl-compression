@@ -304,6 +304,19 @@ _match_stored:
 }
 
 #ifdef AOCL_ZSTD_OPT
+#define PREFETCH_OFFSET 8
+#define PREFETCH_SAFETY (PREFETCH_OFFSET + 4) // value at ip + PREFETCH_SAFETY can be read to prefetch match candidates. +4 as 4 candidates are prefetched on long hash match.
+/* Compute hash for search key at PREFETCH_OFFSET from ip 
+*  Prefetch match candidate stored at hashTable[hashIndex]
+*  If hashTable[hashIndex] is empty, (base + 0) is still a valid address and can be accessed. No check added for this to avoid branching. */
+#define PREFETCH_MATCH(ip, hBits, hSize, hashTable) { \
+    size_t nexth = ZSTD_hashPtr((ip) + PREFETCH_OFFSET, hBits, hSize); \
+    U32 idxn = hashTable[nexth]; \
+    PREFETCH_L1(base + idxn); \
+}
+#define PREFETCH_MATCH_L(ip) PREFETCH_MATCH(ip, hBitsL, 8, hashLong) // prefetch match candidate stored in hashLong 
+#define PREFETCH_MATCH_S(ip) PREFETCH_MATCH(ip, hBitsS, mls, hashSmall) // prefetch match candidate stored in hashSmall 
+
 /* The following optimizations have been included in the optimized function:
     - when the AOCL_ZSTD_SEARCH_SKIP_OPT_DOUBLE_FAST flag is enabled,
         - the search tolerance is reduced to 2^5 (32) instead of 2^8 (256)
@@ -312,6 +325,7 @@ _match_stored:
     - in search_next_long, the condition is wrapped with an UNLIKELY() to improve branch prediction
     - AOCL_ZSTD_count is called in place of ZSTD_count
     - More complementary insertions to improve ratio 
+    - Prefetch potential future match candidates
 */
 FORCE_INLINE_TEMPLATE
 size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
@@ -331,7 +345,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
     const U32 prefixLowestIndex = ZSTD_getLowestPrefixIndex(ms, endIndex, cParams->windowLog);
     const BYTE* const prefixLowest = base + prefixLowestIndex;
     const BYTE* const iend = istart + srcSize;
-    const BYTE* const ilimit = iend - HASH_READ_SIZE;
+    const BYTE* const ilimit = iend - HASH_READ_SIZE - PREFETCH_SAFETY;
     U32 offset_1=rep[0], offset_2=rep[1];
     U32 offsetSaved1 = 0, offsetSaved2 = 0;
 
@@ -386,6 +400,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
         }
 
         hl0 = ZSTD_hashPtr(ip, hBitsL, 8);
+        PREFETCH_MATCH_L(ip);
         idxl0 = hashLong[hl0];
         matchl0 = base + idxl0;
 
@@ -406,6 +421,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
 
             /* check noDict repcode */
             if ((offset_1 > 0) & (MEM_read32(ip+1-offset_1) == MEM_read32(ip+1))) {
+                PREFETCH_MATCH_L(ip+1+4);
                 mLength = AOCL_ZSTD_count(ip+1+4, ip+1+4-offset_1, iend) + 4;
                 ip++;
                 ZSTD_storeSeq(seqStore, (size_t)(ip-anchor), anchor, iend, REPCODE1_TO_OFFBASE, mLength);
@@ -417,6 +433,10 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
             if (idxl0 > prefixLowestIndex) {
                 /* check prefix long match */
                 if (MEM_read64(matchl0) == MEM_read64(ip)) {
+                    PREFETCH_MATCH_L(ip1+8);
+                    PREFETCH_MATCH_L(ip1+9);
+                    PREFETCH_MATCH_L(ip1+10);
+                    PREFETCH_MATCH_L(ip1+11);
                     mLength = AOCL_ZSTD_count(ip+8, matchl0+8, iend) + 8;
                     offset = (U32)(ip-matchl0);
                     while (((ip>anchor) & (matchl0>prefixLowest)) && (ip[-1] == matchl0[-1])) { ip--; matchl0--; mLength++; } /* catch up */
@@ -430,6 +450,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
             if (idxs0 > prefixLowestIndex) {
                 /* check prefix short match */
                 if (MEM_read32(matchs0) == MEM_read32(ip)) {
+                    PREFETCH_MATCH_S(ip+4);
                     goto _search_next_long;
                 }
             }
@@ -516,9 +537,12 @@ _match_stored:
 #ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DOUBLE_FAST
                 /* More complementary insertions to improve ratio */
                 hashLong[ZSTD_hashPtr(base+indexToInsert, hBitsL, 8)] = indexToInsert;
+                hashLong[ZSTD_hashPtr(ip-3, hBitsL, 8)] = (U32)(ip-3-base);
                 hashLong[ZSTD_hashPtr(ip-2, hBitsL, 8)] = (U32)(ip-2-base);
                 hashLong[ZSTD_hashPtr(ip-1, hBitsL, 8)] = (U32)(ip-1-base);
                 hashSmall[ZSTD_hashPtr(base+indexToInsert, hBitsS, mls)] = indexToInsert;
+                hashSmall[ZSTD_hashPtr(ip-4, hBitsS, mls)] = (U32)(ip-4-base);
+                hashSmall[ZSTD_hashPtr(ip-3, hBitsS, mls)] = (U32)(ip-3-base);
                 hashSmall[ZSTD_hashPtr(ip-2, hBitsS, mls)] = (U32)(ip-2-base);
                 hashSmall[ZSTD_hashPtr(ip-1, hBitsS, mls)] = (U32)(ip-1-base);
 #else

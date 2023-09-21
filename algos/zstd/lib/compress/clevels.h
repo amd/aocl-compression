@@ -129,17 +129,32 @@ static const ZSTD_compressionParameters ZSTD_defaultCParameters[4][ZSTD_MAX_CLEV
 },
 };
 
-// AOCL specific changes to the default parameters set by zstd
-//      changes : level 3 : W changed to 23 (previously 21)
-//      changes : level 4 : W changed to 23 (previously 21)
+/* AOCL specific changes to the default parameters set by zstd
+* 
+* Commit 0235abbbba59705febbf0d6d04f65912e88bd50b : Compression ratio change with optimizations off fixed
+*       AOCL_ZSTD_defaultCParameters created
+*       > 256 KB
+*           level 3 : W changed from 21 to 23
+*           level 4 : W changed from 21 to 23
+* 
+* Commit 27a5c0394577b3fc1cb076593f316a56f4cd117e : Prefetch potential future match candidates in dfast
+*       > 256 KB
+*           level 3 : C changed from 16 to 15
+*           level 4 : C changed from 18 to 16
+*       <= 128 KB
+*           level 3 : C changed from 15 to 14
+*           level 4 : C changed from 17 to 15
+*       <= 16 KB
+*           level 3 : C changed from 14 to 13
+*/
 static const ZSTD_compressionParameters AOCL_ZSTD_defaultCParameters[4][ZSTD_MAX_CLEVEL+1] = {
 {   /* "default" - for any srcSize > 256 KB */
     /* W,  C,  H,  S,  L, TL, strat */
     { 19, 12, 13,  1,  6,  1, ZSTD_fast    },  /* base for negative levels */
     { 19, 13, 14,  1,  7,  0, ZSTD_fast    },  /* level  1 */
     { 20, 15, 16,  1,  6,  0, ZSTD_fast    },  /* level  2 */
-    { 23, 16, 17,  1,  5,  0, ZSTD_dfast   },  /* level  3 */
-    { 23, 18, 18,  1,  5,  0, ZSTD_dfast   },  /* level  4 */
+    { 23, 15, 17,  1,  5,  0, ZSTD_dfast   },  /* level  3 */
+    { 23, 16, 18,  1,  5,  0, ZSTD_dfast   },  /* level  4 */
     { 21, 18, 19,  3,  5,  2, ZSTD_greedy  },  /* level  5 */
     { 21, 18, 19,  3,  5,  4, ZSTD_lazy    },  /* level  6 */
     { 21, 19, 20,  4,  5,  8, ZSTD_lazy    },  /* level  7 */
@@ -190,8 +205,8 @@ static const ZSTD_compressionParameters AOCL_ZSTD_defaultCParameters[4][ZSTD_MAX
     { 17, 12, 12,  1,  5,  1, ZSTD_fast    },  /* base for negative levels */
     { 17, 12, 13,  1,  6,  0, ZSTD_fast    },  /* level  1 */
     { 17, 13, 15,  1,  5,  0, ZSTD_fast    },  /* level  2 */
-    { 17, 15, 16,  2,  5,  0, ZSTD_dfast   },  /* level  3 */
-    { 17, 17, 17,  2,  4,  0, ZSTD_dfast   },  /* level  4 */
+    { 17, 14, 16,  2,  5,  0, ZSTD_dfast   },  /* level  3 */
+    { 17, 15, 17,  2,  4,  0, ZSTD_dfast   },  /* level  4 */
     { 17, 16, 17,  3,  4,  2, ZSTD_greedy  },  /* level  5 */
     { 17, 16, 17,  3,  4,  4, ZSTD_lazy    },  /* level  6 */
     { 17, 16, 17,  3,  4,  8, ZSTD_lazy2   },  /* level  7 */
@@ -216,7 +231,7 @@ static const ZSTD_compressionParameters AOCL_ZSTD_defaultCParameters[4][ZSTD_MAX
     { 14, 12, 13,  1,  5,  1, ZSTD_fast    },  /* base for negative levels */
     { 14, 14, 15,  1,  5,  0, ZSTD_fast    },  /* level  1 */
     { 14, 14, 15,  1,  4,  0, ZSTD_fast    },  /* level  2 */
-    { 14, 14, 15,  2,  4,  0, ZSTD_dfast   },  /* level  3 */
+    { 14, 13, 15,  2,  4,  0, ZSTD_dfast   },  /* level  3 */
     { 14, 14, 14,  4,  4,  2, ZSTD_greedy  },  /* level  4 */
     { 14, 14, 14,  3,  4,  4, ZSTD_lazy    },  /* level  5.*/
     { 14, 14, 14,  4,  4,  8, ZSTD_lazy2   },  /* level  6 */
