@@ -533,7 +533,7 @@ if __name__ == '__main__':
         '--iterations', '-itr',
         help='Specify number of iterations for compression/decompression.', default=ITERS)
     parser.add_argument('--optionalFlags', '-flags',
-                        help='Pass a list of supported optional flags (SNAPPY_MATCH_SKIP_OPT, AOCL_LZ4_OPT_PREFETCH_BACKWARDS, and LZ4_FRAME_FORMAT_SUPPORT) as required. For example: -flags SNAPPY_MATCH_SKIP_OPT=ON AOCL_LZ4_OPT_PREFETCH_BACKWARDS=ON LZ4_FRAME_FORMAT_SUPPORT=ON',
+                        help='Pass a list of supported optional flags (SNAPPY_MATCH_SKIP_OPT, AOCL_LZ4_OPT_PREFETCH_BACKWARDS, AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST and LZ4_FRAME_FORMAT_SUPPORT) as required. For example: -flags SNAPPY_MATCH_SKIP_OPT=ON AOCL_LZ4_OPT_PREFETCH_BACKWARDS=ON AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON LZ4_FRAME_FORMAT_SUPPORT=ON',
                         type=str, nargs="*", default=[])
     parser.add_argument('--VSVersion', '-vs',
                         type=str, help='This is a Windows platform specific option. Use this option to provide an installed Visual Studio version available on the system. Default is "Visual Studio 17 2022"', default="Visual Studio 17 2022")
@@ -554,11 +554,11 @@ if __name__ == '__main__':
         
     # Linux specific library configuration and installation commands with default flags
     compression_cmds = {
-        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
+        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
         'install_cmd': 'cmake --build build -v -j --target uninstall --target install'}
     # Windows specific library configuration and installation commands with default flags
     compression_cmds_windows = {
-        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
+        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
         'install_cmd': 'cmake --build ./build --config Release --target INSTALL'
     }
                 

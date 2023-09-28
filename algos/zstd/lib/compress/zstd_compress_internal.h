@@ -32,7 +32,8 @@ extern "C" {
 /*-*************************************
 *  Constants
 ***************************************/
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DOUBLE_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+    #define kSearchStrengthFast            6
     #define kSearchStrengthDoubleFast      5
 #endif
 #define kSearchStrength      8
@@ -1563,6 +1564,7 @@ size_t ZSTD_compressBlock_deprecated(ZSTD_CCtx* cctx, void* dst, size_t dstCapac
  * appropriate functions for compression in double fast mode when
  * the dynamic dispatcher is used.
  * =============================================================== */
+void aocl_register_compressfast_fmv(int optOff, int optLevel);
 void aocl_register_compressdoublefast_fmv(int optOff, int optLevel);
 #endif /* AOCL_DYNAMIC_DISPATCHER */
 #endif /* ZSTD_COMPRESS_H */

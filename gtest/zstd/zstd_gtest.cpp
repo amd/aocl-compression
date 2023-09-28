@@ -673,118 +673,6 @@ TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_commo
  * End of ZSTD_decompressDCtx
  *********************************************/
 
-/*********************************************
- * Begin of ZSTD_AOCL_reset_n_highest_set_bits
- *********************************************/
-// N = (rowEntries - nbAttempts) highest set bits must be reset
-// all 1s (16 bits)
-TEST(ZSTD_AOCL_RESET_N_HIGHEST_SET_BITS, AOCL_Compression_zstd_AOCL_RESET_N_HIGHEST_SET_BITS_allSet16_common_1) {
-    const uint32_t rowEntries = 16;
-    uint64_t matches = 0xFFFF;
-    uint64_t res[17] = { 0, 0x1u, 0x3u, 0x7u, 0xFu, 0x1Fu, 0x3Fu, 0x7Fu, 0xFFu, 0x1FFu,
-                            0x3FFu, 0x7FFu, 0xFFFu, 0x1FFFu, 0x3FFFu, 0x7FFFu, 0xFFFFu };
-    for (uint32_t nbAttempts = 1; nbAttempts <= rowEntries; nbAttempts++) {
-        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
-        EXPECT_EQ(matchesNew, res[nbAttempts]);
-    }
-}
-
-// all 1s (64 bits)
-TEST(ZSTD_AOCL_RESET_N_HIGHEST_SET_BITS, AOCL_Compression_zstd_AOCL_RESET_N_HIGHEST_SET_BITS_allSet64_common_1) {
-    const uint32_t rowEntries = 16;
-    uint64_t matches = -1;
-    uint64_t res[17] = { 0, 0x1ffffffffffffllu, 0x3ffffffffffffllu, 0x7ffffffffffffllu, 0xfffffffffffffllu,
-                            0x1fffffffffffffllu, 0x3fffffffffffffllu, 0x7fffffffffffffllu, 0xffffffffffffffllu,
-                            0x1ffffffffffffffllu, 0x3ffffffffffffffllu, 0x7ffffffffffffffllu, 0xfffffffffffffffllu,
-                            0x1fffffffffffffffllu, 0x3fffffffffffffffllu, 0x7fffffffffffffffllu, 0xffffffffffffffffllu };
-    for (uint32_t nbAttempts = 1; nbAttempts <= rowEntries; nbAttempts++) {
-        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
-        EXPECT_EQ(matchesNew, res[nbAttempts]);
-    }
-}
-
-// random patterns (16 bits)
-TEST(ZSTD_AOCL_RESET_N_HIGHEST_SET_BITS, AOCL_Compression_zstd_AOCL_RESET_N_HIGHEST_SET_BITS_random16_common_1) {
-    const uint32_t rowEntries = 16;
-    
-    {
-        const uint32_t nbAttempts = 12;
-        {
-            uint64_t matches = 0xE560; //0b 1110 0101 0110 0000
-            uint64_t expected = 0x160; //0b 0000 0001 0110 0000
-            uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
-            EXPECT_EQ(matchesNew, expected);
-        }
-
-        {
-            uint64_t matches = 0xAAAA; //0b 1010 1010 1010 1010
-            uint64_t expected = 0xAA;  //0b 0000 0000 1010 1010
-            uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
-            EXPECT_EQ(matchesNew, expected);
-        }
-    }
-
-    {
-        const uint32_t nbAttempts = 9;
-        {
-            uint64_t matches = 0xE560; //0b 1110 0101 0110 0000
-            uint64_t expected = 0;     //0b 0000 0000 0000 0000
-            uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
-            EXPECT_EQ(matchesNew, expected);
-        }
-
-        {
-            uint64_t matches = 0xAAAA; //0b 1010 1010 1010 1010
-            uint64_t expected = 0x02;  //0b 0000 0000 0000 0010
-            uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
-            EXPECT_EQ(matchesNew, expected);
-        }
-    }
-}
-
-// random patterns (64 bits)
-TEST(ZSTD_AOCL_RESET_N_HIGHEST_SET_BITS, AOCL_Compression_zstd_AOCL_RESET_N_HIGHEST_SET_BITS_random64_common_1) {
-    const uint32_t rowEntries = 64;
-    const uint32_t nbAttempts = 60;
-    {
-        uint64_t matches = 0xE560000000000000; //0b 1110 0101 0110 0000...0s
-        uint64_t expected = 0x0160000000000000; //0b 0000 0001 0110 0000...0s
-        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
-        EXPECT_EQ(matchesNew, expected);
-    }
-
-    {
-        uint64_t matches = 0xAAAA000000000000; //0b 1010 1010 1010 1010...0s
-        uint64_t expected = 0x00AA000000000000; //0b 0000 0000 1010 1010...0s
-        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
-        EXPECT_EQ(matchesNew, expected);
-    }
-}
-
-// none set, N=0
-TEST(ZSTD_AOCL_RESET_N_HIGHEST_SET_BITS, AOCL_Compression_zstd_AOCL_RESET_N_HIGHEST_SET_BITS_limits_common_1) {
-    const uint32_t rowEntries = 16;
-    {
-        const uint32_t nbAttempts = 12;
-        uint64_t matches = 0;
-        uint64_t expected = 0;
-        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
-        EXPECT_EQ(matchesNew, expected);
-    }
-
-    {
-        const uint32_t nbAttempts = rowEntries;
-        uint64_t matches = 0xAAAA;
-        uint64_t expected = matches;
-        uint64_t matchesNew = Test_AOCL_reset_n_highest_set_bits(matches, rowEntries, nbAttempts);
-        EXPECT_EQ(matchesNew, expected);
-    }
-}
-
-/*********************************************
- * End of ZSTD_AOCL_reset_n_highest_set_bits
- *********************************************/
-
  /*********************************************
   * Begin of ZSTD_AOCL_ZSTD_row_getMatchMask
   *********************************************/
@@ -911,4 +799,40 @@ INSTANTIATE_TEST_SUITE_P(
 
 /*********************************************
  * End of ZSTD_AOCL_reset_n_highest_set_bits
+ *********************************************/
+
+ /*********************************************
+ * Begin of ZSTD_ZSTD_selectBlockCompressor
+ *********************************************/
+
+ // Test valid compressors are set on optOff
+TEST(ZSTD_ZSTD_selectBlockCompressor, AOCL_Compression_zstd_ZSTD_selectBlockCompressor_optOff_common_1)
+{
+    int aoclOptFlag = 0; //optOff
+    for (int strat = 1; strat <= 9; ++strat) { //Refer to ZSTD_strategy for valid range of values
+        for (int useRowMatchFinder = 0; useRowMatchFinder <= 1; useRowMatchFinder++) {
+            for (int dictMode = 0; dictMode <= 3; ++dictMode) { //Refer to ZSTD_dictMode_e for valid range of values
+                int ret = Test_ZSTD_selectBlockCompressor(strat, useRowMatchFinder, dictMode, aoclOptFlag);
+                EXPECT_EQ(ret, 0);
+            }
+        }
+    }
+}
+
+// Test valid compressors are set on optOn
+TEST(ZSTD_ZSTD_selectBlockCompressor, AOCL_Compression_zstd_ZSTD_selectBlockCompressor_optOn_common_1)
+{
+    int aoclOptFlag = 1; //optOn
+    for (int strat = 1; strat <= 9; ++strat) { //Refer to ZSTD_strategy for valid range of values
+        for (int useRowMatchFinder = 0; useRowMatchFinder <= 1; useRowMatchFinder++) {
+            for (int dictMode = 0; dictMode <= 3; ++dictMode) { //Refer to ZSTD_dictMode_e for valid range of values
+                int ret = Test_ZSTD_selectBlockCompressor(strat, useRowMatchFinder, dictMode, aoclOptFlag);
+                EXPECT_EQ(ret, 0);
+            }
+        }
+    }
+}
+
+ /*********************************************
+ * End of ZSTD_ZSTD_selectBlockCompressor
  *********************************************/

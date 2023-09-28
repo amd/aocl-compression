@@ -2912,6 +2912,13 @@ ZSTDLIB_API size_t ZSTD_readSkippableFrame(void* dst, size_t dstCapacity, unsign
 ZSTDLIB_API unsigned ZSTD_isSkippableFrame(const void* buffer, size_t size);
 
 /***************************************
+*  Unit testing
+***************************************/
+#ifdef AOCL_ZSTD_UNIT_TEST
+ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag);
+#endif
+
+/***************************************
 *  Memory management
 ***************************************/
 

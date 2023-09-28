@@ -136,7 +136,7 @@ static const ZSTD_compressionParameters ZSTD_defaultCParameters[4][ZSTD_MAX_CLEV
 *       > 256 KB
 *           level 3 : W changed from 21 to 23
 *           level 4 : W changed from 21 to 23
-* 
+*  
 * Commit 27a5c0394577b3fc1cb076593f316a56f4cd117e : Prefetch potential future match candidates in dfast
 *       > 256 KB
 *           level 3 : C changed from 16 to 15
@@ -146,13 +146,18 @@ static const ZSTD_compressionParameters ZSTD_defaultCParameters[4][ZSTD_MAX_CLEV
 *           level 4 : C changed from 17 to 15
 *       <= 16 KB
 *           level 3 : C changed from 14 to 13
+* 
+* Commit c3851db97f38428995610f6beb35f8b39851c5ed : Extend aocl optimizations to fast, lazy and greedy compression
+*       > 256 KB
+*           level 1 : W changed from 19 to 23
+*           level 2 : W changed from 20 to 23
 */
 static const ZSTD_compressionParameters AOCL_ZSTD_defaultCParameters[4][ZSTD_MAX_CLEVEL+1] = {
 {   /* "default" - for any srcSize > 256 KB */
     /* W,  C,  H,  S,  L, TL, strat */
     { 19, 12, 13,  1,  6,  1, ZSTD_fast    },  /* base for negative levels */
-    { 19, 13, 14,  1,  7,  0, ZSTD_fast    },  /* level  1 */
-    { 20, 15, 16,  1,  6,  0, ZSTD_fast    },  /* level  2 */
+    { 23, 13, 14,  1,  7,  0, ZSTD_fast    },  /* level  1 */
+    { 23, 15, 16,  1,  6,  0, ZSTD_fast    },  /* level  2 */
     { 23, 15, 17,  1,  5,  0, ZSTD_dfast   },  /* level  3 */
     { 23, 16, 18,  1,  5,  0, ZSTD_dfast   },  /* level  4 */
     { 21, 18, 19,  3,  5,  2, ZSTD_greedy  },  /* level  5 */

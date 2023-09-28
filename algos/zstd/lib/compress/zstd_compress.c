@@ -3070,31 +3070,39 @@ ZSTD_blockCompressor ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_paramS
     DEBUGLOG(4, "Selected block compressor: dictMode=%d strat=%d rowMatchfinder=%d", (int)dictMode, (int)strat, (int)useRowMatchFinder);
     if (ZSTD_rowMatchFinderUsed(strat, useRowMatchFinder)) {
 #ifdef AOCL_ZSTD_OPT //Added new AMD optimized compressors
-        static const ZSTD_blockCompressor rowBasedBlockCompressors[4][4] = {
+        static const ZSTD_blockCompressor rowBasedBlockCompressors[4][6] = {
             { ZSTD_compressBlock_greedy_row,
             ZSTD_compressBlock_lazy_row,
             ZSTD_compressBlock_lazy2_row,
+            AOCL_ZSTD_compressBlock_greedy_row,
+            AOCL_ZSTD_compressBlock_lazy_row,
             AOCL_ZSTD_compressBlock_lazy2_row},
             { ZSTD_compressBlock_greedy_extDict_row,
             ZSTD_compressBlock_lazy_extDict_row,
             ZSTD_compressBlock_lazy2_extDict_row,
+            ZSTD_compressBlock_greedy_extDict_row,
+            ZSTD_compressBlock_lazy_extDict_row,
             ZSTD_compressBlock_lazy2_extDict_row},
             { ZSTD_compressBlock_greedy_dictMatchState_row,
             ZSTD_compressBlock_lazy_dictMatchState_row,
             ZSTD_compressBlock_lazy2_dictMatchState_row,
+            AOCL_ZSTD_compressBlock_greedy_dictMatchState_row,
+            AOCL_ZSTD_compressBlock_lazy_dictMatchState_row,
             AOCL_ZSTD_compressBlock_lazy2_dictMatchState_row},
             { ZSTD_compressBlock_greedy_dedicatedDictSearch_row,
             ZSTD_compressBlock_lazy_dedicatedDictSearch_row,
             ZSTD_compressBlock_lazy2_dedicatedDictSearch_row,
+            AOCL_ZSTD_compressBlock_greedy_dedicatedDictSearch_row,
+            AOCL_ZSTD_compressBlock_lazy_dedicatedDictSearch_row,
             AOCL_ZSTD_compressBlock_lazy2_dedicatedDictSearch_row}
         };
         DEBUGLOG(4, "Selecting a row-based matchfinder");
         assert(useRowMatchFinder != ZSTD_urm_auto);
-        int select = (int)strat - (int)ZSTD_greedy;
+        int select = (int)strat - (int)ZSTD_greedy; //select in range : [0, 2] as strat in range : [ZSTD_greedy, ZSTD_lazy2]
 #ifdef AOCL_DYNAMIC_DISPATCHER
-        select = (select == 2) ? select + aoclOptFlag : select;
+        select = (aoclOptFlag * 3) + select;
 #else
-        select = (select == 2) ? select + 1 : select;
+        select = 3 + select;
 #endif
         selectedCompressor = rowBasedBlockCompressors[(int)dictMode][select];
 #else
@@ -7138,7 +7146,141 @@ char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog)
 {
     aocl_register_zstd_compress_fmv(optOff, optLevel);
+    aocl_register_compressfast_fmv(optOff, optLevel);
     aocl_register_compressdoublefast_fmv(optOff, optLevel);
     return NULL;
+}
+#endif
+
+#ifdef AOCL_ZSTD_UNIT_TEST
+/* Unit test function for block compressor selection.
+* Returns 0 if expected compressor is selected, else -1. */
+ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag) {
+    static const ZSTD_blockCompressor expectedRefCompressor[4][ZSTD_STRATEGY_MAX + 1] = { //mimic reference
+        { ZSTD_compressBlock_fast  /* default for 0 */,
+          ZSTD_compressBlock_fast,
+          ZSTD_compressBlock_doubleFast,
+          ZSTD_compressBlock_greedy,
+          ZSTD_compressBlock_lazy,
+          ZSTD_compressBlock_lazy2,
+          ZSTD_compressBlock_btlazy2,
+          ZSTD_compressBlock_btopt,
+          ZSTD_compressBlock_btultra,
+          ZSTD_compressBlock_btultra2 },
+        { ZSTD_compressBlock_fast_extDict  /* default for 0 */,
+          ZSTD_compressBlock_fast_extDict,
+          ZSTD_compressBlock_doubleFast_extDict,
+          ZSTD_compressBlock_greedy_extDict,
+          ZSTD_compressBlock_lazy_extDict,
+          ZSTD_compressBlock_lazy2_extDict,
+          ZSTD_compressBlock_btlazy2_extDict,
+          ZSTD_compressBlock_btopt_extDict,
+          ZSTD_compressBlock_btultra_extDict,
+          ZSTD_compressBlock_btultra_extDict },
+        { ZSTD_compressBlock_fast_dictMatchState  /* default for 0 */,
+          ZSTD_compressBlock_fast_dictMatchState,
+          ZSTD_compressBlock_doubleFast_dictMatchState,
+          ZSTD_compressBlock_greedy_dictMatchState,
+          ZSTD_compressBlock_lazy_dictMatchState,
+          ZSTD_compressBlock_lazy2_dictMatchState,
+          ZSTD_compressBlock_btlazy2_dictMatchState,
+          ZSTD_compressBlock_btopt_dictMatchState,
+          ZSTD_compressBlock_btultra_dictMatchState,
+          ZSTD_compressBlock_btultra_dictMatchState },
+        { NULL  /* default for 0 */,
+          NULL,
+          NULL,
+          ZSTD_compressBlock_greedy_dedicatedDictSearch,
+          ZSTD_compressBlock_lazy_dedicatedDictSearch,
+          ZSTD_compressBlock_lazy2_dedicatedDictSearch,
+          NULL,
+          NULL,
+          NULL,
+          NULL }
+    };
+
+    static const ZSTD_blockCompressor expectedRefRowCompressor[4][3] = { //mimic reference
+            { ZSTD_compressBlock_greedy_row,
+            ZSTD_compressBlock_lazy_row,
+            ZSTD_compressBlock_lazy2_row },
+            { ZSTD_compressBlock_greedy_extDict_row,
+            ZSTD_compressBlock_lazy_extDict_row,
+            ZSTD_compressBlock_lazy2_extDict_row },
+            { ZSTD_compressBlock_greedy_dictMatchState_row,
+            ZSTD_compressBlock_lazy_dictMatchState_row,
+            ZSTD_compressBlock_lazy2_dictMatchState_row },
+            { ZSTD_compressBlock_greedy_dedicatedDictSearch_row,
+            ZSTD_compressBlock_lazy_dedicatedDictSearch_row,
+            ZSTD_compressBlock_lazy2_dedicatedDictSearch_row }
+    };
+
+    aoclOptFlag = _aoclOptFlag;
+    assert(strat >= (int)(ZSTD_fast) && strat <= (int)(ZSTD_btultra2));
+    ZSTD_strategy strat_e = (ZSTD_strategy)(strat);
+    assert(dictmode >= (int)(ZSTD_noDict) && dictMode <= (int)(ZSTD_dedicatedDictSearch));
+    ZSTD_dictMode_e dictMode_e = (ZSTD_dictMode_e)(dictMode);
+    ZSTD_paramSwitch_e useRowMatchFinder_e = useRowMatchFinder ? ZSTD_ps_enable : ZSTD_ps_disable;
+    ZSTD_blockCompressor bc = ZSTD_selectBlockCompressor(strat_e, useRowMatchFinder_e, dictMode_e);
+
+#ifdef AOCL_ZSTD_OPT
+    if (aoclOptFlag > 0 && useRowMatchFinder) { //optimized compressors expected
+        if      (dictMode_e == ZSTD_noDict              && strat_e == ZSTD_greedy) { if(bc != AOCL_ZSTD_compressBlock_greedy_row) return -1;}
+        else if (dictMode_e == ZSTD_noDict              && strat_e == ZSTD_lazy  ) { if(bc != AOCL_ZSTD_compressBlock_lazy_row) return -1;}
+        else if (dictMode_e == ZSTD_noDict              && strat_e == ZSTD_lazy2 ) { if(bc != AOCL_ZSTD_compressBlock_lazy2_row) return -1;}
+        else if (dictMode_e == ZSTD_dictMatchState      && strat_e == ZSTD_greedy) { if(bc != AOCL_ZSTD_compressBlock_greedy_dictMatchState_row) return -1;}
+        else if (dictMode_e == ZSTD_dictMatchState      && strat_e == ZSTD_lazy  ) { if(bc != AOCL_ZSTD_compressBlock_lazy_dictMatchState_row) return -1;}
+        else if (dictMode_e == ZSTD_dictMatchState      && strat_e == ZSTD_lazy2 ) { if(bc != AOCL_ZSTD_compressBlock_lazy2_dictMatchState_row) return -1;}
+        else if (dictMode_e == ZSTD_dedicatedDictSearch && strat_e == ZSTD_greedy) { if(bc != AOCL_ZSTD_compressBlock_greedy_dedicatedDictSearch_row) return -1;}
+        else if (dictMode_e == ZSTD_dedicatedDictSearch && strat_e == ZSTD_lazy  ) { if(bc != AOCL_ZSTD_compressBlock_lazy_dedicatedDictSearch_row) return -1;}
+        else if (dictMode_e == ZSTD_dedicatedDictSearch && strat_e == ZSTD_lazy2 ) { if(bc != AOCL_ZSTD_compressBlock_lazy2_dedicatedDictSearch_row) return -1; }
+        else { //reference compressors expected                                  )
+            if (useRowMatchFinder) {
+                switch (strat_e) {
+                case ZSTD_greedy:
+                case ZSTD_lazy:
+                case ZSTD_lazy2:
+                    //row match finder
+                    if (bc != expectedRefRowCompressor[(int)dictMode][(int)strat_e - (int)ZSTD_greedy])
+                        return -1;
+                    break;
+                default:
+                    //row match finder not relevant for other levels
+                    if (bc != expectedRefCompressor[(int)dictMode][(int)strat_e])
+                        return -1;
+                    break;
+                }
+            }
+            else {
+                if (bc != expectedRefCompressor[(int)dictMode][(int)strat_e])
+                    return -1;
+            }
+        }
+    }
+    else { //reference compressors expected
+#endif
+        if (useRowMatchFinder) {
+            switch (strat_e) {
+            case ZSTD_greedy:
+            case ZSTD_lazy:
+            case ZSTD_lazy2:
+                //row match finder
+                if (bc != expectedRefRowCompressor[(int)dictMode][(int)strat_e - (int)ZSTD_greedy])
+                    return -1;
+                break;
+            default:
+                //row match finder not relevant for other levels
+                if (bc != expectedRefCompressor[(int)dictMode][(int)strat_e])
+                    return -1;
+                break;
+            }
+        }
+        else {
+            if (bc != expectedRefCompressor[(int)dictMode][(int)strat_e])
+                return -1;
+        }
+#ifdef AOCL_ZSTD_OPT
+    }
+#endif
+    return 0; //bc matched expected
 }
 #endif
