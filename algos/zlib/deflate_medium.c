@@ -361,7 +361,7 @@ local block_state aocl_deflate_medium_v1(deflate_state *s, int flush)
         FLUSH_BLOCK(s, 1);
         return finish_done;
     }
-    if (s->last_lit)
+    if (s->sym_next)
         FLUSH_BLOCK(s, 0);
     return block_done;
 }
@@ -496,7 +496,7 @@ local block_state aocl_deflate_medium_v2(deflate_state *s, int flush)
         FLUSH_BLOCK(s, 1);
         return finish_done;
     }
-    if (s->last_lit)
+    if (s->sym_next)
         FLUSH_BLOCK(s, 0);
     return block_done;
 }

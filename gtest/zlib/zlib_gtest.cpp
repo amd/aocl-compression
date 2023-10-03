@@ -793,7 +793,7 @@ TEST(ZLIB_deflateReset, pass_cases)
   EXPECT_EQ(strm->msg, (const char *)Z_NULL);
   EXPECT_EQ(strm->data_type, Z_UNKNOWN);
   EXPECT_EQ(strm->state->pending, 0);
-  EXPECT_EQ(strm->state->last_flush, Z_NO_FLUSH);
+  EXPECT_EQ(strm->state->last_flush, -2);
 
   rstd(strm);
 }
@@ -819,7 +819,7 @@ TEST_F(ZLIB_deflateParams, fail_cases)
   EXPECT_EQ(deflateParams(strm, level, 5), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateParams_common_6
 
   deflate_state *state = (deflate_state *)strm->state;
-  state->high_water = 1;
+  state->last_flush = 1;
   EXPECT_EQ(deflateParams(strm, level, 2), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateParams_common_7
   deflateEnd(strm);
   uLongf dstLen = 50;
@@ -828,7 +828,7 @@ TEST_F(ZLIB_deflateParams, fail_cases)
   Bytef *src = (Bytef *)malloc(srcLen);
   call_before_deflate(strm, dest, &dstLen, src, srcLen, 0);
   state = (deflate_state *)strm->state;
-  state->high_water = 1;
+  state->last_flush = 1;
   strm->avail_out = 0;
 
   EXPECT_EQ(deflateParams(strm, level, 3), Z_BUF_ERROR);  // AOCL_Compression_zlib_deflateParams_common_8
@@ -904,7 +904,7 @@ TEST(ZLIB_deflateBound, all_cases)
   z_streamp strm = nzp();
   int sourceLen = 1 << 6;
 
-  EXPECT_EQ(deflateBound(strm, sourceLen), 84); // AOCL_Compression_zlib_deflateBound_common_1
+  EXPECT_EQ(deflateBound(strm, sourceLen), 82); // AOCL_Compression_zlib_deflateBound_common_1
 
   deflateInit(strm, 2);
   deflate_state *state = (deflate_state *)strm->state;
@@ -944,7 +944,7 @@ TEST(ZLIB_deflateBound, all_cases)
 
   state->w_bits = 14;
 
-  EXPECT_EQ(deflateBound(strm, 0), 45); // AOCL_Compression_zlib_deflateBound_common_7
+  EXPECT_EQ(deflateBound(strm, 0), 44); // AOCL_Compression_zlib_deflateBound_common_7
 
   free(gz);
   rstd(strm);
@@ -995,7 +995,11 @@ TEST(ZLIB_deflatePrime, fail_cases)
   EXPECT_EQ(deflatePrime(strm, 3, 3), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_deflatePrime_common_2
 
   deflateInit(strm, 3);
+  #ifdef LIT_MEM
   strm->state->pending_out = (Bytef *)strm->state->d_buf + 10;
+  #else
+  strm->state->pending_out = (Bytef *)strm->state->sym_buf + 10;
+  #endif
 
   EXPECT_EQ(deflatePrime(strm, 3, 3), Z_BUF_ERROR); //  AOCL_Compression_zlib_deflatePrime_common_3
 
@@ -1719,28 +1723,28 @@ TEST(ZLIB_deflateResetKeep, pass_cases)
 
   EXPECT_EQ(deflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_3
   EXPECT_EQ(state->wrap, 2);
-  EXPECT_EQ(state->last_flush, Z_NO_FLUSH);
+  EXPECT_EQ(state->last_flush, -2);
   EXPECT_EQ(strm->adler, 0);
 
   state->wrap = 1;
   state->last_flush = Z_FINISH;
   EXPECT_EQ(deflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_4
   EXPECT_EQ(state->wrap, 1);
-  EXPECT_EQ(state->last_flush, Z_NO_FLUSH);
+  EXPECT_EQ(state->last_flush, -2);
   EXPECT_EQ(strm->adler, 1);
 
   state->wrap = 0;
   state->last_flush = Z_FINISH;
   EXPECT_EQ(deflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_5
   EXPECT_EQ(state->wrap, 0);
-  EXPECT_EQ(state->last_flush, Z_NO_FLUSH);
+  EXPECT_EQ(state->last_flush, -2);
   EXPECT_EQ(strm->adler, 1);
 
   state->wrap = -100;
   state->last_flush = Z_FINISH;
   EXPECT_EQ(deflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_6
   EXPECT_EQ(state->wrap, 100);
-  EXPECT_EQ(state->last_flush, Z_NO_FLUSH);
+  EXPECT_EQ(state->last_flush, -2);
   EXPECT_EQ(strm->adler, 1);
 
   rstd(strm);

@@ -318,6 +318,21 @@ if (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST")
 endif()
 
+include(CheckCSourceCompiles)
+#
+# Check if we can hide zlib internal symbols that are linked between separate source files using hidden
+#
+check_c_source_compiles(
+    "#define ZLIB_INTERNAL __attribute__((visibility (\"hidden\")))
+    int ZLIB_INTERNAL foo;
+    int main() {
+        return 0;
+    }"
+    HAVE_ATTRIBUTE_VISIBILITY_HIDDEN FAIL_REGEX "visibility")
+if(HAVE_ATTRIBUTE_VISIBILITY_HIDDEN)
+    set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DHAVE_HIDDEN")
+endif()
+
 add_compile_definitions(CCompiler="${CMAKE_C_COMPILER}")
 add_compile_definitions(CXXCompiler="${CMAKE_CXX_COMPILER}")
 add_compile_definitions(CFLAGS_SET2="${CMAKE_C_FLAGS}")

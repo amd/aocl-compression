@@ -48,14 +48,12 @@ static inline void slide_hash_c_opt(deflate_state *s)
         Pos t = (Pos)wsize;
         *hc++ = (Pos)(v >= t ? v-t: 0);
     }
-#ifndef FASTEST
     Pos *pc = s->prev;
     for (uInt j = 0; j < wsize; j++) {
         Pos v = *pc;
         Pos t = (Pos)wsize;
         *pc++ = (Pos)(v >= t ? v-t: 0);
     }
-#endif
 }
 
 #ifdef AOCL_ZLIB_AVX2_OPT
@@ -75,7 +73,6 @@ static inline void slide_hash_avx2(deflate_state *s)
         _mm256_storeu_si256((__m256i *)hc, hres);
         hc += 16;
     }
-#ifndef FASTEST
     Pos *pc = s->prev;
     for(;wsz > 0;wsz -= 16) {
         __m256i pres, pval;
@@ -84,7 +81,6 @@ static inline void slide_hash_avx2(deflate_state *s)
         _mm256_storeu_si256((__m256i *)pc, pres); 
         pc += 16;
     }
-#endif
 }
 #endif /* AOCL_ZLIB_AVX2_OPT */
 

@@ -8,8 +8,6 @@
 
 #include "zutil.h"
 
-local uLong adler32_combine_ OF((uLong adler1, uLong adler2, z_off64_t len2));
-
 #define BASE 65521U     /* largest prime smaller than 65536 */
 #define NMAX 5552
 /* NMAX is the largest n such that 255n(n+1)/2 + (n+1)(BASE-1) <= 2^32-1 */
@@ -61,15 +59,7 @@ local uLong adler32_combine_ OF((uLong adler1, uLong adler2, z_off64_t len2));
 #endif
 
 /* ========================================================================= */
-#ifdef ENABLE_STRICT_WARNINGS
-uLong ZEXPORT adler32_z(uLong adler, const Bytef *buf, z_size_t len)
-#else
-uLong ZEXPORT adler32_z(adler, buf, len)
-    uLong adler;
-    const Bytef *buf;
-    z_size_t len;
-#endif /* ENABLE_STRICT_WARNINGS */
-{
+uLong ZEXPORT adler32_z(uLong adler, const Bytef *buf, z_size_t len) {
     unsigned long sum2;
     unsigned n;
 
@@ -136,28 +126,12 @@ uLong ZEXPORT adler32_z(adler, buf, len)
 }
 
 /* ========================================================================= */
-#ifdef ENABLE_STRICT_WARNINGS
-uLong ZEXPORT adler32(uLong adler, const Bytef *buf, uInt len)
-#else
-uLong ZEXPORT adler32(adler, buf, len)
-    uLong adler;
-    const Bytef *buf;
-    uInt len;
-#endif /* ENABLE_STRICT_WARNINGS */
-{
+uLong ZEXPORT adler32(uLong adler, const Bytef *buf, uInt len) {
     return adler32_z(adler, buf, len);
 }
 
 /* ========================================================================= */
-#ifdef ENABLE_STRICT_WARNINGS
-local uLong adler32_combine_(uLong adler1, uLong adler2, z_off64_t len2)
-#else
-local uLong adler32_combine_(adler1, adler2, len2)
-    uLong adler1;
-    uLong adler2;
-    z_off64_t len2;
-#endif /* ENABLE_STRICT_WARNINGS */
-{
+local uLong adler32_combine_(uLong adler1, uLong adler2, z_off64_t len2) {
     unsigned long sum1;
     unsigned long sum2;
     unsigned rem;
@@ -182,26 +156,10 @@ local uLong adler32_combine_(adler1, adler2, len2)
 }
 
 /* ========================================================================= */
-#ifdef ENABLE_STRICT_WARNINGS
-uLong ZEXPORT adler32_combine(uLong adler1, uLong adler2, z_off_t len2)
-#else
-uLong ZEXPORT adler32_combine(adler1, adler2, len2)
-    uLong adler1;
-    uLong adler2;
-    z_off_t len2;
-#endif /* ENABLE_STRICT_WARNINGS */
-{
+uLong ZEXPORT adler32_combine(uLong adler1, uLong adler2, z_off_t len2) {
     return adler32_combine_(adler1, adler2, len2);
 }
 
-#ifdef ENABLE_STRICT_WARNINGS
-uLong ZEXPORT adler32_combine64(uLong adler1, uLong adler2, z_off64_t len2)
-#else
-uLong ZEXPORT adler32_combine64(adler1, adler2, len2)
-    uLong adler1;
-    uLong adler2;
-    z_off64_t len2;
-#endif /* ENABLE_STRICT_WARNINGS */
-{
+uLong ZEXPORT adler32_combine64(uLong adler1, uLong adler2, z_off64_t len2) {
     return adler32_combine_(adler1, adler2, len2);
 }

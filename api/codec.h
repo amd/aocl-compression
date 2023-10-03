@@ -157,7 +157,7 @@ static const aocl_codec_t aocl_codec[AOCL_COMPRESSOR_ALGOS_NUM] =
     { "lzma",   "22.01",      aocl_lzma_compress,   aocl_lzma_decompress,   aocl_lzma_setup,   NULL },
     { "bzip2",  "1.0.8",      aocl_bzip2_compress,  aocl_bzip2_decompress,  aocl_bzip2_setup,  NULL },
     { "snappy", "2020-07-11", aocl_snappy_compress, aocl_snappy_decompress, aocl_snappy_setup, NULL },
-    { "zlib",   "1.2.11",     aocl_zlib_compress,   aocl_zlib_decompress,   aocl_zlib_setup,   NULL },
+    { "zlib",   "1.3",     aocl_zlib_compress,   aocl_zlib_decompress,   aocl_zlib_setup,   NULL },
     { "zstd",   "1.5.5",      aocl_zstd_compress,   aocl_zstd_decompress,   aocl_zstd_setup,   aocl_zstd_destroy }
 };
 

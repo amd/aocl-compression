@@ -25,16 +25,8 @@
    Z_DATA_ERROR if the input data was corrupted, including if the input data is
    an incomplete zlib stream.
 */
-#ifdef ENABLE_STRICT_WARNINGS
-int ZEXPORT uncompress2 (Bytef *dest, uLongf *destLen, const Bytef *source, uLong *sourceLen)
-#else
-int ZEXPORT uncompress2 (dest, destLen, source, sourceLen)
-    Bytef *dest;
-    uLongf *destLen;
-    const Bytef *source;
-    uLong *sourceLen;
-#endif /* ENABLE_STRICT_WARNINGS */
-{
+int ZEXPORT uncompress2(Bytef *dest, uLongf *destLen, const Bytef *source,
+                        uLong *sourceLen) {
     if(destLen == NULL || sourceLen == NULL)
     {
         return Z_STREAM_ERROR;
@@ -93,15 +85,7 @@ int ZEXPORT uncompress2 (dest, destLen, source, sourceLen)
            err;
 }
 
-#ifdef ENABLE_STRICT_WARNINGS
-int ZEXPORT uncompress (Bytef *dest, uLongf *destLen, const Bytef *source, uLong sourceLen)
-#else
-int ZEXPORT uncompress (dest, destLen, source, sourceLen)
-    Bytef *dest;
-    uLongf *destLen;
-    const Bytef *source;
-    uLong sourceLen;
-#endif /* ENABLE_STRICT_WARNINGS */
-{
+int ZEXPORT uncompress(Bytef *dest, uLongf *destLen, const Bytef *source,
+                       uLong sourceLen) {
     return uncompress2(dest, destLen, source, &sourceLen);
 }

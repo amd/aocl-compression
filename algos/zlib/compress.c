@@ -37,17 +37,8 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
    memory, Z_BUF_ERROR if there was not enough room in the output buffer,
    Z_STREAM_ERROR if the level parameter is invalid.
 */
-#ifdef ENABLE_STRICT_WARNINGS
-int ZEXPORT compress2 (Bytef *dest, uLongf *destLen, const Bytef *source, uLong sourceLen, int level)
-#else
-int ZEXPORT compress2 (dest, destLen, source, sourceLen, level)
-    Bytef *dest;
-    uLongf *destLen;
-    const Bytef *source;
-    uLong sourceLen;
-    int level;
-#endif /* ENABLE_STRICT_WARNINGS */
-{
+int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
+                      uLong sourceLen, int level) {
     if(destLen == NULL)
     {
         return Z_STREAM_ERROR;
@@ -92,16 +83,8 @@ int ZEXPORT compress2 (dest, destLen, source, sourceLen, level)
 
 /* ===========================================================================
  */
-#ifdef ENABLE_STRICT_WARNINGS
-int ZEXPORT compress (Bytef *dest, uLongf *destLen, const Bytef *source, uLong sourceLen)
-#else
-int ZEXPORT compress (dest, destLen, source, sourceLen)
-    Bytef *dest;
-    uLongf *destLen;
-    const Bytef *source;
-    uLong sourceLen;
-#endif /* ENABLE_STRICT_WARNINGS */
-{
+int ZEXPORT compress(Bytef *dest, uLongf *destLen, const Bytef *source,
+                     uLong sourceLen) {
     return compress2(dest, destLen, source, sourceLen, Z_DEFAULT_COMPRESSION);
 }
 
@@ -109,13 +92,7 @@ int ZEXPORT compress (dest, destLen, source, sourceLen)
      If the default memLevel or windowBits for deflateInit() is changed, then
    this function needs to be updated.
  */
-#ifdef ENABLE_STRICT_WARNINGS
-uLong ZEXPORT compressBound (uLong sourceLen)
-#else
-uLong ZEXPORT compressBound (sourceLen)
-    uLong sourceLen;
-#endif /* ENABLE_STRICT_WARNINGS */
-{
+uLong ZEXPORT compressBound(uLong sourceLen) {
     return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
            (sourceLen >> 25) + 13;
 }

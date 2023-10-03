@@ -38,6 +38,9 @@
 #  define crc32                 z_crc32
 #  define crc32_combine         z_crc32_combine
 #  define crc32_combine64       z_crc32_combine64
+#  define crc32_combine_gen     z_crc32_combine_gen
+#  define crc32_combine_gen64   z_crc32_combine_gen64
+#  define crc32_combine_op      z_crc32_combine_op
 #  define crc32_z               z_crc32_z
 #  define deflate               z_deflate
 #  define deflateBound          z_deflateBound
@@ -238,7 +241,11 @@
 #endif
 
 #ifdef Z_SOLO
-   typedef unsigned long z_size_t;
+#  ifdef _WIN64
+     typedef unsigned long long z_size_t;
+#  else
+     typedef unsigned long z_size_t;
+#  endif
 #else
 #  define z_longlong long long
 #  if defined(NO_SIZE_T)
@@ -351,6 +358,9 @@
 #  ifdef ZLIB_WINAPI
 #    ifdef FAR
 #      undef FAR
+#    endif
+#    ifndef WIN32_LEAN_AND_MEAN
+#      define WIN32_LEAN_AND_MEAN
 #    endif
 #    include <windows.h>
      /* No need for _export, use ZLIB.DEF instead. */
