@@ -44,6 +44,7 @@
 #define ZSTD_STATIC_LINKING_ONLY
 #include "algos/zstd/lib/zstd.h"
 #include "algos/zstd/lib/compress/zstd_lazy.h"
+#include "algos/zstd/lib/decompress/zstd_decompress_block.h"
 #endif
 
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
@@ -836,3 +837,145 @@ TEST(ZSTD_ZSTD_selectBlockCompressor, AOCL_Compression_zstd_ZSTD_selectBlockComp
  /*********************************************
  * End of ZSTD_ZSTD_selectBlockCompressor
  *********************************************/
+
+ /*********************************************
+ * Begin of ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long
+ *********************************************/
+class ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long : public AOCL_setup_zstd
+{
+public:
+    ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long() : stream(nullptr), src(nullptr), dst(nullptr) {}
+
+    ~ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long() {
+        if (stream) free(stream);
+    }
+
+    void create(size_t len, size_t slen) {
+        ASSERT_GE(len, slen * 2); //enough space to hold src and dst
+        buf_len = len + WILDCOPY_OVERLENGTH;
+        src_len = slen;
+
+        stream = (char*)malloc(sizeof(char) * buf_len);
+        src = stream;
+        reset();
+    }
+
+    void reset() {
+        ASSERT_NE(src, nullptr);
+        memset(stream, 0, sizeof(char) * buf_len);
+        
+        for (size_t i = 0; i < src_len; ++i) { //fill non-0 values for src
+            src[i] = (i % 256);
+            if (src[i] == 0) src[i] = 1;
+        }
+    }
+
+    void setDst(size_t pos) {
+        ASSERT_LE(pos + src_len, buf_len - WILDCOPY_OVERLENGTH); //enough space in dst to hold src_len
+        ASSERT_NE(src, nullptr);
+        dst = src + pos;
+    }
+
+    void validate() {
+        EXPECT_EQ(memcmp(src, dst, src_len), 0); //validate src and dst are equal
+        
+        
+        if (dst > (src + src_len)) 
+        { //validate bytes HERE are not polluted: [src...src+length..<HERE>..dst..dst+len]
+            bool polluted = false;
+            char* cur = src + src_len;
+            char* end = dst;
+            while (cur < end) {
+                if ((*cur) != 0) {
+                    polluted = true;
+                    break;
+                }
+                cur++;
+            }
+            EXPECT_NE(polluted, true);
+        }
+        //[src...src+length...dst..dst+len..<HERE>..buf_len]. Ok to pollute here
+    }
+
+    char* getSrc() {
+        return src;
+    }
+
+    char* getDst() {
+        return dst;
+    }
+    
+private:
+    char* stream, *src, *dst;
+    size_t buf_len, src_len;
+};
+
+TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildcopy_long_common_1) // (dst-src) >= WILDCOPY_VECLEN, length < WILDCOPY_VECLEN
+{
+    size_t length = WILDCOPY_VECLEN - 1;
+    size_t test_cnt = 8;
+    size_t buf_len = length + WILDCOPY_VECLEN + test_cnt; //(dst bytes) + (gap btw dst,src) + (test for > WILDCOPY_VECLEN gap)
+
+    int ovtype = 0;
+    create(buf_len, length);
+
+    for (int i = WILDCOPY_VECLEN; i < (WILDCOPY_VECLEN + test_cnt); ++i) {
+        setDst(i);
+        TEST_AOCL_ZSTD_wildcopy_long((void*)getDst(), (void*)getSrc(), length, ovtype);
+        validate();
+        reset();
+    }
+}
+
+TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildcopy_long_common_2) // (dst-src) >= WILDCOPY_VECLEN, length > WILDCOPY_VECLEN
+{
+    size_t length = WILDCOPY_VECLEN + 1;
+    size_t test_cnt = 8;
+    size_t buf_len = length + WILDCOPY_VECLEN + test_cnt; //(dst bytes) + (gap btw dst,src) + (test for > WILDCOPY_VECLEN gap)
+
+    int ovtype = 0;
+    create(buf_len, length);
+
+    for (int i = WILDCOPY_VECLEN; i < (WILDCOPY_VECLEN + test_cnt); ++i) {
+        setDst(i);
+        TEST_AOCL_ZSTD_wildcopy_long((void*)getDst(), (void*)getSrc(), length, ovtype);
+        validate();
+        reset();
+    }
+}
+
+TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildcopy_long_common_3) // 8 <= (dst-src) < WILDCOPY_VECLEN, length < WILDCOPY_VECLEN
+{
+    size_t length = WILDCOPY_VECLEN - 1;
+    size_t buf_len = length + WILDCOPY_VECLEN; //(dst bytes) + (gap btw dst,src)
+
+    int ovtype = 1;
+    create(buf_len, length);
+
+    for (int i = 8; i < WILDCOPY_VECLEN; ++i) {
+        setDst(i);
+        TEST_AOCL_ZSTD_wildcopy_long((void*)getDst(), (void*)getSrc(), length, ovtype);
+        validate();
+        reset();
+    }
+}
+
+TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildcopy_long_common_4) // 8 <= (dst-src) < WILDCOPY_VECLEN, length > WILDCOPY_VECLEN
+{
+    size_t length = WILDCOPY_VECLEN + 1;
+    size_t buf_len = length + length; //(dst bytes) + (src bytes)
+
+    int ovtype = 1;
+    create(buf_len, length);
+
+    for (int i = 8; i < WILDCOPY_VECLEN; ++i) {
+        setDst(i);
+        TEST_AOCL_ZSTD_wildcopy_long((void*)getDst(), (void*)getSrc(), length, ovtype);
+        validate();
+        reset();
+    }
+}
+
+/*********************************************
+* End of ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long
+*********************************************/

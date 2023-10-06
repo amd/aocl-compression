@@ -249,6 +249,34 @@ void ZSTD_wildcopy(void* dst, const void* src, ptrdiff_t length, ZSTD_overlap_e 
     }
 }
 
+/*
+* Variant of ZSTD_wildcopy that is more performant when 'length' is long
+* Change wrt ZSTD_wildcopy:
+*   - Does not perform ZSTD_copy16 and length check before copy loop.
+*/
+MEM_STATIC FORCE_INLINE_ATTR
+void AOCL_ZSTD_wildcopy_long(void* dst, const void* src, ptrdiff_t length, ZSTD_overlap_e const ovtype)
+{
+    ptrdiff_t diff = (BYTE*)dst - (const BYTE*)src;
+    const BYTE* ip = (const BYTE*)src;
+    BYTE* op = (BYTE*)dst;
+    BYTE* const oend = op + length;
+
+    if (ovtype == ZSTD_overlap_src_before_dst && diff < WILDCOPY_VECLEN) {
+        /* Handle short offset copies. */
+        do {
+            COPY8(op, ip)
+        } while (op < oend);
+    }
+    else {
+        assert(diff >= WILDCOPY_VECLEN || diff <= -WILDCOPY_VECLEN);
+        do {
+            COPY16(op, ip);
+            COPY16(op, ip);
+        } while (op < oend);
+    }
+}
+
 MEM_STATIC size_t ZSTD_limitCopy(void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
     size_t const length = MIN(dstCapacity, srcSize);

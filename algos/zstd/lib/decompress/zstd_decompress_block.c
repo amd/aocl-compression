@@ -8,6 +8,34 @@
  * You may select, at your option, one of the above-listed licenses.
  */
 
+/**
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its
+ * contributors may be used to endorse or promote products derived from this
+ * software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /* zstd_decompress_block :
  * this module takes care of decompressing _compressed_ block */
 
@@ -1058,6 +1086,117 @@ size_t ZSTD_execSequence(BYTE* op,
     return sequenceLength;
 }
 
+#ifdef AOCL_ZSTD_OPT
+/*
+* Changes wrt ZSTD_execSequence:
+*   + Calls AOCL_ZSTD_wildcopy_long to copy matches
+*/
+HINT_INLINE
+size_t AOCL_ZSTD_execSequence(BYTE* op,
+    BYTE* const oend, seq_t sequence,
+    const BYTE** litPtr, const BYTE* const litLimit,
+    const BYTE* const prefixStart, const BYTE* const virtualStart, const BYTE* const dictEnd)
+{
+    BYTE* const oLitEnd = op + sequence.litLength;
+    size_t const sequenceLength = sequence.litLength + sequence.matchLength;
+    BYTE* const oMatchEnd = op + sequenceLength;   /* risk : address space overflow (32-bits) */
+    BYTE* const oend_w = oend - WILDCOPY_OVERLENGTH;   /* risk : address space underflow on oend=NULL */
+    const BYTE* const iLitEnd = *litPtr + sequence.litLength;
+    const BYTE* match = oLitEnd - sequence.offset;
+
+    assert(op != NULL /* Precondition */);
+    assert(oend_w < oend /* No underflow */);
+
+#if defined(__aarch64__)
+    /* prefetch sequence starting from match that will be used for copy later */
+    PREFETCH_L1(match);
+#endif
+    /* Handle edge cases in a slow path:
+     *   - Read beyond end of literals
+     *   - Match end is within WILDCOPY_OVERLIMIT of oend
+     *   - 32-bit mode and the match length overflows
+     */
+    if (UNLIKELY(
+        iLitEnd > litLimit ||
+        oMatchEnd > oend_w ||
+        (MEM_32bits() && (size_t)(oend - op) < sequenceLength + WILDCOPY_OVERLENGTH)))
+        return ZSTD_execSequenceEnd(op, oend, sequence, litPtr, litLimit, prefixStart, virtualStart, dictEnd);
+
+    /* Assumptions (everything else goes into ZSTD_execSequenceEnd()) */
+    assert(op <= oLitEnd /* No overflow */);
+    assert(oLitEnd < oMatchEnd /* Non-zero match & no overflow */);
+    assert(oMatchEnd <= oend /* No underflow */);
+    assert(iLitEnd <= litLimit /* Literal length is in bounds */);
+    assert(oLitEnd <= oend_w /* Can wildcopy literals */);
+    assert(oMatchEnd <= oend_w /* Can wildcopy matches */);
+
+    /* Copy Literals:
+     * Split out litLength <= 16 since it is nearly always true. +1.6% on gcc-9.
+     * We likely don't need the full 32-byte wildcopy.
+     */
+    assert(WILDCOPY_OVERLENGTH >= 16);
+    ZSTD_copy16(op, (*litPtr));
+    if (UNLIKELY(sequence.litLength > 16)) {
+        ZSTD_wildcopy(op + 16, (*litPtr) + 16, sequence.litLength - 16, ZSTD_no_overlap);
+    }
+    op = oLitEnd;
+    *litPtr = iLitEnd;   /* update for next sequence */
+
+    /* Copy Match */
+    if (sequence.offset > (size_t)(oLitEnd - prefixStart)) {
+        /* offset beyond prefix -> go into extDict */
+        RETURN_ERROR_IF(UNLIKELY(sequence.offset > (size_t)(oLitEnd - virtualStart)), corruption_detected, "");
+        match = dictEnd + (match - prefixStart);
+        if (match + sequence.matchLength <= dictEnd) {
+            ZSTD_memmove(oLitEnd, match, sequence.matchLength);
+            return sequenceLength;
+        }
+        /* span extDict & currentPrefixSegment */
+        {   size_t const length1 = dictEnd - match;
+        ZSTD_memmove(oLitEnd, match, length1);
+        op = oLitEnd + length1;
+        sequence.matchLength -= length1;
+        match = prefixStart;
+        }
+    }
+    /* Match within prefix of 1 or more bytes */
+    assert(op <= oMatchEnd);
+    assert(oMatchEnd <= oend_w);
+    assert(match >= prefixStart);
+    assert(sequence.matchLength >= 1);
+
+    /* Nearly all offsets are >= WILDCOPY_VECLEN bytes, which means we can use wildcopy
+     * without overlap checking.
+     */
+    if (LIKELY(sequence.offset >= WILDCOPY_VECLEN)) {
+        /* We bet on a full wildcopy for matches, since we expect matches to be
+         * longer than literals (in general). In silesia, ~10% of matches are longer
+         * than 16 bytes.
+         */
+#ifdef AOCL_ZSTD_WILDCOPY_LONG
+        /*
+        * As match lengths are mostly long, call AOCL_ZSTD_wildcopy_long.
+        */
+        AOCL_ZSTD_wildcopy_long(op, match, (ptrdiff_t)sequence.matchLength, ZSTD_no_overlap);
+#else
+        ZSTD_wildcopy(op, match, (ptrdiff_t)sequence.matchLength, ZSTD_no_overlap);
+#endif
+        return sequenceLength;
+    }
+    assert(sequence.offset < WILDCOPY_VECLEN);
+
+    /* Copy 8 bytes and spread the offset to be >= 8. */
+    ZSTD_overlapCopy8(&op, &match, sequence.offset);
+
+    /* If the match length is > 8 bytes, then continue with the wildcopy. */
+    if (sequence.matchLength > 8) {
+        assert(op < oMatchEnd);
+        ZSTD_wildcopy(op, match, (ptrdiff_t)sequence.matchLength - 8, ZSTD_overlap_src_before_dst);
+    }
+    return sequenceLength;
+}
+#endif
+
 HINT_INLINE
 size_t ZSTD_execSequenceSplitLitBuffer(BYTE* op,
     BYTE* const oend, const BYTE* const oend_w, seq_t sequence,
@@ -1751,6 +1890,7 @@ ZSTD_decompressSequences_body(ZSTD_DCtx* dctx,
 /*
 * Change wrt ZSTD_decompressSequences_body:
 *  + Calls AOCL_ZSTD_decodeSequence_gcc for gcc compiler on x86 machines
+*  + Calls AOCL_ZSTD_execSequence
 */
 FORCE_INLINE_TEMPLATE size_t
 DONT_VECTORIZE
@@ -1810,7 +1950,7 @@ AOCL_ZSTD_decompressSequences_body(ZSTD_DCtx* dctx,
 #else
             seq_t const sequence = ZSTD_decodeSequence(&seqState, isLongOffset);
 #endif
-            size_t const oneSeqSize = ZSTD_execSequence(op, oend, sequence, &litPtr, litEnd, prefixStart, vBase, dictEnd);
+            size_t const oneSeqSize = AOCL_ZSTD_execSequence(op, oend, sequence, &litPtr, litEnd, prefixStart, vBase, dictEnd);
 #if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) && defined(FUZZING_ASSERT_VALID_SEQUENCE)
             assert(!ZSTD_isError(oneSeqSize));
             if (frame) ZSTD_assertValidSequence(dctx, op, oend, sequence, prefixStart, vBase);
@@ -2474,5 +2614,21 @@ static void aocl_register_zstd_decompress_block_fmv(int optOff, int optLevel)
 void aocl_setup_zstd_decompress_block(int optOff, int optLevel)
 {
     aocl_register_zstd_decompress_block_fmv(optOff, optLevel);
+}
+#endif
+
+#ifdef AOCL_ZSTD_UNIT_TEST
+ZSTDLIB_API 
+void TEST_AOCL_ZSTD_wildcopy_long(void* dst, const void* src, size_t length, int ovtype) {
+    switch (ovtype) {
+    case 0:
+        AOCL_ZSTD_wildcopy_long(dst, src, length, ZSTD_no_overlap);
+        break;
+    case 1:
+        AOCL_ZSTD_wildcopy_long(dst, src, length, ZSTD_overlap_src_before_dst);
+        break;
+    default:
+        break;
+    }
 }
 #endif
