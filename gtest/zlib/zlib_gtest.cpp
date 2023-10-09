@@ -44,6 +44,7 @@
 #include "algos/zlib/inflate.h"
 #include "algos/zlib/deflate.h"
 #include "algos/zlib/aocl_zlib_test.h"
+#include "algos/zlib/aocl_send_bits.h"
 #include "api/aocl_compression.h"
 #include "gtest/gtest.h"
 
@@ -52,6 +53,13 @@ using namespace std;
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
 
 #define MIN(a,b)    ( (a) < (b) ? (a) : (b) )
+
+#ifdef __cplusplus
+extern "C" {
+    extern void AOCL_bi_flush(deflate_state* s);
+    extern void AOCL_bi_windup(deflate_state* s);
+}
+#endif
 
 /* This base class can be used for all fixtures
 * that require dynamic dispatcher setup */
@@ -1616,7 +1624,7 @@ TEST(ZLIB_inflateBackEnd, all_cases)
 
   inflateBackInit(strm, windowBits, window);
 
-  internal_state * st = strm->state;
+  internal_state *st = strm->state;
   strm->state = 0;
   EXPECT_EQ(inflateBackEnd(strm), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackEnd_common_3
   strm->state = st;
@@ -2232,4 +2240,341 @@ TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_3)
 
     free(compr);
     free(uncompr);
+}
+
+/*=====================================
+ *  Test cases for AOCL_bi_flush
+ *=====================================*/
+class ZLIB_AOCL_bi_flush : public ::testing::Test
+{
+protected:
+    z_streamp strm;
+    int val;
+    deflate_state* state;
+
+    void SetUp() override
+    {
+        strm = nzp();
+        deflateInit(strm, 6);
+        state = (deflate_state*)strm->state;
+        val = 170; /* 1010 1010 */
+        state->bi_valid = 0; /* number of bits set in state->bi_buf */
+        state->pending = 0;  /* number of bytes present in state->pending_buf. */
+    }
+    ~ZLIB_AOCL_bi_flush()
+    {
+        rstd(strm);
+    }
+};
+
+TEST_F(ZLIB_AOCL_bi_flush, AOCL_Compression_AOCL_bi_flush_common_1)
+{
+    /* Setting 64 bits in bit buffer */
+    for (int i = 0; i < 8; i++) {
+        state->bi_buf |= (uint64_t)val << state->bi_valid;
+        state->bi_valid += 8;
+    }
+    /* 64 bits are set in state->bi_buf */
+    EXPECT_EQ(state->bi_valid, 64);
+
+    AOCL_bi_flush(state);
+    EXPECT_EQ(state->pending, 8);
+    /* Checking if all the 64 bits are copied to state->pending_buf properly. */
+    for (int i = 0; i < 8; i++) {
+        EXPECT_EQ(state->pending_buf[state->pending - 8 + i], 170);
+    }
+    /* Number of bits remaining in buffer (should not be more than 7). */
+    EXPECT_EQ(state->bi_valid, 0);  /* Expected number of bits in this case is zero. */
+    EXPECT_EQ(state->bi_buf, 0);
+}
+
+TEST_F(ZLIB_AOCL_bi_flush, AOCL_Compression_AOCL_bi_flush_common_2)
+{
+    /* Setting 56 bits in bit buffer. */
+    for (int i = 0; i < 7; i++) {
+        state->bi_buf |= (uint64_t)(val+i) << state->bi_valid;
+        state->bi_valid += 8;
+    }
+    /* Setting another 7 bits in bit buffer */
+    int val2 = 122; /* "0111 1010" */
+    state->bi_buf |= (uint64_t)val2 << state->bi_valid;
+    state->bi_valid += 7;
+    EXPECT_EQ(state->bi_valid, 63); /* Total of 63 bits are set in state->bi_buf */
+
+    AOCL_bi_flush(state);
+
+    EXPECT_EQ(state->pending, 7);
+    /* Checking if AOCL_bi_flush() copies the data to state->pending_buf properly. */
+    for (int i = 0; i < 7; i++) {
+        EXPECT_EQ(state->pending_buf[state->pending - 7 + i], val + i);
+    }
+    /* Number of bits remaining in buffer (should not be more than 7). */
+    EXPECT_EQ(state->bi_valid, 7); /* Expected number of bits in this case is 7. */
+    EXPECT_EQ(state->bi_buf, 122);
+}
+
+TEST_F(ZLIB_AOCL_bi_flush, AOCL_Compression_AOCL_bi_flush_common_3)
+{
+    /* setting 32 bits in bit buffer */
+    for (int i = 0; i < 4; i++) {
+        state->bi_buf |= (uint64_t)(val+i) << state->bi_valid;
+        state->bi_valid += 8;
+    }
+    /* setting another one bit in bit buffer */
+    int one = 1; /* "0000 0001" */
+    state->bi_buf |= (uint64_t)one << state->bi_valid;
+    state->bi_valid += 1;
+
+    /* total 33 bits are set */
+    EXPECT_EQ(state->bi_valid, 33);
+
+    AOCL_bi_flush(state);
+
+    EXPECT_EQ(state->pending, 4);
+    /* Checking if AOCL_bi_flush() copies the data to state->pending_buf properly. */
+    for (int i = 0; i < 4; i++) {
+        EXPECT_EQ(state->pending_buf[state->pending - 4 + i], val+i);
+    }
+    /* Number of bits remaining in buffer (should not be more than 7). */
+    EXPECT_EQ(state->bi_valid, 1);  /* Expected number of bits in this case is 1. */
+    EXPECT_EQ(state->bi_buf, 1);
+}
+
+TEST_F(ZLIB_AOCL_bi_flush, AOCL_Compression_AOCL_bi_flush_common_4)  /* state->bi_valid > 8 */
+{
+    /* setting 8 bits in bit buffer */
+    state->bi_buf |= (uint64_t)(val) << state->bi_valid;
+    state->bi_valid += 8;
+
+    /* setting another one bit in bit buffer */
+    int one = 1; /* "0000 0001" */
+    state->bi_buf |= (uint64_t)one << state->bi_valid;
+    state->bi_valid += 1;
+
+    /* total 9 bits are set */
+    EXPECT_EQ(state->bi_valid, 9);
+
+    AOCL_bi_flush(state);
+
+    EXPECT_EQ(state->pending, 1);
+    /* Checking if AOCL_bi_flush() copies the data to state->pending_buf properly. */
+
+    EXPECT_EQ(state->pending_buf[state->pending - 1], val);
+
+    /* Number of bits remaining in buffer (should not be more than 7). */
+    EXPECT_EQ(state->bi_valid, 1);  /* Expected number of bits in this case is 1. */
+    EXPECT_EQ(state->bi_buf, 1);
+}
+
+/*=====================================
+ *  Test cases for AOCL_bi_windup
+ *=====================================*/
+class ZLIB_AOCL_bi_windup : public ZLIB_AOCL_bi_flush {
+};
+
+TEST_F(ZLIB_AOCL_bi_windup, AOCL_Compression_zlib_AOCL_bi_windup_common_1)
+{
+    /* Setting 56 bits in bit buffer */
+    for (int i = 0; i < 7; i++) {
+        state->bi_buf |= (uint64_t)(val+i) << state->bi_valid;
+        state->bi_valid += 8;
+    }
+    /* Setting another one bit in bit buffer */
+    int one = 1; /* " 0000 0001" */
+    state->bi_buf |= (uint64_t)one << state->bi_valid;
+    state->bi_valid += 1;
+
+    /* 57 bits are set in state->bi_buf */
+    EXPECT_EQ(state->bi_valid, 57);
+
+    AOCL_bi_windup(state);
+
+    EXPECT_EQ(state->pending, 8);
+    /* Checking if AOCL_bi_windup flushes the bit buffer to state->pending_buf properly. */
+    for (int i = 0; i < 7; i++) {
+        EXPECT_EQ(state->pending_buf[state->pending - 8 + i], 170+i);
+    }
+    EXPECT_EQ(state->pending_buf[state->pending - 8 + 7], 1);
+
+    EXPECT_EQ(state->bi_valid, 0);
+    EXPECT_EQ(state->bi_buf, 0);
+}
+
+TEST_F(ZLIB_AOCL_bi_windup, AOCL_Compression_zlib_AOCL_bi_windup_common_2)
+{
+    /* Setting 48 bits in bit buffer */
+    for (int i = 0; i < 6; i++) {
+        state->bi_buf |= (uint64_t)(val+i) << state->bi_valid;
+        state->bi_valid += 8;
+    }
+    /* Setting another 7 bits in bit buffer */
+    int val2 = 122; /* "0111 1010" */
+    state->bi_buf |= (uint64_t)val2 << state->bi_valid;
+    state->bi_valid += 7;
+
+    /* 55 bits are set in state->bi_buf */
+    EXPECT_EQ(state->bi_valid, 55);
+
+    AOCL_bi_windup(state);
+
+    EXPECT_EQ(state->pending, 7);
+    /* Checking if AOCL_bi_windup flushes the bit buffer to state->pending_buf properly. */
+    for (int i = 0; i < 6; i++) {
+        EXPECT_EQ(state->pending_buf[state->pending - 7 + i], val+i);
+    }
+    EXPECT_EQ(state->pending_buf[state->pending - 7 + 6], 122);
+
+    EXPECT_EQ(state->bi_valid, 0);
+    EXPECT_EQ(state->bi_buf, 0);
+}
+
+TEST_F(ZLIB_AOCL_bi_windup, AOCL_Compression_zlib_AOCL_bi_windup_common_3)  /* state->bi_valid > 8 */
+{
+    /* Setting 8 bits in bit buffer */
+    state->bi_buf |= (uint64_t)(val) << state->bi_valid;
+    state->bi_valid += 8;
+
+    /* Setting another 1 bits in bit buffer */
+    int one = 1; /* "0000 0001" */
+    state->bi_buf |= (uint64_t)one << state->bi_valid;
+    state->bi_valid += 1;
+
+    /* 9 bits are set in state->bi_buf */
+    EXPECT_EQ(state->bi_valid, 9);
+
+    AOCL_bi_windup(state);
+
+    EXPECT_EQ(state->pending, 2);
+    /* Checking if AOCL_bi_windup flushes the bit buffer to state->pending_buf properly. */
+    EXPECT_EQ(state->pending_buf[state->pending - 2], 170);
+    EXPECT_EQ(state->pending_buf[state->pending - 1], 1);
+
+    EXPECT_EQ(state->bi_valid, 0);
+    EXPECT_EQ(state->bi_buf, 0);
+}
+
+TEST_F(ZLIB_AOCL_bi_windup, AOCL_Compression_zlib_AOCL_bi_windup_common_4)  /* state->bi_valid > 0 */
+{
+    /* Setting another 1 bits in bit buffer */
+    int one = 1; /* "0000 0001" */
+    state->bi_buf |= (uint64_t)one << state->bi_valid;
+    state->bi_valid += 1;
+
+    /* 1 bit are set in state->bi_buf */
+    EXPECT_EQ(state->bi_valid, 1);
+
+    AOCL_bi_windup(state);
+
+    EXPECT_EQ(state->pending, 1); /* number of bytes moved to pending buffer on calling AOCL_bi_windup. */
+    /* Checking if AOCL_bi_windup flushes the bit buffer to state->pending_buf properly. */
+    EXPECT_EQ(state->pending_buf[state->pending - 1], 1);
+
+    EXPECT_EQ(state->bi_valid, 0);
+    EXPECT_EQ(state->bi_buf, 0);
+}
+
+/*=====================================
+ *  Test cases for AOCL_send_bits
+ *=====================================*/
+class ZLIB_AOCL_send_bits : public ::testing::Test
+{
+protected:
+    z_streamp strm;
+    int val;
+    deflate_state* state;
+    int value_to_send;
+    int length;
+
+    void SetUp() override
+    {
+        strm = nzp();
+        deflateInit(strm, 6);
+        state = (deflate_state*)strm->state;
+        val = 170; /* 1010 1010 */
+        state->bi_valid = 0; /* number of bits set in state->bi_buf */
+        state->pending = 0;  /* number of bytes present in pending buffer. */
+    }
+
+    ~ZLIB_AOCL_send_bits()
+    {
+        rstd(strm);
+    }
+};
+
+TEST_F(ZLIB_AOCL_send_bits, AOCL_Compression_zlib_AOCL_send_bits_common_1)
+{
+    /* Check if data is kept safe in bit buffer when it is empty. */
+    value_to_send = 358;    /* "1 0110 0110" */
+    length = 9;             /* bit length of value to send */
+
+    /* Storing to confirm that AOCL_send_bits doesn't change this value for length < 64. */
+    int pending_count = state->pending;  /* number of valid bytes in pending buffer */
+    uint8_t byte1 = state->pending_buf[pending_count];
+    uint8_t byte2 = state->pending_buf[pending_count + 1];
+
+    AOCL_send_bits(state, value_to_send, length);
+    /* Nothing is copied to pending buffer untill bi buffer is full. */
+
+    EXPECT_EQ(state->bi_buf, 358);
+    EXPECT_EQ(state->bi_valid, 9);
+
+    /* Check to confirm no data byte copied to state->pending_buf */
+    EXPECT_EQ(state->pending, pending_count);
+    /* In case data is copied to state->pending_buf, it will be atmost 2 bytes,
+     * because length sent above is 9. */
+    EXPECT_EQ(state->pending_buf[pending_count], byte1);
+    EXPECT_EQ(state->pending_buf[pending_count + 1], byte2);
+}
+
+TEST_F(ZLIB_AOCL_send_bits, AOCL_Compression_zlib_AOCL_send_bits_common_2)
+{
+    /* Check if data is copied properly to pending buffer when bit buffer is already full. */
+    value_to_send = 358;    /* "1 0110 0110" */
+    length = 9;             /* bit length of value to send */
+    for (int i = 0; i < 8; i++) {
+        state->bi_buf |= (uint64_t)(val+i) << state->bi_valid;
+        state->bi_valid += 8;
+    }
+    AOCL_send_bits(state, value_to_send, length);
+
+    EXPECT_EQ(state->pending, 8);    /* 8 Bytes moved to pending buffer, remainig bits are stored in bit buffer. */
+
+    for (int i = 0; i < 7; i++) {
+        EXPECT_EQ(state->pending_buf[state->pending - 8 + i], val+i);
+    }
+    EXPECT_EQ(state->bi_buf, 358);
+    EXPECT_EQ(state->bi_valid, 9);
+}
+
+TEST_F(ZLIB_AOCL_send_bits, AOCL_Compression_zlib_AOCL_send_bits_common_3)
+{
+    /* Check if data is copied properly to pending buffer when bit buffer may overflow because of new insert. */
+    value_to_send = 359;    /* "1 0110 0111" */
+    length = 9;             /* bit length of value to send */
+
+    /* Setting 56 bits of bit buffer */
+    for (int i = 0; i < 7; i++) {
+        state->bi_buf |= (uint64_t)(val+i) << state->bi_valid;
+        state->bi_valid += 8;
+    }
+    /* Setting another 7 bits in bit buffer */
+    int val2 = 122; /* "0111 1010" */
+    state->bi_buf |= (uint64_t)val2 << state->bi_valid;
+    state->bi_valid += 7;
+    /* 63 Bits in bit buffer  be like "122 176 175 174 173 172 171 170". */
+    /* Least significant bit from value_to_send will be inserted in bit buffer. */
+    /* 63 bits of bit buffer will be " 250 176 175 174 173 172 171 170" */
+    AOCL_send_bits(state, value_to_send, length); /* Copies data from bit buffer when it is full to pending buffer(LSB First). */
+
+    EXPECT_EQ(state->pending, 8);
+
+    for (int i = 0; i < 7; i++) {
+        EXPECT_EQ(state->pending_buf[state->pending - 8 + i], val+i);
+    }
+    EXPECT_EQ(state->pending_buf[state->pending - 8 + 7], 250);
+
+    /* Least sinificant bit is already inserted into pending buffer,
+     * Remaining bits of value_to_send are present in bit buffer which are "1011 0011" which is 179. */
+    EXPECT_EQ(state->bi_buf, 179);
+    EXPECT_EQ(state->bi_valid, 8);
 }

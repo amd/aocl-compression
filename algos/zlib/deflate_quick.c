@@ -11,8 +11,13 @@
 
 #ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
 
+#include "aocl_send_bits.h"
+
 extern uint32_t (*aocl_compare256_fp) (const Bytef *src1, const Bytef *src2);
 extern void bi_windup(deflate_state *s);
+#ifdef AOCL_ZLIB_OPT
+extern void AOCL_bi_windup(deflate_state *s);
+#endif
 
 local z_const unsigned quick_len_codes[MAX_MATCH-MIN_MATCH+1];
 local z_const unsigned quick_dist_codes[8192];
@@ -82,9 +87,12 @@ local void static_emit_tree(deflate_state *z_const s,
     unsigned last;
 
     last = flush == Z_FINISH ? 1 : 0;
-    send_bits(s, (STATIC_TREES<<1)+ last, 3);
+    OPT_send_bits(s, (STATIC_TREES<<1) + last, 3);
 }
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+extern void (*bi_windup_fp)(deflate_state *s);
+#endif /* AOCL_DYNAMIC_DISPATCHER */
 
 local void static_emit_end_block(deflate_state *z_const s,
         int last)
@@ -92,7 +100,13 @@ local void static_emit_end_block(deflate_state *z_const s,
     send_code(s, END_BLOCK, static_ltree);
 
     if (last)
-        bi_windup(s);
+#ifdef AOCL_DYNAMIC_DISPATCHER
+        bi_windup_fp(s);
+#elif defined(AOCL_ZLIB_OPT)
+        AOCL_bi_windup(s);
+#else
+		bi_windup(s);
+#endif /* AOCL_DYNAMIC_DISPATCHER */
 
     s->block_start = s->strstart;
     flush_pending_fp(s->strm);

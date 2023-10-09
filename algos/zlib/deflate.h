@@ -55,6 +55,7 @@
 /* All codes must not exceed MAX_BITS bits */
 
 #define Buf_size 16
+#define AOCL_Buf_size 64
 /* size of bit buffer in bi_buf */
 
 #define INIT_STATE    42    /* zlib header -> BUSY_STATE */
@@ -263,7 +264,11 @@ typedef struct internal_state {
     ulg bits_sent;      /* bit length of compressed data sent mod 2^32 */
 #endif
 
+#ifdef AOCL_ZLIB_OPT 
+    uint64_t bi_buf;
+#else
     ush bi_buf;
+#endif
     /* Output buffer. bits are inserted starting at the bottom (least
      * significant bits).
      */
@@ -464,15 +469,6 @@ extern uint32_t mask;
     put_byte(s, (uch)((ush)(w) >> 8)); \
 }
 
-#ifndef ZLIB_DEBUG
-#  define send_code(s, c, tree) send_bits(s, tree[c].Code, tree[c].Len)
-   /* Send a code of the given tree. c and tree must not have side effects */
-
-#else /* !ZLIB_DEBUG */
-#  define send_code(s, c, tree) \
-     { if (z_verbose>2) fprintf(stderr,"\ncd %3d ",(c)); \
-       send_bits(s, tree[c].Code, tree[c].Len); }
-#endif
 /* ===========================================================================
  * Send a value on a given number of bits.
  * IN assertion: length <= 16 and value fits in length bits.

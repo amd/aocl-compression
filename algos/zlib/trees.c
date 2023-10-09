@@ -36,6 +36,7 @@
 /* #define GEN_TREES_H */
 
 #include "deflate.h"
+#include "aocl_send_bits.h"
 
 #ifdef ZLIB_DEBUG
 #  include <ctype.h>
@@ -184,6 +185,40 @@ local void bi_flush(deflate_state *s) {
     }
 }
 
+/* AOCL_variant of bi_flush() which uses the s->bi_buf of 64 bits */
+#ifdef AOCL_ZLIB_OPT
+#ifdef AOCL_ZLIB_UNIT_TEST
+ZEXTERN void ZEXPORT AOCL_bi_flush(deflate_state* s) {
+#else
+local void AOCL_bi_flush(deflate_state * s) {
+#endif /* AOCL_ZLIB_UNIT_TEST */
+    if (s->bi_valid == 64) {
+        AOCL_put_uInt64_t(s, s->bi_buf);
+        s->bi_buf = 0;
+        s->bi_valid = 0;
+    }
+    else
+    {
+        if (s->bi_valid >= 32) {
+            put_short(s, (ush)s->bi_buf);
+            s->bi_buf >>= 16;
+            put_short(s, (ush)s->bi_buf);
+            s->bi_buf >>= 16;
+            s->bi_valid -= 32;
+        }
+        if (s->bi_valid >= 16) {
+            put_short(s, (ush)s->bi_buf);
+            s->bi_buf >>= 16;
+            s->bi_valid -= 16;
+        }
+        if (s->bi_valid >= 8) {
+            put_byte(s, (Byte)s->bi_buf);
+            s->bi_buf >>= 8;
+            s->bi_valid -= 8;
+        }
+    }
+}
+#endif /* AOCL_ZLIB_OPT */
 /* ===========================================================================
  * Flush the bit buffer and align the output on a byte boundary
  */
@@ -203,6 +238,45 @@ void ZLIB_INTERNAL bi_windup(deflate_state *s) {
     s->bits_sent = (s->bits_sent + 7) & ~7;
 #endif
 }
+
+#ifdef AOCL_ZLIB_OPT
+#ifdef AOCL_ZLIB_UNIT_TEST
+ZEXTERN void ZEXPORT AOCL_bi_windup(deflate_state *s) {
+#else
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+local void AOCL_bi_windup(deflate_state *s) {
+#else
+void ZLIB_INTERNAL AOCL_bi_windup(deflate_state *s) {
+#endif
+#endif
+    if (s->bi_valid > 56) {
+        AOCL_put_uInt64_t(s, s->bi_buf);
+    }
+    else
+    {
+        if (s->bi_valid > 24) {
+            put_short(s, (ush)s->bi_buf);
+            s->bi_buf >>= 16;
+            put_short(s, (ush)s->bi_buf);
+            s->bi_buf >>= 16;
+            s->bi_valid -= 32;
+        }
+        if (s->bi_valid > 8) {
+            put_short(s, (ush)s->bi_buf);
+            s->bi_buf >>= 16;
+            s->bi_valid -= 16;
+        }
+        if (s->bi_valid > 0) {
+            put_byte(s, (Byte)s->bi_buf);
+        }
+    }
+    s->bi_buf = 0;
+    s->bi_valid = 0;
+#ifdef ZLIB_DEBUG
+    s->bits_sent = (s->bits_sent + 63) & ~63;
+#endif
+}
+#endif /* AOCL_ZLIB_OPT */
 
 /* ===========================================================================
  * Generate the codes for a given tree and bit counts (which need not be
@@ -247,15 +321,34 @@ local void gen_codes(ct_data *tree, int max_code, ushf *bl_count) {
 local void gen_trees_header(void);
 #endif
 
+#ifdef AOCL_DYNAMIC_DISPATCHER
+/* Function pointers holding the AOCL optimized variant. */
+static void (*bi_flush_fp)(deflate_state *s) = bi_flush;
+void (*bi_windup_fp)(deflate_state *s) = bi_windup;
+
+ZEXTERN char* ZEXPORT aocl_setup_tree_fmv(int optOff, int optLevel, int insize,
+    int level, int windowLog)
+{
+    if (UNLIKELY(optOff == 1)) {
+        bi_flush_fp = bi_flush;
+        bi_windup_fp = bi_windup;
+    }
+    else {
+        bi_flush_fp = AOCL_bi_flush;
+        bi_windup_fp = AOCL_bi_windup;
+    }
+    return NULL;
+}
+#endif
 #ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
 #ifndef ZLIB_DEBUG
-#  define send_code(s, c, tree) send_bits(s, tree[c].Code, tree[c].Len)
+#  define send_code(s, c, tree) OPT_send_bits(s, tree[c].Code, tree[c].Len)
    /* Send a code of the given tree. c and tree must not have side effects */
 
 #else /* !ZLIB_DEBUG */
 #  define send_code(s, c, tree) \
      { if (z_verbose>2) fprintf(stderr,"\ncd %3d ",(c)); \
-       send_bits(s, tree[c].Code, tree[c].Len); }
+       OPT_send_bits(s, tree[c].Code, tree[c].Len); }
 #endif
 
 /* ===========================================================================
@@ -789,13 +882,15 @@ local void send_tree(deflate_state *s, ct_data *tree, int max_code) {
                 send_code(s, curlen, s->bl_tree); count--;
             }
             Assert(count >= 3 && count <= 6, " 3_6?");
-            send_code(s, REP_3_6, s->bl_tree); send_bits(s, count - 3, 2);
-
+            send_code(s, REP_3_6, s->bl_tree);
+            OPT_send_bits(s, count - 3, 2);
         } else if (count <= 10) {
-            send_code(s, REPZ_3_10, s->bl_tree); send_bits(s, count - 3, 3);
+            send_code(s, REPZ_3_10, s->bl_tree);
+            OPT_send_bits(s, count - 3, 3);
 
         } else {
-            send_code(s, REPZ_11_138, s->bl_tree); send_bits(s, count - 11, 7);
+            send_code(s, REPZ_11_138, s->bl_tree);
+            OPT_send_bits(s, count - 11, 7);
         }
         count = 0; prevlen = curlen;
         if (nextlen == 0) {
@@ -853,12 +948,13 @@ local void send_all_trees(deflate_state *s, int lcodes, int dcodes,
     Assert (lcodes <= L_CODES && dcodes <= D_CODES && blcodes <= BL_CODES,
             "too many codes");
     Tracev((stderr, "\nbl counts: "));
-    send_bits(s, lcodes - 257, 5);  /* not +255 as stated in appnote.txt */
-    send_bits(s, dcodes - 1,   5);
-    send_bits(s, blcodes - 4,  4);  /* not -3 as stated in appnote.txt */
+    OPT_send_bits(s, lcodes-257, 5); /* not +255 as stated in appnote.txt */
+    OPT_send_bits(s, dcodes-1, 5);
+    OPT_send_bits(s, blcodes-4, 4);  /* not -3 as stated in appnote.txt */
+
     for (rank = 0; rank < blcodes; rank++) {
         Tracev((stderr, "\nbl code %2d ", bl_order[rank]));
-        send_bits(s, s->bl_tree[bl_order[rank]].Len, 3);
+        OPT_send_bits(s, s->bl_tree[bl_order[rank]].Len, 3);
     }
     Tracev((stderr, "\nbl tree: sent %ld", s->bits_sent));
 
@@ -874,8 +970,16 @@ local void send_all_trees(deflate_state *s, int lcodes, int dcodes,
  */
 void ZLIB_INTERNAL _tr_stored_block(deflate_state *s, charf *buf,
                                     ulg stored_len, int last) {
-    send_bits(s, (STORED_BLOCK<<1) + last, 3);  /* send block type */
-    bi_windup(s);        /* align on byte boundary */
+    /* send block type */
+    OPT_send_bits(s, (STORED_BLOCK << 1) + last, 3);
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    bi_windup_fp(s);         /* align on byte boundary */
+#elif defined(AOCL_ZLIB_OPT)
+    AOCL_bi_windup(s);        /* align on byte boundary */
+#else
+    bi_windup(s);             /* align on byte boundary */
+#endif /* AOCL_DYNAMIC_DISPATCHER */
+
     put_short(s, (ush)stored_len);
     put_short(s, (ush)~stored_len);
     if (stored_len)
@@ -893,7 +997,13 @@ void ZLIB_INTERNAL _tr_stored_block(deflate_state *s, charf *buf,
  * Flush the bits in the bit buffer to pending output (leaves at most 7 bits)
  */
 void ZLIB_INTERNAL _tr_flush_bits(deflate_state *s) {
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    bi_flush_fp(s);
+#elif defined(AOCL_ZLIB_OPT)
+    AOCL_bi_flush(s);
+#else
     bi_flush(s);
+#endif /* AOCL_DYNAMIC_DISPATCHER */
 }
 
 /* ===========================================================================
@@ -901,12 +1011,20 @@ void ZLIB_INTERNAL _tr_flush_bits(deflate_state *s) {
  * This takes 10 bits, of which 7 may remain in the bit buffer.
  */
 void ZLIB_INTERNAL _tr_align(deflate_state *s) {
-    send_bits(s, STATIC_TREES<<1, 3);
+    OPT_send_bits(s, STATIC_TREES<<1, 3);
+
     send_code(s, END_BLOCK, static_ltree);
 #ifdef ZLIB_DEBUG
     s->compressed_len += 10L; /* 3 for block type, 7 for EOB */
 #endif
+
+#ifdef AOCL_DYNAMIC_DISPATCHER
+    bi_flush_fp(s);
+#elif defined(AOCL_ZLIB_OPT)
+    AOCL_bi_flush(s);
+#else
     bi_flush(s);
+#endif /* AOCL_DYNAMIC_DISPATCHER */
 }
 
 /* ===========================================================================
@@ -939,17 +1057,18 @@ local void compress_block(deflate_state *s, const ct_data *ltree,
             extra = extra_lbits[code];
             if (extra != 0) {
                 lc -= base_length[code];
-                send_bits(s, lc, extra);       /* send the extra length bits */
+                /* send the extra length bits */
+                OPT_send_bits(s, lc, extra);
             }
             dist--; /* dist is now the match distance - 1 */
             code = d_code(dist);
-            Assert (code < D_CODES, "bad d_code");
+            Assert(code < D_CODES, "bad d_code");
 
             send_code(s, code, dtree);       /* send the distance code */
             extra = extra_dbits[code];
             if (extra != 0) {
                 dist -= (unsigned)base_dist[code];
-                send_bits(s, dist, extra);   /* send the extra distance bits */
+                OPT_send_bits(s, dist, extra);   /* send the extra distance bits */
             }
         } /* literal or match pair ? */
 
@@ -1071,14 +1190,14 @@ void ZLIB_INTERNAL _tr_flush_block(deflate_state *s, charf *buf,
         _tr_stored_block(s, buf, stored_len, last);
 
     } else if (static_lenb == opt_lenb) {
-        send_bits(s, (STATIC_TREES<<1) + last, 3);
+        OPT_send_bits(s, (STATIC_TREES<<1) + last, 3);
         compress_block(s, (const ct_data *)static_ltree,
                        (const ct_data *)static_dtree);
 #ifdef ZLIB_DEBUG
         s->compressed_len += 3 + s->static_len;
 #endif
     } else {
-        send_bits(s, (DYN_TREES<<1) + last, 3);
+        OPT_send_bits(s, (DYN_TREES<<1) + last, 3);
         send_all_trees(s, s->l_desc.max_code + 1, s->d_desc.max_code + 1,
                        max_blindex + 1);
         compress_block(s, (const ct_data *)s->dyn_ltree,
@@ -1094,7 +1213,14 @@ void ZLIB_INTERNAL _tr_flush_block(deflate_state *s, charf *buf,
     init_block(s);
 
     if (last) {
+#ifdef AOCL_DYNAMIC_DISPATCHER
+        bi_windup_fp(s);
+#elif defined(AOCL_ZLIB_OPT)
+        AOCL_bi_windup(s);
+#else
         bi_windup(s);
+#endif /* AOCL_DYNAMIC_DISPATCHER */
+
 #ifdef ZLIB_DEBUG
         s->compressed_len += 7;  /* align on byte boundary */
 #endif

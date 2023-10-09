@@ -3172,6 +3172,8 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib OF((int optOff, int optLevel,
  */
 ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv OF((int optOff, int optLevel,
                                         int insize, int level, int windowLog));
+ZEXTERN char * ZEXPORT aocl_setup_tree_fmv OF((int optOff, int optLevel,
+                                        int insize, int level, int windowLog));                                        
 ZEXTERN char * ZEXPORT aocl_setup_inflate_fmv OF((int optOff, int optLevel,
                                         int insize, int level, int windowLog));
 

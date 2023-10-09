@@ -20,6 +20,7 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
     zlibOptOff = optOff;
     zlibOptLevel = optLevel;
     aocl_setup_deflate_fmv(optOff, optLevel, insize, level, windowLog);
+    aocl_setup_tree_fmv(optOff, optLevel, insize, level, windowLog);
     aocl_setup_inflate_fmv(optOff, optLevel, insize, level, windowLog);
     aocl_setup_adler32_fmv(optOff, optLevel, insize, level, windowLog);
     return NULL;
