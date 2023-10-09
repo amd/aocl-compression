@@ -75,6 +75,7 @@ option (ZLIB_DEFLATE_FAST_MODE_3 "Enable ZLIB deflate quick strategy (Disabled b
 option (AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 "Enable LZ4 match skipping optimization strategy-1 based on a larger base step size (Disabled by default)" OFF)
 option (AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2 "Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1 (Disabled by default)" OFF)
 option (AOCL_LZ4_NEW_PRIME_NUMBER "Enable the usage of a new prime number for LZ4 hashing function (Disabled by default)" OFF)
+option (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL "Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)" OFF)
 
 if(ZLIB_DEFLATE_FAST_MODE_2 AND ZLIB_DEFLATE_FAST_MODE_3)
 	message(FATAL_ERROR "You can not enable ZLIB_DEFLATE_FAST_MODE_2 and ZLIB_DEFLATE_FAST_MODE_3 together.")
@@ -135,6 +136,14 @@ set (LZMA_SRC_FILES	${ALGOS_PATH}/lzma/code_alignment.c
 					${ALGOS_PATH}/lzma/LzmaDec.h
 					${ALGOS_PATH}/lzma/LzmaEnc.h
 					${ALGOS_PATH}/lzma/LzFind.h)
+
+if (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL)
+set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL")
+set (LZMA_SRC_FILES	${LZMA_SRC_FILES}
+					${ALGOS_PATH}/lzma/xzlzma/XzLzma.c
+					${ALGOS_PATH}/lzma/xzlzma/XzLzma.h
+					${ALGOS_PATH}/lzma/xzlzma/XzVersion.h)
+endif()
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
 endif ()

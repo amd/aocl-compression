@@ -1518,7 +1518,6 @@ TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Create_pass_common_1) //LzmaE
 TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Create_fail_common_1) //LzmaEnc create with invalid allocator
 {
     const ISzAlloc g_Alloc = { SzAllocDummy, SzFreeDummy };
-    const ISzAlloc g_AllocBig = { SzAllocDummy, SzFreeDummy };
     CLzmaEncHandle p = LzmaEnc_Create(&g_Alloc);
 
     EXPECT_EQ(p, nullptr);
@@ -1808,55 +1807,15 @@ TEST(LZMA_isWriteEndMark, AOCL_Compression_lzma_LzmaEnc_IsWriteEndMark_common_1)
 * End of LZMA_isWriteEndMark
 *********************************************/
 
-/*********************************************
-* Begin of LZMA_memEncode
-*********************************************/
-//
 /*
-    Base class for all fixtures that test/use lzma encoder
+    Base class for allocating and filling up buffers used for compression/decompression tests
 */
-class LZMA_encodeBase : public ::testing::TestWithParam<size_t> {
+class LZMA_buffersBase {
 public:
-    void decomp_validate(size_t resultComp) {
-        //compress
-        EXPECT_GT(resultComp, 0);
-
-        //decompress
-        int64_t resultDecomp = decompress(compPtr, resultComp, decompPtr, inSize);
-        EXPECT_GT(resultDecomp, 0);
-
-        //validate
-        EXPECT_EQ(memcmp(inPtr, decompPtr, inSize), 0); //decompressed data must match input
-    }
-
-    CLzmaEncProps props;
-
     const ISzAlloc g_Alloc = { SzAlloc, SzFree };
     const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
 
-    char* inPtr = nullptr, * compPtr = nullptr, * decompPtr = nullptr;
-    size_t inSize;
-    size_t outSize = 0;
-    size_t headerSize;
-    SizeT outLen;
-
 protected:
-    void SetUpEncode(size_t _inSize) {
-        aocl_setup_lzma_test();
-        inSize = _inSize;
-        //setup buffers
-        buffers_setup();
-        headerSize = LZMA_PROPS_SIZE;
-    }
-
-    void TearDownEncode() {
-        //free buffers
-        if (inPtr) free(inPtr);
-        if (compPtr) free(compPtr);
-        if (decompPtr) free(decompPtr);
-    }
-
-private:
     void buffers_setup()
     {
         //allocate buffers
@@ -1881,21 +1840,6 @@ private:
         }
     }
 
-    int64_t decompress(char* inPtr, size_t inSize, char* outbuf, size_t outSize) {
-        ptrdiff_t res;
-        SizeT outLen = outSize;
-        SizeT srcLen = inSize - LZMA_PROPS_SIZE;
-        ELzmaStatus status;
-
-        res = LzmaDecode((uint8_t*)outbuf, &outLen, (uint8_t*)inPtr + LZMA_PROPS_SIZE,
-            &srcLen, (uint8_t*)inPtr, LZMA_PROPS_SIZE, LZMA_FINISH_END,
-            &status, &g_Alloc);
-        if (res != SZ_OK)
-            return 0;
-
-        return outLen;
-    }
-
     void* allocMem(size_t size, ptrdiff_t zeroInit)
     {
         void* bufPtr = (zeroInit == 0) ? calloc(1, size) : malloc(size);
@@ -1910,6 +1854,67 @@ private:
 
     std::vector<std::string> randomStrs = { "qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890",
         "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM", "!@#$%^&*()" };
+
+    char* inPtr = nullptr, * compPtr = nullptr, * decompPtr = nullptr;
+    size_t inSize = 0;
+    size_t outSize = 0;
+    SizeT outLen;
+};
+
+/*********************************************
+* Begin of LZMA_memEncode
+*********************************************/
+/*
+    Base class for all fixtures that test/use lzma encoder
+*/
+class LZMA_encodeBase : public LZMA_buffersBase, public ::testing::TestWithParam<size_t> {
+public:
+    void decomp_validate(size_t resultComp) {
+        //compress
+        EXPECT_GT(resultComp, 0);
+
+        //decompress
+        int64_t resultDecomp = decompress(compPtr, resultComp, decompPtr, inSize);
+        EXPECT_GT(resultDecomp, 0);
+
+        //validate
+        EXPECT_EQ(memcmp(inPtr, decompPtr, inSize), 0); //decompressed data must match input
+    }
+
+protected:
+    void SetUpEncode(size_t _inSize) {
+        aocl_setup_lzma_test();
+        inSize = _inSize;
+        //setup buffers
+        buffers_setup();
+        headerSize = LZMA_PROPS_SIZE;
+    }
+
+    void TearDownEncode() {
+        //free buffers
+        if (inPtr) free(inPtr);
+        if (compPtr) free(compPtr);
+        if (decompPtr) free(decompPtr);
+    }
+
+    CLzmaEncProps props;
+    size_t headerSize;
+
+private:
+    int64_t decompress(char* inPtr, size_t inSize, char* outbuf, size_t outSize) {
+        ptrdiff_t res;
+        SizeT outLen = outSize;
+        SizeT srcLen = inSize - LZMA_PROPS_SIZE;
+        ELzmaStatus status;
+
+        res = LzmaDecode((uint8_t*)outbuf, &outLen, (uint8_t*)inPtr + LZMA_PROPS_SIZE,
+            &srcLen, (uint8_t*)inPtr, LZMA_PROPS_SIZE, LZMA_FINISH_END,
+            &status, &g_Alloc);
+        if (res != SZ_OK)
+            return 0;
+
+        return outLen;
+    }
 };
 
 /*
@@ -2969,24 +2974,16 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_nullAlloc_common_1
 /*
     Fixture class for testing
 */
-class LZMA_decodeBase : public AOCL_setup_lzma {
+class LZMA_decodeBase : public LZMA_buffersBase, public AOCL_setup_lzma {
 public:
     void validate() {
         EXPECT_EQ(memcmp(inPtr, decompPtr, inSize), 0); //decompressed data must match input
     }
 
-    const ISzAlloc g_Alloc = { SzAlloc, SzFree };
-    const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
-
-    char* inPtr = nullptr, * compPtr = nullptr, * decompPtr = nullptr;
-    const size_t inSize = 1024 * 1024; //1MB
-    size_t outSize = 0;
-    size_t headerSize;
-    SizeT outLen;
-
 protected:
     void SetUpBuffers() {
         //setup buffers
+        inSize = 1024 * 1024; //1MB
         buffers_setup();
         headerSize = LZMA_PROPS_SIZE;
     }
@@ -2997,47 +2994,9 @@ protected:
         if (compPtr) free(compPtr);
         if (decompPtr) free(decompPtr);
     }
+
     CLzmaEncProps props;
-
-private:
-    void buffers_setup()
-    {
-        //allocate buffers
-        outSize = compression_bound(inSize);
-        inPtr = (char*)allocMem(inSize, 1);
-        compPtr = (char*)allocMem(outSize, 0);
-        decompPtr = (char*)allocMem(inSize, 0);
-        ASSERT_NE(inPtr, nullptr);
-        ASSERT_NE(compPtr, nullptr);
-        ASSERT_NE(decompPtr, nullptr);
-
-        //load input buffer
-        memset(inPtr, 0, inSize);
-        size_t cur = 0;
-        while (cur < inSize) { //fill buffer with repeating patterns
-            int randId = rand() % randomStrs.size(); //pick a string at random
-            int randLen = rand() % randomStrs[randId].size(); //select sub string length
-            if (cur + randLen >= inSize) break;
-
-            memcpy(inPtr + cur, randomStrs[randId].c_str(), randLen * sizeof(char));
-            cur += randLen;
-        }
-    }
-
-    void* allocMem(size_t size, ptrdiff_t zeroInit)
-    {
-        void* bufPtr = (zeroInit == 0) ? calloc(1, size) : malloc(size);
-        return bufPtr;
-    }
-
-    size_t compression_bound(size_t inSize)
-    {
-        size_t outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
-        return outSize;
-    }
-
-    std::vector<std::string> randomStrs = { "qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890",
-        "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM", "!@#$%^&*()" };
+    size_t headerSize;
 };
 /*********************************************
  * End of LZMA_decodeBase
@@ -3454,4 +3413,451 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_headerNull_common_1)
 
 /*********************************************
  * End API tests for LzmaDec
+ *********************************************/
+
+/*********************************************
+ * Begin API tests for xz utils lzma
+ *********************************************/
+#ifdef AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL
+#include "algos/lzma/lzma.h"
+
+lzma_ret Test_lzma_easy_buffer_encode(uint32_t preset, lzma_check check,
+    const lzma_allocator* allocator, const uint8_t* in,
+    size_t in_size, uint8_t* out, size_t* out_pos, size_t out_size) {
+    return lzma_easy_buffer_encode(preset, check, allocator, in, in_size, out, out_pos, out_size);
+}
+
+lzma_ret Test_lzma_stream_buffer_decode(uint64_t* memlimit, uint32_t flags,
+    const lzma_allocator* allocator,
+    const uint8_t* in, size_t* in_pos, size_t in_size,
+    uint8_t* out, size_t* out_pos, size_t out_size) {
+    return lzma_stream_buffer_decode(memlimit, flags, allocator, in, in_pos, in_size, out, out_pos, out_size);
+}
+
+uint32_t Test_lzma_version_number(void) {
+    return lzma_version_number();
+}
+
+const char* Test_lzma_version_string(void) {
+    return lzma_version_string();
+}
+
+/*
+    Base class for all fixtures that test/use xz lzma encoder
+*/
+class LZMA_XZ_encodeBase : public LZMA_buffersBase, public AOCL_setup_lzma {
+public:
+    void decomp_validate(size_t resultComp) {
+        //compress
+        EXPECT_GT(resultComp, 0);
+
+        //decompress
+        int64_t resultDecomp = decompress(compPtr, resultComp, decompPtr, inSize);
+        EXPECT_GT(resultDecomp, 0);
+
+        //validate
+        EXPECT_EQ(memcmp(inPtr, decompPtr, inSize), 0); //decompressed data must match input
+    }
+
+    CLzmaEncProps props;
+
+protected:
+    void SetUpEncode() {
+        inSize = 1024 * 1024; //1MB
+        //setup buffers
+        buffers_setup();
+    }
+
+    void TearDownEncode() {
+        //free buffers
+        if (inPtr) free(inPtr);
+        if (compPtr) free(compPtr);
+        if (decompPtr) free(decompPtr);
+    }
+
+private:
+    int64_t decompress(char* inPtr, size_t inSize, char* outBuf, size_t outSize) {
+        uint64_t memlimit = 1 << 25;
+        size_t in_pos = 0, out_pos = 0;
+        lzma_ret ret_lzma = lzma_stream_buffer_decode(&memlimit, 0, NULL,
+            (uint8_t*)inPtr,
+            &in_pos,
+            inSize,
+            (uint8_t*)outBuf,
+            &out_pos,
+            outSize);
+        if (ret_lzma != LZMA_OK)
+            return 0;
+
+        return (int64_t)out_pos;
+    }
+};
+
+/*
+    Base class for all fixtures that test/use xz lzma decoder
+*/
+class LZMA_XZ_decodeBase : public LZMA_buffersBase, public AOCL_setup_lzma 
+{
+public:
+    void validate() {
+        EXPECT_EQ(memcmp(inPtr, decompPtr, inSize), 0); //decompressed data must match input
+    }
+
+protected:
+    void SetUpBuffers() {
+        //setup buffers
+        inSize = 1024 * 1024; //1MB
+        buffers_setup();
+    }
+
+    void TearDownBuffers() {
+        //free buffers
+        if (inPtr) free(inPtr);
+        if (compPtr) free(compPtr);
+        if (decompPtr) free(decompPtr);
+    }
+};
+
+/*********************************************
+* Begin of LZMA_XZ_encodeFile
+*********************************************/
+/*
+    Fixture class for testing LZMA_encodeFile
+    LZMA_encodeFile is used for file encoding
+*/
+class LZMA_XZ_encodeFile : public LZMA_XZ_encodeBase
+{
+public:
+    void SetUp() override {
+        SetUpEncode();
+    }
+
+    void TearDown() override {
+        TearDownEncode();
+    }
+
+    void execute(uint32_t preset, lzma_check check) {
+        //compress using lzma_easy_buffer_encode
+        size_t out_pos = 0;
+        lzma_ret ret_lzma = Test_lzma_easy_buffer_encode(preset, check, NULL /*lzma_allocator*/,
+            (uint8_t*)inPtr, inSize,
+            (uint8_t*)compPtr, &out_pos, outSize);
+
+        EXPECT_EQ(ret_lzma, LZMA_OK);
+
+        //decompress and validate
+        decomp_validate(out_pos);
+    }
+
+    void execute_invalid(uint32_t preset, lzma_check check) {
+        //compress using lzma_easy_buffer_encode
+        size_t out_pos = 0;
+        lzma_ret ret_lzma = Test_lzma_easy_buffer_encode(preset, check, NULL /*lzma_allocator*/,
+            (uint8_t*)inPtr, inSize,
+            (uint8_t*)compPtr, &out_pos, outSize);
+
+        EXPECT_NE(ret_lzma, LZMA_OK);
+    }
+};
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_valid_common)
+{
+    //Test for all levels
+    for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level) {
+        execute(level, LZMA_CHECK_NONE); //AOCL_Compression_lzma_lzma_easy_buffer_encode_valid_common_1 - 10
+    }
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidPreset_common_1)
+{
+    execute_invalid(LZMA_MIN_LEVEL-1, LZMA_CHECK_NONE); //level < LZMA_MIN_LEVEL
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidPreset_common_2)
+{
+    execute_invalid(LZMA_MAX_LEVEL + 1, LZMA_CHECK_NONE); //level > LZMA_MAX_LEVEL
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidPreset_common_3)
+{
+    //preset format : extreme....flags......level
+    //bit number    : 31.........30_to_6....5_to_0
+    uint32_t preset = LZMA_MIN_LEVEL;
+    for (int i = 6; i < 31; ++i) {
+        preset |= (UINT32_C(1) << i); //set different flags in preset (flags not supported in aocl lzma)
+        execute_invalid(preset, LZMA_CHECK_NONE);
+    }
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidPreset_common_4)
+{
+    uint32_t preset = LZMA_MIN_LEVEL;
+    preset |= (UINT32_C(1) << 31); //LZMA_PRESET_EXTREME
+    execute_invalid(preset, LZMA_CHECK_NONE);
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidCheck_common_1)
+{
+    execute_invalid(LZMA_MAX_LEVEL, LZMA_CHECK_CRC32); //check not supported in aocl lzma
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidCheck_common_2)
+{
+    execute_invalid(LZMA_MAX_LEVEL, LZMA_CHECK_CRC64); //check not supported in aocl lzma
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidCheck_common_3)
+{
+    execute_invalid(LZMA_MAX_LEVEL, LZMA_CHECK_SHA256); //check not supported in aocl lzma
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noSrc_common_1)
+{
+    //input buffer: in = nullptr
+    size_t out_pos = 0;
+    lzma_ret ret_lzma = Test_lzma_easy_buffer_encode(LZMA_MIN_LEVEL, LZMA_CHECK_NONE, NULL /*lzma_allocator*/,
+        nullptr, inSize,
+        (uint8_t*)compPtr, &out_pos, outSize);
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noSrcSz_common_1)
+{
+    SizeT invalidInSize = 0; //in_size empty
+    size_t out_pos = 0;
+    lzma_ret ret_lzma = Test_lzma_easy_buffer_encode(LZMA_MIN_LEVEL, LZMA_CHECK_NONE, NULL /*lzma_allocator*/,
+        (uint8_t*)inPtr, invalidInSize,
+        (uint8_t*)compPtr, &out_pos, outSize);
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noDst_common_1)
+{
+    //output buffer: out = nullptr
+    size_t out_pos = 0;
+    lzma_ret ret_lzma = Test_lzma_easy_buffer_encode(LZMA_MIN_LEVEL, LZMA_CHECK_NONE, NULL /*lzma_allocator*/,
+        (uint8_t*)inPtr, inSize,
+        nullptr, &out_pos, outSize);
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noDstPos_common_1)
+{
+    //output buffer pos: out_pos = nullptr
+    lzma_ret ret_lzma = Test_lzma_easy_buffer_encode(LZMA_MIN_LEVEL, LZMA_CHECK_NONE, NULL /*lzma_allocator*/,
+        (uint8_t*)inPtr, inSize,
+        (uint8_t*)compPtr, nullptr, outSize);
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidDstPos_common_1)
+{
+    //output buffer pos: out_pos > out_size
+    size_t out_pos = outSize + 1;
+    lzma_ret ret_lzma = Test_lzma_easy_buffer_encode(LZMA_MIN_LEVEL, LZMA_CHECK_NONE, NULL /*lzma_allocator*/,
+        (uint8_t*)inPtr, inSize,
+        (uint8_t*)compPtr, &out_pos, outSize);
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+/*********************************************
+* End of LZMA_XZ_encodeFile
+*********************************************/
+
+/*********************************************
+* Begin of LZMA_XZ_decodeFile
+*********************************************/
+/*
+    Fixture class for testing LzmaDecode
+*/
+class LZMA_XZ_decodeFile : public LZMA_XZ_decodeBase
+{
+public:
+    void SetUp() override {
+        SetUpBuffers();
+    }
+
+    void TearDown() override
+    {
+        TearDownBuffers();
+    }
+
+    size_t encode() {
+        //compress using lzma_easy_buffer_encode
+        size_t out_pos = 0;
+        lzma_ret ret_lzma = Test_lzma_easy_buffer_encode(LZMA_MIN_LEVEL, LZMA_CHECK_NONE, NULL /*lzma_allocator*/,
+            (uint8_t*)inPtr, inSize,
+            (uint8_t*)compPtr, &out_pos, outSize);
+        EXPECT_EQ(ret_lzma, LZMA_OK);
+        return out_pos;
+    }
+
+    size_t decode(char* inPtr, size_t inSize, char* outBuf, size_t outSize, lzma_ret& ret_lzma) {
+        uint64_t memlimit = 1 << 25;
+        size_t in_pos = 0, out_pos = 0;
+        ret_lzma = Test_lzma_stream_buffer_decode(&memlimit, 0, NULL,
+            (uint8_t*)inPtr, &in_pos, inSize,
+            (uint8_t*)outBuf, &out_pos, outSize);
+        if (ret_lzma != LZMA_OK)
+            return 0;
+        return out_pos;
+    }
+
+    void decode_valid(size_t compSz) {
+        lzma_ret ret_lzma;
+        size_t decompSz = decode(compPtr, compSz, decompPtr, inSize, ret_lzma);
+        EXPECT_EQ(ret_lzma, LZMA_OK);
+        EXPECT_EQ(decompSz, inSize);
+        EXPECT_EQ(memcmp(inPtr, decompPtr, inSize), 0); //decompressed data must match input
+    }
+
+    void decode_invalid(size_t compSz) {
+        lzma_ret ret_lzma;
+        decode(compPtr, compSz, decompPtr, inSize, ret_lzma);
+        EXPECT_NE(ret_lzma, LZMA_OK);
+    }
+
+    void validate() {
+        
+    }
+};
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_valid_common_1)
+{
+    size_t compSz = encode(); //encode and get compressed stream
+    decode_valid(compSz); //decompress and validate
+}
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_invalidCompressedInp_common_1)
+{
+    size_t compSz = encode(); //encode and get compressed stream
+
+    for (int i = 0; i < 8; ++i) { // scramble compressed data
+        compPtr[LZMA_PROPS_SIZE + i] = rand() % 256;
+    }
+
+    decode_invalid(compSz); //decompress and validate
+}
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_srcNull_common_1)
+{
+    size_t compSz = encode(); //encode and get compressed stream
+
+    lzma_ret ret_lzma;
+    decode(NULL, compSz, decompPtr, inSize, ret_lzma); //src = nullptr
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_srcSzZero_common_1)
+{
+    encode(); //encode and get compressed stream
+
+    lzma_ret ret_lzma;
+    decode(compPtr, 0, decompPtr, inSize, ret_lzma); //src size = 0
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_dstNull_common_1)
+{
+    size_t compSz = encode(); //encode and get compressed stream
+
+    lzma_ret ret_lzma;
+    decode(compPtr, compSz, NULL, inSize, ret_lzma); //dst = nullptr
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_inPosNull_common_1)
+{
+    size_t compSz = encode(); //encode and get compressed stream
+
+    size_t out_pos = 0;
+    lzma_ret ret_lzma = Test_lzma_stream_buffer_decode(NULL, 0, NULL,
+        (uint8_t*)compPtr, NULL, compSz,
+        (uint8_t*)decompPtr, &out_pos, inSize);
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_outPosNull_common_1)
+{
+    size_t compSz = encode(); //encode and get compressed stream
+
+    size_t in_pos = 0;
+    lzma_ret ret_lzma = Test_lzma_stream_buffer_decode(NULL, 0, NULL,
+        (uint8_t*)compPtr, &in_pos, compSz,
+        (uint8_t*)decompPtr, NULL, inSize);
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_invalidInPos_common_1)
+{
+    size_t compSz = encode(); //encode and get compressed stream
+
+    size_t in_pos = inSize + 1, out_pos = 0; //in_pos > inSize
+    lzma_ret ret_lzma = Test_lzma_stream_buffer_decode(NULL, 0, NULL,
+        (uint8_t*)compPtr, &in_pos, compSz,
+        (uint8_t*)decompPtr, &out_pos, inSize);
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_invalidOutPos_common_1)
+{
+    size_t compSz = encode(); //encode and get compressed stream
+
+    size_t in_pos = 0, out_pos = outSize + 1; //out_pos > outSize
+    lzma_ret ret_lzma = Test_lzma_stream_buffer_decode(NULL, 0, NULL,
+        (uint8_t*)compPtr, &in_pos, compSz,
+        (uint8_t*)decompPtr, &out_pos, inSize);
+    EXPECT_NE(ret_lzma, LZMA_OK);
+}
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_invalidFlag_common_1)
+{
+    size_t compSz = encode(); //encode and get compressed stream
+
+    size_t in_pos = 0, out_pos = 0;
+    uint32_t flags = 0x04; //invalid flag : LZMA_TELL_ANY_CHECK
+    lzma_ret ret_lzma = Test_lzma_stream_buffer_decode(NULL, flags, NULL,
+        (uint8_t*)compPtr, &in_pos, compSz,
+        (uint8_t*)decompPtr, &out_pos, inSize);
+    EXPECT_EQ(ret_lzma, LZMA_OPTIONS_ERROR);
+}
+
+TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_invalidFlag_common_2)
+{
+    size_t compSz = encode(); //encode and get compressed stream
+
+    size_t in_pos = 0, out_pos = 0;
+    uint32_t flags = (UINT32_C(1) << 7); //invalid flag : not in LZMA_SUPPORTED_FLAGS
+    lzma_ret ret_lzma = Test_lzma_stream_buffer_decode(NULL, flags, NULL,
+        (uint8_t*)compPtr, &in_pos, compSz,
+        (uint8_t*)decompPtr, &out_pos, inSize);
+    EXPECT_EQ(ret_lzma, LZMA_OPTIONS_ERROR);
+}
+
+/*********************************************
+* End of LZMA_XZ_decodeFile
+*********************************************/
+
+/*********************************************
+* Begin of LZMA_XZ_version
+*********************************************/
+TEST(LZMA_XZ_version, AOCL_Compression_lzma_lzma_version_number_common_1)
+{
+    uint32_t ver = Test_lzma_version_number();
+    EXPECT_EQ(ver, LZMA_VERSION);
+}
+
+TEST(LZMA_XZ_version, AOCL_Compression_lzma_lzma_version_string_common_1)
+{
+    const char* ver = Test_lzma_version_string();
+    EXPECT_STREQ(ver, LZMA_VERSION_STRING);
+}
+
+/*********************************************
+* End of LZMA_XZ_version
+*********************************************/
+
+#endif
+/*********************************************
+ * End API tests for xz utils lzma
  *********************************************/

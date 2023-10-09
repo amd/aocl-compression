@@ -131,6 +131,7 @@ AOCL_EXCLUDE_LZMA                   |  Exclude LZMA compression method from the 
 AOCL_EXCLUDE_SNAPPY                 |  Exclude SNAPPY compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_ZLIB                   |  Exclude ZLIB compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_ZSTD                   |  Exclude ZSTD compression method from the library build (Disabled by default)
+AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL |  Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)
 
 Running AOCL-Compression Test Bench On Linux
 --------------------------------------------
