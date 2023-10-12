@@ -552,14 +552,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpNull_common_5) //
 
     printf("cSize by algo %d %ld", algo, cSize);
 
-    switch (algo) {
-    case SNAPPY:
-        EXPECT_EQ(cSize, cpr.getOutSize()); //snappy does not return error code
-        break;
-    default:
-        EXPECT_LE(cSize, 0); //compress failed
-        break;
-    }
+    EXPECT_LT(cSize, 0); //compress failed
 }
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpSzZero_common_6) //input size 0
@@ -594,7 +587,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpSzZero_common_6) 
         EXPECT_GT(cSize, 0);
         break;
     default:
-        EXPECT_LE(cSize, 0); //compress failed
+        EXPECT_LT(cSize, 0); //compress failed
         break;
     }
 }
@@ -611,14 +604,8 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_outNull_common_7) //
     setup();
 
     int64_t cSize = compress();
-    switch (algo) {
-    case SNAPPY:
-        EXPECT_GT(cSize, 0); //valid case for snappy
-        break;
-    default:
-        EXPECT_LE(cSize, 0); //compress failed
-        break;
-    }
+
+    EXPECT_LT(cSize, 0); //compress failed
 }
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_outSzZero_common_8) //output size 0
@@ -633,14 +620,8 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_outSzZero_common_8) 
     setup();
 
     int64_t cSize = compress();
-    switch (algo) {
-    case SNAPPY:
-        EXPECT_GT(cSize, 0); //snappy does not return error code
-        break;
-    default:
-        EXPECT_LE(cSize, 0); //compress failed
-        break;
-    }
+
+    EXPECT_LT(cSize, 0); //compress failed
 }
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_levelsOptOn_common) //all levels optOn
@@ -777,14 +758,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_inpNull_common_1
     desc.outSize = dpr->getOutSize();
     int64_t dSize = aocl_llc_decompress(&desc, algo);
 
-    switch (algo) {
-    case SNAPPY:
-        EXPECT_GT(dSize, 0); //snappy does not return error code
-        break;
-    default:
-        EXPECT_LE(dSize, 0); //decompress failed
-        break;
-    }
+    EXPECT_LT(dSize, 0); //decompress failed
 }
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_inpSzZero_common_1) //inp size = 0
@@ -803,14 +777,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_inpSzZero_common
     desc.outSize = dpr->getOutSize();
     int64_t dSize = aocl_llc_decompress(&desc, algo);
 
-    switch (algo) {
-    case SNAPPY:
-        EXPECT_GT(dSize, 0); //snappy does not return error code
-        break;
-    default:
-        EXPECT_LE(dSize, 0); //decompress failed
-        break;
-    }
+    EXPECT_LT(dSize, 0); //decompress failed
 }
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_outNull_common_1) //out NULL
@@ -829,14 +796,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_outNull_common_1
     desc.outSize = dpr->getOutSize();
     int64_t dSize = aocl_llc_decompress(&desc, algo);
 
-    switch (algo) {
-    case SNAPPY:
-        EXPECT_GT(dSize, 0); //snappy does not return error code
-        break;
-    default:
-        EXPECT_LE(dSize, 0); //decompress failed
-        break;
-    }
+    EXPECT_LT(dSize, 0); //decompress failed
 }
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_outSzZero_common_1) //out size = 0
@@ -854,7 +814,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_outSzZero_common
     desc.outBuf  = dpr->getOutData();
     desc.outSize = 0;
     int64_t dSize = aocl_llc_decompress(&desc, algo);
-    EXPECT_LE(dSize, 0); //decompress failed
+    EXPECT_LT(dSize, 0); //decompress failed
 }
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_invalidCprData_common_1) //invalid compressed data
@@ -880,7 +840,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_invalidCprData_c
         EXPECT_NE(memcmp(cpr->getInpData(), desc.outBuf, dSize), 0); //mismatch with src
     }
     else {
-        EXPECT_LE(dSize, 0); //decompress failed
+        EXPECT_LT(dSize, 0); //decompress failed
     }
 }
 

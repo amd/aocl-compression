@@ -92,7 +92,7 @@ extern "C" {
   */
 typedef enum
 {
-    ERR_UNSUPPORTED_METHOD = -3,     ///<Compression method not supported by the library
+    ERR_UNSUPPORTED_METHOD = -4,     ///<Compression method not supported by the library
     ERR_EXCLUDED_METHOD,             ///<Compression method excluded from this library build
     ERR_COMPRESSION_FAILED,          ///<Failure during compression/decompression
     ERR_COMPRESSION_INVALID_OUTPUT   ///<Invalid compression/decompression output

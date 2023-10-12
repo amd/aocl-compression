@@ -78,6 +78,9 @@ INT64 aocl_llc_compress(aocl_compression_desc *handle,
     
     LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
 
+    if (ret < 0)
+        return ERR_COMPRESSION_FAILED;
+        
     return ret;
 }
 
@@ -116,6 +119,9 @@ INT64 aocl_llc_decompress(aocl_compression_desc *handle,
 
     LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
 
+    if (ret < 0)
+        return ERR_COMPRESSION_FAILED;
+        
     return ret;
 }
 

@@ -74,6 +74,8 @@
 #include "algos/zstd/lib/zstd.h"
 #endif
 
+#define CODEC_ERROR -1
+
 //bzip2
 #ifndef AOCL_EXCLUDE_BZIP2
 CHAR *aocl_bzip2_setup(INTP optOff, INTP optLevel,
@@ -90,22 +92,24 @@ INT64 aocl_bzip2_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 						  UINTP outsize, UINTP level, UINTP windowLog, CHAR *)
 {
     UINT32 outSizeL = outsize;
-    if (BZ2_bzBuffToBuffCompress((CHAR *)outbuf, &outSizeL, (CHAR *)inbuf, 
-	   (UINTP)insize, level, 0, 0)==BZ_OK)
+    INT32 res = BZ2_bzBuffToBuffCompress((CHAR *)outbuf, &outSizeL, (CHAR *)inbuf, 
+                                       (UINTP)insize, level, 0, 0);
+    if (res == BZ_OK)
         return outSizeL;
-    else
-        return -1;
+
+    return CODEC_ERROR;
 }
 
 INT64 aocl_bzip2_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 
 							UINTP outsize, UINTP level, UINTP, CHAR *)
 {
     UINT32 outSizeL = outsize;
-    if (BZ2_bzBuffToBuffDecompress((CHAR *)outbuf, &outSizeL, (CHAR *)inbuf, 
-	   (UINTP)insize, 0, 0)==BZ_OK)
+    INT32 res = BZ2_bzBuffToBuffDecompress((CHAR *)outbuf, &outSizeL, (CHAR *)inbuf, 
+	                                     (UINTP)insize, 0, 0);
+    if (res == BZ_OK)
         return outSizeL;
-    else
-        return -1;
+
+    return CODEC_ERROR;
 }
 #endif
 
@@ -130,7 +134,11 @@ __asm__(".p2align 4");
 INT64 aocl_lz4_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                         UINTP outsize, UINTP level, UINTP, CHAR *)
 {
-    return LZ4_compress_default(inbuf, outbuf, insize, outsize);
+    INT32 res = LZ4_compress_default(inbuf, outbuf, insize, outsize);
+    if (res > 0)
+        return res;
+    
+    return CODEC_ERROR;
 }
 
 #if defined(__GNUC__) && defined(__x86_64__)
@@ -143,7 +151,11 @@ __asm__(".p2align 5");
 INT64 aocl_lz4_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                           UINTP outsize, UINTP level, UINTP, CHAR *)
 {
-    return LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
+    INT32 res = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
+    if (res >= 0)
+        return res;
+
+    return CODEC_ERROR;
 }
 #endif
 
@@ -163,13 +175,21 @@ CHAR *aocl_lz4hc_setup(INTP optOff, INTP optLevel,
 INT64 aocl_lz4hc_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                           UINTP outsize, UINTP level, UINTP, CHAR *)
 {
-    return LZ4_compress_HC(inbuf, outbuf, insize, outsize, level);
+    INT32 res = LZ4_compress_HC(inbuf, outbuf, insize, outsize, level);
+    if (res > 0)
+        return res;
+
+    return CODEC_ERROR;
 }
 
 INT64 aocl_lz4hc_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 							UINTP outsize, UINTP, UINTP, CHAR *)
 {
-    return LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
+    INT32 res = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
+    if (res >= 0)
+        return res;
+
+    return CODEC_ERROR;
 }
 #endif
 
@@ -202,10 +222,10 @@ INT64 aocl_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
     res = LzmaEncode((UINT8 *)outbuf+LZMA_PROPS_SIZE, &outLen, (UINT8 *)inbuf, 
                      insize, &encProps, (UINT8 *)outbuf, &headerSize, 0, NULL, 
                      &g_Alloc, &g_Alloc);
-    if (res != SZ_OK)
-        return 0;
-	
-    return LZMA_PROPS_SIZE + outLen;
+	if (res == SZ_OK)
+        return LZMA_PROPS_SIZE + outLen;
+    
+    return CODEC_ERROR;
 }
 
 INT64 aocl_lzma_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
@@ -219,10 +239,10 @@ INT64 aocl_lzma_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
     res = LzmaDecode((UINT8 *)outbuf, &outLen, (UINT8 *)inbuf+LZMA_PROPS_SIZE, 
                      &srcLen, (UINT8 *)inbuf, LZMA_PROPS_SIZE, LZMA_FINISH_END,
                      &status, &g_Alloc);
-    if (res != SZ_OK)
-        return 0;
+    if (res == SZ_OK)
+        return outLen;
 
-    return outLen;
+    return CODEC_ERROR;
 }
 #endif
 
@@ -241,15 +261,37 @@ CHAR *aocl_snappy_setup(INTP optOff, INTP optLevel,
 INT64 aocl_snappy_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 
 						   UINTP outsize, UINTP, UINTP, CHAR *)
 {
+    UINTP max_compressed_length = snappy::MaxCompressedLength(insize);
+    if (outsize < max_compressed_length) {
+        return CODEC_ERROR;
+    }
+    // RawCompress modifies the value of the 4th parameter after successful completion
+    // of compression, but returns early on error. Hence, to detect failure we can set
+    // the value of the last parameter to something that is not a valid "compressed length"
+    // so that after it returns, that value can be checked. If the value remains invalid
+    // after RawCompress returns, it should indicate failure.
+
+    // by definition, any value greater than the "max compressed length" is an invalid
+    // compressed length, so we choose the value "max_compressed_length + 1" here.
+    outsize = max_compressed_length + 1;
     snappy::RawCompress(inbuf, insize, outbuf, &outsize);
-    return outsize;
+    if (outsize <= max_compressed_length)
+        return outsize;
+
+    return CODEC_ERROR;
 }
 
 INT64 aocl_snappy_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 
 							 UINTP outsize, UINTP, UINTP, CHAR *)
 {
-    snappy::RawUncompress(inbuf, insize, outbuf);
-    return outsize;
+    UINTP uncompressed_len;
+    if (!snappy::GetUncompressedLength(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len)
+        return CODEC_ERROR;
+    bool res = snappy::RawUncompress(inbuf, insize, outbuf);
+    if (res)
+        return uncompressed_len;
+
+    return CODEC_ERROR;
 }
 #endif
 
@@ -271,9 +313,10 @@ INT64 aocl_zlib_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
     uLongf zencLen = outsize;
     INTP res = compress2((UINT8 *)outbuf, &zencLen, 
                          (UINT8 *)inbuf, insize, level);
-    if (res != Z_OK)
-        return 0;
-    return zencLen;
+    if (res == Z_OK)
+        return zencLen;
+    
+    return CODEC_ERROR;
 }
 
 INT64 aocl_zlib_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 
@@ -281,9 +324,10 @@ INT64 aocl_zlib_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
 {
     uLongf zdecLen = outsize;
     INTP res = uncompress((UINT8*)outbuf, &zdecLen, (UINT8 *)inbuf, insize);
-    if (res != Z_OK)
-        return 0;
-    return zdecLen;
+    if (res == Z_OK)
+        return zdecLen;
+
+    return CODEC_ERROR;
 }
 #endif
 
@@ -358,20 +402,25 @@ INT64 aocl_zstd_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf,
                                 insize, NULL, 0, zstd_params->zparams);
 #pragma GCC diagnostic pop
 
-    if (ZSTD_isError(res))
+    if (!ZSTD_isError(res))
         return res;
 
-    return res;
+    return CODEC_ERROR;
 }
 
 INT64 aocl_zstd_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, 
 						   UINTP outsize, UINTP, UINTP, CHAR *workmem)
 {
+    UINTP res;
     zstd_params_t *zstd_params = (zstd_params_t *) workmem;
     if (!zstd_params || !zstd_params->dctx)
-        return 0;
+        return CODEC_ERROR;
 
-    return ZSTD_decompressDCtx(zstd_params->dctx, outbuf, outsize, 
-                               inbuf, insize);
+    res = ZSTD_decompressDCtx(zstd_params->dctx, outbuf, outsize, 
+                              inbuf, insize);
+    if (!ZSTD_isError(res))
+        return res;
+
+    return CODEC_ERROR;
 }
 #endif
