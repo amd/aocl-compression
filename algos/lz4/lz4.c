@@ -1565,6 +1565,23 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                     }
 #endif
 
+#ifdef AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES
+
+                    /* Hash and update hash table with indexes of ip+1, ip+2 and ip+3.
+                       This results in storing additional potential matches which improves 
+                       compression ratio. Recommended for higher compressibility use cases.
+                    */
+                    U32 next_h = AOCL_LZ4_hashPosition(ip+1, tableType);
+                    LZ4_putIndexOnHash(current+1, next_h, cctx->hashTable, tableType);
+
+                    next_h = AOCL_LZ4_hashPosition(ip+2, tableType);
+                    LZ4_putIndexOnHash(current+2, next_h, cctx->hashTable, tableType);
+
+                    next_h = AOCL_LZ4_hashPosition(ip+3, tableType);
+                    LZ4_putIndexOnHash(current+3, next_h, cctx->hashTable, tableType);
+
+#endif /* AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES */
+
                     break;   /* match found */
                 }
 
