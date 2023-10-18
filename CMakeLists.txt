@@ -245,28 +245,36 @@ if (NOT AOCL_EXCLUDE_LZ4HC AND NOT AOCL_EXCLUDE_LZ4)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lz4/lz4hc.h)
 endif ()
 if (NOT AOCL_EXCLUDE_LZMA)
-    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lzma/7zTypes.h)
-    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lzma/Alloc.h)
-    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lzma/LzmaDec.h)
-    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lzma/LzmaEnc.h)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lzma/7zTypes.h
+                               ${ALGOS_PATH}/lzma/Alloc.h
+                               ${ALGOS_PATH}/lzma/LzmaDec.h
+                               ${ALGOS_PATH}/lzma/LzmaEnc.h)
+    if (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL)
+	    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lzma/lzma.h)
+		set(INC_XZ_UTILS_LZMA ${ALGOS_PATH}/lzma/xzlzma)
+	endif()	   
 endif ()
 if (NOT AOCL_EXCLUDE_SNAPPY)
-    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/snappy/snappy-stubs-public.h)
-    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/snappy/snappy.h)
-    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/snappy/snappy-c.h)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/snappy/snappy-stubs-public.h
+                               ${ALGOS_PATH}/snappy/snappy-sinksource.h
+                               ${ALGOS_PATH}/snappy/snappy.h
+                               ${ALGOS_PATH}/snappy/snappy-c.h)
 endif ()
 if (NOT AOCL_EXCLUDE_ZLIB)
-    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/zlib/zconf.h)
-    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/zlib/zlib.h)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/zlib/zconf.h
+                               ${ALGOS_PATH}/zlib/zlib.h)
 endif ()
 if (NOT AOCL_EXCLUDE_ZSTD)
-    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/zstd/lib/zstd.h)
+    set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/zstd/lib/zstd.h
+                               ${ALGOS_PATH}/zstd/lib/zdict.h
+                               ${ALGOS_PATH}/zstd/lib/zstd_errors.h)
 endif ()
 
 if (NOT AOCL_EXCLUDE_LZ4)
     if (LZ4_FRAME_FORMAT_SUPPORT)
         set(INC_FILES ${INC_FILES}
-                      ${ALGOS_PATH}/lz4/lz4frame.h)
+                      ${ALGOS_PATH}/lz4/lz4frame.h
+                      ${ALGOS_PATH}/lz4/lz4frame_static.h)
         set (LZ4_SRC_FILES ${LZ4_SRC_FILES}
                            ${ALGOS_PATH}/lz4/lz4frame.c
                            ${ALGOS_PATH}/lz4/lz4frame.h)
@@ -500,6 +508,9 @@ message(STATUS "AOCL COMPRESSION Library, Interface header files and Test binary
 install(TARGETS ${exe_name} DESTINATION ${DEST_BIN_PATH})
 install(TARGETS ${lib_name} DESTINATION ${DEST_LIB_PATH})
 install(FILES ${INC_FILES} DESTINATION ${DEST_INC_PATH})
+if (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL)
+    install(DIRECTORY ${INC_XZ_UTILS_LZMA} DESTINATION ${DEST_INC_PATH} FILES_MATCHING PATTERN "*.h")
+endif()
 if((NOT BUILD_STATIC_LIBS) AND WIN32 AND AOCL_TEST_COVERAGE)
 	add_custom_command(
 		TARGET ${lib_name}
