@@ -427,9 +427,14 @@ public:
         algo = GetParam();
     }
 
-    void TearDown() override {
-        if (algo < AOCL_COMPRESSOR_ALGOS_NUM)
+    void destroy() {
+        if (algo < AOCL_COMPRESSOR_ALGOS_NUM && desc.workBuf != nullptr)
             aocl_llc_destroy(&desc, algo);
+        desc.workBuf = nullptr;
+    }
+
+    void TearDown() override {
+        destroy();
     }
 
     void setup() {
@@ -476,6 +481,7 @@ public:
         TestLoadSingle dpr(cSize, cpr->getOutData(), cpr->getInpSize());
         set_ACD_io_bufs(&desc, (TestLoadBase*)(&dpr));  //set desc. inp=compressed data, out=empty output buffer.
         decompress_and_validate(cpr);
+        destroy();
     }
 
     ACT algo;

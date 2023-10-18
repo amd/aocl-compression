@@ -128,16 +128,19 @@ bool zstd_check_uncompressed_equal_to_original(char *src, unsigned srcSize, char
 
     if (uncompressedLenRes < 0) {//error code
         free(uncompressed);
+        ZSTD_freeDCtx(dctx);
         return false;
     }
 
     if (!(srcSize == (unsigned)uncompressedLenRes)) {
         free(uncompressed);
+        ZSTD_freeDCtx(dctx);
         return false;
     }
 
     bool ret = (memcmp(src, uncompressed, srcSize) == 0);
     free(uncompressed);
+    ZSTD_freeDCtx(dctx);
     return ret;
 }
 

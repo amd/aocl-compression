@@ -1364,7 +1364,7 @@ TEST_P(SNAPPY_Compress_, using_source)
     delete sink;
     delete compressed;
     free(c);
-    free(source);
+    delete source;
 }
 
 class SNAPPY_Compress_using_source : public AOCL_setup_snappy {

@@ -142,18 +142,18 @@ TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_sho
     Byte cur[] = "abcd1234";
     {
         Byte pb[] = "abc";
-        EXPECT_EQ(org_find_match(len, pb, cur, lenLimit),
-            opt_find_match(len, pb, cur, lenLimit)); //AOCL_Compression_lzma_byteMatching_shortStr_common_1
+        EXPECT_EQ(org_find_match(len, pb, cur, 3),
+            opt_find_match(len, pb, cur, 3)); //AOCL_Compression_lzma_byteMatching_shortStr_common_1
     }
     {
         Byte pb[] = "ab";
-        EXPECT_EQ(org_find_match(len, pb, cur, lenLimit),
-            opt_find_match(len, pb, cur, lenLimit)); //AOCL_Compression_lzma_byteMatching_shortStr_common_2
+        EXPECT_EQ(org_find_match(len, pb, cur, 2),
+            opt_find_match(len, pb, cur, 2)); //AOCL_Compression_lzma_byteMatching_shortStr_common_2
     }
     {
         Byte pb[] = "a";
-        EXPECT_EQ(org_find_match(len, pb, cur, lenLimit),
-            opt_find_match(len, pb, cur, lenLimit)); //AOCL_Compression_lzma_byteMatching_shortStr_common_3
+        EXPECT_EQ(org_find_match(len, pb, cur, 1),
+            opt_find_match(len, pb, cur, 1)); //AOCL_Compression_lzma_byteMatching_shortStr_common_3
     }
 }
 

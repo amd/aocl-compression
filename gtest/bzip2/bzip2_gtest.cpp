@@ -839,6 +839,7 @@ TEST_F(BZIP2_BZ2_bzCompress_failCases, AOCL_Compression_bzip2_BZ2_bzCompress_com
     strm->setMode(BZ_M_RUNNING);
     strm->setStream(NULL);
     EXPECT_EQ(BZIP2_API::Compress(strm->getStrm(), BZ_RUN), BZ_PARAM_ERROR);         // strm->state->strm != strm
+    strm->setStream(strm->getStrm());
 }
 
 TEST_F(BZIP2_BZ2_bzCompress_failCases, AOCL_Compression_bzip2_BZ2_bzCompress_common_4)
@@ -1080,8 +1081,10 @@ TEST_F(BZIP2_BZ2_bzDecompress, AOCL_Compression_bzip2_BZ2_bzDecompress_common_1)
 
 TEST_F(BZIP2_BZ2_bzDecompress, AOCL_Compression_bzip2_BZ2_bzDecompress_common_2)
 {
+    DState * temp_ptr = strm->getStatePtr();
     strm->setDState(NULL);
     EXPECT_EQ(BZIP2_API::Decompress(strm->getStrm()), BZ_PARAM_ERROR);   // state is pointed to NULL
+    strm->setDState(temp_ptr);
 }
 
 TEST_F(BZIP2_BZ2_bzDecompress, AOCL_Compression_bzip2_BZ2_bzDecompress_common_3)
@@ -1161,7 +1164,6 @@ TEST_F(BZIP2_BZ2_bzDecompress, AOCL_Compression_bzip2_BZ2_bzDecompress_common_9)
 
 TEST_F(BZIP2_BZ2_bzDecompress, AOCL_Compression_bzip2_BZ2_bzDecompress_common_10)
 {
-    BZIP2_API::DecompressInit(strm->getStrm(), 0, 0);
     strm->setDState(strm->getStatePtr());
     strm->setAvailIn(destLen);
     strm->setAvailOut(uncompressedLen);
@@ -1173,7 +1175,6 @@ TEST_F(BZIP2_BZ2_bzDecompress, AOCL_Compression_bzip2_BZ2_bzDecompress_common_10
 
 TEST_F(BZIP2_BZ2_bzDecompress, AOCL_Compression_bzip2_BZ2_bzDecompress_common_11) // pass
 {
-    BZIP2_API::DecompressInit(strm->getStrm(), 0, 0);
     strm->setDState(strm->getStatePtr());
     strm->setAvailIn(destLen);
     strm->setAvailOut(uncompressedLen);
