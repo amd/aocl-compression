@@ -861,8 +861,13 @@ INT32 main (INT32 argc, CHAR **argv)
         result = ERR_CODEC_BENCH_FILE_IO;
         goto exit;
     }
+#ifdef _WINDOWS
+    _fseeki64(inFp, 0L, SEEK_END);
+    codec_bench_handle.file_size = _ftelli64(inFp);
+#else
     fseek(inFp, 0L, SEEK_END);
     codec_bench_handle.file_size = ftell(inFp);
+#endif
     rewind(inFp);
 
     if (dumpEnabled) 
@@ -930,8 +935,13 @@ INT32 main (INT32 argc, CHAR **argv)
             result = ERR_CODEC_BENCH_FILE_IO;
             goto exit;
         }
+#ifdef _WINDOWS
+        _fseeki64(valFp, 0L, SEEK_END);
+        codec_bench_handle.val_file_size = _ftelli64(valFp);
+#else
         fseek(valFp, 0L, SEEK_END);
         codec_bench_handle.val_file_size = ftell(valFp);
+#endif
         rewind(valFp);
         codec_bench_handle.valFp = valFp;
     }
