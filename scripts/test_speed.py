@@ -177,6 +177,10 @@ def parse_line(line, amd_opt):
     # If IPP option enabled
     if amd_opt == "IPP":
         rx_dict['libdata'] = re.compile(r'IPP \[(.*)\] \[Filename:(.*)\] --')
+    
+    # If Native API option enabled
+    if amd_opt == "NAPI":
+        rx_dict['libdata'] = re.compile(r'COMPRESSION Native API \[(.*)\] \[Filename:(.*)\] --')
 
     for key, rx in rx_dict.items():
         match = rx.search(line)
@@ -445,6 +449,8 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
         amd_opt = 'AMD_OPT_OFF'
     if amd_opt == "ipp" or amd_opt == "IPP":
         amd_opt = 'IPP'
+    if amd_opt == "napi" or amd_opt == "NAPI":
+        amd_opt = 'NAPI'
 
     method = "-e{}".format(method_name)
     testOptions = []
@@ -463,6 +469,8 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
                 testOptions.append("-v3")
             if amd_opt == "AMD_OPT_OFF" or amd_opt == "off":
                 testOptions.append("-o")
+            if amd_opt == "NAPI" or amd_opt == "napi":
+                testOptions.append("-n")
             cmd = "{}/{}".format(args.dataset, dataset)
             testOptions.append(cmd)
             testOptions.append(method)
@@ -481,11 +489,13 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
                 exit()
         elif comparewith == "vanilla":
             amd_opt = 'AMD_OPT_OFF'
+        elif comparewith == "napi":
+            amd_opt = 'NAPI'
         else:
             run = False
         comparewith = "off"
 
-    if compare == 'ipp' or compare == 'vanilla':
+    if compare in ('ipp', 'vanilla', 'napi'):
         compare_benchmarks_numbers('final_{}_AMD_OPT_ON.csv'.format(
             method_name.replace(':', '_Level_')), 'final_{}_{}.csv'.format(method_name.replace(':', '_Level_'), amd_opt), 
             method_name, amd_opt)
@@ -522,12 +532,12 @@ if __name__ == '__main__':
         '--ipp', '-ipp',
         help='Provide IPP installed library path like for lz4: --ipp $PATH/lz4-1.9.3/lib) and for zlib: --ipp $PATH/zlib-1.2.11)', default=ipp)
     parser.add_argument(
-        '--optimization', '-o', choices=['on', 'off', 'ipp'],
-        help='Specify one of the options: on(default - with AOCL optimization), off(without AOCL optimization), ipp(with IPP patch)', type=str,
+        '--optimization', '-o', choices=['on', 'off', 'ipp', 'napi'],
+        help='Specify one of the options: on(default - with AOCL optimization), off(without AOCL optimization), ipp(with IPP patch), napi(with NativeAPI)', type=str,
         default="AMD_OPT_ON")
     parser.add_argument(
-        '--comparewith', '-cw', choices=['ipp', 'vanilla'],
-        help='Please specify a library for comparison, options are vanilla(Vanilla VS AOCL optimization), ipp(IPP VS AOCL optimization)', type=str
+        '--comparewith', '-cw', choices=['ipp', 'vanilla', 'napi'],
+        help='Please specify a library for comparison, options are vanilla(AOCL optimization Vs Vanilla), ipp(AOCL optimization Vs IPP) napi(AOCL optimization Vs NativeAPI)', type=str
     )
     parser.add_argument(
         '--iterations', '-itr',

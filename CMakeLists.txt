@@ -98,6 +98,12 @@ set (API_SRC_FILES 	api/code_alignment.cpp
 					api/codec.h
 					api/types.h)
 
+set (BENCH_PATH test)
+set (TESTBENCH_SRC_FILES 
+					${BENCH_PATH}/codec_bench.c 
+					${BENCH_PATH}/codec_native_api_bench.c 
+					${BENCH_PATH}/codec_bench.h)
+
 set (ALGOS_PATH algos)
 if (NOT AOCL_EXCLUDE_BZIP2)
 set (BZIP2_SRC_FILES 	${ALGOS_PATH}/bzip2/code_alignment.c
@@ -111,6 +117,7 @@ set (BZIP2_SRC_FILES 	${ALGOS_PATH}/bzip2/code_alignment.c
 						${ALGOS_PATH}/bzip2/bzlib.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
+set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
 set (LZ4_SRC_FILES	${ALGOS_PATH}/lz4/code_alignment_lz4.c
@@ -119,6 +126,7 @@ set (LZ4_SRC_FILES	${ALGOS_PATH}/lz4/code_alignment_lz4.c
 					${ALGOS_PATH}/lz4/xxhash.c)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
+set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4HC AND NOT AOCL_EXCLUDE_LZ4)
 set (LZ4HC_SRC_FILES	${ALGOS_PATH}/lz4/code_alignment_lz4hc.c
@@ -126,6 +134,7 @@ set (LZ4HC_SRC_FILES	${ALGOS_PATH}/lz4/code_alignment_lz4hc.c
 						${ALGOS_PATH}/lz4/lz4hc.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
+set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
 endif ()
 if (NOT AOCL_EXCLUDE_LZMA)
 set (LZMA_SRC_FILES	${ALGOS_PATH}/lzma/code_alignment.c
@@ -147,6 +156,7 @@ set (LZMA_SRC_FILES	${LZMA_SRC_FILES}
 endif()
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
+set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
 endif ()
 if (NOT AOCL_EXCLUDE_SNAPPY)
 set (SNAPPY_SRC_FILES 	${ALGOS_PATH}/snappy/code_alignment.cc
@@ -157,6 +167,7 @@ set (SNAPPY_SRC_FILES 	${ALGOS_PATH}/snappy/code_alignment.cc
 						${ALGOS_PATH}/snappy/snappy.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
+set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
 endif ()
 if (NOT AOCL_EXCLUDE_ZLIB)
 set (ZLIB_SRC_FILES	${ALGOS_PATH}/zlib/code_alignment.c
@@ -184,6 +195,7 @@ set (ZLIB_SRC_FILES	${ALGOS_PATH}/zlib/code_alignment.c
 					${ALGOS_PATH}/zlib/zlib.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
+set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()
 if (NOT AOCL_EXCLUDE_ZSTD)
 set (ZSTD_SRC_FILES	${ALGOS_PATH}/zstd/lib/common/code_alignment.c
@@ -220,6 +232,7 @@ set (ZSTD_SRC_FILES	${ALGOS_PATH}/zstd/lib/common/code_alignment.c
 					${ALGOS_PATH}/zstd/lib/zstd.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
+set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
 set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h)
 set (UTILS_SRC_FILES	utils/code_alignment.cpp
@@ -393,7 +406,7 @@ set(SRC_FILES
         ${ZSTD_SRC_FILES}
         ${COMMON_SRC_FILES}
 	)
-set (BENCH_PATH test)
+
 
 #common flag for aocl_compression_bench and gtest_combined_test
 set(AOCL_DYNAMIC_DISPATCHER ON)
@@ -491,15 +504,18 @@ set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
 
 #add executable
 set (exe_name aocl_compression_bench)
+
 if (WIN32)
 message(STATUS "C Compiler flags used for this windows build are: ${CMAKE_C_FLAGS}")
 message(STATUS "C++ Compiler flags used for this windows build are: ${CMAKE_CXX_FLAGS}")
-add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/codec_bench.h)
+add_executable(${exe_name} ${TESTBENCH_SRC_FILES})
 else ()
 message(STATUS "C Compiler flags used for this Unix build are: ${CMAKE_C_FLAGS}")
 message(STATUS "C++ Compiler flags used for this Unix build are: ${CMAKE_CXX_FLAGS}")
-add_executable(${exe_name} ${BENCH_PATH}/codec_bench.c ${BENCH_PATH}/ipp_codec_bench.c ${BENCH_PATH}/codec_bench.h)
+list(APPEND TESTBENCH_SRC_FILES ${BENCH_PATH}/ipp_codec_bench.c)
+add_executable(${exe_name} ${TESTBENCH_SRC_FILES})
 endif()
+
 target_link_libraries(${exe_name} ${lib_name})
 target_link_libraries(${exe_name} ${CMAKE_DL_LIBS})
 

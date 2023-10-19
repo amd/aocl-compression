@@ -81,7 +81,8 @@ void print_user_options (void)
     printf("-d          File to dump output data. Based on -r, saves compressed/decompressed data.\n\n");
     printf("-f          Input uncompressed file to be used for validation in -rdecompress mode.\n\n");
     printf("-v<>        Enable verbosity. Allowed values: 1 for Error (default), 2 for Info, 3 for Debug, 4 for Trace.\n");
-    printf("-c          Run IPP library methods. Make sure to set the library path with LD_LIBRARY_PATH.\n\n");
+    printf("-c          Run IPP library methods. Make sure to set the library path with LD_LIBRARY_PATH.\n");
+    printf("-n          Use Native APIs for compression/decompression.\n\n");
 }
 
 void print_supported_compressors (void)
@@ -184,6 +185,7 @@ INTP read_user_options (INTP argc,
     codec_bench_handle->decompPtr = NULL;
     codec_bench_handle->optOff = 0;
     codec_bench_handle->useIPP = 0;
+    codec_bench_handle->useNAPI = 0;
     codec_bench_handle->dumpFp = NULL;
     codec_bench_handle->valFp = NULL;
     codec_bench_handle->val_file_size = 0;
@@ -241,6 +243,10 @@ INTP read_user_options (INTP argc,
                 
                 case 'p':
                     codec_bench_handle->print_stats = 1;
+                break;
+
+                case 'n':
+                    codec_bench_handle->useNAPI = 1;
                 break;
                 
                 case 'v':
@@ -971,6 +977,10 @@ INT32 main (INT32 argc, CHAR **argv)
 #else
         result = ipp_bench_run(aocl_codec_handle, &codec_bench_handle);
 #endif
+    else if (codec_bench_handle.useNAPI)
+        {
+            result = native_api_bench_run(aocl_codec_handle, &codec_bench_handle);
+        }   
     else
         result = aocl_bench_run(aocl_codec_handle, &codec_bench_handle);
     if (result != 0)

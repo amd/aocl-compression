@@ -112,6 +112,7 @@ typedef struct
     INTP optOff;
     UINTP file_size;
     INTP useIPP;
+    INTP useNAPI;
     FILE *fp;
     CHAR *fName;
     UINT64 cSize;           //size of compressed output
@@ -139,7 +140,9 @@ INTP read_user_options (INTP argc,
 INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                     aocl_codec_bench_info *codec_bench_handle);
 INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
-                   aocl_codec_bench_info *codec_bench_handle);
+                    aocl_codec_bench_info *codec_bench_handle);
+INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle, 
+                    aocl_codec_bench_info *codec_bench_handle);
 VOID destroy(aocl_codec_bench_info *codec_bench_handle);
 
 #endif
