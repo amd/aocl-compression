@@ -34,7 +34,7 @@
  * are made to provide the best code alignment for lzma module.*/
 #if defined(__x86_64__)
 __attribute__((aligned(64)))
-int code_alignment_lzma() {
+int code_alignment_lzma(void) {
 #if defined(__clang__)
     // desired alignment: 16 bytes
 #else

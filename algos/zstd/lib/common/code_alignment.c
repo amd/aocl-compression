@@ -34,7 +34,7 @@
  * are made to provide the best code alignment for zstd module.*/
 #if defined(__x86_64__)
 __attribute__((aligned(64)))
-int code_alignment_zstd() {
+int code_alignment_zstd(void) {
 #if defined(__clang__)
     // desired alignment: 32 bytes
     __asm__("nop");

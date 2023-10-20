@@ -34,7 +34,7 @@
  * are made to provide the best code alignment for snappy module.*/
 #if defined(__x86_64__)
 __attribute__((aligned(64)))
-int code_alignment_snappy() {
+int code_alignment_snappy(void) {
 #if defined(__clang__)
     // desired alignment: 64 bytes
     __asm__("nop");
