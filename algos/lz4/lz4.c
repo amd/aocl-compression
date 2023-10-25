@@ -776,7 +776,11 @@ LZ4_FORCE_INLINE U32 AOCL_LZ4_hash5(U64 sequence, tableType_t const tableType)
 #else
         const U64 prime5bytes = 889523592379ULL;
 #endif /* AOCL_LZ4_NEW_PRIME_NUMBER */
+#ifdef AOCL_LZ4_HASH_BITS_USED
+        return (U32)(((sequence << (64 - AOCL_LZ4_HASH_BITS_USED)) * prime5bytes) >> (64 - hashLog));
+#else
         return (U32)(((sequence << 24) * prime5bytes) >> (64 - hashLog));
+#endif /* AOCL_LZ4_HASH_BITS_USED */
     } else {
         const U64 prime8bytes = 11400714785074694791ULL;
         return (U32)(((sequence >> 24) * prime8bytes) >> (64 - hashLog));

@@ -125,6 +125,7 @@ AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1  |  Enable LZ4 match skipping optimization st
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2  |  Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1. Preferred to be used with Silesia corpus (Disabled by default)
 AOCL_LZ4_NEW_PRIME_NUMBER           |  Enable the usage of a new prime number for LZ4 hashing function. Preferred to be used with Silesia corpus (Disabled by default)
 AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES   |  Enable storing of additional potential matches to improve compression ratio. Recommended for higher compressibility use cases (Disabled by default)
+AOCL_LZ4_HASH_BITS_USED             | Control the number of bits used for LZ4 hashing, allowed values are LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (Disabled by default)
 AOCL_EXCLUDE_BZIP2                  |  Exclude BZIP2 compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_LZ4                    |  Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)
 AOCL_EXCLUDE_LZ4HC                  |  Exclude LZ4HC compression method from the library build (Disabled by default)

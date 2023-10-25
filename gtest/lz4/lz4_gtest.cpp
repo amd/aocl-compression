@@ -1915,9 +1915,43 @@ TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_2)
 {
     // Least significant 5 bytes are same, Highest significant 3 bytes may vary
     // Hash function output is expected to be same.
+    unsigned long long seq1;
+    unsigned long long seq2;
+#if AOCL_LZ4_HASH_BITS_USED == 41
+    seq1 = 0xFFFFFFFF12345678; // 0xFFFFF'1111'[FF12345678]
+    seq2 = 0xFFFFFDFF12345678; // 0xFFFFF'1101'[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
 
-    unsigned long long seq1 = 0xFFFFFFFF12345678; // 0xFFFFFF[FF12345678]
-    unsigned long long seq2 = 0xFFFFFEFF12345678; // 0xFFFFFE[FF12345678]
+    seq1 = 0x000000FF12345678; // 0x00000'0000'[FF12345678]
+    seq2 = 0x000002FF12345678; // 0x00000'0010'[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x123456FF12345678; // 0x12345'0110'[FF12345678]
+    seq2 = 0xFEB124FF12345678; // 0xFEB12'0100'[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x000000FF12345678; // 0x000000[FF12345678]  41st bit is different, lower 40bits are same
+    seq2 = 0x000001FF12345678; // 0x000001[FF12345678]
+    EXPECT_NE(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+#elif AOCL_LZ4_HASH_BITS_USED == 44
+    seq1 = 0xFFFFFFFF12345678; // 0xFFFFF[FFF12345678]
+    seq2 = 0xFFFFEFFF12345678; // 0xFFFFE[FFF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x000000FF12345678; // 0x00000[0FF12345678]
+    seq2 = 0x000010FF12345678; // 0x00001[0FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x123465FF12345678; // 0x12346[5FF12345678]
+    seq2 = 0xFEB135FF12345678; // 0xFEB13[5FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0xFFFFFFFF12345678; // 0xFFFFF'1111'[FF12345678] 44th bit is different, lower 43bits are same
+    seq2 = 0xFFFFF7FF12345678; // 0xFFFFF'0111'[FF12345678]
+    EXPECT_NE(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+#else
+    seq1 = 0xFFFFFFFF12345678; // 0xFFFFFF[FF12345678]
+    seq2 = 0xFFFFFEFF12345678; // 0xFFFFFE[FF12345678]
     EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
 
     seq1 = 0x000000FF12345678; // 0x000000[FF12345678]
@@ -1927,6 +1961,11 @@ TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_2)
     seq1 = 0x123456FF12345678; // 0x123456[FF12345678]
     seq2 = 0xFEB123FF12345678; // 0xFEB123[FF12345678]
     EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0xFFFFFFFF12345678; // 0xFFFFFF'1111'[F12345678] 40th bit is different, lower 39bits are same
+    seq2 = 0xFFFFFF7F12345678; // 0xFFFFFF'0111'[F12345678]
+    EXPECT_NE(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+#endif /* AOCL_LZ4_HASH_BITS_USED */
 }
 
 TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_3)
