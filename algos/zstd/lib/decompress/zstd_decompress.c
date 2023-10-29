@@ -82,6 +82,7 @@
 /*-*******************************************************
 *  Dependencies
 *********************************************************/
+#include "utils/utils.h"
 #include "../common/allocations.h"  /* ZSTD_customMalloc, ZSTD_customCalloc, ZSTD_customFree */
 #include "../common/zstd_deps.h"   /* ZSTD_memcpy, ZSTD_memmove, ZSTD_memset */
 #include "../common/mem.h"         /* low level memory routines */
@@ -101,7 +102,17 @@
 #  include "../legacy/zstd_legacy.h"
 #endif
 
-
+#ifdef AOCL_ZSTD_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
 
 /*************************************
  * Multiple DDicts Hashset internals *
@@ -1192,6 +1203,7 @@ size_t ZSTD_decompress_usingDict(ZSTD_DCtx* dctx,
                            const void* src, size_t srcSize,
                            const void* dict, size_t dictSize)
 {
+    AOCL_SETUP_NATIVE();
     return ZSTD_decompressMultiFrame(dctx, dst, dstCapacity, src, srcSize, dict, dictSize, NULL);
 }
 
@@ -1216,10 +1228,11 @@ static ZSTD_DDict const* ZSTD_getDDict(ZSTD_DCtx* dctx)
 size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    AOCL_SETUP_NATIVE();
     if (dctx == NULL)
     {
         LOG_UNFORMATTED(INFO, logCtx, "Exit");
-        return ERROR(GENERIC);;
+        return ERROR(GENERIC);
     }
 
     size_t ret = ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
@@ -1231,6 +1244,7 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
 
 size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
+    AOCL_SETUP_NATIVE();
 #if defined(ZSTD_HEAPMODE) && (ZSTD_HEAPMODE>=1)
     size_t regenSize;
     ZSTD_DCtx* const dctx =  ZSTD_createDCtx_internal(ZSTD_defaultCMem);
@@ -1303,6 +1317,7 @@ static int ZSTD_isSkipFrame(ZSTD_DCtx* dctx) { return dctx->stage == ZSTDds_skip
  *            or an error code, which can be tested using ZSTD_isError() */
 size_t ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
+    AOCL_SETUP_NATIVE();
     DEBUGLOG(5, "ZSTD_decompressContinue (srcSize:%u)", (unsigned)srcSize);
     /* Sanity check */
     RETURN_ERROR_IF(srcSize != ZSTD_nextSrcSizeToDecompressWithInputSize(dctx, srcSize), srcSize_wrong, "not allowed");
@@ -1586,6 +1601,7 @@ static size_t ZSTD_decompress_insertDictionary(ZSTD_DCtx* dctx, const void* dict
 
 size_t ZSTD_decompressBegin(ZSTD_DCtx* dctx)
 {
+    AOCL_SETUP_NATIVE();
     assert(dctx != NULL);
 #if ZSTD_TRACE
     dctx->traceCtx = (ZSTD_trace_decompress_begin != NULL) ? ZSTD_trace_decompress_begin(dctx) : 0;
@@ -1613,6 +1629,7 @@ size_t ZSTD_decompressBegin(ZSTD_DCtx* dctx)
 
 size_t ZSTD_decompressBegin_usingDict(ZSTD_DCtx* dctx, const void* dict, size_t dictSize)
 {
+    AOCL_SETUP_NATIVE();
     FORWARD_IF_ERROR( ZSTD_decompressBegin(dctx) , "");
     if (dict && dictSize)
         RETURN_ERROR_IF(
@@ -1626,6 +1643,7 @@ size_t ZSTD_decompressBegin_usingDict(ZSTD_DCtx* dctx, const void* dict, size_t 
 
 size_t ZSTD_decompressBegin_usingDDict(ZSTD_DCtx* dctx, const ZSTD_DDict* ddict)
 {
+    AOCL_SETUP_NATIVE();
     DEBUGLOG(4, "ZSTD_decompressBegin_usingDDict");
     assert(dctx != NULL);
     if (ddict) {
@@ -1684,6 +1702,7 @@ size_t ZSTD_decompress_usingDDict(ZSTD_DCtx* dctx,
                             const void* src, size_t srcSize,
                             const ZSTD_DDict* ddict)
 {
+    AOCL_SETUP_NATIVE();
     /* pass content and size in case legacy frames are encountered */
     return ZSTD_decompressMultiFrame(dctx, dst, dstCapacity, src, srcSize,
                                      NULL, 0,
@@ -2088,6 +2107,7 @@ static size_t ZSTD_decompressContinueStream(
 
 size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input)
 {
+    AOCL_SETUP_NATIVE();
     const char* const src = (const char*)input->src;
     const char* const istart = input->pos != 0 ? src + input->pos : src;
     const char* const iend = input->size != 0 ? src + input->size : src;
@@ -2408,7 +2428,6 @@ size_t ZSTD_decompressStream_simpleArgs (
     }
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /* AOCL-Compression setup API for invoking Dynamic dispatcher for decompression
 * */
 char* aocl_setup_zstd_decode(int optOff, int optLevel, size_t insize,
@@ -2417,4 +2436,16 @@ char* aocl_setup_zstd_decode(int optOff, int optLevel, size_t insize,
     aocl_setup_zstd_decompress_block(optOff, optLevel);
     return NULL;
 }
+
+#ifdef AOCL_ZSTD_OPT
+static void aocl_setup_native(void) {
+    int optLevel = get_cpu_opt_flags(0);
+    int optOff = get_disable_opt_flags(0);
+    aocl_setup_zstd_decompress_block(optOff, optLevel);
+}
 #endif
+
+void aocl_destroy_zstd_decode(void)
+{
+    aocl_destroy_zstd_decompress_block();
+}

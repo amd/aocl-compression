@@ -59,9 +59,11 @@
 /*===   Common definitions   ===*/
 #if defined(__GNUC__)
 #  pragma GCC diagnostic ignored "-Wunused-function"
+#  pragma GCC diagnostic ignored "-Wunused-variable"
 #endif
 #if defined (__clang__)
 #  pragma clang diagnostic ignored "-Wunused-function"
+#  pragma clang diagnostic ignored "-Wunused-variable"
 #endif
 
 #define LZ4_COMMONDEFS_ONLY
@@ -111,13 +113,24 @@ static U32 LZ4HC_hashPtr(const void* ptr) { return HASH_FUNCTION(LZ4_read32(ptr)
 
 #define kEmptyValue 0
 
+#include "utils/utils.h"
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_LZ4HC_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE_HC() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native_hc(void);
+#define AOCL_SETUP_NATIVE_HC() aocl_setup_native_hc()
+#else
+#define AOCL_SETUP_NATIVE_HC()
+#endif
+
+int setup_ok_lz4hc = 0; // flag to indicate status of dynamic dispatcher setup
+
+// function pointer to variants of LZ4_compress_HC() function, used for integration with the dynamic dispatcher.
 static int (*LZ4_compress_HC_fp)(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel) = LZ4_compress_HC_internal;
-
-// function pointer to variants to be used in LZ4_compress_HC() function, used for integration
-// with the dynamic dispatcher. 
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 
 /**************************************
 *  HC Compression
@@ -171,7 +184,7 @@ static void AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* 
 }
 #endif /* AOCL_LZ4HC_OPT */
 
-#ifdef AOCL_LZ4HC_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 /* Wrapper function to be used for Unit Testing. */
 void Test_AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* start)
 {
@@ -224,12 +237,12 @@ LZ4_FORCE_INLINE void AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const BYT
 }
 #endif /* AOCL_LZ4HC_OPT */
 
-#ifdef AOCL_LZ4HC_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 void Test_AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* ip, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz)
 {
     AOCL_LZ4HC_Insert(hc4, ip, Hash_Chain_Max, Hash_Chain_Slot_Sz);
 }
-#endif /* AOCL_LZ4HC_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
 
 #ifdef AOCL_LZ4HC_OPT
 /* This function returns the number of leading zeros of the value passed.
@@ -390,15 +403,11 @@ int AOCL_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
 }
 #endif /* AOCL_LZ4HC_OPT */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
+// function pointer to variants of LZ4HC_countBack() function, used for integration with the dynamic dispatcher. 
 static int (*LZ4HC_countBack_fp)(const BYTE* const ip, const BYTE* const match,
     const BYTE* const iMin, const BYTE* const mMin) = LZ4HC_countBack;
 
-// function pointer to variants of the LZ4HC_countBack() function, used for integration
-// with the dynamic dispatcher. 
-#endif /* AOCL_DYNAMIC_DISPATCHER */
-
-#ifdef AOCL_LZ4HC_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 /* Wrapper functions for static inlined LZ4HC_countBack and AOCL_LZ4HC_countBack function for unit testing. */
 
 int Test_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
@@ -412,7 +421,7 @@ int Test_AOCL_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
 {
     return AOCL_LZ4HC_countBack(ip, match, iMin, mMin);
 }
-#endif /* AOCL_LZ4HC_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
 
 #if defined(_MSC_VER)
 #  define LZ4HC_rotl32(x,r) _rotl(x,r)
@@ -546,11 +555,7 @@ LZ4HC_InsertAndGetWiderMatch (
             if (LZ4_read16(iLowLimit + longest - 1) == LZ4_read16(matchPtr - lookBackLength + longest - 1)) {
                 if (LZ4_read32(matchPtr) == pattern) {
 #ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
                     int const back = lookBackLength ? LZ4HC_countBack_fp(ip, matchPtr, iLowLimit, lowPrefixPtr) : 0;
-#else
-                    int const back = lookBackLength ? AOCL_LZ4HC_countBack(ip, matchPtr, iLowLimit, lowPrefixPtr) : 0;
-#endif
 #else
                     int const back = lookBackLength ? LZ4HC_countBack(ip, matchPtr, iLowLimit, lowPrefixPtr) : 0;
 #endif
@@ -575,11 +580,7 @@ LZ4HC_InsertAndGetWiderMatch (
                 if ((ip+matchLength == vLimit) && (vLimit < iHighLimit))
                     matchLength += LZ4_count(ip+matchLength, lowPrefixPtr, iHighLimit);
 #ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
                 back = lookBackLength ? LZ4HC_countBack_fp(ip, matchPtr, iLowLimit, dictStart) : 0;
-#else
-                back = lookBackLength ? AOCL_LZ4HC_countBack(ip, matchPtr, iLowLimit, dictStart) : 0;
-#endif
 #else
                 back = lookBackLength ? LZ4HC_countBack(ip, matchPtr, iLowLimit, dictStart) : 0;
 #endif
@@ -716,11 +717,7 @@ LZ4HC_InsertAndGetWiderMatch (
                 if (vLimit > iHighLimit) vLimit = iHighLimit;
                 mlt = (int)LZ4_count(ip+MINMATCH, matchPtr+MINMATCH, vLimit) + MINMATCH;
 #ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
                 back = lookBackLength ? LZ4HC_countBack_fp(ip, matchPtr, iLowLimit, dictCtx->base + dictCtx->dictLimit) : 0;
-#else
-                back = lookBackLength ? AOCL_LZ4HC_countBack(ip, matchPtr, iLowLimit, dictCtx->base + dictCtx->dictLimit) : 0;
-#endif
 #else
                 back = lookBackLength ? LZ4HC_countBack(ip, matchPtr, iLowLimit, dictCtx->base + dictCtx->dictLimit) : 0;
 #endif
@@ -982,7 +979,7 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
 }
 #endif /* AOCL_LZ4HC_OPT */
 
-#ifdef AOCL_LZ4HC_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
     AOCL_LZ4HC_CCtx_internal* hc4,
     const BYTE* const ip,
@@ -1002,7 +999,7 @@ int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
     return AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, iLowLimit, iHighLimit, longest, matchpos, startpos, maxNbAttempts,
         patternAnalysis, chainSwap, dict, favorDecSpeed, Hash_Chain_Max, Hash_Chain_Slot_Sz);
 }
-#endif /* AOCL_LZ4HC_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
 
 LZ4_FORCE_INLINE
 int LZ4HC_InsertAndFindBestMatch(LZ4HC_CCtx_internal* const hc4,   /* Index table will be updated */
@@ -1926,6 +1923,7 @@ static size_t AOCL_LZ4_streamHC_t_alignment(void)
  * in which case its size and alignment have already been validated */
 int LZ4_compress_HC_extStateHC_fastReset (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
+    AOCL_SETUP_NATIVE_HC();
     if(state==NULL || (src==NULL && srcSize!=0) || dst==NULL)
         return 0;
     LZ4HC_CCtx_internal* const ctx = &((LZ4_streamHC_t*)state)->internal_donotuse;
@@ -1946,6 +1944,7 @@ int LZ4_compress_HC_extStateHC_fastReset (void* state, const char* src, char* ds
  * in which case its size and alignment have already been validate */
 int AOCL_LZ4_compress_HC_extStateHC_fastReset(void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
+    AOCL_SETUP_NATIVE_HC();
     if (state == NULL || (src == NULL && srcSize != 0) || dst == NULL)
         return 0;
     AOCL_LZ4HC_CCtx_internal* const ctx = &((AOCL_LZ4_streamHC_t*)state)->internal_donotuse;
@@ -1961,6 +1960,7 @@ int AOCL_LZ4_compress_HC_extStateHC_fastReset(void* state, const char* src, char
 
 int LZ4_compress_HC_extStateHC (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
+    AOCL_SETUP_NATIVE_HC();
     LZ4_streamHC_t* const ctx = LZ4_initStreamHC(state, sizeof(*ctx));
     if (ctx==NULL) return 0;   /* init failure */
     return LZ4_compress_HC_extStateHC_fastReset(state, src, dst, srcSize, dstCapacity, compressionLevel);
@@ -1972,6 +1972,7 @@ int LZ4_compress_HC_extStateHC (void* state, const char* src, char* dst, int src
  * LZ4_compress_HC_extStateHC, only difference is the type of state. */
 int AOCL_LZ4_compress_HC_extStateHC(void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
+    AOCL_SETUP_NATIVE_HC();
     AOCL_LZ4_streamHC_t* const ctx = AOCL_LZ4_initStreamHC(state, sizeof(*ctx));
     if (ctx == NULL) return 0;   /* init failure */
     return AOCL_LZ4_compress_HC_extStateHC_fastReset(state, src, dst, srcSize, dstCapacity, compressionLevel);
@@ -1980,6 +1981,7 @@ int AOCL_LZ4_compress_HC_extStateHC(void* state, const char* src, char* dst, int
 
 int LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
+    AOCL_SETUP_NATIVE_HC();
 #if defined(LZ4HC_HEAPMODE) && LZ4HC_HEAPMODE==1
     LZ4_streamHC_t* const statePtr = (LZ4_streamHC_t*)ALLOC(sizeof(LZ4_streamHC_t));
 #else
@@ -2002,6 +2004,7 @@ int LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int dstCap
  * DO NOT CALL THIS FUNCTION FOR OTHER LEVELS. */
 int AOCL_LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
+    AOCL_SETUP_NATIVE_HC();
 #if defined(LZ4HC_HEAPMODE) && LZ4HC_HEAPMODE==1
     AOCL_LZ4_streamHC_t* const statePtr = (AOCL_LZ4_streamHC_t*)ALLOC(sizeof(AOCL_LZ4_streamHC_t));
 #else
@@ -2020,14 +2023,10 @@ int LZ4_compress_HC(const char* src, char* dst, int srcSize, int dstCapacity, in
 {
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     int ret = 0;
+    AOCL_SETUP_NATIVE_HC();
 #ifdef AOCL_LZ4HC_OPT
-
 if(compressionLevel >= 6 && compressionLevel <=9)
-#ifdef AOCL_DYNAMIC_DISPATCHER
-    ret = LZ4_compress_HC_fp(src, dst, srcSize, dstCapacity, compressionLevel);
-#else
-    ret = AOCL_LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+    return LZ4_compress_HC_fp(src, dst, srcSize, dstCapacity, compressionLevel);
 else
     ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
 #else
@@ -2040,6 +2039,7 @@ else
 /* state is presumed sized correctly (>= sizeof(LZ4_streamHC_t)) */
 int LZ4_compress_HC_destSize(void* state, const char* source, char* dest, int* sourceSizePtr, int targetDestSize, int cLevel)
 {
+    AOCL_SETUP_NATIVE_HC();
     if(state==NULL || source==NULL || dest==NULL || sourceSizePtr==NULL)
         return 0;
     LZ4_streamHC_t* const ctx = LZ4_initStreamHC(state, sizeof(*ctx));
@@ -2310,6 +2310,7 @@ LZ4_compressHC_continue_generic (LZ4_streamHC_t* LZ4_streamHCPtr,
 
 int LZ4_compress_HC_continue (LZ4_streamHC_t* LZ4_streamHCPtr, const char* src, char* dst, int srcSize, int dstCapacity)
 {
+    AOCL_SETUP_NATIVE_HC();
     if (dstCapacity < LZ4_compressBound(srcSize))
         return LZ4_compressHC_continue_generic (LZ4_streamHCPtr, src, dst, &srcSize, dstCapacity, limitedOutput);
     else
@@ -2318,6 +2319,7 @@ int LZ4_compress_HC_continue (LZ4_streamHC_t* LZ4_streamHCPtr, const char* src, 
 
 int LZ4_compress_HC_continue_destSize (LZ4_streamHC_t* LZ4_streamHCPtr, const char* src, char* dst, int* srcSizePtr, int targetDestSize)
 {
+    AOCL_SETUP_NATIVE_HC();
     return LZ4_compressHC_continue_generic(LZ4_streamHCPtr, src, dst, srcSizePtr, targetDestSize, fillOutput);
 }
 
@@ -2403,11 +2405,13 @@ int LZ4_freeHC (void* LZ4HC_Data)
 
 int LZ4_compressHC2_continue (void* LZ4HC_Data, const char* src, char* dst, int srcSize, int cLevel)
 {
+    AOCL_SETUP_NATIVE_HC();
     return LZ4HC_compress_generic (&((LZ4_streamHC_t*)LZ4HC_Data)->internal_donotuse, src, dst, &srcSize, 0, cLevel, notLimited);
 }
 
 int LZ4_compressHC2_limitedOutput_continue (void* LZ4HC_Data, const char* src, char* dst, int srcSize, int dstCapacity, int cLevel)
 {
+    AOCL_SETUP_NATIVE_HC();
     return LZ4HC_compress_generic (&((LZ4_streamHC_t*)LZ4HC_Data)->internal_donotuse, src, dst, &srcSize, dstCapacity, cLevel, limitedOutput);
 }
 
@@ -2788,17 +2792,25 @@ _return_label:
      return retval;
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
     if (optOff)
     {
-        LZ4_compress_HC_fp = LZ4_compress_HC_internal;
         LZ4HC_countBack_fp = LZ4HC_countBack;
+        LZ4_compress_HC_fp = LZ4_compress_HC_internal;
     }
     else
     {
         switch (optLevel)
         {
+            case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_LZ4HC_OPT
+            LZ4HC_countBack_fp = AOCL_LZ4HC_countBack;
+            LZ4_compress_HC_fp = AOCL_LZ4_compress_HC_internal;
+#else
+            LZ4HC_countBack_fp = LZ4HC_countBack;
+            LZ4_compress_HC_fp = LZ4_compress_HC_internal;
+#endif
+            break;
         case 0://C version
         case 1://SSE version
         case 2://AVX version
@@ -2812,7 +2824,31 @@ static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
 }
 
 char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog) {
-    aocl_register_lz4hc_fmv(optOff, optLevel);
+    AOCL_ENTER_CRITICAL(setup_lz4hc)
+    if (!setup_ok_lz4hc) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_lz4hc_fmv(optOff, optLevel);
+        setup_ok_lz4hc = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lz4hc)
     return NULL;
 }
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+
+#ifdef AOCL_LZ4HC_OPT
+static void aocl_setup_native_hc(void) {
+    AOCL_ENTER_CRITICAL(setup_lz4hc)
+    if (!setup_ok_lz4hc) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_lz4hc_fmv(optOff, optLevel);
+        setup_ok_lz4hc = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lz4hc)
+}
+#endif
+
+void aocl_destroy_lz4hc(void){
+    AOCL_ENTER_CRITICAL(setup_lz4hc)
+    setup_ok_lz4hc = 0;
+    AOCL_EXIT_CRITICAL(setup_lz4hc)
+}

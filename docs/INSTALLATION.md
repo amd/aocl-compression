@@ -103,17 +103,17 @@ AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for lev
 AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST|  Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Disabled by default)
 AOCL_ZSTD_WILDCOPY_LONG             |  Faster wildcopy when match lengths are long in ZSTD decompression (Disabled by default)
 AOCL_TEST_COVERAGE                  |  Enable GTest and AOCL test bench based CTest suite (Disabled by default)
-AOCL_ENABLE_LOG_FEATURE               |  Enables logging through enironment variable `AOCL_ENABLE_LOG` (Disabled by default)
+AOCL_ENABLE_LOG_FEATURE             |  Enables logging through environment variable `AOCL_ENABLE_LOG` (Disabled by default)
 CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
 ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
 VALGRIND                            |  Enable Valgrind checks. Only supported on Linux/Debug and incompatible with ASAN=ON (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Disabled by default)
-ZLIB_DEFLATE_FAST_MODE            |  Enable ZLIB deflate quick strategy (Disabled by default)
+ZLIB_DEFLATE_FAST_MODE              |  Enable ZLIB deflate quick strategy (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1  |  Enable LZ4 match skipping optimization strategy-1 based on a larger base step size applied for long distance search (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2  |  Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1. Preferred to be used with Silesia corpus (Disabled by default)
 AOCL_LZ4_NEW_PRIME_NUMBER           |  Enable the usage of a new prime number for LZ4 hashing function. Preferred to be used with Silesia corpus (Disabled by default)
 AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES   |  Enable storing of additional potential matches to improve compression ratio. Recommended for higher compressibility use cases (Disabled by default)
-AOCL_LZ4_HASH_BITS_USED             | Control the number of bits used for LZ4 hashing, allowed values are LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (Disabled by default)
+AOCL_LZ4_HASH_BITS_USED             |  Control the number of bits used for LZ4 hashing, allowed values are LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (Disabled by default)
 AOCL_EXCLUDE_BZIP2                  |  Exclude BZIP2 compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_LZ4                    |  Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)
 AOCL_EXCLUDE_LZ4HC                  |  Exclude LZ4HC compression method from the library build (Disabled by default)
@@ -265,3 +265,23 @@ Generating Documentation
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
 - Documents will be generated in HTML format in the folder __docs/html__ . Open the index.html file in any browser to view the documentation.
 - CMake will use the existing Doxygen if available. Else, it will prompt the user to install doxygen and try again.
+
+Enabling/disabling optimizations
+--------------------------------
+- AOCL optimizations can be disabled by setting the environment variable AOCL_DISABLE_OPT to ON.
+- Reference code paths are taken in such a scenario.
+- This needs to be set before launching the application for it to take effect.
+- If optimization is turned off via aocl_compression_desc::optOff (= 1) passed to aocl_llc_setup(), then reference code paths are taken.
+- If optimization is turned on  via aocl_compression_desc::optOff (= 0) passed to aocl_llc_setup(), then AOCL_DISABLE_OPT is checked 
+  additionally to override aocl_compression_desc::optOff value.
+
+Enabling specific instructions (ISA)
+------------------------------------
+- AOCL optimizations can be restricted to certain ISAs by setting the environment variable 
+  AOCL_ENABLE_INSTRUCTIONS. Supported values are SSE2, AVX, AVX2 and AVX512.
+- This ensures optimized code paths with ISAs above the set value are not taken. E.g. If 
+  it is set to AVX, no AVX2 and AVX512 optimized code paths are taken.
+- This needs to be set before launching the application for it to take effect.
+- It takes precedence over aocl_compression_desc::optLevel setting passed to aocl_llc_setup().
+- Note: When calling aocl_llc_setup() API from multiple threads, changing aocl_compression_desc::optOff
+  and aocl_compression_desc::optLevel values between threads can lead to undefined behaviour.

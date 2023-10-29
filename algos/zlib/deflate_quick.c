@@ -8436,7 +8436,7 @@ local z_const unsigned quick_dist_codes[MAX_SEARCH_DIST] = {
 	0x3ff9712, 0x3ffb712, 0x3ffd712, 0x3fff712, 
 };
 
-#ifdef AOCL_ZLIB_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 #include "aocl_zlib_test.h"
 extern z_const ct_data static_dtree[D_CODES];
 extern const int extra_dbits[D_CODES];
@@ -8454,6 +8454,6 @@ uint32_t ZEXPORT Test_quick_dist_code(void)
 	}
 	return 0;
 }
-#endif /* AOCL_ZLIB_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
 #endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 

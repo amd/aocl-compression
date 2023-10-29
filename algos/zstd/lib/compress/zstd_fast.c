@@ -8,6 +8,7 @@
  * You may select, at your option, one of the above-listed licenses.
  */
 
+#include "utils/utils.h"
 #include "zstd_compress_internal.h"  /* ZSTD_hashPtr, ZSTD_count, ZSTD_storeSeq */
 #include "zstd_fast.h"
 
@@ -742,7 +743,6 @@ AOCL_ZSTD_GEN_FAST_NODICT_FN(6, 0)
 AOCL_ZSTD_GEN_FAST_NODICT_FN(7, 0)
 #endif /* AOCL_ZSTD_OPT */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 static size_t(*ZSTD_compressBlock_fast_noDict_4_1_fp)(ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM], void const* src, size_t srcSize) = ZSTD_compressBlock_fast_noDict_4_1;
 static size_t(*ZSTD_compressBlock_fast_noDict_5_1_fp)(ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM], void const* src, size_t srcSize) = ZSTD_compressBlock_fast_noDict_5_1;
 static size_t(*ZSTD_compressBlock_fast_noDict_6_1_fp)(ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM], void const* src, size_t srcSize) = ZSTD_compressBlock_fast_noDict_6_1;
@@ -751,7 +751,6 @@ static size_t(*ZSTD_compressBlock_fast_noDict_4_0_fp)(ZSTD_matchState_t* ms, seq
 static size_t(*ZSTD_compressBlock_fast_noDict_5_0_fp)(ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM], void const* src, size_t srcSize) = ZSTD_compressBlock_fast_noDict_5_0;
 static size_t(*ZSTD_compressBlock_fast_noDict_6_0_fp)(ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM], void const* src, size_t srcSize) = ZSTD_compressBlock_fast_noDict_6_0;
 static size_t(*ZSTD_compressBlock_fast_noDict_7_0_fp)(ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM], void const* src, size_t srcSize) = ZSTD_compressBlock_fast_noDict_7_0;
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 
 size_t ZSTD_compressBlock_fast(
         ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
@@ -761,7 +760,6 @@ size_t ZSTD_compressBlock_fast(
     assert(ms->dictMatchState == NULL);
 
 #ifdef AOCL_ZSTD_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     if (ms->cParams.targetLength > 1) {
         switch (mls)
         {
@@ -791,36 +789,6 @@ size_t ZSTD_compressBlock_fast(
         }
 
     }
-#else
-    if (ms->cParams.targetLength > 1) {
-        switch(mls)
-        {
-        default: /* includes case 3 */
-        case 4 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_4_1(ms, seqStore, rep, src, srcSize);
-        case 5 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_5_1(ms, seqStore, rep, src, srcSize);
-        case 6 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_6_1(ms, seqStore, rep, src, srcSize);
-        case 7 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_7_1(ms, seqStore, rep, src, srcSize);
-        }
-    } else {
-        switch(mls)
-        {
-        default: /* includes case 3 */
-        case 4 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_4_0(ms, seqStore, rep, src, srcSize);
-        case 5 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_5_0(ms, seqStore, rep, src, srcSize);
-        case 6 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_6_0(ms, seqStore, rep, src, srcSize);
-        case 7 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_7_0(ms, seqStore, rep, src, srcSize);
-        }
-
-    }
-#endif
 #else
     if (ms->cParams.targetLength > 1) {
         switch(mls)
@@ -1357,7 +1325,6 @@ size_t ZSTD_compressBlock_fast_extDict(
     }
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 void aocl_register_compressfast_fmv(int optOff, int optLevel)
 {
     if (optOff)
@@ -1376,21 +1343,41 @@ void aocl_register_compressfast_fmv(int optOff, int optLevel)
     {
         switch (optLevel)
         {
-        case 0://C version
-        case 1://SSE version
-        case 2://AVX version
-        case 3://AVX2 version
-        default://AVX512 and other versions
-            ZSTD_compressBlock_fast_noDict_4_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_4_1;
-            ZSTD_compressBlock_fast_noDict_5_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_5_1;
-            ZSTD_compressBlock_fast_noDict_6_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_6_1;
-            ZSTD_compressBlock_fast_noDict_7_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_7_1;
-            ZSTD_compressBlock_fast_noDict_4_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_4_0;
-            ZSTD_compressBlock_fast_noDict_5_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_5_0;
-            ZSTD_compressBlock_fast_noDict_6_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_6_0;
-            ZSTD_compressBlock_fast_noDict_7_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_7_0;
-            break;
+            case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_ZSTD_OPT
+                ZSTD_compressBlock_fast_noDict_4_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_4_1;
+                ZSTD_compressBlock_fast_noDict_5_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_5_1;
+                ZSTD_compressBlock_fast_noDict_6_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_6_1;
+                ZSTD_compressBlock_fast_noDict_7_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_7_1;
+                ZSTD_compressBlock_fast_noDict_4_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_4_0;
+                ZSTD_compressBlock_fast_noDict_5_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_5_0;
+                ZSTD_compressBlock_fast_noDict_6_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_6_0;
+                ZSTD_compressBlock_fast_noDict_7_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_7_0;
+#else
+                ZSTD_compressBlock_fast_noDict_4_1_fp = ZSTD_compressBlock_fast_noDict_4_1;
+                ZSTD_compressBlock_fast_noDict_5_1_fp = ZSTD_compressBlock_fast_noDict_5_1;
+                ZSTD_compressBlock_fast_noDict_6_1_fp = ZSTD_compressBlock_fast_noDict_6_1;
+                ZSTD_compressBlock_fast_noDict_7_1_fp = ZSTD_compressBlock_fast_noDict_7_1;
+                ZSTD_compressBlock_fast_noDict_4_0_fp = ZSTD_compressBlock_fast_noDict_4_0;
+                ZSTD_compressBlock_fast_noDict_5_0_fp = ZSTD_compressBlock_fast_noDict_5_0;
+                ZSTD_compressBlock_fast_noDict_6_0_fp = ZSTD_compressBlock_fast_noDict_6_0;
+                ZSTD_compressBlock_fast_noDict_7_0_fp = ZSTD_compressBlock_fast_noDict_7_0;
+#endif
+                break;
+            case 0://C version
+            case 1://SSE version
+            case 2://AVX version
+            case 3://AVX2 version
+            default://AVX512 and other versions
+                ZSTD_compressBlock_fast_noDict_4_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_4_1;
+                ZSTD_compressBlock_fast_noDict_5_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_5_1;
+                ZSTD_compressBlock_fast_noDict_6_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_6_1;
+                ZSTD_compressBlock_fast_noDict_7_1_fp = AOCL_ZSTD_compressBlock_fast_noDict_7_1;
+                ZSTD_compressBlock_fast_noDict_4_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_4_0;
+                ZSTD_compressBlock_fast_noDict_5_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_5_0;
+                ZSTD_compressBlock_fast_noDict_6_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_6_0;
+                ZSTD_compressBlock_fast_noDict_7_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_7_0;
+                break;
         }
     }
 }
-#endif /* AOCL_DYNAMIC_DISPATCHER */

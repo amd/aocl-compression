@@ -42,11 +42,7 @@ int code_alignment_zlib(void) {
     __asm__("nop");
     __asm__(".p2align 4"); //+ 16 bytes
 #else
-    // desired alignment: 64 bytes
-    __asm__("nop");
-    __asm__(".p2align 5"); //+ 32 bytes
-    __asm__("nop");
-    __asm__(".p2align 4"); //+ 16 bytes
+    // desired alignment: 16 bytes
 #endif
     return 0; //+ 16 bytes
 }

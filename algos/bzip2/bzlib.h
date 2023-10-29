@@ -805,8 +805,6 @@ BZ_EXTERN const char * BZ_API(BZ2_bzerror) (
 #endif
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-
 BZ_EXTERN char * BZ_API(aocl_setup_bzip2) (
       int optOff,
       int optLevel,
@@ -815,7 +813,7 @@ BZ_EXTERN char * BZ_API(aocl_setup_bzip2) (
       size_t windowLog
    );
 
-#endif
+BZ_EXTERN void BZ_API(aocl_destroy_bzip2) (void);
 
 #ifdef __cplusplus
 }

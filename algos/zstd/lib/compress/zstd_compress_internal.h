@@ -1558,8 +1558,6 @@ size_t ZSTD_compressEnd_public(ZSTD_CCtx* cctx,
 
 size_t ZSTD_compressBlock_deprecated(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 
-
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /* ===============================================================
  * Internal function used for setting the function pointers to the
  * appropriate functions for compression in double fast mode when
@@ -1567,5 +1565,4 @@ size_t ZSTD_compressBlock_deprecated(ZSTD_CCtx* cctx, void* dst, size_t dstCapac
  * =============================================================== */
 void aocl_register_compressfast_fmv(int optOff, int optLevel);
 void aocl_register_compressdoublefast_fmv(int optOff, int optLevel);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 #endif /* ZSTD_COMPRESS_H */

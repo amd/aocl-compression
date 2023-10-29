@@ -26,6 +26,7 @@
 int ZEXPORT inflateBackInit_(z_streamp strm, int windowBits,
                              unsigned char FAR *window, const char *version,
                              int stream_size) {
+    //AOCL_SETUP_NATIVE(); enable once aocl optimizations are added to this function
     struct inflate_state FAR *state;
 
     if (version == Z_NULL || version[0] != ZLIB_VERSION[0] ||
@@ -242,6 +243,7 @@ local void fixedtables(struct inflate_state FAR *state) {
  */
 int ZEXPORT inflateBack(z_streamp strm, in_func in, void FAR *in_desc,
                         out_func out, void FAR *out_desc) {
+    //AOCL_SETUP_NATIVE(); enable once aocl optimizations are added to this function
     struct inflate_state FAR *state;
     z_const unsigned char FAR *next;    /* next input */
     unsigned char FAR *put;     /* next output */
@@ -633,6 +635,7 @@ int ZEXPORT inflateBack(z_streamp strm, in_func in, void FAR *in_desc,
 }
 
 int ZEXPORT inflateBackEnd(z_streamp strm) {
+    //AOCL_SETUP_NATIVE(); enable once aocl optimizations are added to this function
     if (strm == Z_NULL || strm->state == Z_NULL || strm->zfree == (free_func)0)
         return Z_STREAM_ERROR;
     ZFREE(strm, strm->state);

@@ -382,12 +382,15 @@ void ZLIB_INTERNAL _tr_stored_block(deflate_state *s, charf *buf,
 /* AOCL-Compression defined register routines to setup the appropriate function
  * variant out of the multiple function versions for performing deflate
  * related tasks */
-#ifdef AOCL_DYNAMIC_DISPATCHER
-void aocl_register_slide_hash_fmv(int optOff, int optLevel, 
+void aocl_register_slide_hash(int optOff, int optLevel, 
                                   void (*slide_hash_c_fp)(deflate_state* s));
-void aocl_register_longest_match_fmv(int optOff, int optLevel,
+void aocl_register_longest_match(int optOff, int optLevel,
                                   uInt (*longest_match_fp)(deflate_state* s, IPos cur_match));
-#endif
+void aocl_register_deflate_medium(int optOff, int optLevel);
+
+void aocl_destroy_slide_hash(void);
+void aocl_destroy_longest_match(void);
+
 #ifdef AOCL_ZLIB_OPT
 typedef enum {
     need_more,      /* block not completed, need more input or more output */

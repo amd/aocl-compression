@@ -40,6 +40,8 @@
 #include <stdio.h>
 #endif
 
+#include "utils/utils.h"
+
 #include "LzmaEnc.h"
 
 #include "utils/utils.h"
@@ -89,11 +91,23 @@ static unsigned g_STAT_OFFSET = 0;
 
 #define REP_LEN_COUNT 64
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_LZMA_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+static int setup_ok_lzma_encode = 0; // flag to indicate status of dynamic dispatcher setup
+
 //Forward declarations to allow default pointer initializations
 // Function pointers for optimization overloads
 void (*LzmaEncProps_Normalize_fp)(CLzmaEncProps* p) = LzmaEncProps_Normalize;
-#endif
 
 void LzmaEncProps_Init(CLzmaEncProps *p)
 {
@@ -267,11 +281,7 @@ UInt32 LzmaEncProps_GetDictSize(const CLzmaEncProps *props2)
 {
   CLzmaEncProps props = *props2;
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
   LzmaEncProps_Normalize_fp(&props);
-#else
-  AOCL_LzmaEncProps_Normalize(&props);
-#endif
 #else
   LzmaEncProps_Normalize(&props);
 #endif
@@ -675,19 +685,17 @@ typedef struct
   #endif
 } CLzmaEnc;
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 //Forward declarations to allow default pointer initializations
 static unsigned GetOptimum(CLzmaEnc* p, UInt32 position);
 
 // Function pointers for optimization overloads
-void (*MatchFinder_CreateVTable_fp)(CMatchFinder* p, IMatchFinder2* vTable) = MatchFinder_CreateVTable;
-int (*MatchFinder_Create_fp)(CMatchFinder* p, UInt32 historySize,
+ void (*MatchFinder_CreateVTable_fp)(CMatchFinder* p, IMatchFinder2* vTable) = MatchFinder_CreateVTable;
+ int (*MatchFinder_Create_fp)(CMatchFinder* p, UInt32 historySize,
   UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
   ISzAllocPtr alloc) = MatchFinder_Create;
-void (*MatchFinder_Free_fp)(CMatchFinder* p, ISzAllocPtr alloc) = MatchFinder_Free;
-unsigned (*GetOptimum_fp)(CLzmaEnc* p, UInt32 position) = GetOptimum;
-SRes(*LzmaEnc_SetProps_fp)(CLzmaEncHandle pp, const CLzmaEncProps* props2) = LzmaEnc_SetProps;
-#endif
+ void (*MatchFinder_Free_fp)(CMatchFinder* p, ISzAllocPtr alloc) = MatchFinder_Free;
+ unsigned (*GetOptimum_fp)(CLzmaEnc* p, UInt32 position) = GetOptimum;
+ SRes(*LzmaEnc_SetProps_fp)(CLzmaEncHandle pp, const CLzmaEncProps* props2) = LzmaEnc_SetProps;
 
 #define MFB (p->matchFinderBase)
 /*
@@ -3578,11 +3586,7 @@ static void LzmaEnc_Construct(CLzmaEnc *p)
     CLzmaEncProps props;
     LzmaEncProps_Init(&props);
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     LzmaEnc_SetProps_fp(p, &props);
-#else
-    AOCL_LzmaEnc_SetProps(p, &props);
-#endif
 #else
     LzmaEnc_SetProps(p, &props);
 #endif
@@ -3599,6 +3603,7 @@ static void LzmaEnc_Construct(CLzmaEnc *p)
 
 CLzmaEncHandle LzmaEnc_Create(ISzAllocPtr alloc)
 {
+  AOCL_SETUP_NATIVE();
   void *p = NULL;
   if (alloc == NULL) return p;
   p = ISzAlloc_Alloc(alloc, sizeof(CLzmaEnc));
@@ -3622,11 +3627,7 @@ static void LzmaEnc_Destruct(CLzmaEnc *p, ISzAllocPtr alloc, ISzAllocPtr allocBi
   #endif
   
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
   MatchFinder_Free_fp(&MFB, allocBig);
-#else
-  AOCL_MatchFinder_Free(&MFB, allocBig);
-#endif
 #else
   MatchFinder_Free(&MFB, allocBig);
 #endif
@@ -3636,6 +3637,7 @@ static void LzmaEnc_Destruct(CLzmaEnc *p, ISzAllocPtr alloc, ISzAllocPtr allocBi
 
 void LzmaEnc_Destroy(CLzmaEncHandle p, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  AOCL_SETUP_NATIVE();
   LzmaEnc_Destruct((CLzmaEnc *)p, alloc, allocBig);
   ISzAlloc_Free(alloc, p);
 }
@@ -3689,11 +3691,7 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
       unsigned oci = p->optCur;
       if (p->optEnd == oci)
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
         len = GetOptimum_fp(p, nowPos32);
-#else
-        len = AOCL_GetOptimum(p, nowPos32);
-#endif
 #else
         len = GetOptimum(p, nowPos32);
 #endif
@@ -4017,15 +4015,9 @@ static SRes LzmaEnc_Alloc(CLzmaEnc *p, UInt32 keepWindowSize, ISzAllocPtr alloc,
   #endif
   {
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     if (!MatchFinder_Create_fp(&MFB, dictSize, beforeSize,
         p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
         , allocBig))
-#else
-      if (!AOCL_MatchFinder_Create(&MFB, dictSize, beforeSize,
-          p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
-          , allocBig))
-#endif
 #else
       if (!MatchFinder_Create(&MFB, dictSize, beforeSize,
           p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
@@ -4034,11 +4026,7 @@ static SRes LzmaEnc_Alloc(CLzmaEnc *p, UInt32 keepWindowSize, ISzAllocPtr alloc,
       return SZ_ERROR_MEM;
     p->matchFinderObj = &MFB;
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     MatchFinder_CreateVTable_fp(&MFB, &p->matchFinder);
-#else
-    AOCL_MatchFinder_CreateVTable(&MFB, &p->matchFinder);
-#endif
 #else
     MatchFinder_CreateVTable(&MFB, &p->matchFinder);
 #endif
@@ -4322,6 +4310,7 @@ static SRes LzmaEnc_Encode2(CLzmaEnc *p, ICompressProgress *progress)
 SRes LzmaEnc_Encode(CLzmaEncHandle pp, ISeqOutStream *outStream, ISeqInStream *inStream, ICompressProgress *progress,
     ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  AOCL_SETUP_NATIVE();
   RINOK(LzmaEnc_Prepare(pp, outStream, inStream, alloc, allocBig));
   return LzmaEnc_Encode2((CLzmaEnc *)pp, progress);
 }
@@ -4372,6 +4361,7 @@ unsigned LzmaEnc_IsWriteEndMark(CLzmaEncHandle pp)
 SRes LzmaEnc_MemEncode(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  AOCL_SETUP_NATIVE();
   if (pp == NULL || src == NULL || srcLen == 0 || dest == NULL || destLen == NULL)
       return SZ_ERROR_PARAM;
 
@@ -4427,6 +4417,7 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
   LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    AOCL_SETUP_NATIVE();
   if (src == NULL || srcLen == 0 || dest == NULL || propsEncoded == NULL ||
       props == NULL || propsSize == NULL || destLen == NULL ||
       *destLen > (ULLONG_MAX - LZMA_PROPS_SIZE)) // handles case when dest size is < LZMA_PROPS_SIZE, resulting in destLen rolling over in calling APIs
@@ -4452,11 +4443,7 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
 #ifdef AOCL_LZMA_OPT
   CLzmaEncProps props_cur = *props;
   props_cur.srcLen = srcLen; //same srcLen value must be set here and passed to LzmaEnc_MemEncode()
-#ifdef AOCL_DYNAMIC_DISPATCHER
   res = LzmaEnc_SetProps_fp(p, &props_cur);
-#else
-  res = AOCL_LzmaEnc_SetProps(p, &props_cur);
-#endif
 #else
   res = LzmaEnc_SetProps(p, props);
 #endif
@@ -4475,54 +4462,90 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
   return res;
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
 {
-  if (optOff)
-  {
-    //C version
-    MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
-    MatchFinder_Create_fp = MatchFinder_Create;
-    MatchFinder_Free_fp = MatchFinder_Free;
-    GetOptimum_fp = GetOptimum;
-    LzmaEncProps_Normalize_fp = LzmaEncProps_Normalize;
-    LzmaEnc_SetProps_fp = LzmaEnc_SetProps;
-  }
-  else
-  {
-    switch (optLevel)
+    if (optOff)
     {
-    case 0://C version
-    case 1://SSE version
-    case 2://AVX version
-    case 3://AVX2 version
-    default://AVX512 and other versions
-      MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
-      MatchFinder_Create_fp = AOCL_MatchFinder_Create;
-      MatchFinder_Free_fp = AOCL_MatchFinder_Free;
-      GetOptimum_fp = AOCL_GetOptimum;
-      LzmaEncProps_Normalize_fp = AOCL_LzmaEncProps_Normalize;
-      LzmaEnc_SetProps_fp = AOCL_LzmaEnc_SetProps;
-      break;
+        //C version
+        MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
+        MatchFinder_Create_fp       = MatchFinder_Create;
+        MatchFinder_Free_fp         = MatchFinder_Free;
+        GetOptimum_fp               = GetOptimum;
+        LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
+        LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
     }
-  }
+    else
+    {
+        switch (optLevel)
+        {
+        case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_LZMA_OPT
+            MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
+            MatchFinder_Create_fp       = AOCL_MatchFinder_Create;
+            MatchFinder_Free_fp         = AOCL_MatchFinder_Free;
+            GetOptimum_fp               = AOCL_GetOptimum;
+            LzmaEncProps_Normalize_fp   = AOCL_LzmaEncProps_Normalize;
+            LzmaEnc_SetProps_fp         = AOCL_LzmaEnc_SetProps;
+#else
+            MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
+            MatchFinder_Create_fp       = MatchFinder_Create;
+            MatchFinder_Free_fp         = MatchFinder_Free;
+            GetOptimum_fp               = GetOptimum;
+            LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
+            LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
+#endif
+            break;
+        case 0://C version
+        case 1://SSE version
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
+            MatchFinder_Create_fp       = AOCL_MatchFinder_Create;
+            MatchFinder_Free_fp         = AOCL_MatchFinder_Free;
+            GetOptimum_fp               = AOCL_GetOptimum;
+            LzmaEncProps_Normalize_fp   = AOCL_LzmaEncProps_Normalize;
+            LzmaEnc_SetProps_fp         = AOCL_LzmaEnc_SetProps;
+            break;
+        }
+    }
 }
 
 void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
-  size_t level, size_t windowLog)
+    size_t level, size_t windowLog)
 {
-  aocl_register_lzma_encode_fmv(optOff, optLevel);
+    AOCL_ENTER_CRITICAL(setup_lzmaenc)
+    if (!setup_ok_lzma_encode) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_lzma_encode_fmv(optOff, optLevel);
+        setup_ok_lzma_encode = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lzmaenc)
+}
+
+#ifdef AOCL_LZMA_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_lzmaenc)
+    if (!setup_ok_lzma_encode) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_lzma_encode_fmv(optOff, optLevel);
+        setup_ok_lzma_encode = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lzmaenc)
 }
 #endif
 
-#ifdef AOCL_LZMA_UNIT_TEST
+void aocl_destroy_lzma_encode(void){
+    AOCL_ENTER_CRITICAL(setup_lzma_encode)
+    setup_ok_lzma_encode = 0;
+    AOCL_EXIT_CRITICAL(setup_lzma_encode)
+}
+
+#ifdef AOCL_UNIT_TEST
 void Test_LzmaEncProps_Normalize_Dyn(CLzmaEncProps* p) {
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     LzmaEncProps_Normalize_fp(p);
-#else
-    AOCL_LzmaEncProps_Normalize(p);
-#endif
 #else
     LzmaEncProps_Normalize(p);
 #endif
@@ -4549,11 +4572,7 @@ unsigned Test_IsWriteEndMark(CLzmaEncHandle pp, unsigned wem) {
 SRes Test_SetProps_Dyn(CLzmaEncHandle pp, const CLzmaEncProps* props) {
     CLzmaEnc* p = (CLzmaEnc*)pp;
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     SRes res = LzmaEnc_SetProps_fp(p, props);
-#else
-    SRes res = AOCL_LzmaEnc_SetProps(p, props);
-#endif
 #else
     SRes res = LzmaEnc_SetProps(p, props);
 #endif

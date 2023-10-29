@@ -68,9 +68,7 @@ void print_user_options (void)
     printf("-i<>        Number of iterations of compression/decompression\n");
     printf("-t          Verification and functional tests of the compression/decompression methods\n");
     printf("-p          Print stats like compression/decompression time, speed, ratio\n");
-#ifdef AOCL_DYNAMIC_DISPATCHER
     printf("-o          Turn off all optimizations\n");
-#endif
     printf("-r          Run particular operation only. Supported options are 'compress' and 'decompress'.\n\n");
     printf("-d          File to dump output data. Based on -r, saves compressed/decompressed data.\n\n");
     printf("-f          Input uncompressed file to be used for validation in -rdecompress mode.\n\n");
@@ -265,12 +263,9 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                 case 'n':
                     codec_bench_handle->useNAPI = 1;
                 break;
-                
-#ifdef AOCL_DYNAMIC_DISPATCHER
                 case 'o':
                     codec_bench_handle->optOff = 1;
                 break;
-#endif
                 case 'c':
                     codec_bench_handle->useIPP = 1;
                 break;

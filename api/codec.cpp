@@ -82,11 +82,7 @@
 AOCL_CHAR *aocl_bzip2_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
                        AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
     return aocl_setup_bzip2(optOff, optLevel, insize, level, windowLog);
-#else
-    return NULL;
-#endif
 }
 
 AOCL_INT64 aocl_bzip2_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, 
@@ -110,6 +106,10 @@ AOCL_INT64 aocl_bzip2_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR 
 
     return CODEC_ERROR;
 }
+
+AOCL_VOID aocl_bzip2_destroy(AOCL_CHAR* workmem) {
+    aocl_destroy_bzip2();
+}
 #endif
 
 
@@ -118,11 +118,7 @@ AOCL_INT64 aocl_bzip2_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR 
 AOCL_CHAR *aocl_lz4_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
                      AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
     return aocl_setup_lz4(optOff, optLevel, insize, level, windowLog);
-#else
-    return NULL;
-#endif
 }
 
 #if defined(__GNUC__) && defined(__x86_64__)
@@ -156,6 +152,10 @@ AOCL_INT64 aocl_lz4_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *o
 
     return CODEC_ERROR;
 }
+
+AOCL_VOID aocl_lz4_destroy(AOCL_CHAR* workmem) {
+    aocl_destroy_lz4();
+}
 #endif
 
 
@@ -164,11 +164,7 @@ AOCL_INT64 aocl_lz4_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *o
 AOCL_CHAR *aocl_lz4hc_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
                        AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
     return aocl_setup_lz4hc(optOff, optLevel, insize, level, windowLog);
-#else
-    return NULL;
-#endif
 }
 
 AOCL_INT64 aocl_lz4hc_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
@@ -190,6 +186,10 @@ AOCL_INT64 aocl_lz4hc_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR 
 
     return CODEC_ERROR;
 }
+
+AOCL_VOID aocl_lz4hc_destroy(AOCL_CHAR* workmem) {
+    aocl_destroy_lz4hc();
+}
 #endif
 
 
@@ -198,13 +198,9 @@ AOCL_INT64 aocl_lz4hc_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR 
 AOCL_CHAR *aocl_lzma_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
                       AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
-  aocl_setup_lzma_encode(optOff, optLevel, insize, level, windowLog);
-  aocl_setup_lzma_decode(optOff, optLevel, insize, level, windowLog);
-  return NULL;
-#else
-  return NULL;
-#endif
+    aocl_setup_lzma_encode(optOff, optLevel, insize, level, windowLog);
+    aocl_setup_lzma_decode(optOff, optLevel, insize, level, windowLog);
+    return NULL;
 }
 
 AOCL_INT64 aocl_lzma_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
@@ -243,6 +239,11 @@ AOCL_INT64 aocl_lzma_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
 
     return CODEC_ERROR;
 }
+
+AOCL_VOID aocl_lzma_destroy(AOCL_CHAR* workmem) {
+    aocl_destroy_lzma_encode();
+    aocl_destroy_lzma_decode();
+}
 #endif
 
 
@@ -250,11 +251,7 @@ AOCL_INT64 aocl_lzma_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
 AOCL_CHAR *aocl_snappy_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
                         AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
     return snappy::aocl_setup_snappy(optOff, optLevel, insize, level, windowLog);
-#else
-    return NULL;
-#endif
 }
 
 AOCL_INT64 aocl_snappy_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, 
@@ -292,6 +289,10 @@ AOCL_INT64 aocl_snappy_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
 
     return CODEC_ERROR;
 }
+
+AOCL_VOID aocl_snappy_destroy(AOCL_CHAR* workmem) {
+    snappy::aocl_destroy_snappy();
+}
 #endif
 
 
@@ -299,11 +300,7 @@ AOCL_INT64 aocl_snappy_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
 AOCL_CHAR *aocl_zlib_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
                       AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
     return aocl_setup_zlib (optOff, optLevel, insize, level, windowLog);
-#else
-    return NULL;
-#endif
 }
 
 AOCL_INT64 aocl_zlib_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
@@ -328,6 +325,10 @@ AOCL_INT64 aocl_zlib_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
 
     return CODEC_ERROR;
 }
+
+AOCL_VOID aocl_zlib_destroy(AOCL_CHAR* workmem) {
+    aocl_destroy_zlib();
+}
 #endif
 
 
@@ -346,10 +347,9 @@ AOCL_CHAR *aocl_zstd_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
     zstd_params_t *zstd_params = (zstd_params_t *) 
     malloc(sizeof(zstd_params_t));
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
     aocl_setup_zstd_encode(optOff, optLevel, insize, level, windowLog);
     aocl_setup_zstd_decode(optOff, optLevel, insize, level, windowLog);
-#endif
+    
     if (!zstd_params)
 		return NULL;
     zstd_params->cctx = ZSTD_createCCtx();
@@ -361,6 +361,9 @@ AOCL_CHAR *aocl_zstd_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
 
 AOCL_VOID aocl_zstd_destroy(AOCL_CHAR *workmem)
 {
+    aocl_destroy_zstd_encode();
+    aocl_destroy_zstd_decode();
+
     zstd_params_t *zstd_params = (zstd_params_t *) workmem;
     if (!zstd_params)
 		return;

@@ -8,26 +8,68 @@
 
 #define ZLIB_INTERNAL
 #include "zlib.h"
-
 #include "utils/utils.h"
+
+#ifdef AOCL_ZLIB_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+int zlibOptOff = 0; // default, run reference code
+static int setup_ok_zlib = 0; // flag to indicate status of dynamic dispatcher setup
 
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
-#ifdef AOCL_DYNAMIC_DISPATCHER
-int zlibOptOff = 1; // If setup is not called for dynamic dispatcher, run reference code 
-int zlibOptLevel = 0;
 ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
     int level, int windowLog)
 {
-    zlibOptOff = optOff;
-    zlibOptLevel = optLevel;
-    aocl_setup_deflate_fmv(optOff, optLevel, insize, level, windowLog);
-    aocl_setup_tree_fmv(optOff, optLevel, insize, level, windowLog);
-    aocl_setup_inflate_fmv(optOff, optLevel, insize, level, windowLog);
-    aocl_setup_adler32_fmv(optOff, optLevel, insize, level, windowLog);
+    AOCL_ENTER_CRITICAL(setup_zlib)
+    if (!setup_ok_zlib) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        zlibOptOff = optOff;
+        aocl_setup_deflate(optOff, optLevel);
+        aocl_setup_tree   (optOff, optLevel);
+        aocl_setup_inflate(optOff, optLevel);
+        aocl_setup_adler32(optOff, optLevel);
+        setup_ok_zlib = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib)
     return NULL;
 }
+
+#ifdef AOCL_ZLIB_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib)
+    if (!setup_ok_zlib) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        zlibOptOff = optOff;
+        aocl_setup_deflate(optOff, optLevel);
+        aocl_setup_tree   (optOff, optLevel);
+        aocl_setup_inflate(optOff, optLevel);
+        aocl_setup_adler32(optOff, optLevel);
+        setup_ok_zlib = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib)
+}
 #endif
+
+ZEXTERN void ZEXPORT aocl_destroy_zlib (void) {
+    AOCL_ENTER_CRITICAL(setup_zlib)
+    setup_ok_zlib = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib)
+    aocl_destroy_adler32();
+    aocl_destroy_deflate();
+    aocl_destroy_tree();
+    aocl_destroy_inflate();
+}
 
 /* ===========================================================================
      Compresses the source buffer into the destination buffer. The level
@@ -43,6 +85,7 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
 int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
                       uLong sourceLen, int level) {
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    AOCL_SETUP_NATIVE();
     if(destLen == NULL)
     {
         LOG_UNFORMATTED(INFO, logCtx, "Exit");

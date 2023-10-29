@@ -185,6 +185,21 @@
 # define LZ4_ALIGN_TEST 1
 #endif
 
+#include "utils/utils.h"
+
+#ifdef AOCL_LZ4_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+static int setup_ok_lz4 = 0; // flag to indicate status of dynamic dispatcher setup
 
 /*-************************************
 *  Memory routines
@@ -478,7 +493,7 @@ LZ4_wildCopy32(void* dstPtr, const void* srcPtr, void* dstEnd)
 __attribute__((__target__("avx2")))
 static inline void
 AOCL_memcpy64(BYTE* dst, const BYTE* src){
-
+    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
     __m256i src_reg = _mm256_lddqu_si256((__m256i*)src);
     _mm256_storeu_si256((__m256i*)dst, src_reg);
 
@@ -665,16 +680,13 @@ unsigned LZ4_count(const BYTE* pIn, const BYTE* pMatch, const BYTE* pInLimit)
  
 
 #ifndef LZ4_COMMONDEFS_ONLY
-
 /* Function pointer holding the optimized function variant as per the detected
  * CPU features */
 /* Function pointer definition placed inside #ifndef LZ4_COMMONDEFS_ONLY to avoid
  warnings related to unused variable. */
-#ifdef AOCL_DYNAMIC_DISPATCHER
 static int (*LZ4_compress_fast_extState_fp)(void* state, const char* source,
     char* dest, int inputSize,
     int maxOutputSize, int acceleration) = LZ4_compress_fast_extState;
-#endif
 
 /*-************************************
 *  Local Constants
@@ -789,12 +801,12 @@ LZ4_FORCE_INLINE U32 AOCL_LZ4_hash5(U64 sequence, tableType_t const tableType)
     }
 }
 
-#ifdef AOCL_LZ4_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 U32 Test_AOCL_LZ4_hash5(U64 sequence, int tableType)
 {
     return AOCL_LZ4_hash5(sequence, tableType);
 }
-#endif /* AOCL_LZ4_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
 #endif /* AOCL_LZ4_OPT */
 
 LZ4_FORCE_INLINE U32 LZ4_hashPosition(const void* const p, tableType_t const tableType)
@@ -2463,6 +2475,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_mt(
 
 int LZ4_compress_fast_extState(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
+    AOCL_SETUP_NATIVE();
     if(state==NULL || (source==NULL && inputSize!=0) || dest==NULL)
         return 0;
     
@@ -2490,6 +2503,7 @@ int LZ4_compress_fast_extState(void* state, const char* source, char* dest, int 
 #ifdef AOCL_LZ4_OPT
 int AOCL_LZ4_compress_fast_extState(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
+    AOCL_SETUP_NATIVE();
     if(state==NULL || (source==NULL && inputSize!=0) || dest==NULL)
         return 0;
     
@@ -2561,6 +2575,7 @@ int AOCL_LZ4_compress_fast_extState_mt(void* state, const char* source, char* de
  */
 int LZ4_compress_fast_extState_fastReset(void* state, const char* src, char* dst, int srcSize, int dstCapacity, int acceleration)
 {
+    AOCL_SETUP_NATIVE();
     LZ4_stream_t_internal* ctx = &((LZ4_stream_t*)state)->internal_donotuse;
     if (acceleration < 1) acceleration = LZ4_ACCELERATION_DEFAULT;
     if (acceleration > LZ4_ACCELERATION_MAX) acceleration = LZ4_ACCELERATION_MAX;
@@ -2628,6 +2643,7 @@ int LZ4_compress_fast_ST(const char* source, char* dest, int inputSize, int maxO
 
 int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
+    AOCL_SETUP_NATIVE();
     int result;
 
 #ifdef AOCL_ENABLE_THREADS //Threaded
@@ -2893,11 +2909,7 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
     LZ4_stream_t* const ctxPtr = &ctx;
 #endif
 #ifdef AOCL_LZ4_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     result = LZ4_compress_fast_extState_fp(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
-#else
-    result = AOCL_LZ4_compress_fast_extState(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
-#endif
 #else
     result = LZ4_compress_fast_extState(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
 #endif
@@ -2911,13 +2923,12 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
     return result;
 }
 
-
 int LZ4_compress_default(const char* src, char* dst, int srcSize, int maxOutputSize)
 {
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
     int ret = LZ4_compress_fast(src, dst, srcSize, maxOutputSize, 1);
-    
+
     LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return ret;
 }
@@ -2928,6 +2939,7 @@ int LZ4_compress_default(const char* src, char* dst, int srcSize, int maxOutputS
  * _continue() call without resetting it. */
 static int LZ4_compress_destSize_extState (LZ4_stream_t* state, const char* src, char* dst, int* srcSizePtr, int targetDstSize)
 {
+    AOCL_SETUP_NATIVE();
     if(state==NULL || src==NULL || dst==NULL || srcSizePtr==NULL)
         return 0;
     
@@ -2948,6 +2960,7 @@ static int LZ4_compress_destSize_extState (LZ4_stream_t* state, const char* src,
 
 int LZ4_compress_destSize(const char* src, char* dst, int* srcSizePtr, int targetDstSize)
 {
+    AOCL_SETUP_NATIVE();
 #if (LZ4_HEAPMODE)
     LZ4_stream_t* ctx = (LZ4_stream_t*)ALLOC(sizeof(LZ4_stream_t));   /* malloc-calloc always properly aligned */
     if (ctx == NULL) return 0;
@@ -3127,6 +3140,7 @@ int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
                                 int inputSize, int maxOutputSize,
                                 int acceleration)
 {
+    AOCL_SETUP_NATIVE();
     if(LZ4_stream==NULL || source==NULL || dest==NULL)
         return 0;
         
@@ -3203,6 +3217,7 @@ int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
 /* Hidden debug function, to force-test external dictionary mode */
 int LZ4_compress_forceExtDict (LZ4_stream_t* LZ4_dict, const char* source, char* dest, int srcSize)
 {
+    AOCL_SETUP_NATIVE();
     LZ4_stream_t_internal* streamPtr = &LZ4_dict->internal_donotuse;
     int result;
 
@@ -4689,8 +4704,6 @@ LZ4_decompress_generic(
 
 /*===== Instantiate the API decoding functions. =====*/
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-
 /* Wrapper function for static inlined LZ4_decompress_generic function for extending dynamic dispatcher support to decompression functions. */
 LZ4_FORCE_O2
 static int LZ4_decompress_wrapper(const char* source, char* dest, int compressedSize, int maxDecompressedSize)
@@ -4711,27 +4724,13 @@ static int AOCL_LZ4_decompress_wrapper(const char* source, char* dest, int compr
 }
 
 static int (*LZ4_decompress_wrapper_fp) (const char* source, char* dest, int compressedSize, int maxDecompressedSize) = LZ4_decompress_wrapper;
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 
 #ifdef AOCL_ENABLE_THREADS
 LZ4_FORCE_O2
 int LZ4_decompress_safe_ST(const char* source, char* dest, int compressedSize, int maxDecompressedSize)
 {
-
 #ifdef AOCL_LZ4_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     return LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
-#else
-#ifdef AOCL_LZ4_AVX2_OPT
-    return AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
-                                    endOnInputSize, decode_full_block, noDict,
-                                    (BYTE*)dest, NULL, 0);
-#else
-    return LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
-                                  endOnInputSize, decode_full_block, noDict,
-                                  (BYTE*)dest, NULL, 0);
-#endif /* AOCL_LZ4_AVX2_OPT */
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 #else
     return LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                   endOnInputSize, decode_full_block, noDict,
@@ -4878,7 +4877,6 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
     return result;
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 static void aocl_register_lz4_fmv(int optOff, int optLevel)
 {
     if (optOff)
@@ -4891,6 +4889,18 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
     {
         switch (optLevel)
         {
+        case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_LZ4_AVX2_OPT
+            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
+            LZ4_decompress_wrapper_fp = AOCL_LZ4_decompress_wrapper;
+#elif defined(AOCL_LZ4_OPT)
+            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
+            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
+#else
+            LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
+            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
+#endif
+            break;
         case 0://C version
         case 1://SSE version
         case 2://AVX version
@@ -4910,26 +4920,48 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
 char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog)
 {
-    aocl_register_lz4_fmv(optOff, optLevel);
+    AOCL_ENTER_CRITICAL(setup_lz4)
+    if (!setup_ok_lz4) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_lz4_fmv(optOff, optLevel);
+        setup_ok_lz4 = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lz4)
     return NULL;
 }
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 
 #ifdef AOCL_LZ4_OPT
-#ifdef AOCL_LZ4_UNIT_TEST
-/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX2 function for unit testing. */
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_lz4)
+    if (!setup_ok_lz4) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_lz4_fmv(optOff, optLevel);
+        setup_ok_lz4 = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lz4)
+}
 
+void aocl_destroy_lz4(void){
+    AOCL_ENTER_CRITICAL(setup_lz4)
+    setup_ok_lz4 = 0;
+    AOCL_EXIT_CRITICAL(setup_lz4)
+}
+
+#ifdef AOCL_UNIT_TEST
+/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX2 function for unit testing. */
 void Test_AOCL_LZ4_wildCopy64_AVX2(void*dstPtr, const void* srcPtr, void*dstEnd)
 {
     AOCL_LZ4_wildCopy64_AVX2(dstPtr, srcPtr, dstEnd);
 }
 
-#endif /* AOCL_LZ4_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
 #endif /* AOCL_LZ4_OPT */
 
 LZ4_FORCE_O2
 int LZ4_decompress_safe_partial(const char* src, char* dst, int compressedSize, int targetOutputSize, int dstCapacity)
 {
+    AOCL_SETUP_NATIVE();
     dstCapacity = MIN(targetOutputSize, dstCapacity);
     return LZ4_decompress_generic(src, dst, compressedSize, dstCapacity,
                                   endOnInputSize, partial_decode,
@@ -4939,6 +4971,7 @@ int LZ4_decompress_safe_partial(const char* src, char* dst, int compressedSize, 
 LZ4_FORCE_O2
 int LZ4_decompress_fast(const char* source, char* dest, int originalSize)
 {
+    AOCL_SETUP_NATIVE();
     return LZ4_decompress_generic(source, dest, 0, originalSize,
                                   endOnOutputSize, decode_full_block, withPrefix64k,
                                   (BYTE*)dest - 64 KB, NULL, 0);
@@ -4949,6 +4982,7 @@ int LZ4_decompress_fast(const char* source, char* dest, int originalSize)
 LZ4_FORCE_O2 /* Exported, an obsolete API function. */
 int LZ4_decompress_safe_withPrefix64k(const char* source, char* dest, int compressedSize, int maxOutputSize)
 {
+    AOCL_SETUP_NATIVE();
     return LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
                                   endOnInputSize, decode_full_block, withPrefix64k,
                                   (BYTE*)dest - 64 KB, NULL, 0);
@@ -4957,6 +4991,7 @@ int LZ4_decompress_safe_withPrefix64k(const char* source, char* dest, int compre
 /* Another obsolete API function, paired with the previous one. */
 int LZ4_decompress_fast_withPrefix64k(const char* source, char* dest, int originalSize)
 {
+    AOCL_SETUP_NATIVE();
     /* LZ4_decompress_fast doesn't validate match offsets,
      * and thus serves well with any prefixed dictionary. */
     return LZ4_decompress_fast(source, dest, originalSize);
@@ -4966,6 +5001,7 @@ LZ4_FORCE_O2
 static int LZ4_decompress_safe_withSmallPrefix(const char* source, char* dest, int compressedSize, int maxOutputSize,
                                                size_t prefixSize)
 {
+    AOCL_SETUP_NATIVE();
     return LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
                                   endOnInputSize, decode_full_block, noDict,
                                   (BYTE*)dest-prefixSize, NULL, 0);
@@ -4976,6 +5012,7 @@ int LZ4_decompress_safe_forceExtDict(const char* source, char* dest,
                                      int compressedSize, int maxOutputSize,
                                      const void* dictStart, size_t dictSize)
 {
+    AOCL_SETUP_NATIVE();
     return LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
                                   endOnInputSize, decode_full_block, usingExtDict,
                                   (BYTE*)dest, (const BYTE*)dictStart, dictSize);
@@ -4985,6 +5022,7 @@ LZ4_FORCE_O2
 static int LZ4_decompress_fast_extDict(const char* source, char* dest, int originalSize,
                                        const void* dictStart, size_t dictSize)
 {
+    AOCL_SETUP_NATIVE();
     return LZ4_decompress_generic(source, dest, 0, originalSize,
                                   endOnOutputSize, decode_full_block, usingExtDict,
                                   (BYTE*)dest, (const BYTE*)dictStart, dictSize);
@@ -5076,6 +5114,7 @@ int LZ4_decoderRingBufferSize(int maxBlockSize)
 LZ4_FORCE_O2
 int LZ4_decompress_safe_continue (LZ4_streamDecode_t* LZ4_streamDecode, const char* source, char* dest, int compressedSize, int maxOutputSize)
 {
+    AOCL_SETUP_NATIVE();
     if(LZ4_streamDecode==NULL)
         return -1;
 
@@ -5119,6 +5158,7 @@ int LZ4_decompress_safe_continue (LZ4_streamDecode_t* LZ4_streamDecode, const ch
 LZ4_FORCE_O2
 int LZ4_decompress_fast_continue (LZ4_streamDecode_t* LZ4_streamDecode, const char* source, char* dest, int originalSize)
 {
+    AOCL_SETUP_NATIVE();
     LZ4_streamDecode_t_internal* lz4sd = &LZ4_streamDecode->internal_donotuse;
     int result;
     assert(originalSize >= 0);
@@ -5161,6 +5201,7 @@ Advanced decoding functions :
 
 int LZ4_decompress_safe_usingDict(const char* source, char* dest, int compressedSize, int maxOutputSize, const char* dictStart, int dictSize)
 {
+    AOCL_SETUP_NATIVE();
     if (dictSize==0)
         return LZ4_decompress_safe(source, dest, compressedSize, maxOutputSize);
     if (dictStart+dictSize == dest) {
@@ -5176,6 +5217,7 @@ int LZ4_decompress_safe_usingDict(const char* source, char* dest, int compressed
 
 int LZ4_decompress_fast_usingDict(const char* source, char* dest, int originalSize, const char* dictStart, int dictSize)
 {
+    AOCL_SETUP_NATIVE();
     if (dictSize==0 || dictStart+dictSize == dest)
         return LZ4_decompress_fast(source, dest, originalSize);
     assert(dictSize >= 0);

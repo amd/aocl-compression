@@ -42,6 +42,7 @@
 /*-*******************************************************
 *  Dependencies
 *********************************************************/
+#include "utils/utils.h"
 #include "../common/zstd_deps.h"   /* ZSTD_memcpy, ZSTD_memmove, ZSTD_memset */
 #include "../common/compiler.h"    /* prefetch */
 #include "../common/cpu.h"         /* bmi2 */
@@ -54,6 +55,20 @@
 #include "zstd_ddict.h"  /* ZSTD_DDictDictContent */
 #include "zstd_decompress_block.h"
 #include "../common/bits.h"  /* ZSTD_highbit32 */
+
+#ifdef AOCL_ZSTD_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+static int setup_ok_zstd_decode = 0; // flag to indicate status of dynamic dispatcher setup
 
 /*_*******************************************************
 *  Macros
@@ -2007,11 +2022,9 @@ AOCL_ZSTD_decompressSequences_default(ZSTD_DCtx* dctx,
 }
 #endif
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-size_t (*ZSTD_decompressSequences_default_fp)(ZSTD_DCtx* dctx, void* dst, size_t maxDstSize,
+ size_t (*ZSTD_decompressSequences_default_fp)(ZSTD_DCtx* dctx, void* dst, size_t maxDstSize,
     const void* seqStart, size_t seqSize, int nbSeq, const ZSTD_longOffset_e isLongOffset, const int frame)
     = ZSTD_decompressSequences_default;
-#endif
 
 static size_t
 ZSTD_decompressSequencesSplitLitBuffer_default(ZSTD_DCtx* dctx,
@@ -2250,11 +2263,9 @@ AOCL_ZSTD_decompressSequences_bmi2(ZSTD_DCtx* dctx,
 }
 #endif
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-size_t (*ZSTD_decompressSequences_bmi2_fp)(ZSTD_DCtx* dctx, void* dst, size_t maxDstSize,
+ size_t (*ZSTD_decompressSequences_bmi2_fp)(ZSTD_DCtx* dctx, void* dst, size_t maxDstSize,
     const void* seqStart, size_t seqSize, int nbSeq, const ZSTD_longOffset_e isLongOffset, const int frame)
     = ZSTD_decompressSequences_bmi2;
-#endif
 
 static BMI2_TARGET_ATTRIBUTE size_t
 DONT_VECTORIZE
@@ -2301,11 +2312,7 @@ ZSTD_decompressSequences(ZSTD_DCtx* dctx, void* dst, size_t maxDstSize,
 #if DYNAMIC_BMI2
     if (ZSTD_DCtx_get_bmi2(dctx)) {
 #ifdef AOCL_ZSTD_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
         return ZSTD_decompressSequences_bmi2_fp(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
-#else
-        return AOCL_ZSTD_decompressSequences_bmi2(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 #else
         return ZSTD_decompressSequences_bmi2(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
 #endif /* AOCL_ZSTD_OPT */
@@ -2313,11 +2320,7 @@ ZSTD_decompressSequences(ZSTD_DCtx* dctx, void* dst, size_t maxDstSize,
 #endif /* DYNAMIC_BMI2 */
 
 #ifdef AOCL_ZSTD_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     return ZSTD_decompressSequences_default_fp(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
-#else
-    return AOCL_ZSTD_decompressSequences_default(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 #else
     return ZSTD_decompressSequences_default(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
 #endif /* AOCL_ZSTD_OPT */
@@ -2577,10 +2580,10 @@ size_t ZSTD_decompressBlock(ZSTD_DCtx* dctx,
                             void* dst, size_t dstCapacity,
                       const void* src, size_t srcSize)
 {
+    AOCL_SETUP_NATIVE();
     return ZSTD_decompressBlock_deprecated(dctx, dst, dstCapacity, src, srcSize);
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 static void aocl_register_zstd_decompress_block_fmv(int optOff, int optLevel)
 {
     if (optOff)
@@ -2613,11 +2616,39 @@ static void aocl_register_zstd_decompress_block_fmv(int optOff, int optLevel)
 
 void aocl_setup_zstd_decompress_block(int optOff, int optLevel)
 {
-    aocl_register_zstd_decompress_block_fmv(optOff, optLevel);
+    AOCL_ENTER_CRITICAL(setup_zstd_decode)
+    if (!setup_ok_zstd_decode) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_zstd_decompress_block_fmv(optOff, optLevel);
+        setup_ok_zstd_decode = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zstd_decode)
+}
+
+#ifdef AOCL_ZSTD_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_zstd_decode)
+    if (!setup_ok_zstd_decode) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_zstd_decompress_block_fmv(optOff, optLevel);
+        setup_ok_zstd_decode = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zstd_decode)
+}
+
+void aocl_setup_zstd_decompress_block_native(void) {
+    aocl_setup_native();
 }
 #endif
 
-#ifdef AOCL_ZSTD_UNIT_TEST
+void aocl_destroy_zstd_decompress_block(void) {
+    AOCL_ENTER_CRITICAL(setup_zstd_decode)
+    setup_ok_zstd_decode = 0;
+    AOCL_EXIT_CRITICAL(setup_zstd_decode)
+}
+
+#ifdef AOCL_UNIT_TEST
 ZSTDLIB_API 
 void TEST_AOCL_ZSTD_wildcopy_long(void* dst, const void* src, size_t length, int ovtype) {
     switch (ovtype) {

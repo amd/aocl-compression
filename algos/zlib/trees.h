@@ -64,11 +64,11 @@ ZLIB_INTERNAL const ct_data static_ltree[L_CODES+2] = {
 {{163},{  8}}, {{ 99},{  8}}, {{227},{  8}}
 };
 
-#if defined(AOCL_ZLIB_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
+#if defined(AOCL_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
 const ZLIB_INTERNAL ct_data static_dtree[D_CODES] = {
 #else
 local const ct_data static_dtree[D_CODES] = {
-#endif /* AOCL_ZLIB_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
 {{ 0},{ 5}}, {{16},{ 5}}, {{ 8},{ 5}}, {{24},{ 5}}, {{ 4},{ 5}},
 {{20},{ 5}}, {{12},{ 5}}, {{28},{ 5}}, {{ 2},{ 5}}, {{18},{ 5}},
 {{10},{ 5}}, {{26},{ 5}}, {{ 6},{ 5}}, {{22},{ 5}}, {{14},{ 5}},
@@ -127,11 +127,11 @@ local const int base_length[LENGTH_CODES] = {
 64, 80, 96, 112, 128, 160, 192, 224, 0
 };
 
-#if defined(AOCL_ZLIB_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
+#if defined(AOCL_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
 const ZLIB_INTERNAL int base_dist[D_CODES] = {
 #else
 local const int base_dist[D_CODES] = {
-#endif /* AOCL_ZLIB_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
     0,     1,     2,     3,     4,     6,     8,    12,    16,    24,
    32,    48,    64,    96,   128,   192,   256,   384,   512,   768,
  1024,  1536,  2048,  3072,  4096,  6144,  8192, 12288, 16384, 24576

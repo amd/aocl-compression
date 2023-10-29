@@ -301,7 +301,6 @@ LZMALIB_API SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT s
  * @}
 */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /*! @brief AOCL-Compression defined setup function that configures with the right
  * AMD optimized lzma routines depending upon the detected CPU features.
  *
@@ -317,7 +316,11 @@ LZMALIB_API SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT s
  */
 LZMALIB_API void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
   size_t level, size_t windowLog);
-#endif
+
+/**
+ * @brief AOCL-Compression defined destroy function for lzma encode.
+ */
+LZMALIB_API void aocl_destroy_lzma_encode(void);
 
 /*!
  * @name Encode Functions
@@ -358,7 +361,7 @@ LZMALIB_API SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* p
  * @}
 */
 
-#ifdef AOCL_LZMA_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 typedef struct { // struct to expose CLzmaEnc properties for unit testing
     unsigned numFastBytes;
     unsigned lc, lp, pb;

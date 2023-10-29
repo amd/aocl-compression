@@ -405,7 +405,6 @@ ZSTDLIB_API size_t ZSTD_findFrameCompressedSize(const void* src, size_t srcSize)
  */
 #define AOCL_ZSTD_OPT //Main AOCL optimization switch for ZSTD
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /**
  * @brief AOCL-Compression defined setup functions that configures ZSTD
  * compression with the right AMD optimized ZSTD routines depending upon the
@@ -441,7 +440,16 @@ ZSTDLIB_API char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize
  */
 ZSTDLIB_API char* aocl_setup_zstd_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
-#endif
+
+/**
+ * @brief AOCL-Compression defined destroy function for zstd encode.
+ */
+ZSTDLIB_API void aocl_destroy_zstd_encode(void);
+
+/**
+ * @brief AOCL-Compression defined destroy function for zstd decode.
+ */
+ZSTDLIB_API void aocl_destroy_zstd_decode(void);
 
 /*======  Helper functions  ======*/
 /* ZSTD_compressBound() :
@@ -2914,7 +2922,7 @@ ZSTDLIB_API unsigned ZSTD_isSkippableFrame(const void* buffer, size_t size);
 /***************************************
 *  Unit testing
 ***************************************/
-#ifdef AOCL_ZSTD_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag);
 #endif
 

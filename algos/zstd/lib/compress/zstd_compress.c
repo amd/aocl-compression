@@ -39,6 +39,11 @@
 /*-*************************************
 *  Dependencies
 ***************************************/
+#include "utils/utils.h"
+#ifdef ERROR
+#undef ERROR /* Conflict with ERROR defined in zstd reference code */
+#endif
+
 #include "../common/allocations.h"  /* ZSTD_customMalloc, ZSTD_customCalloc, ZSTD_customFree */
 #include "../common/zstd_deps.h"  /* INT_MAX, ZSTD_memset, ZSTD_memcpy */
 #include "../common/mem.h"
@@ -57,7 +62,14 @@
 #include "zstd_compress_superblock.h"
 #include  "../common/bits.h"      /* ZSTD_highbit32, ZSTD_rotateRight_U64 */
 
-#include "utils/utils.h"
+#ifdef AOCL_ZSTD_OPT
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+static int setup_ok_zstd_encode = 0; // flag to indicate status of dynamic dispatcher setup
 
 /* ***************************************************************
 *  Tuning parameters
@@ -123,9 +135,7 @@ struct ZSTD_CDict_s {
                                            */
 };  /* typedef'd to ZSTD_CDict within "zstd.h" */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 static unsigned char aoclOptFlag = 0;
-#endif
 
 ZSTD_CCtx* ZSTD_createCCtx(void)
 {
@@ -3124,11 +3134,7 @@ ZSTD_blockCompressor ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_paramS
         DEBUGLOG(4, "Selecting a row-based matchfinder");
         assert(useRowMatchFinder != ZSTD_ps_auto);
         int select = (int)strat - (int)ZSTD_greedy; //select in range : [0, 2] as strat in range : [ZSTD_greedy, ZSTD_lazy2]
-#ifdef AOCL_DYNAMIC_DISPATCHER
         select = (aoclOptFlag * 3) + select;
-#else
-        select = 3 + select;
-#endif
         selectedCompressor = rowBasedBlockCompressors[(int)dictMode][select];
 #else
         static const ZSTD_blockCompressor rowBasedBlockCompressors[4][3] = {
@@ -4738,6 +4744,7 @@ size_t ZSTD_compressContinue(ZSTD_CCtx* cctx,
                              void* dst, size_t dstCapacity,
                        const void* src, size_t srcSize)
 {
+    AOCL_SETUP_NATIVE();
     return ZSTD_compressContinue_public(cctx, dst, dstCapacity, src, srcSize);
 }
 
@@ -4767,6 +4774,7 @@ size_t ZSTD_compressBlock_deprecated(ZSTD_CCtx* cctx, void* dst, size_t dstCapac
 /* NOTE: Must just wrap ZSTD_compressBlock_deprecated() */
 size_t ZSTD_compressBlock(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
+    AOCL_SETUP_NATIVE();
     return ZSTD_compressBlock_deprecated(cctx, dst, dstCapacity, src, srcSize);
 }
 
@@ -5163,6 +5171,7 @@ size_t ZSTD_compressBegin_advanced(ZSTD_CCtx* cctx,
                              const void* dict, size_t dictSize,
                                    ZSTD_parameters params, unsigned long long pledgedSrcSize)
 {
+    AOCL_SETUP_NATIVE();
     ZSTD_CCtx_params cctxParams;
     ZSTD_CCtxParams_init_internal(&cctxParams, &params, ZSTD_NO_CLEVEL);
     return ZSTD_compressBegin_advanced_internal(cctx,
@@ -5186,11 +5195,13 @@ ZSTD_compressBegin_usingDict_deprecated(ZSTD_CCtx* cctx, const void* dict, size_
 size_t
 ZSTD_compressBegin_usingDict(ZSTD_CCtx* cctx, const void* dict, size_t dictSize, int compressionLevel)
 {
+    AOCL_SETUP_NATIVE();
     return ZSTD_compressBegin_usingDict_deprecated(cctx, dict, dictSize, compressionLevel);
 }
 
 size_t ZSTD_compressBegin(ZSTD_CCtx* cctx, int compressionLevel)
 {
+    AOCL_SETUP_NATIVE();
     return ZSTD_compressBegin_usingDict_deprecated(cctx, NULL, 0, compressionLevel);
 }
 
@@ -5292,6 +5303,7 @@ size_t ZSTD_compressEnd(ZSTD_CCtx* cctx,
                         void* dst, size_t dstCapacity,
                   const void* src, size_t srcSize)
 {
+    AOCL_SETUP_NATIVE();
     return ZSTD_compressEnd_public(cctx, dst, dstCapacity, src, srcSize);
 }
 
@@ -5348,6 +5360,7 @@ size_t ZSTD_compress_usingDict(ZSTD_CCtx* cctx,
                          const void* dict, size_t dictSize,
                                int compressionLevel)
 {
+    AOCL_SETUP_NATIVE();
     {
         ZSTD_parameters const params = ZSTD_getParams_internal(compressionLevel, srcSize, dict ? dictSize : 0, ZSTD_cpm_noAttachDict);
         assert(params.fParams.contentSizeFlag == 1);
@@ -5362,6 +5375,7 @@ size_t ZSTD_compressCCtx(ZSTD_CCtx* cctx,
                    const void* src, size_t srcSize,
                          int compressionLevel)
 {
+    AOCL_SETUP_NATIVE();
     DEBUGLOG(4, "ZSTD_compressCCtx (srcSize=%u)", (unsigned)srcSize);
     if (src == NULL) return ERROR(GENERIC);
     if (dst == NULL) return ERROR(dstBuffer_null);
@@ -5374,6 +5388,7 @@ size_t ZSTD_compress(void* dst, size_t dstCapacity,
                const void* src, size_t srcSize,
                      int compressionLevel)
 {
+    AOCL_SETUP_NATIVE();
     size_t result;
 #if ZSTD_COMPRESS_HEAPMODE
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
@@ -5745,6 +5760,7 @@ size_t ZSTD_compressBegin_usingCDict_advanced(
     ZSTD_CCtx* const cctx, const ZSTD_CDict* const cdict,
     ZSTD_frameParameters const fParams, unsigned long long const pledgedSrcSize)
 {
+    AOCL_SETUP_NATIVE();
     return ZSTD_compressBegin_usingCDict_internal(cctx, cdict, fParams, pledgedSrcSize);
 }
 
@@ -5758,6 +5774,7 @@ size_t ZSTD_compressBegin_usingCDict_deprecated(ZSTD_CCtx* cctx, const ZSTD_CDic
 
 size_t ZSTD_compressBegin_usingCDict(ZSTD_CCtx* cctx, const ZSTD_CDict* cdict)
 {
+    AOCL_SETUP_NATIVE();
     return ZSTD_compressBegin_usingCDict_deprecated(cctx, cdict);
 }
 
@@ -5794,6 +5811,7 @@ size_t ZSTD_compress_usingCDict(ZSTD_CCtx* cctx,
                                 const void* src, size_t srcSize,
                                 const ZSTD_CDict* cdict)
 {
+    AOCL_SETUP_NATIVE();
     ZSTD_frameParameters const fParams = { 1 /*content*/, 0 /*checksum*/, 0 /*noDictID*/ };
     return ZSTD_compress_usingCDict_internal(cctx, dst, dstCapacity, src, srcSize, cdict, fParams);
 }
@@ -6323,6 +6341,7 @@ size_t ZSTD_compressStream2( ZSTD_CCtx* cctx,
                              ZSTD_inBuffer* input,
                              ZSTD_EndDirective endOp)
 {
+    AOCL_SETUP_NATIVE();
     DEBUGLOG(5, "ZSTD_compressStream2, endOp=%u ", (unsigned)endOp);
     /* check conditions */
     RETURN_ERROR_IF(output->pos > output->size, dstSize_tooSmall, "invalid output buffer");
@@ -6443,6 +6462,7 @@ size_t ZSTD_compress2(ZSTD_CCtx* cctx,
                       void* dst, size_t dstCapacity,
                       const void* src, size_t srcSize)
 {
+    AOCL_SETUP_NATIVE();
     ZSTD_bufferMode_e const originalInBufferMode = cctx->requestedParams.inBufferMode;
     ZSTD_bufferMode_e const originalOutBufferMode = cctx->requestedParams.outBufferMode;
     DEBUGLOG(4, "ZSTD_compress2 (srcSize=%u)", (unsigned)srcSize);
@@ -7091,11 +7111,7 @@ static ZSTD_compressionParameters ZSTD_getCParams_internal(int compressionLevel,
 
     {
 #ifdef AOCL_ZSTD_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
         ZSTD_compressionParameters cp = AOCL_ZSTD_defaultCParameters_used[tableID][row];
-#else
-        ZSTD_compressionParameters cp = AOCL_ZSTD_defaultCParameters[tableID][row];
-#endif // AOCL_DYNAMIC_DISPATCHER
 #else
         ZSTD_compressionParameters cp = ZSTD_defaultCParameters[tableID][row];
 #endif // AOCL_ZSTD_OPT
@@ -7165,7 +7181,6 @@ void ZSTD_registerSequenceProducer(
     }
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /* Dynamic dispatcher that sets up the optimized AMD function variant
 * */
 static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
@@ -7180,14 +7195,23 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
     {
         switch (optLevel)
         {
-        case 0://Optimized C version
-        case 1://SSE version
-        case 2://AVX version
-        case 3://AVX2 version
-        default://AVX512 and other versions
-            aoclOptFlag = 1;
-            AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
-            break;
+            case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_ZSTD_OPT
+                aoclOptFlag = 1;
+                AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
+#else
+                aoclOptFlag = 0;
+                AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
+#endif
+                break;
+            case 0://Optimized C version
+            case 1://SSE version
+            case 2://AVX version
+            case 3://AVX2 version
+            default://AVX512 and other versions
+                aoclOptFlag = 1;
+                AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
+                break;
         }
     }
 }
@@ -7196,14 +7220,40 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
 char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog)
 {
-    aocl_register_zstd_compress_fmv(optOff, optLevel);
-    aocl_register_compressfast_fmv(optOff, optLevel);
-    aocl_register_compressdoublefast_fmv(optOff, optLevel);
+    AOCL_ENTER_CRITICAL(setup_zstd_encode)
+    if (!setup_ok_zstd_encode) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_zstd_compress_fmv(optOff, optLevel);
+        aocl_register_compressfast_fmv(optOff, optLevel);
+        aocl_register_compressdoublefast_fmv(optOff, optLevel);
+        setup_ok_zstd_encode = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zstd_encode)
     return NULL;
+}
+
+#ifdef AOCL_ZSTD_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_zstd_encode)
+    if (!setup_ok_zstd_encode) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_zstd_compress_fmv(optOff, optLevel);
+        aocl_register_compressfast_fmv(optOff, optLevel);
+        aocl_register_compressdoublefast_fmv(optOff, optLevel);
+        setup_ok_zstd_encode = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zstd_encode)
 }
 #endif
 
-#ifdef AOCL_ZSTD_UNIT_TEST
+void aocl_destroy_zstd_encode(void) {
+    AOCL_ENTER_CRITICAL(setup_zstd_encode)
+    setup_ok_zstd_encode = 0;
+    AOCL_EXIT_CRITICAL(setup_zstd_encode)
+}
+
+#ifdef AOCL_UNIT_TEST
 /* Unit test function for block compressor selection.
 * Returns 0 if expected compressor is selected, else -1. */
 ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag) {

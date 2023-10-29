@@ -76,6 +76,13 @@ typedef struct timespec timer;
 typedef struct timespec timeVal;
 #endif
 #endif
+#include <stddef.h>
+
+#define AOCL_BUILD_PRAGMA(x) _Pragma (#x)
+/* Place content that needs to run within a critical section
+ * between AOCL_ENTER_CRITICAL() and AOCL_EXIT_CRITICAL() calls */
+#define AOCL_ENTER_CRITICAL(func) AOCL_BUILD_PRAGMA(omp critical (func)) {
+#define AOCL_EXIT_CRITICAL(func) }
 
 #include <string.h>
 #include <stdio.h>
@@ -93,12 +100,13 @@ int maxLevel; // set via AOCL_ENABLE_LOG
 extern "C" {
 #endif
 
-extern aocl_log_ctx logCtx;
+    extern aocl_log_ctx logCtx;
 
 #ifdef __cplusplus
 }
 #endif
 
+#ifdef AOCL_ENABLE_LOG_FEATURE
 #ifdef _WINDOWS
 #include <stdlib.h>
 #define SET_MAX_LOG_LEVEL(logCtx)\
@@ -143,7 +151,9 @@ extern aocl_log_ctx logCtx;
                             }\
 }
 #endif /* _WINDOWS */
+#endif
 
+#ifndef AOCL_UNIT_TEST
 #define LOG_UNFORMATTED(logType, logCtx, str)     do {\
                             SET_MAX_LOG_LEVEL(logCtx)\
                             if (logType <= logCtx.maxLevel)\
@@ -173,6 +183,7 @@ extern aocl_log_ctx logCtx;
                                 }\
                             }\
                         } while (0)
+#endif
 #define LOG_FORMATTED(logType, logCtx, str, ...)     do {\
                             SET_MAX_LOG_LEVEL(logCtx)\
                             if (logType <= logCtx.maxLevel)\
@@ -202,7 +213,7 @@ extern aocl_log_ctx logCtx;
                                 }\
                             }\
                         } while (0)
-#else
+#else /* !AOCL_ENABLE_LOG_FEATURE */
 #define LOG_UNFORMATTED(logType, logCtx, str)
 #define LOG_FORMATTED(logType, logCtx, str, ...)
 #endif
@@ -271,6 +282,117 @@ inline AOCL_VOID cpu_features_detection(AOCL_INTP fn, AOCL_INTP optVal,
 #endif
 #endif
 
-AOCL_VOID set_cpu_opt_flags(AOCL_VOID *handle);
+#if defined(WIN32) && defined(AOCL_UNIT_TEST)
+#define EXPORT_UTILS_DYN_TEST __declspec(dllexport)
+#else
+/**
+ * For Linux EXPORT_UTILS_DYN_TEST is NULL, by default the symbols are publicly exposed.
+ */
+#define EXPORT_UTILS_DYN_TEST
+#endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+    /* Similar to get_cpu_opt_flags, but sets handle->optLevel
+     * instead of returning it. */
+    EXPORT_UTILS_DYN_TEST AOCL_VOID set_cpu_opt_flags(AOCL_VOID* handle);
+
+    /* Reads cpuid to determine instruction sets supported
+     * Also, reads AOCL_ENABLE_INSTRUCTIONS environment variable
+     * Determines optLevel based on this
+     * return
+     *        -1 if undecided
+     *        optLevel otherwise */
+    EXPORT_UTILS_DYN_TEST ptrdiff_t get_cpu_opt_flags(int printDebugLogs);
+
+    /* Reads the value of AOCL_DISABLE_OPT environment variable
+     * return
+     *        0 if AOCL_DISABLE_OPT=OFF
+     *        1 if AOCL_DISABLE_OPT=ON
+     *        0 if not set */
+    EXPORT_UTILS_DYN_TEST ptrdiff_t get_disable_opt_flags(int printDebugLogs);
+
+#ifdef __cplusplus
+}
+#endif
+
+
+#ifdef AOCL_UNIT_TEST
+//Logger - DTL
+#ifdef AOCL_ENABLE_LOG_FEATURE
+#define LOG_UNFORMATTED(logType, logCtx, str)     do {\
+                            SET_MAX_LOG_LEVEL(logCtx)\
+                            update_test_log_counter(FUNC_NAME); \
+                            if (logType <= logCtx.maxLevel)\
+                            {\
+                                const char *type=NULL;\
+                                if (logType == ERR)\
+                                    type = "ERR";\
+                                else if (logType == INFO)\
+                                    type = "INFO";\
+                                else if (logType == DEBUG)\
+                                    type = "DEBUG";\
+                                else if (logType == TRACE)\
+                                    type = "TRACE";\
+                                if(logType == ERR)\
+                                {\
+                                    fprintf(stderr, "[%s] : %s : %s : %d : ",\
+                                    type, __FILE__, FUNC_NAME, __LINE__);\
+                                    fprintf(stderr, str);\
+                                    fprintf(stderr, "\n");\
+                                }\
+                                else\
+                                {\
+                                    fprintf(stdout, "[%s] : %s : %s : %d : ",\
+                                    type, __FILE__, FUNC_NAME, __LINE__);\
+                                    fprintf(stdout, str);\
+                                    fprintf(stdout, "\n");\
+                                }\
+                            }\
+                        } while (0)
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+    typedef struct {
+        const char* name;
+        int optLevel;
+    } aocl_func_info;
+
+    /* Keeps count of number of LOG_UNFORMATTED() calls from any function.
+    * This can be used to check hits for aocl optimized functions by
+    * placing LOG_UNFORMATTED() calls in them. */
+    void update_test_log_counter(const char* name);
+
+    EXPORT_UTILS_DYN_TEST void clear_test_log_counter(void);
+
+    /* Call this after running desired compression/decompression apis.
+    * aocl_func_info* is the list of aocl optimized functions using simd.
+    * maxOptLevel is the max optLevel allowed. compression/decompression apis
+    *   are expected to not take any code paths that use simd above this level.
+    * This function validates if that is the case based on hits counted by
+    *   update_test_log_counter().
+    */
+    EXPORT_UTILS_DYN_TEST int validate_simd_func_access(const aocl_func_info* aocl_simd_funcs, size_t cnt, int maxOptLevel);
+
+    EXPORT_UTILS_DYN_TEST int set_env_var(const char* name, const char* value);
+
+    EXPORT_UTILS_DYN_TEST int unset_env_var(const char* name);
+
+    EXPORT_UTILS_DYN_TEST int set_opt_off(int optOff);
+
+    EXPORT_UTILS_DYN_TEST int set_opt_level(int optLevel);
+
+    /* Wrapper function to test reading AOCL_ENABLE_INSTRUCTIONS
+    * environment variable */
+    EXPORT_UTILS_DYN_TEST int test_get_enabled_inst(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* AOCL_UNIT_TEST */
 #endif

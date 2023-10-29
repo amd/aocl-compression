@@ -3006,7 +3006,7 @@ size_t ZSTD_compressBlock_lazy2_extDict_row(
     return ZSTD_compressBlock_lazy_extDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 2);
 }
 
-#ifdef AOCL_ZSTD_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 U64 Test_AOCL_ZSTD_row_getMatchMask(const BYTE* const tagRow, const BYTE tag,
     const U32 headGrouped, const U32 rowEntries) {
     return AOCL_ZSTD_row_getMatchMask(tagRow, tag, headGrouped, rowEntries);

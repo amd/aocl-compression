@@ -34,19 +34,32 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "utils/utils.h"
 #include "deflate.h"
 #include <immintrin.h>
+
+#ifdef AOCL_ZLIB_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+static int setup_ok_zlib_longest = 0; // flag to indicate status of dynamic dispatcher setup
 
 #define NIL 0
 
 /* Please retain this line */
 const char fast_lm_copyright[] = " Fast match finder for zlib, https://github.com/gildor2/fast_zlib ";
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /* Function pointer holding the optimized variant as per the detected CPU 
  * features */
 static uInt (*longest_match_fp)(deflate_state* s, IPos cur_match);
-#endif
 
 #ifdef AOCL_ZLIB_OPT
 static inline uInt longest_match_c_opt(deflate_state* s, IPos cur_match)
@@ -270,6 +283,7 @@ break_matching: /* sorry for goto's, but such code is smaller and easier to view
 __attribute__((__target__("avx2")))
 static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
 {
+    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
     uint32_t match_len = 0;
     while(match_len < 256) {
         __m256i buff1 = _mm256_lddqu_si256((__m256i*)src1);
@@ -308,6 +322,7 @@ static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
 static inline uint32_t compare256_avx(const Bytef *src1, const Bytef *src2)
 {
+    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
     uint32_t match_len = 0;
     while(match_len < 256) {
         __m128i buff1 = _mm_lddqu_si128((__m128i *)src1);
@@ -342,21 +357,19 @@ static inline uint32_t compare256_avx(const Bytef *src1, const Bytef *src2)
  * optimized code flow path */
 uInt ZLIB_INTERNAL longest_match_x86(deflate_state *s, IPos cur_match)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
+    AOCL_SETUP_NATIVE();
     return longest_match_fp(s, cur_match);
-#elif defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
-    return longest_match_avx2_opt(s, cur_match);
-#elif defined(AOCL_ZLIB_AVX_OPT)
-    return longest_match_avx_opt(s, cur_match);
-#else
-    return longest_match_c_opt(s, cur_match);
-#endif
 }
+
+uInt ZLIB_INTERNAL longest_match_x86_internal(deflate_state* s, IPos cur_match)
+{
+    return longest_match_fp(s, cur_match);
+}
+
 #endif //AOCL_ZLIB_OPT
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 void aocl_register_longest_match_fmv(int optOff, int optLevel,
-                                  uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match))
+uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match))
 {
     if (UNLIKELY(optOff==1))
     {
@@ -366,6 +379,21 @@ void aocl_register_longest_match_fmv(int optOff, int optLevel,
     {
         switch (optLevel)
         {
+        case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_ZLIB_AVX2_OPT
+#ifdef HAVE_BUILTIN_CTZ
+            longest_match_fp = longest_match_avx2_opt;
+#elif defined(AOCL_ZLIB_AVX_OPT)
+            longest_match_fp = longest_match_avx_opt;
+#else
+            longest_match_fp = longest_match_c_opt;
+#endif /* HAVE_BUILTIN_CTZ */
+#elif defined(AOCL_ZLIB_OPT)
+            longest_match_fp = longest_match_c_opt;
+#else
+            longest_match_fp = longest_match_c_fp;
+#endif
+            break;
         case 0://C version
         case 1://SSE version
             longest_match_fp = longest_match_c_opt;
@@ -386,4 +414,37 @@ void aocl_register_longest_match_fmv(int optOff, int optLevel,
         }
     }
 }
+
+void aocl_register_longest_match(int optOff, int optLevel,
+uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match)){
+    AOCL_ENTER_CRITICAL(setup_zlib_longest)
+    if (!setup_ok_zlib_longest) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_longest_match_fmv(optOff, optLevel, longest_match_c_fp);
+        setup_ok_zlib_longest = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_longest)
+}
+
+#ifdef AOCL_ZLIB_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_longest)
+    if (!setup_ok_zlib_longest) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        /* setting longest_match_fp = longest_match_c_opt even if optOff==1.
+        * aocl_setup_native() will be called from functions in longest_match_x86.c
+        * only, which are optimized implementations. So, if caller is calling,
+        * longest_match_x86() for example, they are expecting to run optimized code. */
+        aocl_register_longest_match_fmv(optOff, optLevel, longest_match_c_opt);
+        setup_ok_zlib_longest = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_longest)
+}
 #endif
+
+void aocl_destroy_longest_match(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_longest)
+    setup_ok_zlib_longest = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib_longest)
+}

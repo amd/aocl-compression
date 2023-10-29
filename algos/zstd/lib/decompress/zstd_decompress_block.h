@@ -96,13 +96,15 @@ size_t ZSTD_decompressBlock_deprecated(ZSTD_DCtx* dctx,
                             void* dst, size_t dstCapacity,
                       const void* src, size_t srcSize);
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 void aocl_setup_zstd_decompress_block(int optOff, int optLevel);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+
+void aocl_setup_zstd_decompress_block_native(void);
+
+void aocl_destroy_zstd_decompress_block(void);
 
 #endif /* ZSTD_DEC_BLOCK_H */
 
-#ifdef AOCL_ZSTD_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 #if defined (__cplusplus)
 extern "C" {
 #endif

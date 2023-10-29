@@ -35,12 +35,15 @@
 
 /* #define GEN_TREES_H */
 
+#include "utils/utils.h"
 #include "deflate.h"
 #include "aocl_send_bits.h"
 
 #ifdef ZLIB_DEBUG
 #  include <ctype.h>
 #endif
+
+static int setup_ok_zlib_tree = 0; // flag to indicate status of dynamic dispatcher setup
 
 /* ===========================================================================
  * Constants
@@ -66,11 +69,11 @@
 local const int extra_lbits[LENGTH_CODES] /* extra bits for each length code */
    = {0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0};
 
-#if defined(AOCL_ZLIB_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
+#if defined(AOCL_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
 const ZLIB_INTERNAL int extra_dbits[D_CODES] 
 #else
 local const int extra_dbits[D_CODES] /* extra bits for each distance code */
-#endif /* AOCL_ZLIB_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
    = {0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13};
 
 local const int extra_blbits[BL_CODES]/* extra bits for each bit length code */
@@ -102,11 +105,11 @@ ZLIB_INTERNAL ct_data static_ltree[L_CODES+2];
  * below).
  */
 
-#if defined(AOCL_ZLIB_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
+#if defined(AOCL_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
 ZLIB_INTERNAL ct_data static_dtree[D_CODES];
 #else
 local ct_data static_dtree[D_CODES];
-#endif /* AOCL_ZLIB_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
 /* The static distance tree. (Actually a trivial tree since all codes use
  * 5 bits.)
  */
@@ -123,11 +126,11 @@ uch _length_code[MAX_MATCH-MIN_MATCH+1];
 local int base_length[LENGTH_CODES];
 /* First normalized length for each code (0 = MIN_MATCH) */
 
-#if defined(AOCL_ZLIB_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
+#if defined(AOCL_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
 ZLIB_INTERNAL int base_dist[D_CODES];
 #else
 local int base_dist[D_CODES];
-#endif /* AOCL_ZLIB_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
 /* First normalized distance for each code (0 = distance of 1) */
 
 #else
@@ -199,11 +202,11 @@ local void bi_flush(deflate_state *s) {
 
 /* AOCL_variant of bi_flush() which uses the s->bi_buf of 64 bits */
 #ifdef AOCL_ZLIB_OPT
-#ifdef AOCL_ZLIB_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 ZEXTERN void ZEXPORT AOCL_bi_flush(deflate_state* s) {
 #else
 local void AOCL_bi_flush(deflate_state * s) {
-#endif /* AOCL_ZLIB_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST */
     if (s->bi_valid == 64) {
         AOCL_put_uInt64_t(s, s->bi_buf);
         s->bi_buf = 0;
@@ -252,7 +255,7 @@ void ZLIB_INTERNAL bi_windup(deflate_state *s) {
 }
 
 #ifdef AOCL_ZLIB_OPT
-#ifdef AOCL_ZLIB_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 ZEXTERN void ZEXPORT AOCL_bi_windup(deflate_state *s) {
 #else
 #ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
@@ -333,17 +336,24 @@ local void gen_codes(ct_data *tree, int max_code, ushf *bl_count) {
 local void gen_trees_header(void);
 #endif
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /* Function pointers holding the AOCL optimized variant. */
 static void (*bi_flush_fp)(deflate_state *s) = bi_flush;
 void (*bi_windup_fp)(deflate_state *s) = bi_windup;
 
-ZEXTERN char* ZEXPORT aocl_setup_tree_fmv(int optOff, int optLevel, int insize,
-    int level, int windowLog)
+static char* aocl_setup_tree_fmv(int optOff, int optLevel)
 {
     if (UNLIKELY(optOff == 1)) {
         bi_flush_fp = bi_flush;
         bi_windup_fp = bi_windup;
+    }
+    else if (UNLIKELY(optLevel == -1)) { // undecided. use defaults based on compiler flags
+#ifdef AOCL_ZLIB_OPT
+        bi_flush_fp = AOCL_bi_flush;
+        bi_windup_fp = AOCL_bi_windup;
+#else
+        bi_flush_fp = bi_flush;
+        bi_windup_fp = bi_windup;
+#endif
     }
     else {
         bi_flush_fp = AOCL_bi_flush;
@@ -351,7 +361,25 @@ ZEXTERN char* ZEXPORT aocl_setup_tree_fmv(int optOff, int optLevel, int insize,
     }
     return NULL;
 }
-#endif
+
+ZEXTERN char* ZEXPORT aocl_setup_tree(int optOff, int optLevel) 
+{
+    AOCL_ENTER_CRITICAL(setup_zlib_tree)
+    if (!setup_ok_zlib_tree) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_setup_tree_fmv(optOff, optLevel);
+        setup_ok_zlib_tree = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_tree)
+    return NULL;
+}
+
+ZEXTERN void ZEXPORT aocl_destroy_tree(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_tree)
+    setup_ok_zlib_tree = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib_tree)
+}
+
 #ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
 #ifndef ZLIB_DEBUG
 #  define send_code(s, c, tree) OPT_send_bits(s, tree[c].Code, tree[c].Len)
@@ -984,13 +1012,11 @@ void ZLIB_INTERNAL _tr_stored_block(deflate_state *s, charf *buf,
                                     ulg stored_len, int last) {
     /* send block type */
     OPT_send_bits(s, (STORED_BLOCK << 1) + last, 3);
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_ZLIB_OPT
     bi_windup_fp(s);         /* align on byte boundary */
-#elif defined(AOCL_ZLIB_OPT)
-    AOCL_bi_windup(s);        /* align on byte boundary */
 #else
     bi_windup(s);             /* align on byte boundary */
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+#endif /* AOCL_ZLIB_OPT */
 
     put_short(s, (ush)stored_len);
     put_short(s, (ush)~stored_len);
@@ -1009,13 +1035,11 @@ void ZLIB_INTERNAL _tr_stored_block(deflate_state *s, charf *buf,
  * Flush the bits in the bit buffer to pending output (leaves at most 7 bits)
  */
 void ZLIB_INTERNAL _tr_flush_bits(deflate_state *s) {
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_ZLIB_OPT
     bi_flush_fp(s);
-#elif defined(AOCL_ZLIB_OPT)
-    AOCL_bi_flush(s);
 #else
     bi_flush(s);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+#endif /* AOCL_ZLIB_OPT */
 }
 
 /* ===========================================================================
@@ -1030,13 +1054,11 @@ void ZLIB_INTERNAL _tr_align(deflate_state *s) {
     s->compressed_len += 10L; /* 3 for block type, 7 for EOB */
 #endif
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_ZLIB_OPT
     bi_flush_fp(s);
-#elif defined(AOCL_ZLIB_OPT)
-    AOCL_bi_flush(s);
 #else
     bi_flush(s);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+#endif /* AOCL_ZLIB_OPT */
 }
 
 /* ===========================================================================
@@ -1225,13 +1247,11 @@ void ZLIB_INTERNAL _tr_flush_block(deflate_state *s, charf *buf,
     init_block(s);
 
     if (last) {
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_ZLIB_OPT
         bi_windup_fp(s);
-#elif defined(AOCL_ZLIB_OPT)
-        AOCL_bi_windup(s);
 #else
         bi_windup(s);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+#endif /* AOCL_ZLIB_OPT */
 
 #ifdef ZLIB_DEBUG
         s->compressed_len += 7;  /* align on byte boundary */

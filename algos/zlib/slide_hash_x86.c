@@ -26,15 +26,28 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "utils/utils.h"
 #include <immintrin.h>
 #include <stdint.h>
 #include "deflate.h"
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_ZLIB_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+static int setup_ok_zlib_slide = 0; // flag to indicate status of dynamic dispatcher setup
+
 /* Function pointer holding the optimized variant as per the detected CPU 
  * features */
 static void (*slide_hash_fp)(deflate_state* s);
-#endif
 
 #ifdef AOCL_ZLIB_OPT
 static inline void slide_hash_c_opt(deflate_state *s)
@@ -60,6 +73,7 @@ static inline void slide_hash_c_opt(deflate_state *s)
 __attribute__((__target__("avx2")))
 static inline void slide_hash_avx2(deflate_state *s)
 {
+    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
     Pos *hc;
     uint16_t wsz = (uint16_t)s->w_size;
     uInt hchnsz = s->hash_size;
@@ -88,19 +102,18 @@ static inline void slide_hash_avx2(deflate_state *s)
  * optimized code flow path */
 void ZLIB_INTERNAL slide_hash_x86(deflate_state *s)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
+    AOCL_SETUP_NATIVE();
     slide_hash_fp(s);
-#elif defined(AOCL_ZLIB_AVX2_OPT)
-    slide_hash_avx2(s);
-#else
-    slide_hash_c_opt(s);
-#endif
+}
+
+void ZLIB_INTERNAL slide_hash_x86_internal(deflate_state* s)
+{
+    slide_hash_fp(s);
 }
 #endif /* AOCL_ZLIB_OPT */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 void aocl_register_slide_hash_fmv(int optOff, int optLevel,
-                                  void (*slide_hash_c_fp)(deflate_state* s))
+void (*slide_hash_c_fp)(deflate_state* s))
 {
     if (UNLIKELY(optOff==1))
     {
@@ -110,6 +123,15 @@ void aocl_register_slide_hash_fmv(int optOff, int optLevel,
     {
         switch (optLevel)
         {
+        case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_ZLIB_AVX2_OPT
+            slide_hash_fp = slide_hash_avx2;
+#elif defined(AOCL_ZLIB_OPT)
+            slide_hash_fp = slide_hash_c_opt;
+#else
+            slide_hash_fp = slide_hash_c_fp;
+#endif
+            break;
         case 0://C version
         case 1://SSE version
         case 2://AVX version
@@ -122,4 +144,37 @@ void aocl_register_slide_hash_fmv(int optOff, int optLevel,
         }
     }
 }
+
+void aocl_register_slide_hash(int optOff, int optLevel,
+void (*slide_hash_c_fp)(deflate_state* s)){
+    AOCL_ENTER_CRITICAL(setup_zlib_slide)
+    if (!setup_ok_zlib_slide) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_slide_hash_fmv(optOff, optLevel, slide_hash_c_fp);
+        setup_ok_zlib_slide = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_slide)
+}
+
+#ifdef AOCL_ZLIB_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_slide)
+    if (!setup_ok_zlib_slide) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        /* setting slide_hash_fp = slide_hash_c_opt even if optOff==1.
+        * aocl_setup_native() will be called from functions in slide_hash_x86.c
+        * only, which are optimized implementations. So, if caller is calling,
+        * slide_hash_x86() for example, they are expecting to run optimized code. */
+        aocl_register_slide_hash_fmv(optOff, optLevel, slide_hash_c_opt);
+        setup_ok_zlib_slide = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_slide)
+}
 #endif
+
+void aocl_destroy_slide_hash(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_slide)
+    setup_ok_zlib_slide = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib_slide)
+}

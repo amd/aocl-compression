@@ -88,23 +88,36 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include "utils/utils.h"
 
 namespace snappy {
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-    //Forward declarations to allow default pointer initializations
-    bool SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed);
-
-    static char* (*SNAPPY_compress_fragment_fp)(const char* input,
-        size_t input_size, char* op,
-        uint16_t* table, const int table_size) = internal::CompressFragment;
-
-    // function pointer to variants of the RawUncompress function, used for integration
-    // with the dynamic dispatcher. "SAW" stands for "SnappyArrayWriter" as that is the
-    // class used for decompression of flat buffers to flat buffers in this library.
-    static bool (*SNAPPY_SAW_raw_uncompress_fp)(const char* compressed,
-        size_t compressed_length, char* uncompressed) = SAW_RawUncompress;
+#ifdef AOCL_SNAPPY_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
 #endif
+
+static int setup_ok_snappy = 0; // flag to indicate status of dynamic dispatcher setup
+
+//Forward declarations to allow default pointer initializations
+bool SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed);
+
+static char* (*SNAPPY_compress_fragment_fp)(const char* input,
+    size_t input_size, char* op,
+    uint16_t* table, const int table_size) = internal::CompressFragment;
+
+// function pointer to variants of the RawUncompress function, used for integration
+// with the dynamic dispatcher. "SAW" stands for "SnappyArrayWriter" as that is the
+// class used for decompression of flat buffers to flat buffers in this library.
+static bool (*SNAPPY_SAW_raw_uncompress_fp)(const char* compressed,
+    size_t compressed_length, char* uncompressed) = SAW_RawUncompress;
 
 // The amount of slop bytes writers are using for unconditional copies.
 constexpr int kSlopBytes = 64;
@@ -1371,6 +1384,7 @@ bool GetUncompressedLength(Source* source, uint32_t* result) {
 }
 
 size_t Compress(Source* reader, Sink* writer) {
+  AOCL_SETUP_NATIVE();
   if (reader == NULL || writer == NULL) return 0;
   size_t written = 0;
   size_t N = reader->Available();
@@ -1429,11 +1443,7 @@ size_t Compress(Source* reader, Sink* writer) {
     char* dest = writer->GetAppendBuffer(max_output, wmem.GetScratchOutput());
 
 #ifdef AOCL_SNAPPY_OPT 
-#ifdef AOCL_DYNAMIC_DISPATCHER
     char* end = SNAPPY_compress_fragment_fp(fragment, fragment_size, dest, table, table_size);
-#else
-    char* end = internal::AOCL_CompressFragment(fragment, fragment_size, dest, table, table_size);
-#endif
 #else
     char* end = internal::CompressFragment(fragment, fragment_size, dest, table, table_size);
 #endif
@@ -1638,6 +1648,7 @@ class SnappyIOVecWriter {
 
 bool RawUncompressToIOVec(const char* compressed, size_t compressed_length,
                           const struct iovec* iov, size_t iov_cnt) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL || iov == NULL) return false;
   ByteArraySource reader(compressed, compressed_length);
   return RawUncompressToIOVec(&reader, iov, iov_cnt);
@@ -1645,6 +1656,7 @@ bool RawUncompressToIOVec(const char* compressed, size_t compressed_length,
 
 bool RawUncompressToIOVec(Source* compressed, const struct iovec* iov,
                           size_t iov_cnt) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL || iov == NULL) return false;
   SnappyIOVecWriter output(iov, iov_cnt);
   return InternalUncompress(compressed, &output);
@@ -1843,6 +1855,7 @@ bool AOCL_SAW_RawUncompress(const char* compressed, size_t compressed_length, ch
 #ifdef AOCL_SNAPPY_OPT 
 bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
   LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+  AOCL_SETUP_NATIVE();
   // sanity checks ------------------------------------------------------------
      size_t ulength;
      if (!GetUncompressedLength(compressed, compressed_length, &ulength))
@@ -1857,16 +1870,13 @@ bool RawUncompress(const char* compressed, size_t compressed_length, char* uncom
      }
   // sanity checks ------------------------------------------------------------
   bool ret = false;
-  #ifdef AOCL_DYNAMIC_DISPATCHER
     ret = SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
-  #else
-    ret = AOCL_SAW_RawUncompress(compressed, compressed_length, uncompressed);
-  #endif
   LOG_UNFORMATTED(INFO, logCtx, "Exit");
   return ret;
 }
 
 bool RawUncompress(Source* compressed, char* uncompressed) {
+     AOCL_SETUP_NATIVE();
   // sanity checks ------------------------------------------------------------
      size_t _readable_length, ulength;
      const char* _compressed_buffer;
@@ -1908,6 +1918,7 @@ bool RawUncompress(Source* compressed, char* uncompressed) {
 
 bool Uncompress(const char* compressed, size_t compressed_length,
                 std::string* uncompressed) {
+  AOCL_SETUP_NATIVE();
   size_t ulength;
   if (!GetUncompressedLength(compressed, compressed_length, &ulength)) {
     return false;
@@ -1966,6 +1977,7 @@ class SnappyDecompressionValidator {
 };
 
 bool IsValidCompressedBuffer(const char* compressed, size_t compressed_length) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL) return false;
   ByteArraySource reader(compressed, compressed_length);
   SnappyDecompressionValidator writer;
@@ -1973,6 +1985,7 @@ bool IsValidCompressedBuffer(const char* compressed, size_t compressed_length) {
 }
 
 bool IsValidCompressed(Source* compressed) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL) return false;
   SnappyDecompressionValidator writer;
   return InternalUncompress(compressed, &writer);
@@ -1988,6 +2001,9 @@ void RawCompress(const char* input,
     LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return;
   }
+  
+  AOCL_SETUP_NATIVE();
+
   ByteArraySource reader(input, input_length);
   UncheckedByteArraySink writer(compressed);
   Compress(&reader, &writer);
@@ -1999,6 +2015,7 @@ void RawCompress(const char* input,
 
 size_t Compress(const char* input, size_t input_length,
                 std::string* compressed) {
+  AOCL_SETUP_NATIVE();
   if (input == NULL || compressed == NULL) return 0;
   // Pre-grow the buffer to the max length of the compressed output
   STLStringResizeUninitialized(compressed, MaxCompressedLength(input_length));
@@ -2010,28 +2027,36 @@ size_t Compress(const char* input, size_t input_length,
   return compressed_length;
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 static void aocl_register_snappy_fmv(int optOff, int optLevel) {
     if (optOff)
     {
         //C version
-        SNAPPY_compress_fragment_fp = internal::CompressFragment;
-        SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress;
+        SNAPPY_compress_fragment_fp    = internal::CompressFragment;
+        SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
     }
     else
     {
         switch (optLevel)
         {
+          case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_SNAPPY_AVX_OPT
+            SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp   = AOCL_SAW_RawUncompress;
+#else
+            SNAPPY_compress_fragment_fp    = internal::CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
+#endif
+            break;
         case 0://C version
         case 1://SSE version
-            SNAPPY_compress_fragment_fp = internal::CompressFragment;
-            SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress;
+            SNAPPY_compress_fragment_fp    = internal::CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
             break;
         case 2://AVX version
         case 3://AVX2 version
         default://AVX512 and other versions
-            SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment;
-            SNAPPY_SAW_raw_uncompress_fp = AOCL_SAW_RawUncompress;
+            SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp   = AOCL_SAW_RawUncompress;
             break;
         }
     }
@@ -2039,10 +2064,34 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
 
 char* aocl_setup_snappy(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog) {
-    aocl_register_snappy_fmv(optOff, optLevel);
+    AOCL_ENTER_CRITICAL(setup_snappy)
+    if (!setup_ok_snappy) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_snappy_fmv(optOff, optLevel);
+        setup_ok_snappy = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_snappy)
     return NULL;
 }
+
+#ifdef AOCL_SNAPPY_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_snappy)
+    if (!setup_ok_snappy) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_snappy_fmv(optOff, optLevel);
+        setup_ok_snappy = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_snappy)
+}
 #endif
+
+void aocl_destroy_snappy(void){
+    AOCL_ENTER_CRITICAL(setup_snappy)
+    setup_ok_snappy = 0;
+    AOCL_EXIT_CRITICAL(setup_snappy)
+}
 
 // -----------------------------------------------------------------------
 // Sink interface
@@ -2279,6 +2328,7 @@ class SnappySinkAllocator {
 };
 
 size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL || uncompressed == NULL) return 0;
   SnappySinkAllocator allocator(uncompressed);
   SnappyScatteredWriter<SnappySinkAllocator> writer(allocator);
@@ -2287,6 +2337,7 @@ size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed) {
 }
 
 bool Uncompress(Source* compressed, Sink* uncompressed) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL || uncompressed == NULL) return false;
   // Read the uncompressed length from the front of the compressed input
   SnappyDecompressor decompressor(compressed);

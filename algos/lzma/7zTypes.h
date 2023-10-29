@@ -10,7 +10,7 @@
 
 #define AOCL_LZMA_OPT
 
-#ifdef AOCL_LZMA_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 // Enabling this will allow code paths to reach some of the hard to reach sections in the code
 //#define AOCL_EXTEND_CODE_COVERAGE //DO NOT ENABLE THIS IN PRODUCTION CODE!
 #endif

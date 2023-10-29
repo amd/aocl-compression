@@ -436,7 +436,6 @@ namespace snappy {
 
   /* AOCL-Compression defined setup function that configures with the right
 *  AMD optimized snappy routines depending upon the detected CPU features. */
-#ifdef AOCL_DYNAMIC_DISPATCHER
 
 /**
  * @brief AOCL-Compression defined setup function that configures with the right
@@ -453,7 +452,11 @@ namespace snappy {
 
  SNAPPYLIB_API char * aocl_setup_snappy(int optOff, int optLevel, size_t insize,
                            size_t level, size_t windowLog);
-#endif
+
+/**
+ * @brief AOCL-Compression defined destroy function.
+ */
+ SNAPPYLIB_API void aocl_destroy_snappy(void);
 
 /**
  * @brief This class is created to expose internal functions which are not available external to this method.

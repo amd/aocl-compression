@@ -510,9 +510,7 @@ BZ2_hbCreateDecodeTables ( Int32*, Int32*, Int32*, UChar*,
 
 #ifdef AOCL_BZIP2_OPT
 extern Int32 AOCL_BZ2_decompress ( DState* );
-#ifdef AOCL_DYNAMIC_DISPATCHER
-extern void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog);
-#endif
+extern void aocl_register_mainSimpleSort_fmv (int optOff, int optLevel);
 #endif
 
 /*-------------------------------------------------------------*/

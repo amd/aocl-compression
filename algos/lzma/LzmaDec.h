@@ -495,7 +495,6 @@ LZMALIB_API SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* 
  * @}
 */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /*! @brief AOCL-Compression defined setup function that configures with the right
  * AMD optimized lzma routines depending upon the detected CPU features.
  *
@@ -511,7 +510,11 @@ LZMALIB_API SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* 
  */
 LZMALIB_API void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
-#endif
+
+/**
+ * @brief AOCL-Compression defined destroy function for lzma decode.
+ */
+LZMALIB_API void aocl_destroy_lzma_decode(void);
 
 /**
  * @}
@@ -519,7 +522,7 @@ LZMALIB_API void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
 
 EXTERN_C_END
 
-#ifdef AOCL_LZMA_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 /* Move these APIs within the scope of gtest once the framework is ready */
 EXTERN_C_BEGIN
 LZMALIB_API void Test_Rc_Get_Bit_2_Dec_Ref(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
@@ -527,5 +530,5 @@ LZMALIB_API void Test_Rc_Get_Bit_2_Dec_Opt(const Byte* buf, UInt32* range, UInt3
 LZMALIB_API void Test_Rc_Rev_Bit_Dec_Ref(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
 LZMALIB_API void Test_Rc_Rev_Bit_Dec_Opt(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
 EXTERN_C_END
-#endif
+#endif /* AOCL_UNIT_TEST */
 #endif

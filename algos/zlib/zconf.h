@@ -563,9 +563,6 @@ typedef uLong FAR uLongf;
 #define UNLIKELY(x) x
 #endif
 #include <stdint.h>
-#ifdef AOCL_DYNAMIC_DISPATCHER
 extern int zlibOptOff; /* Flag to choose code paths based on dynamic dispatcher settings */
-extern int zlibOptLevel; /* Flag to choose code paths based on dynamic dispatcher settings */
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 #endif /* AOCL_ZLIB_OPT */
 #endif /* ZCONF_H */

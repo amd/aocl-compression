@@ -56,6 +56,9 @@
 #endif  // defined(_MSC_VER)
 
 #define AOCL_SNAPPY_OPT 
+#ifdef AOCL_SNAPPY_OPT
+#define AOCL_SNAPPY_AVX_OPT 
+#endif
 
 #ifndef __has_feature
 #define __has_feature(x) 0

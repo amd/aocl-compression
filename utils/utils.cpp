@@ -36,6 +36,7 @@
  *  @author S. Biplab Raut
  */
 
+#include <string.h>
 #include "api/types.h"
 #include "api/aocl_compression.h"
 #include "utils/utils.h"
@@ -54,7 +55,7 @@ aocl_log_ctx logCtx = {-1};
 
 #endif /* AOCL_ENABLE_LOG_FEATURE */
 
-AOCL_INTP is_SSE2_supported(aocl_compression_desc *aocl_codec_handle)
+AOCL_INTP is_SSE2_supported(AOCL_VOID)
 {
     AOCL_INTP ret;
     AOCL_INTP eax, ebx, ecx, edx;
@@ -65,7 +66,7 @@ AOCL_INTP is_SSE2_supported(aocl_compression_desc *aocl_codec_handle)
     return ret;
 }
 
-AOCL_INTP is_AVX_supported(aocl_compression_desc *aocl_codec_handle)
+AOCL_INTP is_AVX_supported(AOCL_VOID)
 {
     AOCL_INTP ret;
     AOCL_INTP eax, ebx, ecx, edx;
@@ -76,7 +77,7 @@ AOCL_INTP is_AVX_supported(aocl_compression_desc *aocl_codec_handle)
     return ret;
 }
 
-AOCL_INTP is_AVX2_supported(aocl_compression_desc *aocl_codec_handle)
+AOCL_INTP is_AVX2_supported(AOCL_VOID)
 {
     AOCL_INTP ret;
     AOCL_INTP eax, ebx, ecx, edx;
@@ -94,7 +95,7 @@ static inline AOCL_INTP xgetbv(AOCL_INTP opt)
     return eax;
 }
 
-AOCL_INTP is_AVX512_supported(aocl_compression_desc *aocl_codec_handle)
+AOCL_INTP is_AVX512_supported(AOCL_VOID)
 {
     AOCL_INTP ret = 0;
     AOCL_INTP eax, ebx, ecx, edx;
@@ -121,16 +122,192 @@ AOCL_INTP is_AVX512_supported(aocl_compression_desc *aocl_codec_handle)
     return ret;
 }
 
-AOCL_VOID set_cpu_opt_flags(AOCL_VOID *handle)
+static inline AOCL_INTP get_enabled_inst(AOCL_VOID) {
+    AOCL_INTP enable_inst = 4;
+    const char* AOCL_Enable_Inst = getenv("AOCL_ENABLE_INSTRUCTIONS");
+    if (AOCL_Enable_Inst != NULL) {
+        if (strcmp(AOCL_Enable_Inst, "AVX512") == 0)
+            enable_inst = 4;
+        else if (strcmp(AOCL_Enable_Inst, "AVX2") == 0)
+            enable_inst = 3;
+        else if (strcmp(AOCL_Enable_Inst, "AVX") == 0)
+            enable_inst = 2;
+        else if (strcmp(AOCL_Enable_Inst, "SSE2") == 0)
+            enable_inst = 1;
+        else
+            enable_inst = 0;
+    }
+#ifndef AOCL_DYNAMIC_DISPATCHER
+    else {
+        enable_inst = -1; //when AOCL_ENABLE_INSTRUCTIONS is not set and AOCL_DYNAMIC_DISPATCHER is disabled, no dynamic isa selection
+    }
+#endif
+    return enable_inst;
+}
+
+AOCL_VOID set_cpu_opt_flags(AOCL_VOID* handle)
 {
+    aocl_compression_desc* aocl_codec_handle = (aocl_compression_desc*)handle;
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-    
-    aocl_compression_desc *aocl_codec_handle = (aocl_compression_desc *)handle;
-    
-    aocl_codec_handle->optLevel = is_SSE2_supported(aocl_codec_handle);
-    aocl_codec_handle->optLevel += is_AVX_supported(aocl_codec_handle);
-    aocl_codec_handle->optLevel += is_AVX2_supported(aocl_codec_handle);
-    aocl_codec_handle->optLevel += is_AVX512_supported(aocl_codec_handle);
-    
+
+    AOCL_INTP enable_inst = get_enabled_inst();
+
+    aocl_codec_handle->optLevel = 0;
+    switch (enable_inst) {
+    case 4:
+        aocl_codec_handle->optLevel += is_AVX512_supported();
+    case 3:
+        aocl_codec_handle->optLevel += is_AVX2_supported();
+    case 2:
+        aocl_codec_handle->optLevel += is_AVX_supported();
+    case 1:
+        aocl_codec_handle->optLevel += is_SSE2_supported();
+        break;
+    case 0:
+        aocl_codec_handle->optLevel = 0;
+        break;
+    default:
+        aocl_codec_handle->optLevel = -1; // undecided. use defaults
+        break;
+    }
+
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 }
+
+AOCL_INTP get_cpu_opt_flags(int printDebugLogs)
+{
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+
+    AOCL_INTP enable_inst = get_enabled_inst();
+
+    AOCL_INTP optLevel = 0;
+    switch (enable_inst) {
+    case 4:
+        optLevel += is_AVX512_supported();
+    case 3:
+        optLevel += is_AVX2_supported();
+    case 2:
+        optLevel += is_AVX_supported();
+    case 1:
+        optLevel += is_SSE2_supported();
+        break;
+    case 0:
+        optLevel = 0;
+        break;
+    default:
+        optLevel = -1; // undecided. use defaults
+        break;
+    }
+    
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+
+    return optLevel;
+}
+
+AOCL_INTP get_disable_opt_flags(int printDebugLogs)
+{
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+
+    const char* AOCL_Enable_Opt = getenv("AOCL_DISABLE_OPT");
+    if (AOCL_Enable_Opt != NULL && (strcmp(AOCL_Enable_Opt, "ON") == 0)) {
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return 1;
+    }
+    
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    return 0;
+}
+
+#ifdef AOCL_UNIT_TEST
+#include <string>
+#include <cstring>
+#include <unordered_map>
+#include <stdlib.h>
+#include <stdio.h>
+
+using namespace std;
+
+unordered_map<string, size_t> unit_test_log_counter;
+
+#ifdef WIN32
+#define SET_ENV_VAR(var) 
+#else
+#define SET_ENV_VAR(var) putenv(var)
+#endif
+
+void update_test_log_counter(const char* name) {
+    if (unit_test_log_counter.find(name) == unit_test_log_counter.end())
+        unit_test_log_counter[name] = 0;
+    unit_test_log_counter[name]++; /* keep count of function hits */
+}
+
+void clear_test_log_counter(void) {
+    unit_test_log_counter.clear();
+}
+
+int validate_simd_func_access(const aocl_func_info* aocl_simd_funcs, size_t cnt, int maxOptLevel) {
+    int access_ok = 1;
+    for (size_t i = 0; i < cnt; ++i) {
+        if (aocl_simd_funcs[i].optLevel <= maxOptLevel)
+            continue; // ok to have hits for functions with optLevel <= maxOptLevel
+        if (unit_test_log_counter.find(aocl_simd_funcs[i].name) != unit_test_log_counter.end()) {
+            printf("%s called with maxOptLevel = %d\n",
+                aocl_simd_funcs[i].name, maxOptLevel);
+            access_ok = 0; // function with optLevel > maxOptLevel had hits
+            break;
+        }
+    }
+    return access_ok;
+}
+
+int set_env_var(const char* name, const char* value) {
+#ifdef WIN32
+    std::string env_var = std::string(name) + "=" + std::string(value);
+    return _putenv((char*)(env_var.c_str()));
+#else
+    return setenv(name, value, 1);
+#endif
+
+}
+
+int unset_env_var(const char* name) {
+#ifdef WIN32
+    std::string env_var = std::string(name) + "=";
+    return _putenv((char*)(env_var.c_str()));
+#else
+    return unsetenv(name);
+#endif
+}
+
+int set_opt_off(int optOff) {
+    switch (optOff) {
+    case 0:
+        return set_env_var("AOCL_DISABLE_OPT", "OFF");
+    case 1:
+        return set_env_var("AOCL_DISABLE_OPT", "ON");
+    default:
+        return unset_env_var("AOCL_DISABLE_OPT");
+    }
+}
+
+int set_opt_level(int optLevel) {
+    switch (optLevel) {
+    case 0:
+        return set_env_var("AOCL_ENABLE_INSTRUCTIONS", "C");
+    case 1:
+        return set_env_var("AOCL_ENABLE_INSTRUCTIONS", "SSE2");
+    case 2:
+        return set_env_var("AOCL_ENABLE_INSTRUCTIONS", "AVX");
+    case 3:
+        return set_env_var("AOCL_ENABLE_INSTRUCTIONS", "AVX2");
+    case 4:
+        return set_env_var("AOCL_ENABLE_INSTRUCTIONS", "AVX512");
+    default:
+        return unset_env_var("AOCL_ENABLE_INSTRUCTIONS");
+    }
+}
+
+int test_get_enabled_inst(void) {
+    return get_enabled_inst();
+}
+#endif

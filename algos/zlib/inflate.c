@@ -81,6 +81,7 @@
  * The history for versions after 1.2.0 are in ChangeLog in zlib distribution.
  */
 
+#include "utils/utils.h"
 #include "zutil.h"
 #include "inftrees.h"
 #include "inflate.h"
@@ -92,6 +93,20 @@
 #include "inffast.h"
 #endif
 #include "aocl_zlib_x86.h"
+
+#ifdef AOCL_ZLIB_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+static int setup_ok_zlib_inflate = 0; // flag to indicate status of dynamic dispatcher setup
 
 #ifdef MAKEFIXED
 #  ifndef BUILDFIXED
@@ -112,6 +127,7 @@ local int inflateStateCheck(z_streamp strm) {
 }
 
 int ZEXPORT inflateResetKeep(z_streamp strm) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
 
     if (inflateStateCheck(strm)) return Z_STREAM_ERROR;
@@ -136,6 +152,7 @@ int ZEXPORT inflateResetKeep(z_streamp strm) {
 }
 
 int ZEXPORT inflateReset(z_streamp strm) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
 
     if (inflateStateCheck(strm)) return Z_STREAM_ERROR;
@@ -147,6 +164,7 @@ int ZEXPORT inflateReset(z_streamp strm) {
 }
 
 int ZEXPORT inflateReset2(z_streamp strm, int windowBits) {
+    AOCL_SETUP_NATIVE();
     int wrap;
     struct inflate_state FAR *state;
 
@@ -185,6 +203,7 @@ int ZEXPORT inflateReset2(z_streamp strm, int windowBits) {
 
 int ZEXPORT inflateInit2_(z_streamp strm, int windowBits,
                           const char *version, int stream_size) {
+    AOCL_SETUP_NATIVE();
     int ret;
     struct inflate_state FAR *state;
 
@@ -229,6 +248,7 @@ int ZEXPORT inflateInit_(z_streamp strm, const char *version,
 }
 
 int ZEXPORT inflatePrime(z_streamp strm, int bits, int value) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
 
     if (inflateStateCheck(strm)) return Z_STREAM_ERROR;
@@ -419,11 +439,11 @@ local int updatewindow(z_streamp strm, const Bytef *end, unsigned copy) {
     return 0;
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
+/* Flag to choose code paths based on dynamic dispatcher settings */
 static int inflateOptLevel = 0;
+/* Function pointers holding the optimized variant as per dynamic dispatcher settings */
 static int (*updatewindow_fp)(z_streamp strm, const Bytef * end, unsigned copy) = updatewindow;
 static void (*inflate_fast_fp)(z_streamp strm, unsigned start) = inflate_fast;
-#endif
 
 #ifdef AOCL_ZLIB_SSE2_OPT
 local int aocl_updatewindow(z_streamp strm, const Bytef *end, unsigned copy)
@@ -489,14 +509,14 @@ local int aocl_updatewindow(z_streamp strm, const Bytef *end, unsigned copy)
 #ifdef GUNZIP
 #ifdef AOCL_ZLIB_OPT
 #  define UPDATE_CHECK(check, buf, len) \
-    (state->flags ? crc32(check, buf, len) : adler32_x86(check, buf, len))
+    (state->flags ? crc32(check, buf, len) : adler32_x86_internal(check, buf, len))
 #else
 #  define UPDATE_CHECK(check, buf, len) \
     (state->flags ? crc32(check, buf, len) : adler32(check, buf, len))
 #endif /* AOCL_ZLIB_OPT */
 #else
 #ifdef AOCL_ZLIB_OPT
-#  define UPDATE_CHECK(check, buf, len) adler32_x86(check, buf, len)
+#  define UPDATE_CHECK(check, buf, len) adler32_x86_internal(check, buf, len)
 #else
 #  define UPDATE_CHECK(check, buf, len) adler32(check, buf, len)
 #endif /* AOCL_ZLIB_OPT */
@@ -669,6 +689,7 @@ local int aocl_updatewindow(z_streamp strm, const Bytef *end, unsigned copy)
  */
 
 int ZEXPORT inflate(z_streamp strm, int flush) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
     z_const unsigned char FAR *next;    /* next input */
     unsigned char FAR *put;     /* next output */
@@ -745,7 +766,7 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
             state->flags = 0;               /* indicate zlib header */
             Tracev((stderr, "inflate:   zlib header ok\n"));
 #ifdef AOCL_ZLIB_OPT
-            strm->adler = state->check = adler32_x86(0L, Z_NULL, 0);
+            strm->adler = state->check = adler32_x86_internal(0L, Z_NULL, 0);
 #else
             strm->adler = state->check = adler32(0L, Z_NULL, 0);
 #endif
@@ -904,7 +925,7 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
                 return Z_NEED_DICT;
             }
 #ifdef AOCL_ZLIB_OPT
-            strm->adler = state->check = adler32_x86(0L, Z_NULL, 0);
+            strm->adler = state->check = adler32_x86_internal(0L, Z_NULL, 0);
 #else
             strm->adler = state->check = adler32(0L, Z_NULL, 0);
 #endif
@@ -1130,11 +1151,7 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
             if (have >= INFLATE_FAST_MIN_INPUT &&
                 left >= INFLATE_FAST_MIN_OUTPUT) {
                 RESTORE();
-#ifdef AOCL_DYNAMIC_DISPATCHER
                 inflate_fast_fp(strm, out);
-#else
-                inflate_fast_chunk_(strm, out);
-#endif
         
 #else
             if (have >= 6 && left >= 258) {
@@ -1247,7 +1264,6 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
             if (left == 0) goto inf_leave;
             copy = out - left;
 #ifdef AOCL_ZLIB_SSE2_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
             if(UNLIKELY(zlibOptOff == 1 || inflateOptLevel <= 0))
             {
                 if (state->offset > copy) {         /* copy from window */
@@ -1292,7 +1308,6 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
                 } while (--copy);
             }
             else {
-#endif /* AOCL_DYNAMIC_DISPATCHER */
             if (state->offset > copy) {         /* copy from window */
                 copy = state->offset - copy;
                 if (copy > state->whave) {
@@ -1332,9 +1347,7 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
             }
             left -= copy;
             state->length -= copy;
-#ifdef AOCL_DYNAMIC_DISPATCHER
             }
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 #else
         if (state->offset > copy) {         /* copy from window */
                 copy = state->offset - copy;
@@ -1451,26 +1464,18 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
      * mislead clients relying on undefined behavior (i.e. assuming
      * that the data is over when the buffer has a zero/null value).
      */
-#ifdef AOCL_DYNAMIC_DISPATCHER
     if(LIKELY(zlibOptOff==0 && inflateOptLevel > 0)) {
-#endif /* AOCL_DYNAMIC_DISPATCHER */
     if (left >= CHUNKCOPY_CHUNK_SIZE)
        memset(put, 0x55, CHUNKCOPY_CHUNK_SIZE);
     else
        memset(put, 0x55, left);
-#ifdef AOCL_DYNAMIC_DISPATCHER
     }
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 #endif /* AOCL_ZLIB_SSE2_OPT */
     RESTORE();
     if (state->wsize || (out != strm->avail_out && state->mode < BAD &&
             (state->mode < CHECK || flush != Z_FINISH)))
 #ifdef AOCL_ZLIB_SSE2_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
         if (updatewindow_fp(strm, strm->next_out, out - strm->avail_out)) {
-#else
-        if (aocl_updatewindow(strm, strm->next_out, out - strm->avail_out)) {
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 #else
         if (updatewindow(strm, strm->next_out, out - strm->avail_out)) {
 #endif /* AOCL_ZLIB_SSE2_OPT */
@@ -1494,6 +1499,7 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
 }
 
 int ZEXPORT inflateEnd(z_streamp strm) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
     if (inflateStateCheck(strm))
         return Z_STREAM_ERROR;
@@ -1507,6 +1513,7 @@ int ZEXPORT inflateEnd(z_streamp strm) {
 
 int ZEXPORT inflateGetDictionary(z_streamp strm, Bytef *dictionary,
                                  uInt *dictLength) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
 
     /* check state */
@@ -1527,6 +1534,7 @@ int ZEXPORT inflateGetDictionary(z_streamp strm, Bytef *dictionary,
 
 int ZEXPORT inflateSetDictionary(z_streamp strm, const Bytef *dictionary,
                                  uInt dictLength) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
     unsigned long dictid;
     int ret;
@@ -1540,8 +1548,8 @@ int ZEXPORT inflateSetDictionary(z_streamp strm, const Bytef *dictionary,
     /* check for correct dictionary identifier */
     if (state->mode == DICT) {
 #ifdef AOCL_ZLIB_OPT
-        dictid = adler32_x86(0L, Z_NULL, 0);
-        dictid = adler32_x86(dictid, dictionary, dictLength);
+        dictid = adler32_x86_internal(0L, Z_NULL, 0);
+        dictid = adler32_x86_internal(dictid, dictionary, dictLength);
 #else
         dictid = adler32(0L, Z_NULL, 0);
         dictid = adler32(dictid, dictionary, dictLength);
@@ -1553,11 +1561,7 @@ int ZEXPORT inflateSetDictionary(z_streamp strm, const Bytef *dictionary,
     /* copy dictionary to window using updatewindow(), which will amend the
        existing dictionary if appropriate */
 #ifdef AOCL_ZLIB_SSE2_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     ret = updatewindow_fp(strm, dictionary + dictLength, dictLength);
-#else
-    ret = aocl_updatewindow(strm, dictionary + dictLength, dictLength);
-#endif
 #else
     ret = updatewindow(strm, dictionary + dictLength, dictLength);
 #endif /* AOCL_ZLIB_SSE2_OPT */
@@ -1571,6 +1575,7 @@ int ZEXPORT inflateSetDictionary(z_streamp strm, const Bytef *dictionary,
 }
 
 int ZEXPORT inflateGetHeader(z_streamp strm, gz_headerp head) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
 
     /* check state */
@@ -1616,6 +1621,7 @@ local unsigned syncsearch(unsigned FAR *have, const unsigned char FAR *buf,
 }
 
 int ZEXPORT inflateSync(z_streamp strm) {
+    AOCL_SETUP_NATIVE();
     unsigned len;               /* number of bytes to look at or looked at */
     int flags;                  /* temporary to save header status */
     unsigned long in, out;      /* temporary to save total_in and total_out */
@@ -1672,6 +1678,7 @@ int ZEXPORT inflateSync(z_streamp strm) {
    inflate is waiting for these length bytes.
  */
 int ZEXPORT inflateSyncPoint(z_streamp strm) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
 
     if (inflateStateCheck(strm)) return Z_STREAM_ERROR;
@@ -1680,6 +1687,7 @@ int ZEXPORT inflateSyncPoint(z_streamp strm) {
 }
 
 int ZEXPORT inflateCopy(z_streamp dest, z_streamp source) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
     struct inflate_state FAR *copy;
     unsigned char FAR *window;
@@ -1724,6 +1732,7 @@ int ZEXPORT inflateCopy(z_streamp dest, z_streamp source) {
 }
 
 int ZEXPORT inflateUndermine(z_streamp strm, int subvert) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
 
     if (inflateStateCheck(strm)) return Z_STREAM_ERROR;
@@ -1739,6 +1748,7 @@ int ZEXPORT inflateUndermine(z_streamp strm, int subvert) {
 }
 
 int ZEXPORT inflateValidate(z_streamp strm, int check) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
 
     if (inflateStateCheck(strm)) return Z_STREAM_ERROR;
@@ -1751,6 +1761,7 @@ int ZEXPORT inflateValidate(z_streamp strm, int check) {
 }
 
 long ZEXPORT inflateMark(z_streamp strm) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
 
     if (inflateStateCheck(strm))
@@ -1762,6 +1773,7 @@ long ZEXPORT inflateMark(z_streamp strm) {
 }
 
 unsigned long ZEXPORT inflateCodesUsed(z_streamp strm) {
+    AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;
     if (inflateStateCheck(strm)) return (unsigned long)-1;
     state = (struct inflate_state FAR *)strm->state;
@@ -1770,21 +1782,54 @@ unsigned long ZEXPORT inflateCodesUsed(z_streamp strm) {
 
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
-#ifdef AOCL_DYNAMIC_DISPATCHER
-ZEXTERN char * ZEXPORT aocl_setup_inflate_fmv(int optOff, int optLevel, int insize,
-    int level, int windowLog)
+static void aocl_setup_inflate_fmv(int optOff, int optLevel)
 {
     inflateOptLevel = optLevel;
-    if(LIKELY(optOff == 0 && optLevel > 0))
-    {
+    if(LIKELY(optOff == 0 && optLevel > 0)) {
         updatewindow_fp = aocl_updatewindow;
         inflate_fast_fp = inflate_fast_chunk_;
     }
-    else
-    {
+    else if (UNLIKELY(optLevel == -1)) { // undecided. use defaults based on compiler flags
+#ifdef AOCL_ZLIB_OPT
+        updatewindow_fp = aocl_updatewindow;
+        inflate_fast_fp = inflate_fast_chunk_;
+#else
+        updatewindow_fp = updatewindow;
+        inflate_fast_fp = inflate_fast;
+#endif
+    }
+    else {
         updatewindow_fp = updatewindow;
         inflate_fast_fp = inflate_fast;
     }
+}
+
+ZEXTERN char * ZEXPORT aocl_setup_inflate(int optOff, int optLevel){
+    AOCL_ENTER_CRITICAL(setup_zlib_inflate)
+    if (!setup_ok_zlib_inflate) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_setup_inflate_fmv(optOff, optLevel);
+        setup_ok_zlib_inflate = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_inflate)
     return NULL;
 }
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+
+#ifdef AOCL_ZLIB_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_inflate)
+    if (!setup_ok_zlib_inflate) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_setup_inflate_fmv(optOff, optLevel);
+        setup_ok_zlib_inflate = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_inflate)
+}
+#endif
+
+ZEXTERN void ZEXPORT aocl_destroy_inflate (void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_inflate)
+    setup_ok_zlib_inflate = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib_inflate)
+}

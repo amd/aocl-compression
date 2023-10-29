@@ -234,9 +234,9 @@ set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXC
 set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
 set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h)
-set (UTILS_SRC_FILES    utils/code_alignment.cpp
-                        utils/utils.cpp
-                        utils/utils.h)
+set (UTILS_SRC_FILES	utils/code_alignment.cpp
+						utils/utils.cpp
+						utils/utils.h)
 
 if (AOCL_ENABLE_THREADS)
     set (THREADS_SRC_FILES threads/threads.c threads/threads.h)
@@ -436,7 +436,7 @@ set(SRC_FILES
 #common flag for aocl_compression_bench and gtest_combined_test
 set(AOCL_DYNAMIC_DISPATCHER ON)
 if (AOCL_DYNAMIC_DISPATCHER)
-    set_property(SOURCE ${SRC_FILES} ${BENCH_PATH}/codec_bench.c APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
+    set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
     option(ENABLE_STRICT_WARNINGS "Enable compiler flags to treat all warnings as errors (Enabled by default)" ON)
 else()
     set(ENABLE_STRICT_WARNINGS OFF)
@@ -486,11 +486,7 @@ if (AOCL_TEST_COVERAGE)
     # enabling ctest
     enable_testing()
 
-    set_property(SOURCE ${LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZMA_UNIT_TEST")
-    set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_UNIT_TEST")
-    set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZLIB_UNIT_TEST")
-    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_UNIT_TEST")
-    set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_UNIT_TEST")
+	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_UNIT_TEST")
 
     add_subdirectory(gtest)
     add_subdirectory(test)
@@ -500,7 +496,7 @@ endif()
 if(ENABLE_STRICT_WARNINGS)
     if (WIN32)
         #suppress warnings suggesting to use fopen_s, ... in place of fopen, ...
-        set_property(SOURCE ${SRC_FILES} ${BENCH_PATH}/codec_bench.c APPEND PROPERTY COMPILE_OPTIONS "-D_CRT_SECURE_NO_WARNINGS")
+        set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-D_CRT_SECURE_NO_WARNINGS")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
         set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DENABLE_STRICT_WARNINGS")

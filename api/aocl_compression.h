@@ -226,6 +226,7 @@ EXPORT_SYM_DYN void aocl_llc_destroy(aocl_compression_desc *handle,
  */
 
 EXPORT_SYM_DYN const char *aocl_llc_version(void);
+
 /**
  * @}
  */

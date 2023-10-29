@@ -250,7 +250,6 @@ LZ4LIB_API int LZ4_compress_HC_destSize(void* stateHC,
  * @}
 */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /**
  * @brief AOCL-Compression defined setup function that configures with the right
  * AMD optimized lz4hc routines depending upon the detected CPU features.
@@ -267,7 +266,11 @@ LZ4LIB_API int LZ4_compress_HC_destSize(void* stateHC,
  */
 LZ4LIB_API char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+
+/**
+ * @brief AOCL-Compression defined destroy function for lz4hc.
+ */
+LZ4LIB_API void aocl_destroy_lz4hc(void);
 
 /*-************************************
  *  Streaming Compression
@@ -536,7 +539,7 @@ LZ4LIB_API int LZ4_compress_HC_continue_destSize(LZ4_streamHC_t* LZ4_streamHCPtr
 */
 LZ4LIB_API int LZ4_saveDictHC (LZ4_streamHC_t* streamHCPtr, char* safeBuffer, int maxDictSize);
 
-#ifdef AOCL_LZ4HC_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 /* Wrapper functions for (static inlined) functions which require unit testing. */
 LZ4LIB_API int Test_LZ4HC_countBack(const LZ4_byte* const ip, const LZ4_byte* const match,
                     const LZ4_byte* const iMin, const LZ4_byte* const mMin);
@@ -730,12 +733,10 @@ LZ4LIB_API LZ4_streamHC_t* LZ4_initStreamHC(void* buffer, size_t size);
 LZ4LIB_API AOCL_LZ4_streamHC_t* AOCL_LZ4_initStreamHC(void* buffer, size_t size);
 #endif /* AOCL_LZ4HC_OPT */
 
-#ifdef AOCL_LZ4HC_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 /* Test wrapper function AOCL_LZ4HC_init_internal for unit testing */
 LZ4LIB_API void Test_AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, const LZ4_byte* start);
-#endif
 
-#ifdef AOCL_LZ4HC_UNIT_TEST
 /* Test wrapper function of AOCL_LZ4HC_Insert for unit testing */
 LZ4LIB_API void Test_AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const LZ4_byte* ip, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz);
 #endif
@@ -746,7 +747,7 @@ typedef enum { noDictCtx, usingDictCtxHc } dictCtx_directive;
 typedef enum { favorCompressionRatio = 0, favorDecompressionSpeed } HCfavor_e;
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
-#ifdef AOCL_LZ4HC_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 /* Test wrapper function of AOCL_LZ4HC_InsertAndGetWiderMatch for unit testing */
 LZ4LIB_API int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
     AOCL_LZ4HC_CCtx_internal* hc4,
@@ -763,7 +764,7 @@ LZ4LIB_API int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
     const HCfavor_e favorDecSpeed,
     int Hash_Chain_Max,
     int Hash_Chain_Slot_Sz);
-#endif  /* AOCL_LZ4HC_OPT */
+#endif /* AOCL_UNIT_TEST */
 
 /**
  * @}
