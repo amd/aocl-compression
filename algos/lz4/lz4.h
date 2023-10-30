@@ -198,7 +198,7 @@ LZ4LIB_API const char* LZ4_versionString (void);
  *  |Result | Description                                                                                           |
  *  |:------|:------------------------------------------------------------------------------------------------------|
  *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst.|
- *  |Fail   | Returns <= 0.                                                                                         |
+ *  |Fail   | Returns 0.                                                                                            |
  *
  */
 LZ4LIB_API int LZ4_compress_default(const char* src, char* dst, int srcSize, int dstCapacity);
@@ -305,7 +305,7 @@ LZ4LIB_API int LZ4_compressBound(int inputSize);
  *  |Result | Description                                                                                            |
  *  |:------|:-------------------------------------------------------------------------------------------------------|   
  *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst. |
- *  |Fail   | Returns <= 0.                                                                                          |
+ *  |Fail   | Returns 0.                                                                                             |
 */
 LZ4LIB_API int LZ4_compress_fast (const char* src, char* dst, int srcSize, int dstCapacity, int acceleration);
 
@@ -339,7 +339,7 @@ LZ4LIB_API int LZ4_sizeofState(void);
  *  |Result | Description                                                                                            |
  *  |:------|:----------- -------------------------------------------------------------------------------------------|
  *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst. |
- *  |Fail   | Returns <= 0.                                                                                          |
+ *  |Fail   | Returns 0.                                                                                             |
  */
 LZ4LIB_API int LZ4_compress_fast_extState (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int acceleration);
 
@@ -369,7 +369,7 @@ LZ4LIB_API int LZ4_compress_fast_extState (void* state, const char* src, char* d
  *  |Result | Description                                                                                            |
  *  |:------|:----------- -------------------------------------------------------------------------------------------|
  *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst. |
- *  |Fail   | Returns <= 0.                                                                                          |
+ *  |Fail   | Returns 0.                                                                                             |
  */
 LZ4LIB_API int AOCL_LZ4_compress_fast_extState(void* state, const char* source,
     char* dest, int inputSize,
@@ -570,6 +570,7 @@ LZ4LIB_API void LZ4_resetStream_fast (LZ4_stream_t* streamPtr);
  *  |Result | Description                                            |
  *  |:------|:-------------------------------------------------------|
  *  |Success|Loaded dictionary size, in bytes (<= 64 KB).            |
+ *  |Fail   |-1 if (streamPtr == NULL) or (dictionary == NULL && dictSize >= sizeof(reg_t)).|
  */
 LZ4LIB_API int LZ4_loadDict (LZ4_stream_t* streamPtr, const char* dictionary, int dictSize);
 

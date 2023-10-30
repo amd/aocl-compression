@@ -264,6 +264,7 @@ typedef enum
 * |:-----------|:------------|
 * | Success    |SZ_OK                                          |
 * | Fail       |SZ_ERROR_MEM         - Memory allocation error |
+* | ^          |SZ_ERROR_PARAM       - Incorrect parameter     |
 * | ^          |SZ_ERROR_UNSUPPORTED - Unsupported properties  |
 * 
 */
@@ -297,6 +298,7 @@ LZMALIB_API void LzmaDec_FreeProbs(CLzmaDec* p, ISzAllocPtr alloc);
 * |:-----------|:------------|
 * | Success    |SZ_OK                                          |
 * | Fail       |SZ_ERROR_MEM         - Memory allocation error |
+* | ^          |SZ_ERROR_PARAM       - Incorrect parameter     |
 * | ^          |SZ_ERROR_UNSUPPORTED - Unsupported properties  |
 * 
 */
@@ -397,6 +399,7 @@ Returns:
 * |:-----------|:------------|
 * | Success    |SZ_OK                      |
 * | Fail       |SZ_ERROR_DATA - Data error |
+* | ^          |SZ_ERROR_PARAM       - Incorrect parameter |
 * | ^          |SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure  |
 * 
 */
@@ -478,6 +481,7 @@ Returns:
 * | Success    |SZ_OK                      |
 * | Fail       |SZ_ERROR_DATA - Data error |
 * | ^          |SZ_ERROR_MEM  - Memory allocation error  |
+* | ^          |SZ_ERROR_PARAM       - Incorrect parameter |
 * | ^          |SZ_ERROR_UNSUPPORTED - Unsupported properties |
 * | ^          |SZ_ERROR_INPUT_EOF - It needs more bytes in input buffer (src) |
 * | ^          |SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure  |

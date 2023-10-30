@@ -5276,8 +5276,8 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
                          const void* dict,size_t dictSize,
                                ZSTD_parameters params)
 {
-    if (cctx == NULL || (dst == NULL || src == NULL))
-        return -1;
+    if (cctx == NULL || src == NULL) return ERROR(GENERIC);
+    if (dst == NULL) return ERROR(dstBuffer_null);
 
     DEBUGLOG(4, "ZSTD_compress_advanced");
     FORWARD_IF_ERROR(ZSTD_checkCParams(params.cParams), "");
@@ -5325,7 +5325,9 @@ size_t ZSTD_compressCCtx(ZSTD_CCtx* cctx,
                          int compressionLevel)
 {
     DEBUGLOG(4, "ZSTD_compressCCtx (srcSize=%u)", (unsigned)srcSize);
-    if (src == NULL || dst == NULL) return -1;
+    if (src == NULL) return ERROR(GENERIC);
+    if (dst == NULL) return ERROR(dstBuffer_null);
+
     assert(cctx != NULL);
     return ZSTD_compress_usingDict(cctx, dst, dstCapacity, src, srcSize, NULL, 0, compressionLevel);
 }

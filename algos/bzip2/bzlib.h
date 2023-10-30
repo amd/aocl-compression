@@ -282,6 +282,7 @@ BZ_EXTERN int BZ_API(BZ2_bzDecompressInit) (
 * |:-----------|:------------|
 * | Success    | `BZ_OK`     |
 * | Fail       | `BZ_PARAM_ERROR` - If strm is NULL or strm->s is NULL or strm->avail_out < 1 |
+* | ^          | `BZ_SEQUENCE_ERROR` - If s->state is BZ_X_IDLE |
 * | ^          | `BZ_DATA_ERROR` - If a data integrity error is detected in the compressed stream |
 * | ^          | `BZ_DATA_ERROR_MAGIC` - If the compressed stream doesn't begin with the right magic bytes |
 * | ^          | `BZ_MEM_ERROR` - If available memory is insufficient. |

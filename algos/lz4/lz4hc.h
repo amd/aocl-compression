@@ -449,7 +449,12 @@ LZ4LIB_API void AOCL_LZ4_resetStreamHC_fast(AOCL_LZ4_streamHC_t* streamHCPtr, in
  *  | \b dictionary  | in,out | Dictionary buffer. |
  *  | \b dictSize    | in     | Size of dictionary. |
  * 
- * @return  Loaded dictionary size, in bytes (necessarily <= 64 KB).
+ * @return
+ *  | Result    | Description  |
+ *  |:----------|:-------------|
+ *  | Success   | Loaded dictionary size, in bytes (necessarily <= 64 KB). |
+ *  | Fail      | 0  if streamHCPtr is NULL or dictionary is NULL. |
+ * 
 */
 LZ4LIB_API int  LZ4_loadDictHC (LZ4_streamHC_t* streamHCPtr, const char* dictionary, int dictSize);
 
@@ -736,8 +741,10 @@ LZ4LIB_API void Test_AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const LZ4_
 #endif
 
 /*===   Enums   ===*/
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 typedef enum { noDictCtx, usingDictCtxHc } dictCtx_directive;
 typedef enum { favorCompressionRatio = 0, favorDecompressionSpeed } HCfavor_e;
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 #ifdef AOCL_LZ4HC_UNIT_TEST
 /* Test wrapper function of AOCL_LZ4HC_InsertAndGetWiderMatch for unit testing */

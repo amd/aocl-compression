@@ -42,7 +42,7 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
                       uLong sourceLen, int level) {
     if(destLen == NULL)
     {
-        return Z_STREAM_ERROR;
+        return Z_BUF_ERROR;
     }
     
     z_stream stream;

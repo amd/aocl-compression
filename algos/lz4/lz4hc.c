@@ -1694,7 +1694,7 @@ LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal (
 /* This function is AOCL variant of LZ4HC_compress_generic_internal() 
  * which uses Cache Efficient Hash Chain for performance improvement. 
  * This strategy is implemented for compression level 6, 7, 8 and 9. 
- * This function will return -1 if called for other compression levels. */
+ * This function will return 0 if called for other compression levels. */
 #ifdef AOCL_LZ4HC_OPT
 LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_generic_internal(
     AOCL_LZ4HC_CCtx_internal* const ctx,
@@ -1740,7 +1740,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_generic_internal(
                     256, limit, dict, 127, 128);
                 break;
             default:
-                result = -1;
+                result = 0;
                 break;
             }
     if (result <= 0) ctx->dirty = 1;
@@ -1832,7 +1832,7 @@ AOCL_LZ4HC_compress_generic_dictCtx(
 )
 {
     const size_t position = (size_t)(ctx->end - ctx->base) - ctx->lowLimit;
-    if (cLevel < 6 || cLevel > 9) return -1;
+    if (cLevel < 6 || cLevel > 9) return 0;
     assert(ctx->dictCtx != NULL);
     if (position >= 64 KB) {
         ctx->dictCtx = NULL;
@@ -1927,7 +1927,7 @@ static size_t AOCL_LZ4_streamHC_t_alignment(void)
 int LZ4_compress_HC_extStateHC_fastReset (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
     if(state==NULL || (src==NULL && srcSize!=0) || dst==NULL)
-        return -1;
+        return 0;
     LZ4HC_CCtx_internal* const ctx = &((LZ4_streamHC_t*)state)->internal_donotuse;
     if (!LZ4_isAligned(state, LZ4_streamHC_t_alignment())) return 0;
     LZ4_resetStreamHC_fast((LZ4_streamHC_t*)state, compressionLevel);
@@ -1947,7 +1947,7 @@ int LZ4_compress_HC_extStateHC_fastReset (void* state, const char* src, char* ds
 int AOCL_LZ4_compress_HC_extStateHC_fastReset(void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
     if (state == NULL || (src == NULL && srcSize != 0) || dst == NULL)
-        return -1;
+        return 0;
     AOCL_LZ4HC_CCtx_internal* const ctx = &((AOCL_LZ4_streamHC_t*)state)->internal_donotuse;
     if (!LZ4_isAligned(state, AOCL_LZ4_streamHC_t_alignment())) return 0;
     AOCL_LZ4_resetStreamHC_fast((AOCL_LZ4_streamHC_t*)state, compressionLevel);
@@ -2037,7 +2037,7 @@ else
 int LZ4_compress_HC_destSize(void* state, const char* source, char* dest, int* sourceSizePtr, int targetDestSize, int cLevel)
 {
     if(state==NULL || source==NULL || dest==NULL || sourceSizePtr==NULL)
-        return -1;
+        return 0;
     LZ4_streamHC_t* const ctx = LZ4_initStreamHC(state, sizeof(*ctx));
     if (ctx==NULL) return 0;   /* init failure */
     LZ4HC_init_internal(&ctx->internal_donotuse, (const BYTE*) source);
@@ -2201,7 +2201,7 @@ int LZ4_loadDictHC (LZ4_streamHC_t* LZ4_streamHCPtr,
               const char* dictionary, int dictSize)
 {
     if(LZ4_streamHCPtr==NULL || dictionary==NULL)
-        return -1;
+        return 0;
     LZ4HC_CCtx_internal* const ctxPtr = &LZ4_streamHCPtr->internal_donotuse;
     DEBUGLOG(4, "LZ4_loadDictHC(ctx:%p, dict:%p, dictSize:%d)", LZ4_streamHCPtr, dictionary, dictSize);
     assert(LZ4_streamHCPtr != NULL);
@@ -2272,7 +2272,7 @@ LZ4_compressHC_continue_generic (LZ4_streamHC_t* LZ4_streamHCPtr,
                                  limitedOutput_directive limit)
 {
     if(LZ4_streamHCPtr==NULL || src==NULL || dst==NULL)
-        return -1;
+        return 0;
     LZ4HC_CCtx_internal* const ctxPtr = &LZ4_streamHCPtr->internal_donotuse;
     DEBUGLOG(5, "LZ4_compressHC_continue_generic(ctx=%p, src=%p, srcSize=%d, limit=%d)",
                 LZ4_streamHCPtr, src, *srcSizePtr, limit);
@@ -2327,7 +2327,7 @@ int LZ4_compress_HC_continue_destSize (LZ4_streamHC_t* LZ4_streamHCPtr, const ch
 int LZ4_saveDictHC (LZ4_streamHC_t* LZ4_streamHCPtr, char* safeBuffer, int dictSize)
 {
     if(LZ4_streamHCPtr == NULL || (safeBuffer == NULL && dictSize != 0))
-        return -1;
+        return 0;
     LZ4HC_CCtx_internal* const streamPtr = &LZ4_streamHCPtr->internal_donotuse;
     int const prefixSize = (int)(streamPtr->end - (streamPtr->base + streamPtr->dictLimit));
     DEBUGLOG(5, "LZ4_saveDictHC(%p, %p, %d)", LZ4_streamHCPtr, safeBuffer, dictSize);

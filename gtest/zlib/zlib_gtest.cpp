@@ -301,10 +301,10 @@ TEST(ZLIB_inflateEnd, Z_STREAM_ERROR_)
 
 TEST(ZLIB_compressBound, basic)
 {
-  EXPECT_EQ(compressBound(0), 13);  // AOCL_compressBoundion_zlib_compressBound_common_1
-  EXPECT_EQ(compressBound(1 << 13), 8207);  // AOCL_compressBoundion_zlib_compressBound_common_2
-  EXPECT_EQ(compressBound(1 << 15), 32791); // AOCL_compressBoundion_zlib_compressBound_common_3
-  EXPECT_EQ(compressBound(1 << 26), 67129359);  // AOCL_compressBoundion_zlib_compressBound_common_4
+  EXPECT_EQ(compressBound(0), 13);  // AOCL_compression_zlib_compressBound_common_1
+  EXPECT_EQ(compressBound(1 << 13), 8207);  // AOCL_compression_zlib_compressBound_common_2
+  EXPECT_EQ(compressBound(1 << 15), 32791); // AOCL_compression_zlib_compressBound_common_3
+  EXPECT_EQ(compressBound(1 << 26), 67129359);  // AOCL_compression_zlib_compressBound_common_4
 }
 
 class ZLIB_compress : public AOCL_setup_zlib {
@@ -317,7 +317,7 @@ TEST_F(ZLIB_compress, fail_cases)
   Bytef *dest = (Bytef *)malloc(destLen);
 
   EXPECT_EQ(compress(NULL, &destLen, (Bytef *)c, 11), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress_common_1
-  EXPECT_EQ(compress(dest,NULL,(Bytef*)c,10),Z_STREAM_ERROR); // AOCL_Compression_zlib_compress_common_2
+  EXPECT_EQ(compress(dest,NULL,(Bytef*)c,10),Z_BUF_ERROR); // AOCL_Compression_zlib_compress_common_2
   EXPECT_EQ(compress(dest, &destLen, NULL, 10), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress_common_3
   EXPECT_EQ(compress(dest, &destLen, (Bytef *)c, 0), Z_BUF_ERROR);  // AOCL_Compression_zlib_compress_common_4
 
@@ -376,7 +376,7 @@ TEST_F(ZLIB_compress2, fail_cases)
   Bytef* dest = (Bytef*)malloc(destLen * sizeof(destLen));
 
   EXPECT_EQ(compress2(NULL, &destLen, src, srcLen, 6), Z_STREAM_ERROR); // AOCL_Compression_zlib_compress2_common_1
-  EXPECT_EQ(compress2(dest,NULL,src,srcLen,6),Z_STREAM_ERROR); // AOCL_Compression_zlib_compress2_common_2
+  EXPECT_EQ(compress2(dest,NULL,src,srcLen,6),Z_BUF_ERROR); // AOCL_Compression_zlib_compress2_common_2
   EXPECT_EQ(compress2(dest, &destLen, NULL, srcLen, 6), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_3
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, -2), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_4
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, 23), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_5
@@ -449,9 +449,9 @@ TEST_F(ZLIB_uncompress2, fail_cases)
   uncompressLen = 3;
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_3
   EXPECT_EQ(uncompress2(NULL, &uncompressLen, compressed, &compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_4
-  EXPECT_EQ(uncompress2(uncompressed,NULL,compressed,&compressedLen),Z_STREAM_ERROR); // AOCL_Compression_zlib_uncompress2_common_5
+  EXPECT_EQ(uncompress2(uncompressed,NULL,compressed,&compressedLen),Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_5
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, NULL, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_6
-  EXPECT_EQ(uncompress2(uncompressed,&uncompressLen,compressed,NULL),Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
+  EXPECT_EQ(uncompress2(uncompressed,&uncompressLen,compressed,NULL),Z_BUF_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
 }
 
 TEST_F(ZLIB_uncompress2, pass)
@@ -494,7 +494,7 @@ TEST_F(ZLIB_uncompress, fail_cases)
   uncompressLen = 3;
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress_common_3
   EXPECT_EQ(uncompress(NULL, &uncompressLen, compressed, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_4
-  EXPECT_EQ(uncompress(uncompressed, NULL, compressed, compressedLen),Z_STREAM_ERROR); // AOCL_Compression_zlib_uncompress_common_5
+  EXPECT_EQ(uncompress(uncompressed, NULL, compressed, compressedLen),Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress_common_5
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, NULL, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, 0), Z_DATA_ERROR); // AOCL_Compression_zlib_uncompress_common_7
 }

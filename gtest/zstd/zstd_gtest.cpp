@@ -216,14 +216,19 @@ class ZSTD_ZSTD_compress : public AOCL_setup_zstd {
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_1) // compress_FAIL_src_is_NULL
 {
     TestLoad_2 d(8000);
-    
-    EXPECT_EQ(Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), NULL, d.getOrigSize(), 1), -1);
+
+    // ZSTD_error_GENERIC
+    size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), NULL, d.getOrigSize(), 1);
+    EXPECT_TRUE(Test_ZSTD_isError(outLen));
 }
 
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_2) // Compress_FAIL_dst_is_NULL
 {
     TestLoad_2 d(800);
-    EXPECT_EQ(Test_ZSTD_compress(NULL, d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), 1), -1);
+
+    // ZSTD_error_dstBuffer_null
+    size_t outLen = Test_ZSTD_compress(NULL, d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), 1);
+    EXPECT_TRUE(Test_ZSTD_isError(outLen));
 }
 
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_3 ) // compress_PASS
@@ -346,12 +351,16 @@ public:
 
 TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_1) // src_NULL
 {
-    EXPECT_EQ(Test_ZSTD_decompress(output, Test_ZSTD_decompressBound(src, srcLen), NULL, srcLen), -1);
+    // ZSTD_error_GENERIC
+    size_t decLen = Test_ZSTD_decompress(output, Test_ZSTD_decompressBound(src, srcLen), NULL, srcLen);
+    EXPECT_TRUE(Test_ZSTD_isError(decLen));
 }
 
 TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_2) // dst_NULL
 {
-    EXPECT_EQ(Test_ZSTD_decompress(NULL, Test_ZSTD_decompressBound(src, srcLen), src, srcLen), -1);
+    // ZSTD_error_dstBuffer_null
+    size_t decLen = Test_ZSTD_decompress(NULL, Test_ZSTD_decompressBound(src, srcLen), src, srcLen);
+    EXPECT_TRUE(Test_ZSTD_isError(decLen));
 }
 
 TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_3) // successfull_decompression
@@ -606,17 +615,23 @@ public:
 
 TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_1) // dctx_NULL
 {
-    EXPECT_EQ(Test_ZSTD_decompressDCtx(NULL, output, Test_ZSTD_decompressBound(src, srcLen), src, srcLen), -1);
+    // ZSTD_error_GENERIC
+    int decLen = Test_ZSTD_decompressDCtx(NULL, output, Test_ZSTD_decompressBound(src, srcLen), src, srcLen);
+    EXPECT_TRUE(Test_ZSTD_isError(decLen));
 }
 
 TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_2) // src_NULL
 {
-    EXPECT_EQ(Test_ZSTD_decompressDCtx(dctx, output, Test_ZSTD_decompressBound(src, srcLen), NULL, srcLen), -1);
+    // ZSTD_error_GENERIC
+    int decLen = Test_ZSTD_decompressDCtx(dctx, output, Test_ZSTD_decompressBound(src, srcLen), NULL, srcLen);
+    EXPECT_TRUE(Test_ZSTD_isError(decLen));
 }
 
 TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_3) // dst_NULL
 {
-    EXPECT_EQ(Test_ZSTD_decompressDCtx(dctx, NULL, Test_ZSTD_decompressBound(src, srcLen), src, srcLen), -1);
+    // ZSTD_error_dstBuffer_null
+    int decLen = Test_ZSTD_decompressDCtx(dctx, NULL, Test_ZSTD_decompressBound(src, srcLen), src, srcLen);
+    EXPECT_TRUE(Test_ZSTD_isError(decLen));
 }
 
 TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_4) // successfull_decompression
