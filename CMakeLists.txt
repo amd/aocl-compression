@@ -536,6 +536,35 @@ install(FILES ${INC_FILES} DESTINATION ${DEST_INC_PATH})
 if (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL)
     install(DIRECTORY ${INC_XZ_UTILS_LZMA} DESTINATION ${DEST_INC_PATH} FILES_MATCHING PATTERN "*.h")
 endif()
+
+#Create symbolic links from expected library names to aocl library
+function(create_sym_link_to_lib sym_name)
+	file(TO_CMAKE_PATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}" DIR_SYM_INSTALL)
+	if(WIN32)
+		install(CODE "execute_process(COMMAND cmd /c echo Creating symbolic link ${sym_name}.dll to ${lib_name}.dll)")
+		install(CODE "execute_process( \
+		COMMAND cmd /c if exist ${sym_name}.dll del ${sym_name}.dll \
+		WORKING_DIRECTORY ${DIR_SYM_INSTALL})")
+		install(CODE "execute_process( \
+		COMMAND cmd /c mklink /H ${sym_name}.dll ${lib_name}.dll \
+		WORKING_DIRECTORY ${DIR_SYM_INSTALL})")
+	else()
+		install(CODE "execute_process(COMMAND echo Creating symbolic link ${sym_name}.so to ${lib_name}.so)")
+		install(CODE "execute_process( \
+		COMMAND rm -f ${sym_name}.so \
+		WORKING_DIRECTORY ${DIR_SYM_INSTALL})")
+		install(CODE "execute_process( \
+		COMMAND ln -s lib${lib_name}.so ${sym_name}.so \
+		WORKING_DIRECTORY ${DIR_SYM_INSTALL})")
+	endif()
+endfunction()
+create_sym_link_to_lib(libbz2)
+create_sym_link_to_lib(libz)
+create_sym_link_to_lib(liblz4)
+create_sym_link_to_lib(libsnappy)
+create_sym_link_to_lib(liblzma)
+create_sym_link_to_lib(libzstd)
+
 if((NOT BUILD_STATIC_LIBS) AND WIN32 AND AOCL_TEST_COVERAGE)
 	add_custom_command(
 		TARGET ${lib_name}
