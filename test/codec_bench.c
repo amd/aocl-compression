@@ -155,6 +155,29 @@ INTP get_codec_method_level(CHAR *str,
     return 0;
 }
 
+void read_file_name(CHAR* dst, const CHAR* src) {
+    UINTP src_sz = strlen(src);
+    if (src_sz > (MAX_FILENAME_LEN - 1)) { 
+        memcpy(dst, src, MAX_FILENAME_LEN - 1); // truncate
+        dst[MAX_FILENAME_LEN - 1] = '\0';
+    }
+    else {
+        strcpy(dst, src);
+    }
+}
+
+void append_file_name_ext(CHAR* dst, const CHAR* ext) {
+    UINTP cur_sz = strlen(dst);
+    UINTP ext_sz = strlen(ext);
+    if ((cur_sz + ext_sz) > (MAX_FILENAME_LEN - 1)) {
+        // truncate. Else it will overflow
+        strcpy(dst + (MAX_FILENAME_LEN - 1 - ext_sz), ext);
+    }
+    else {
+        strcpy(dst + cur_sz, ext);
+    }
+}
+
 INTP read_user_options (INTP argc, 
                        CHAR **argv, 
                        aocl_codec_bench_info *codec_bench_handle)
@@ -299,7 +322,7 @@ INTP read_user_options (INTP argc,
                         ret = ERR_CODEC_BENCH_ARGS;
                         break;
                     }
-                    memcpy(dumpFile, &argv[cnt][2], MAX_FILENAME_LEN);
+                    read_file_name(dumpFile, &argv[cnt][2]);
                     dumpEnabled = 1;
                     break;
 
@@ -310,7 +333,7 @@ INTP read_user_options (INTP argc,
                         ret = ERR_CODEC_BENCH_ARGS;
                         break;
                     }
-                    memcpy(valFile, &argv[cnt][2], MAX_FILENAME_LEN);
+                    read_file_name(valFile, &argv[cnt][2]);
                     valEnabled = 1;
                     break;
  
@@ -324,7 +347,7 @@ INTP read_user_options (INTP argc,
             if (!fileIn)
             {
                 CHAR *tmpStr;
-                memcpy(inFile, argv[cnt], MAX_FILENAME_LEN);
+                read_file_name(inFile, argv[cnt]);
 #ifdef _WINDOWS
                 tmpStr = strrchr(inFile, '\\');
 #else
@@ -469,7 +492,7 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 if (dumpEnabled && k == 0 /* dump only during 1st iteration */) 
                 {
                     // dump compressed data to file
-                    size_t written = fwrite(aocl_codec_handle->outBuf, sizeof(char), resultComp,
+                    UINTP written = fwrite(aocl_codec_handle->outBuf, sizeof(CHAR), resultComp,
                         codec_bench_handle->dumpFp);
                     if (written < resultComp) 
                     {
@@ -574,7 +597,7 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             if (dumpEnabled && k == 0 /* dump only during 1st iteration */) 
             {
                 // dump decompressed data to file
-                size_t written = fwrite(aocl_codec_handle->outBuf, sizeof(char), resultDecomp,
+                UINTP written = fwrite(aocl_codec_handle->outBuf, sizeof(CHAR), resultDecomp,
                     codec_bench_handle->dumpFp);
                 if (written < resultDecomp) 
                 {
@@ -900,17 +923,13 @@ INT32 main (INT32 argc, CHAR **argv)
         else 
         {
             // append extension
-            size_t len = strlen(dumpFile);
-            if (len > (MAX_FILENAME_LEN - 8)) len = (MAX_FILENAME_LEN - 8);
             if (codec_bench_handle.runOperation == RUN_OPERATION_DECOMPRESS) 
             {
-                memcpy(dumpFile + len, ".decomp\0", 8);
+                append_file_name_ext(dumpFile, ".decomp");
             }
             else 
             {
-                size_t ext_len = strlen(codec_list[codec_bench_handle.codec_method].extension);
-                memcpy(dumpFile + len, codec_list[codec_bench_handle.codec_method].extension, ext_len);
-                dumpFile[len + ext_len] = '\0';
+                append_file_name_ext(dumpFile, codec_list[codec_bench_handle.codec_method].extension);
             }
             // open file to dump compressed/decompressed data
             if (!(dumpFp = fopen(dumpFile, "wb")))
