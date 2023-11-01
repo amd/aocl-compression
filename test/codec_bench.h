@@ -68,6 +68,12 @@
 #define RUN_OPERATION_COMPRESS 1    // run compress only
 #define RUN_OPERATION_DECOMPRESS 2  // run decompress only
 
+//Error codes
+#define ERR_CODEC_BENCH_ARGS -1
+#define ERR_CODEC_BENCH_METHOD -2
+#define ERR_CODEC_BENCH_FILE_IO -3
+#define ERR_CODEC_BENCH_MEM -4
+
 //Data structure for storing levels and other parametric details of compressors
 typedef struct
 {

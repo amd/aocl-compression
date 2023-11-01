@@ -44,11 +44,6 @@
 #include "utils/utils.h"
 #include "codec_bench.h"
 
-//Error codes
-#define ERR_CODEC_BENCH_ARGS -1
-#define ERR_CODEC_BENCH_METHOD -2
-#define ERR_CODEC_BENCH_FILE_IO -3
-#define ERR_CODEC_BENCH_MEM -4
 
 //Input test file name
 CHAR inFile[MAX_FILENAME_LEN];
@@ -450,8 +445,8 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     codec_bench_handle->cSize = 0;
     codec_bench_handle->dTime = 0;
     codec_bench_handle->dSize = 0;
-    codec_bench_handle->cBestTime = 0;
-    codec_bench_handle->dBestTime = 0;
+    codec_bench_handle->cBestTime = UINT64_MAX;
+    codec_bench_handle->dBestTime = UINT64_MAX;
     aocl_codec_handle->level = level;
 
     //setup the codec method
@@ -464,6 +459,8 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
     for (INTP k = 0; k < codec_bench_handle->iterations; k++)
     {
+        UINT64 temp_cTime = 0;
+        UINT64 temp_dTime = 0;
         inSize = codec_bench_handle->inSize;
         file_size = codec_bench_handle->file_size;
 
@@ -540,30 +537,28 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     // compression stats
                     codec_bench_handle->cTime += aocl_codec_handle->cTime;
                     codec_bench_handle->cSize += aocl_codec_handle->cSize;
-                    codec_bench_handle->cBestTime =
-                        (codec_bench_handle->cBestTime == 0) ?
-                        aocl_codec_handle->cTime :
-                        (codec_bench_handle->cBestTime >
-                            aocl_codec_handle->cTime) ?
-                        aocl_codec_handle->cTime :
-                        codec_bench_handle->cBestTime;
+                    temp_cTime += aocl_codec_handle->cTime;
 
                     if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT) 
                     {
                         // decompression stats if both are enabled
                         codec_bench_handle->dTime += aocl_codec_handle->dTime;
                         codec_bench_handle->dSize += aocl_codec_handle->dSize;
-                        codec_bench_handle->dBestTime =
-                            (codec_bench_handle->dBestTime == 0) ?
-                            aocl_codec_handle->dTime :
-                            (codec_bench_handle->dBestTime >
-                                aocl_codec_handle->dTime) ?
-                            aocl_codec_handle->dTime :
-                            codec_bench_handle->dBestTime;
+                        temp_dTime += aocl_codec_handle->dTime;
                     }
                 }
                 file_size -= inSize;
                 inSize = (file_size > inSize) ? inSize : file_size;
+            }
+            if (codec_bench_handle->print_stats)
+            {
+                codec_bench_handle->cBestTime = temp_cTime < codec_bench_handle->cBestTime ?
+                    temp_cTime : codec_bench_handle->cBestTime;
+                if(codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT)
+                {
+                    codec_bench_handle->dBestTime = temp_dTime < codec_bench_handle->dBestTime ?
+                        temp_dTime : codec_bench_handle->dBestTime;
+                }
             }
         }
         else 
@@ -636,13 +631,13 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             { // decompression stats
                 codec_bench_handle->dTime += aocl_codec_handle->dTime;
                 codec_bench_handle->dSize += aocl_codec_handle->dSize;
-                codec_bench_handle->dBestTime =
-                    (codec_bench_handle->dBestTime == 0) ?
-                    aocl_codec_handle->dTime :
-                    (codec_bench_handle->dBestTime >
-                        aocl_codec_handle->dTime) ?
-                    aocl_codec_handle->dTime :
-                    codec_bench_handle->dBestTime;
+                temp_dTime += aocl_codec_handle->dTime;
+            }
+
+            if (codec_bench_handle->print_stats)
+            {
+                codec_bench_handle->dBestTime = temp_dTime < codec_bench_handle->dBestTime ?
+                                                    temp_dTime : codec_bench_handle->dBestTime;
             }
         }
 
@@ -682,11 +677,11 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
             codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS) 
         {
-            codec_bench_handle->cSpeed = (codec_bench_handle->inSize *
+            codec_bench_handle->cSpeed = (codec_bench_handle->file_size *
                 codec_bench_handle->iterations * 1000.0) /
                 codec_bench_handle->cTime;
             codec_bench_handle->cBestSpeed =
-                (codec_bench_handle->inSize * 1000.0) /
+                (codec_bench_handle->file_size * 1000.0) /
                 codec_bench_handle->cBestTime;
             printf("Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
                 codec_bench_handle->cSpeed,
@@ -700,12 +695,22 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
             codec_bench_handle->runOperation == RUN_OPERATION_DECOMPRESS) 
         {
-            codec_bench_handle->dSpeed = (codec_bench_handle->inSize *
-                codec_bench_handle->iterations * 1000.0) /
-                codec_bench_handle->dTime;
-            codec_bench_handle->dBestSpeed =
-                (codec_bench_handle->inSize * 1000.0) /
-                codec_bench_handle->dBestTime;
+            if(codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT)
+            {
+                codec_bench_handle->dSpeed = (codec_bench_handle->file_size *
+                    codec_bench_handle->iterations * 1000.0) /
+                    codec_bench_handle->dTime;
+                codec_bench_handle->dBestSpeed = (codec_bench_handle->file_size * 1000.0) /
+                    codec_bench_handle->dBestTime;
+            }
+            else
+            {
+                codec_bench_handle->dSpeed = (resultDecomp *
+                    codec_bench_handle->iterations * 1000.0) /
+                    codec_bench_handle->dTime;
+                codec_bench_handle->dBestSpeed = (resultDecomp * 1000.0) /
+                    codec_bench_handle->dBestTime;
+            }
             printf("Decompression:       speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
                 codec_bench_handle->dSpeed,
                 codec_bench_handle->dTime /
@@ -721,7 +726,7 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             printf("Ratio:               %.2f\n",
                 (((codec_bench_handle->cSize * 100.0) /
                     codec_bench_handle->iterations) /
-                    codec_bench_handle->inSize));
+                    codec_bench_handle->file_size));
         }
     }
 

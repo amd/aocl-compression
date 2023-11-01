@@ -5,6 +5,7 @@ The following test program shows the sample usage and calling sequence of aocl -
 
 ```C
 #include <stdio.h> 
+#include <cstdlib>
 #include "aocl_compression.h"
 
 int main (int argc, char **argv)
