@@ -34,7 +34,7 @@
 #define OPT_send_bits(s, c, v) \
     { if (zlibOptOff == 1) { send_bits((s), (c), (v)); } else { AOCL_send_bits((s), (c), (v)); } }
 
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
 #ifndef ZLIB_DEBUG
 #  define send_code(s, c, tree) OPT_send_bits(s, tree[c].Code, tree[c].Len);
  /* Send a code of the given tree. c and tree must not have side effects */
@@ -44,7 +44,7 @@
      { if (z_verbose>2) fprintf(stderr,"\ncd %3d ",(c)); \
        OPT_send_bits(s, tree[c].Code, tree[c].Len); }
 #endif
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE_3 */
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 
 
 /* ===========================================================================

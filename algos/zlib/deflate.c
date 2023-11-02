@@ -94,7 +94,7 @@ local block_state aocl_deflate_fast_v2(deflate_state *s, int flush);
 local block_state aocl_deflate_slow_v1(deflate_state *s, int flush);
 local block_state aocl_deflate_slow_v2(deflate_state *s, int flush);
 extern block_state deflate_medium(deflate_state *s, int flush);
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
 block_state (*aocl_deflate_lvl1_fp)(deflate_state *s, int flush) = deflate_fast;
 extern block_state deflate_quick(deflate_state *s, int flush);
 #endif
@@ -735,11 +735,6 @@ int ZEXPORT deflateInit2_(z_streamp strm, int level, int method,
         return Z_STREAM_ERROR;
     }
     if (windowBits == 8) windowBits = 9;  /* until 256-byte window bug fixed */
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
-    if (level == 1) {
-        windowBits = 13;
-    }
-#endif
 
 #ifdef AOCL_ZLIB_OPT
 if(level > 5)
@@ -841,11 +836,6 @@ else
     // initializing the dynamic array prev to 0
     memset(s->prev, 0x00, s->w_size * sizeof(Pos));
     s->level = level;
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_2
-    if(s->level == 1)
-        s->strategy = Z_FIXED;
-    else
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE_2 */
     s->strategy = strategy;
     s->method = (Byte)method;
 
@@ -1166,6 +1156,10 @@ local void lm_init(deflate_state *s) {
     s->nice_match       = configuration_table_opt[s->level].nice_length;
     s->max_chain_length = configuration_table_opt[s->level].max_chain;
 #endif /* AOCL_DYNAMIC_DISPATCHER */
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
+    if(LIKELY(s->level == 1 && zlibOptOff==0))
+        s->max_chain_length = 8;
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 #endif /* AOCL_ZLIB_OPT */
 
     s->strstart = 0;
@@ -1704,7 +1698,7 @@ int ZEXPORT deflate(z_streamp strm, int flush) {
         block_state bstate;
 
         bstate = s->level == 0 ? deflate_stored(s, flush) :
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
                  s->level == 1 ? aocl_deflate_lvl1_fp(s, flush) :
 #endif
                  s->strategy == Z_HUFFMAN_ONLY ? deflate_huff(s, flush) :
@@ -3171,7 +3165,7 @@ ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv(int optOff, int optLevel, int insi
         aocl_fill_window_fp = aocl_fill_window_v2;
         aocl_deflate_fast_fp = aocl_deflate_fast_v2;
         aocl_deflate_slow_fp = aocl_deflate_slow_v2;
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
         aocl_deflate_lvl1_fp = deflate_quick;
 #endif
     }
@@ -3180,7 +3174,7 @@ ZEXTERN char * ZEXPORT aocl_setup_deflate_fmv(int optOff, int optLevel, int insi
         aocl_fill_window_fp = aocl_fill_window_v1;
         aocl_deflate_fast_fp = aocl_deflate_fast_v1;
         aocl_deflate_slow_fp = aocl_deflate_slow_v1;
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
         aocl_deflate_lvl1_fp = deflate_fast;
 #endif
     }

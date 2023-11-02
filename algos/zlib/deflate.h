@@ -456,7 +456,7 @@ extern uint32_t mask;
    if (s->strm->avail_out == 0) return (last) ? finish_started : need_more; \
 }
 
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
 #define END_BLOCK 256
 /* end of block literal code */
 
@@ -509,7 +509,7 @@ local void send_bits(deflate_state *s, int value, int length) {
   }\
 }
 #endif /* ZLIB_DEBUG */
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE_3 */
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 
 #endif /* AOCL_ZLIB_OPT */
 

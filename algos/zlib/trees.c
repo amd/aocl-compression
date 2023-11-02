@@ -49,7 +49,7 @@
 #define MAX_BL_BITS 7
 /* Bit length codes must not exceed MAX_BL_BITS bits */
 
-#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
 #define END_BLOCK 256
 #endif
 /* end of block literal code */
@@ -66,7 +66,11 @@
 local const int extra_lbits[LENGTH_CODES] /* extra bits for each length code */
    = {0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0};
 
+#if defined(AOCL_ZLIB_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
+const ZLIB_INTERNAL int extra_dbits[D_CODES] 
+#else
 local const int extra_dbits[D_CODES] /* extra bits for each distance code */
+#endif /* AOCL_ZLIB_UNIT_TEST */
    = {0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13};
 
 local const int extra_blbits[BL_CODES]/* extra bits for each bit length code */
@@ -87,7 +91,7 @@ local const uch bl_order[BL_CODES]
 #if defined(GEN_TREES_H) || !defined(STDC)
 /* non ANSI compilers may not accept trees.h */
 
-#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
 local ct_data static_ltree[L_CODES+2];
 #else
 ZLIB_INTERNAL ct_data static_ltree[L_CODES+2];
@@ -98,7 +102,11 @@ ZLIB_INTERNAL ct_data static_ltree[L_CODES+2];
  * below).
  */
 
+#if defined(AOCL_ZLIB_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
+ZLIB_INTERNAL ct_data static_dtree[D_CODES];
+#else
 local ct_data static_dtree[D_CODES];
+#endif /* AOCL_ZLIB_UNIT_TEST */
 /* The static distance tree. (Actually a trivial tree since all codes use
  * 5 bits.)
  */
@@ -115,7 +123,11 @@ uch _length_code[MAX_MATCH-MIN_MATCH+1];
 local int base_length[LENGTH_CODES];
 /* First normalized length for each code (0 = MIN_MATCH) */
 
+#if defined(AOCL_ZLIB_UNIT_TEST) && defined(AOCL_ZLIB_DEFLATE_FAST_MODE)
+ZLIB_INTERNAL int base_dist[D_CODES];
+#else
 local int base_dist[D_CODES];
+#endif /* AOCL_ZLIB_UNIT_TEST */
 /* First normalized distance for each code (0 = distance of 1) */
 
 #else
@@ -145,7 +157,7 @@ local TCONST static_tree_desc static_d_desc =
 local TCONST static_tree_desc static_bl_desc =
 {(const ct_data *)0, extra_blbits, 0,   BL_CODES, MAX_BL_BITS};
 
-#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
 /* ===========================================================================
  * Output a short LSB first on the stream.
  * IN assertion: there is enough room in pendingBuf.
@@ -154,7 +166,7 @@ local TCONST static_tree_desc static_bl_desc =
     put_byte(s, (uch)((w) & 0xff)); \
     put_byte(s, (uch)((ush)(w) >> 8)); \
 }
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE_3 */
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 
 /* ===========================================================================
  * Reverse the first len bits of a code, using straightforward code (a faster
@@ -222,7 +234,7 @@ local void AOCL_bi_flush(deflate_state * s) {
 /* ===========================================================================
  * Flush the bit buffer and align the output on a byte boundary
  */
-#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
 local void bi_windup(deflate_state *s) {
 #else
 void ZLIB_INTERNAL bi_windup(deflate_state *s) {
@@ -243,7 +255,7 @@ void ZLIB_INTERNAL bi_windup(deflate_state *s) {
 #ifdef AOCL_ZLIB_UNIT_TEST
 ZEXTERN void ZEXPORT AOCL_bi_windup(deflate_state *s) {
 #else
-#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
 local void AOCL_bi_windup(deflate_state *s) {
 #else
 void ZLIB_INTERNAL AOCL_bi_windup(deflate_state *s) {
@@ -340,7 +352,7 @@ ZEXTERN char* ZEXPORT aocl_setup_tree_fmv(int optOff, int optLevel, int insize,
     return NULL;
 }
 #endif
-#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
 #ifndef ZLIB_DEBUG
 #  define send_code(s, c, tree) OPT_send_bits(s, tree[c].Code, tree[c].Len)
    /* Send a code of the given tree. c and tree must not have side effects */
@@ -391,7 +403,7 @@ local void send_bits(deflate_state *s, int value, int length) {
   }\
 }
 #endif /* ZLIB_DEBUG */
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE_3 */
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 
 /* the arguments must not have side effects */
 
@@ -498,7 +510,7 @@ void gen_trees_header(void) {
     Assert (header != NULL, "Can't open trees.h");
     fprintf(header,
             "/* header created automatically with -DGEN_TREES_H */\n\n");
-#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE_3
+#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
     fprintf(header, "local const ct_data static_ltree[L_CODES+2] = {\n");
 #else
     fprintf(header, "ZLIB_INTERNAL const ct_data static_ltree[L_CODES+2] = {\n");

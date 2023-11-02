@@ -2578,3 +2578,10 @@ TEST_F(ZLIB_AOCL_send_bits, AOCL_Compression_zlib_AOCL_send_bits_common_3)
     EXPECT_EQ(state->bi_buf, 179);
     EXPECT_EQ(state->bi_valid, 8);
 }
+
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
+TEST(ZLIB_deflate_quick, AOCL_Compression_zlib_defqck_dist_code_verify)
+{
+  EXPECT_EQ(Test_quick_dist_code(),0);
+}
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
