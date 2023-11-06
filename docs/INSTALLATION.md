@@ -74,7 +74,11 @@ Building with Visual Studio IDE (GUI)
    Microsoft Visual Studio project is generated.
 6. Click __Open Project__.
    Microsoft Visual Studio project for the source package __is launched__.
-7. Build the entire solution or the required projects.
+7. For building multi-threaded library based on AOCL_ENABLE_THREADS, set the 
+   LLVM openMP library path in the Linker->General option and openMP library name
+   in the Linker->Input under the project properties. Set /openmp as the additional
+   compilation option.
+8. Build the entire solution or the required projects.
 
 Building with Visual Studio IDE (command line)
 ----------------------------------------------
@@ -117,6 +121,7 @@ AOCL_EXCLUDE_SNAPPY                 |  Exclude SNAPPY compression method from th
 AOCL_EXCLUDE_ZLIB                   |  Exclude ZLIB compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_ZSTD                   |  Exclude ZSTD compression method from the library build (Disabled by default)
 AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL |  Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)
+AOCL_ENABLE_THREADS                 |  Enable multi-threaded compression and decompression using SMP based openMP threads (Disabled by default)
 
 Running AOCL-Compression Test Bench On Linux
 --------------------------------------------
