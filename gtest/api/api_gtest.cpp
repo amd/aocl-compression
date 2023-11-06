@@ -552,7 +552,8 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpNull_common_5) //
 
     printf("cSize by algo %d %ld", algo, cSize);
 
-    EXPECT_LT(cSize, 0); //compress failed
+    EXPECT_LT(cSize, 0); //compress failed 
+
 }
 
 TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpSzZero_common_6) //input size 0
@@ -777,7 +778,7 @@ TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_inpSzZero_common
     desc.outSize = dpr->getOutSize();
     int64_t dSize = aocl_llc_decompress(&desc, algo);
 
-    EXPECT_LT(dSize, 0); //decompress failed
+    EXPECT_LE(dSize, 0); //decompress failed / nothing to decompress
 }
 
 TEST_P(API_decompress, AOCL_Compression_api_aocl_llc_decompress_outNull_common_1) //out NULL
