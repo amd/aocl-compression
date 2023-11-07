@@ -117,14 +117,19 @@ public:
     }
 };
 
-bool zstd_check_uncompressed_equal_to_original(char *src, unsigned srcSize, char *compressed, unsigned compressedLen)
+typedef size_t(*ZSTD_decompress_fp)(ZSTD_DCtx* dctx,
+    void* dst, size_t dstCapacity,
+    const void* src, size_t srcSize);
+
+bool zstd_check_uncompressed_equal_to_original(char *src, unsigned srcSize, 
+    char *compressed, unsigned compressedLen, ZSTD_decompress_fp decomp_fp)
 {
     int uncompressedLen = srcSize + 10;
     char* uncompressed = (char*)calloc(uncompressedLen, sizeof(char));
     
     
     ZSTD_DCtx* const dctx = ZSTD_createDCtx();
-    int uncompressedLenRes = ZSTD_decompressDCtx(dctx, uncompressed, uncompressedLen, compressed, compressedLen);
+    int uncompressedLenRes = decomp_fp(dctx, uncompressed, uncompressedLen, compressed, compressedLen);
 
     if (uncompressedLenRes < 0) {//error code
         free(uncompressed);
@@ -236,7 +241,7 @@ TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_3 ) // com
     for(int cLevel=1; cLevel<=22; cLevel++) {
         TestLoad_2 d(8000);
         size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(),d.getOrigSize(), cLevel);
-        EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+        EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
     }
 }
 
@@ -255,7 +260,7 @@ TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_5) // Comp
      * while other levels uses the corresponding entry to set compression parameters.
      */
     size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), cLevel);
-    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
 }
 
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_6) // Compression_level_greater_than_maximum_limit
@@ -264,7 +269,7 @@ TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_6) // Comp
     int cLevel = 23;
     // For level > maximum possible level, level will be set to ZSTD_MAX_CLEVEL, which is 22.
     size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(),d.getOrigSize(), cLevel);
-    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
 }
 
 /*********************************************
@@ -576,9 +581,27 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
     size_t outLen_2 = Test_ZSTD_compress_advanced(cctx, d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), NULL, 0, param);
 
     EXPECT_EQ(outLen_1, outLen_2);
-    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen_1));
-    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen_2));
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen_1, ZSTD_decompressDCtx));
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen_2, ZSTD_decompressDCtx));
 }
+
+#ifdef AOCL_ENABLE_THREADS
+TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_common_2) // compress multithreaded. decompress reference. format compliance test.
+{
+    TestLoad_2 d(1024 * 1024 * 32); //use larger input so that compression gets triggered on multiple threads
+    int level = 3;
+
+    param = ZSTD_getParams(level, d.getOrigSize(), 0);
+    ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, level);
+
+    //Compress using multithreaded compressor
+    size_t outLen = Test_ZSTD_compress_advanced(cctx, d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), NULL, 0, param);
+    //Decompress using reference decompressor Test_ZSTD_decompressDCtxRef
+    //As ZSTD writes RAP frame inside skippable frame, compressed output must be format compliant
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, 
+                Test_ZSTD_decompressDCtxRef));
+}
+#endif
 
 /*********************************************
  * End of ZSTD_compress_advanced
@@ -997,3 +1020,38 @@ TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildco
 /*********************************************
 * End of ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long
 *********************************************/
+
+#ifdef AOCL_ENABLE_THREADS
+/*********************************************
+* Begin of ZSTD_GET_WINDOW_FACTOR
+*********************************************/
+TEST(ZSTD_ZSTD_GET_WINDOW_FACTOR, AOCL_Compression_zstd_ZSTD_GET_WINDOW_FACTOR_common_1)
+{
+    size_t srcSize = 0;
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 1);
+
+    srcSize = (100 * 1024 * 1024) - 1; //< 100 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 1);
+
+    srcSize = (100 * 1024 * 1024); //100 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 1);
+
+    srcSize = (100 * 1024 * 1024) + 1; //>100 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 1);
+
+    srcSize = (200 * 1024 * 1024); //200 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 2);
+
+    srcSize = (300 * 1024 * 1024); //300 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 3);
+
+    srcSize = (400 * 1024 * 1024); //400 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 4);
+
+    srcSize = (400 * 1024 * 1024) + 1; //>400 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 4);
+}
+/*********************************************
+* End of ZSTD_GET_WINDOW_FACTOR
+*********************************************/
+#endif /* AOCL_ENABLE_THREADS */

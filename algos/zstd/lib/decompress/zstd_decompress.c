@@ -102,6 +102,10 @@
 #  include "../legacy/zstd_legacy.h"
 #endif
 
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif
+
 #ifdef AOCL_ZSTD_OPT
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
@@ -1225,20 +1229,157 @@ static ZSTD_DDict const* ZSTD_getDDict(ZSTD_DCtx* dctx)
     }
 }
 
+#ifdef AOCL_ENABLE_THREADS
+/* Verifies and reads skippable frame */
+size_t AOCL_ZSTD_readSkippableFrameHeader(const void* src, size_t srcSize)
+{
+    RETURN_ERROR_IF(srcSize < ZSTD_SKIPPABLEHEADERSIZE, srcSize_wrong, "");
+
+    {
+    size_t skippableFrameSize = readSkippableFrameSize(src, srcSize);
+
+    /* check input validity */
+    RETURN_ERROR_IF(!ZSTD_isSkippableFrame(src, srcSize), frameParameter_unsupported, "");
+    RETURN_ERROR_IF(skippableFrameSize < ZSTD_SKIPPABLEHEADERSIZE || skippableFrameSize > srcSize, srcSize_wrong, "");
+
+    return ZSTD_SKIPPABLEHEADERSIZE;
+    }
+}
+#endif
+
 size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     AOCL_SETUP_NATIVE();
-    if (dctx == NULL)
-    {
+
+    if (dctx == NULL) {
         LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return ERROR(GENERIC);
     }
 
-    size_t ret = ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
+#ifdef AOCL_ENABLE_THREADS
+    if (src == NULL || dst == NULL) {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return ERROR(GENERIC);
+    }
 
+    size_t result = 0;
+    aocl_thread_group_t thread_group_handle;
+    aocl_thread_info_t cur_thread_info;
+    AOCL_INT32 ret_status = -1;
+    AOCL_UINT32 thread_cnt = 0;
+    AOCL_CHAR* src_ptr = (AOCL_CHAR*)src;
+    size_t srcDataSz = srcSize;
+
+    //Read and skip skippable RAP frame header
+    size_t skip_head_sz = AOCL_ZSTD_readSkippableFrameHeader(src_ptr, srcSize);
+    if (ERR_isError(skip_head_sz)) {
+        //no skippable RAP frame present. Try regular decompress
+        result = ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return result;
+    }
+    src_ptr += skip_head_sz;
+    srcDataSz -= skip_head_sz;
+
+    ret_status = aocl_setup_parallel_decompress_mt(&thread_group_handle, src_ptr, dst,
+                                                   srcDataSz, dstCapacity, 0);
+    if (ret_status < 0) {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return ERROR(GENERIC);
+    }
+
+    if (thread_group_handle.num_threads == 1)
+    {
+        //Single thread available for processing. Skip RAP frame and process data in one go
+        src_ptr += ret_status;
+        srcDataSz -= ret_status;
+        result = ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src_ptr, srcDataSz, ZSTD_getDDict(dctx));
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return result;
+    }
+    else 
+    {
+#ifdef AOCL_THREADS_LOG
+        printf("Decompress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
+#endif
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+        {
+#ifdef AOCL_THREADS_LOG
+            printf("Decompress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
+#endif
+            AOCL_UINT32 cmpr_bound_pad = WILDCOPY_OVERLENGTH;
+            AOCL_UINT32 is_error = 1;
+            AOCL_UINT32 thread_id = omp_get_thread_num();
+            size_t local_result = 0;
+            AOCL_INT32 thread_parallel_res = 0;
+
+            thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, 
+                                  &cur_thread_info, cmpr_bound_pad, thread_id);
+            if (thread_parallel_res == 0)
+            {
+                ZSTD_DCtx* cur_dctx = ZSTD_createDCtx();
+                local_result = ZSTD_decompress_usingDDict(cur_dctx, cur_thread_info.dst_trap,
+                    cur_thread_info.dst_trap_size, cur_thread_info.partition_src, 
+                    cur_thread_info.partition_src_size, ZSTD_getDDict(cur_dctx));
+                if (!ERR_isError(local_result))
+                    is_error = 0;
+
+                if (cur_dctx)
+                    ZSTD_freeDCtx(cur_dctx);
+            }
+            else if (thread_parallel_res == 1)
+            {
+                local_result = 0;
+                is_error = 0;
+            }
+
+            thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+            thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+            thread_group_handle.threads_info_list[thread_id].additional_state_info = NULL;
+            thread_group_handle.threads_info_list[thread_id].dst_trap_size = local_result;
+            thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+            thread_group_handle.threads_info_list[thread_id].last_bytes_len = 0;
+            thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+            thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+
+        }//#pragma omp parallel
+#ifdef AOCL_THREADS_LOG
+        printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
+#endif
+        //For all the threads: Write to a single output buffer in a single-threaded mode
+        for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+        {
+            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+            //In case of any thread partitioning or alloc errors, exit the compression process with error
+            if (cur_thread_info.is_error)
+            {
+                aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+#ifdef AOCL_THREADS_LOG
+                printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+                LOG_UNFORMATTED(INFO, logCtx, "Exit");
+                return ERROR(GENERIC);
+            }
+
+            //Copy this thread's chunk to the output final buffer
+            memcpy(thread_group_handle.dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+            thread_group_handle.dst += cur_thread_info.dst_trap_size;
+        }
+
+        result = thread_group_handle.dst - (AOCL_CHAR*)dst;
+
+        aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return result;
+    }//thread_group_handle.num_threads > 1
+
+#else //Non-threaded
+    size_t result = ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
     LOG_UNFORMATTED(INFO, logCtx, "Exit");
-    return ret;
+    return result;
+#endif
 }
 
 
@@ -2449,3 +2590,12 @@ void aocl_destroy_zstd_decode(void)
 {
     aocl_destroy_zstd_decompress_block();
 }
+
+#ifdef AOCL_UNIT_TEST
+/* Test wrapper to call reference decompress function irresptive of user/env/thread settings */
+size_t Test_ZSTD_decompressDCtxRef(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
+{
+    if (dctx == NULL) return ERROR(GENERIC);
+    return ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
+}
+#endif

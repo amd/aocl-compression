@@ -2924,6 +2924,10 @@ ZSTDLIB_API unsigned ZSTD_isSkippableFrame(const void* buffer, size_t size);
 ***************************************/
 #ifdef AOCL_UNIT_TEST
 ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag);
+ZSTDLIB_API size_t Test_ZSTD_decompressDCtxRef(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+#ifdef AOCL_ENABLE_THREADS
+ZSTDLIB_API int Test_ZSTD_getWindowFactor(size_t srcSize);
+#endif
 #endif
 
 /***************************************

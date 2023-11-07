@@ -71,6 +71,18 @@ static void aocl_setup_native(void);
 
 static int setup_ok_zstd_encode = 0; // flag to indicate status of dynamic dispatcher setup
 
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+/* src size limits used to determine window_factor */
+#define ZSTD_MT_MIN_INP_SZ (100 * 1024 * 1024) //100MB
+#define ZSTD_MT_MAX_INP_SZ (400 * 1024 * 1024) //400MB
+
+#define ZSTD_GET_WINDOW_FACTOR(srcSize) \
+    (srcSize < ZSTD_MT_MIN_INP_SZ) ? 1 : \
+    ((srcSize > ZSTD_MT_MAX_INP_SZ) ? 4 : (srcSize / ZSTD_MT_MIN_INP_SZ))
+
+#endif
+
 /* ***************************************************************
 *  Tuning parameters
 *****************************************************************/
@@ -5307,6 +5319,72 @@ size_t ZSTD_compressEnd(ZSTD_CCtx* cctx,
     return ZSTD_compressEnd_public(cctx, dst, dstCapacity, src, srcSize);
 }
 
+#ifdef AOCL_ENABLE_THREADS
+/* Write skippable frame header to dst */
+size_t AOCL_ZSTD_writeSkippableFrameHeader(void* dst, size_t dstCapacity, size_t srcSize, unsigned magicVariant) {
+    BYTE* op = (BYTE*)dst;
+
+    RETURN_ERROR_IF(srcSize > (unsigned)0xFFFFFFFF, srcSize_wrong, "Src size too large for skippable frame");
+    RETURN_ERROR_IF(magicVariant > 15, parameter_outOfBound, "Skippable frame magic number variant not supported");
+
+    MEM_writeLE32(op, (U32)(ZSTD_MAGIC_SKIPPABLE_START + magicVariant));
+    MEM_writeLE32(op + 4, (U32)srcSize);
+    return ZSTD_SKIPPABLEHEADERSIZE;
+}
+
+/* Move RAP frame into a skippable frame
+* 
+* [RAP frame header][space for RAP frame metadata] -> [  Skippable frame header  ][RAP frame header][RAP frame metadata]
+* <--------------rap_frame_len------------------->    <-ZSTD_SKIPPABLEHEADERSIZE-><----------rap_frame_len------------->
+* 
+* thread_group_handle->dst must point to a RAP frame
+* Note: data in thread_group_handle->dst beyond rap_frame_len will get overwitten
+*/
+size_t AOCL_write_skippable_rap_frame(aocl_thread_group_t* thread_group_handle, size_t dstCapacity, AOCL_INTP rap_frame_len) {
+    AOCL_CHAR* dst_org = thread_group_handle->dst;
+    AOCL_CHAR* dst_ptr = dst_org;
+    
+    //Shift RAP frame to create space for skippable header
+    RETURN_ERROR_IF(dstCapacity < rap_frame_len + ZSTD_SKIPPABLEHEADERSIZE /* Skippable frame overhead */,
+        dstSize_tooSmall, "Not enough room for skippable frame");
+    memmove(dst_ptr + ZSTD_SKIPPABLEHEADERSIZE, dst_ptr, rap_frame_len);
+
+    //Write skippable frame header
+    size_t skip_head_sz = AOCL_ZSTD_writeSkippableFrameHeader(dst_ptr, dstCapacity, rap_frame_len, 0);
+    if (ERR_isError(skip_head_sz))
+        return skip_head_sz;
+
+    dst_ptr += (skip_head_sz + RAP_START_OF_PARTITIONS);
+
+    //Write RAP frame metadata
+    AOCL_UINT32 dst_offset = rap_frame_len;
+    aocl_thread_info_t cur_thread_info;
+    for (AOCL_UINT32 thread_cnt = 0; thread_cnt < thread_group_handle->num_threads; thread_cnt++)
+    {
+        cur_thread_info = thread_group_handle->threads_info_list[thread_cnt];
+        //In case of any thread partitioning or alloc errors, exit the compression process with error
+        if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
+        {
+            return ERROR(GENERIC);
+        }
+
+        *(AOCL_UINT32*)dst_ptr = dst_offset; //For storing this thread's RAP offset
+        dst_ptr += RAP_OFFSET_BYTES;
+
+        *(AOCL_INT32*)dst_ptr = cur_thread_info.dst_trap_size; //For storing this thread's RAP length
+        dst_ptr += RAP_LEN_BYTES;
+
+        AOCL_INTP decomp_len = cur_thread_info.partition_src_size;
+        *(AOCL_INT32*)dst_ptr = decomp_len;
+        dst_ptr += DECOMP_LEN_BYTES;
+
+        dst_offset += cur_thread_info.dst_trap_size;
+    }
+
+    return (dst_ptr - dst_org);
+}
+#endif
+
 size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
                                void* dst, size_t dstCapacity,
                          const void* src, size_t srcSize,
@@ -5327,16 +5405,131 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
 
     DEBUGLOG(4, "ZSTD_compress_advanced");
     FORWARD_IF_ERROR(ZSTD_checkCParams(params.cParams), "");
+
+#ifdef AOCL_ENABLE_THREADS //Threaded
+    size_t result = 0;
+    aocl_thread_group_t thread_group_handle;
+    aocl_thread_info_t cur_thread_info;
+    AOCL_INT32 rap_frame_len = -1;
+    AOCL_UINT32 thread_cnt = 0;
+    AOCL_UINT32 dst_offset = 0;
+
+    AOCL_UINT32 window_factor = ZSTD_GET_WINDOW_FACTOR(srcSize);
+    rap_frame_len = aocl_setup_parallel_compress_mt(&thread_group_handle, (char*)src,
+        dst, srcSize, dstCapacity, 1U << params.cParams.windowLog, window_factor);
+
+    if (rap_frame_len < 0) {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return ERROR(GENERIC);
+    }
+
+    if (thread_group_handle.num_threads == 1)
+    {
+        ZSTD_CCtxParams_init_internal(&cctx->simpleApiParams, &params, ZSTD_NO_CLEVEL);
+        result = ZSTD_compress_advanced_internal(cctx,
+            dst, dstCapacity,
+            src, srcSize,
+            dict, dictSize,
+            &cctx->simpleApiParams);
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return result;
+    }
+    else
+    {
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
+#endif
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+        {
+#ifdef AOCL_THREADS_LOG
+            printf("Compress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
+#endif
+            size_t maxSrcSize = thread_group_handle.common_part_src_size +
+                                thread_group_handle.leftover_part_src_bytes;
+            AOCL_UINT32 cmpr_bound_pad = (ZSTD_compressBound(maxSrcSize) - maxSrcSize); //Number of additional bytes beyond srcSize that could be written
+            AOCL_UINT32 is_error = 1;
+            AOCL_UINT32 thread_id = omp_get_thread_num();
+            size_t local_result = 0;
+
+            if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
+            {
+                /* Copying cctx directly to cur_cctx might result in data associated with
+                * pointer members being shared between threads. Hence create new cur_cctx
+                * objects for each thread and set necessary parameters here */
+                ZSTD_CCtx* cur_cctx = ZSTD_createCCtx();
+                ZSTD_CCtx_setParameter(cur_cctx, ZSTD_c_compressionLevel, cur_cctx->requestedParams.compressionLevel);
+                ZSTD_CCtxParams_init_internal(&cur_cctx->simpleApiParams, &params, ZSTD_NO_CLEVEL);
+
+                local_result = ZSTD_compress_advanced_internal(cur_cctx,
+                    cur_thread_info.dst_trap, cur_thread_info.dst_trap_size,
+                    cur_thread_info.partition_src, cur_thread_info.partition_src_size,
+                    dict, dictSize,
+                    &cur_cctx->simpleApiParams);
+
+                if (!ERR_isError(local_result))
+                    is_error = 0;
+
+                if (cur_cctx)
+                    ZSTD_freeCCtx(cur_cctx);
+            }//aocl_do_partition_compress_mt
+
+            thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+            thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+            thread_group_handle.threads_info_list[thread_id].additional_state_info = NULL;
+            thread_group_handle.threads_info_list[thread_id].dst_trap_size = local_result;
+            thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+            thread_group_handle.threads_info_list[thread_id].last_bytes_len = 0;
+            thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+            thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+#ifdef AOCL_THREADS_LOG
+            //printf("Compress Thread [id: %d] : Compression output length [%d], original source length [%d]\n",
+            //                                                  omp_get_thread_num(), local_result, inputSize);
+#endif
+        }//#pragma omp parallel
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
+#endif
+
+        /* Post processing in single - threaded mode :
+            * Move RAP frame header within a skippable frame
+            * Add RAP frame metadata
+            * Add compressed data from threads to dst
+        */
+        dst_offset = AOCL_write_skippable_rap_frame(&thread_group_handle, dstCapacity, rap_frame_len);
+        if (ERR_isError(dst_offset)) {
+            aocl_destroy_parallel_compress_mt(&thread_group_handle);
+#ifdef AOCL_THREADS_LOG
+            printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+            LOG_UNFORMATTED(INFO, logCtx, "Exit");
+            return dst_offset;
+        }
+        thread_group_handle.dst += dst_offset; //move by skippable frame
+
+        for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+        {
+            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+            memcpy(thread_group_handle.dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+            thread_group_handle.dst += cur_thread_info.dst_trap_size;
+        }
+
+        aocl_destroy_parallel_compress_mt(&thread_group_handle);
+    }//thread_group_handle.num_threads > 1
+
+    result = (size_t)(thread_group_handle.dst - (AOCL_CHAR*)dst);
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return result;
+
+#else //Non-threaded
     ZSTD_CCtxParams_init_internal(&cctx->simpleApiParams, &params, ZSTD_NO_CLEVEL);
-    
-    size_t ret = ZSTD_compress_advanced_internal(cctx,
+    size_t result = ZSTD_compress_advanced_internal(cctx,
                                            dst, dstCapacity,
                                            src, srcSize,
                                            dict, dictSize,
                                            &cctx->simpleApiParams);
-    
     LOG_UNFORMATTED(INFO, logCtx, "Exit");
-    return ret;
+    return result;
+#endif //AOCL_ENABLE_THREADS
 }
 
 /* Internal */
@@ -7110,11 +7303,19 @@ static ZSTD_compressionParameters ZSTD_getCParams_internal(int compressionLevel,
     else row = compressionLevel;
 
     {
+#ifdef AOCL_ENABLE_THREADS
+        /*
+        * AOCL_ZSTD_defaultCParameters use larger window sizes that are not suitable
+        * for multithreaded compression. Setting it to reference values here.
+        */
+        ZSTD_compressionParameters cp = ZSTD_defaultCParameters[tableID][row];
+#else
 #ifdef AOCL_ZSTD_OPT
         ZSTD_compressionParameters cp = AOCL_ZSTD_defaultCParameters_used[tableID][row];
 #else
         ZSTD_compressionParameters cp = ZSTD_defaultCParameters[tableID][row];
 #endif // AOCL_ZSTD_OPT
+#endif //AOCL_ENABLE_THREADS
         DEBUGLOG(5, "ZSTD_getCParams_internal selected tableID: %u row: %u strat: %u", tableID, row, (U32)cp.strategy);
         /* acceleration factor */
         if (compressionLevel < 0) {
@@ -7254,6 +7455,12 @@ void aocl_destroy_zstd_encode(void) {
 }
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_ENABLE_THREADS
+ZSTDLIB_API int Test_ZSTD_getWindowFactor(size_t srcSize) {
+    return ZSTD_GET_WINDOW_FACTOR(srcSize);
+}
+#endif
+
 /* Unit test function for block compressor selection.
 * Returns 0 if expected compressor is selected, else -1. */
 ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag) {
