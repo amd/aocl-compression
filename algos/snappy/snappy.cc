@@ -90,6 +90,10 @@
 #include <vector>
 #include "utils/utils.h"
 
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif
+
 namespace snappy {
 
 #ifdef AOCL_SNAPPY_OPT
@@ -109,6 +113,10 @@ static int setup_ok_snappy = 0; // flag to indicate status of dynamic dispatcher
 //Forward declarations to allow default pointer initializations
 bool SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed);
 
+#ifdef AOCL_ENABLE_THREADS
+    bool SAW_RawUncompressDirect(const char* compressed, size_t compressed_length, char* uncompressed, AOCL_UINT32 uncompressed_len);
+#endif
+
 static char* (*SNAPPY_compress_fragment_fp)(const char* input,
     size_t input_size, char* op,
     uint16_t* table, const int table_size) = internal::CompressFragment;
@@ -118,6 +126,11 @@ static char* (*SNAPPY_compress_fragment_fp)(const char* input,
 // class used for decompression of flat buffers to flat buffers in this library.
 static bool (*SNAPPY_SAW_raw_uncompress_fp)(const char* compressed,
     size_t compressed_length, char* uncompressed) = SAW_RawUncompress;
+
+#ifdef AOCL_ENABLE_THREADS
+    static bool (*SNAPPY_SAW_raw_uncompress_direct_fp)(const char* compressed,
+        size_t compressed_length, char* uncompressed, AOCL_UINT32 uncompressed_len) = SAW_RawUncompressDirect;
+#endif
 
 // The amount of slop bytes writers are using for unconditional copies.
 constexpr int kSlopBytes = 64;
@@ -563,6 +576,41 @@ bool GetUncompressedLength(const char* start, size_t n, size_t* result) {
     return false;
   }
 }
+
+#ifdef AOCL_ENABLE_THREADS
+// By default, the snappy API doesn't return the length of the uncompressed
+// file. To get that information, the caller has to make a call to
+// 'GetUncompressedLength'. Files compressed using the AOCL multithreaded
+// compressor have a RAP frame header with its RAP metadata which is absent in
+// files compressed using the single threaded compressors. This causes a
+// difference in the location of the encoded uncompressed length varint in the
+// stream; where for the single theaded compressor's output it is located in the
+// first few bytes of the stream and for the the multithreaded compressor's
+// output it is located in the bytes immediately after the RAP frame header.
+// Currently, the only way to get the width of the RAP frame header is to make a
+// call to 'aocl_setup_parallel_decompress_mt' and so we need to make a call to
+// this function to figure out the offset for the location of the varint.
+bool GetUncompressedLengthFromMTCompressedBuffer(const char* start, size_t n, size_t* result) {
+  if (start == NULL || result == NULL) return false;
+  aocl_thread_group_t thread_group_handle;
+  AOCL_INT32 offset = aocl_setup_parallel_decompress_mt(&thread_group_handle, 
+                                                  (char *)start,
+                                                  NULL, /* 'outbuf', safe, since the setup function does not do any operation on it */
+                                                  n,
+                                                  0 /* maxDecompressedSize (not required by snappy, hence 0) */, 
+                                                  1 /* use_ST_decompressor (get only the RAP metadata length, no allocations done) */);
+  const char* start_of_stream = start + offset;
+  size_t size_of_stream = n - offset;
+  uint32_t v = 0;
+  const char* limit = start_of_stream + size_of_stream;
+  if (Varint::Parse32WithLimit(start_of_stream, limit, &v) != NULL) {
+    *result = v;
+    return true;
+  } else {
+    return false;
+  }
+}
+#endif
 
 namespace {
 uint32_t CalculateTableSize(uint32_t input_size) {
@@ -1362,6 +1410,19 @@ static bool InternalUncompress(Source* r, Writer* writer) {
                                    uncompressed_len);
 }
 
+#ifdef AOCL_ENABLE_THREADS
+// since multithreaded decompression happens using externally available uncompressed
+// lengths rather than reading the lengths from the stream, we need a decompression
+// function that takes the uncompressed length as a parameter and which does not read
+// or modify the stream pointer for the computation of the uncompressed length
+template <typename Writer>
+static bool InternalUncompressDirect(Source* r, Writer* writer, AOCL_UINT32 uncompressed_len) {
+  SnappyDecompressor decompressor(r);
+  return InternalUncompressAllTags(&decompressor, writer, r->Available(),
+                                   uncompressed_len);
+}
+#endif
+
 template <typename Writer>
 static bool InternalUncompressAllTags(SnappyDecompressor* decompressor,
                                       Writer* writer,
@@ -1852,10 +1913,145 @@ bool AOCL_SAW_RawUncompress(const char* compressed, size_t compressed_length, ch
   return InternalUncompress(&reader, &output);
 }
 
+#ifdef AOCL_ENABLE_THREADS // Threaded
+// for multithreaded decompression, where the uncompressed length is not available
+// on the stream but rather is stored externally, we need to have a decompression
+// function that takes the uncompressed length as a parameter. The following functions
+// are top level functions that facilitate said behavior
+bool SAW_RawUncompressDirect(const char* compressed, size_t compressed_length, char* uncompressed, AOCL_UINT32 uncompressed_len) {
+  ByteArraySource reader(compressed, compressed_length);
+  SnappyArrayWriter output(uncompressed);
+  return InternalUncompressDirect(&reader, &output, uncompressed_len);
+}
+
+bool AOCL_SAW_RawUncompressDirect(const char* compressed, size_t compressed_length, char* uncompressed, AOCL_UINT32 uncompressed_len) {
+  ByteArraySource reader(compressed, compressed_length);
+  AOCL_SnappyArrayWriter output(uncompressed);
+  return InternalUncompressDirect(&reader, &output, uncompressed_len);
+}
+
+// similar to GetUncompressedLength; difference being that in addition to setting the 
+// value encoded within the varint in `result`, it returns a non-zero value signifying
+// the number of bytes occupied by the varint in the stream. In case of errors during
+// parsing of the varint, the function returns 0.
+AOCL_INT32 AOCL_GetUncompressedLengthAndVarintByteWidth(const char* start, size_t n, AOCL_UINT32* result) {
+  if (start == NULL || result == NULL) return 0;
+  *result = 0;
+  AOCL_UINT32 v = 0;
+  const char* limit = start + n;
+  const char* end_of_varint = Varint::Parse32WithLimit(start, limit, &v);
+  if (end_of_varint != NULL) {
+    *result = v;
+    return (AOCL_INT32)(end_of_varint - start);
+  } else {
+    return 0;
+  }
+}
+#endif // AOCL_ENABLE_THREADS
+
+
 #ifdef AOCL_SNAPPY_OPT 
 bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
   LOG_UNFORMATTED(TRACE, logCtx, "Enter");
   AOCL_SETUP_NATIVE();
+#ifdef AOCL_ENABLE_THREADS // Threaded
+  aocl_thread_group_t thread_group_handle;
+  aocl_thread_info_t cur_thread_info;
+  AOCL_INT32 ret_status = -1;
+
+  // check 'compressed' here, since passing a null pointer to the setup function
+  // will lead to a segmentation fault
+  if (compressed != NULL) {
+    ret_status = aocl_setup_parallel_decompress_mt(&thread_group_handle, 
+                                                  (char *)compressed, uncompressed,
+                                                  compressed_length, 
+                                                  0 /* maxDecompressedSize (not required by snappy, hence 0) */, 
+                                                  0 /* use_ST_decompressor (not required here, hence 0) */);
+    if (ret_status < 0)
+      return false;
+  }
+  else {
+    // if 'compressed' is a null pointer, we can set 'ret_status' to 0 and pass
+    // over the control flow to the single threaded compressor. This way we can
+    // guarantee that the behavior for this special case remains the same,
+    // whether we use the multithreaded compressor or the single threaded one.
+    ret_status = 0;
+  }
+
+  if (thread_group_handle.num_threads == 1 || ret_status == 0 /* for when compressed is NULL*/) {
+    size_t ulength;
+    const char *start_compressed = compressed + ret_status;
+    size_t compressed_length_actual = compressed_length - ret_status;
+
+    if (!GetUncompressedLength(start_compressed, compressed_length_actual, &ulength))
+      return false;
+    if (ulength != 0 && uncompressed == NULL)
+      return false;
+
+    return SNAPPY_SAW_raw_uncompress_fp(start_compressed, compressed_length_actual, uncompressed);
+  }
+  else {
+#ifdef AOCL_THREADS_LOG
+        printf("Decompress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
+#endif
+
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+    {
+#ifdef AOCL_THREADS_LOG
+      printf("Decompress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
+#endif
+      AOCL_UINT32 is_error = 1;
+      AOCL_UINT32 thread_id = omp_get_thread_num();
+      bool local_result = false;
+      AOCL_INT32 thread_parallel_res = 0;
+
+      thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, &cur_thread_info, 0 /*cmpr_bound_pad*/, thread_id);
+      if (thread_parallel_res == 0)
+      {
+        local_result = SNAPPY_SAW_raw_uncompress_direct_fp(cur_thread_info.partition_src, cur_thread_info.partition_src_size, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+        is_error = local_result ? 0 : 1;
+      } // aocl_do_partition_decompress_mt
+      else if (thread_parallel_res == 1)
+      {
+        local_result = 0;
+        is_error = 0;
+      }
+
+      thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+      thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+      thread_group_handle.threads_info_list[thread_id].dst_trap_size = cur_thread_info.dst_trap_size;
+      thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+      thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+      thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+    } // #pragma omp parallel
+
+#ifdef AOCL_THREADS_LOG
+    printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
+#endif
+
+    AOCL_UINT32 thread_cnt = 0;
+    // For all the threads: Write to a single output buffer in single threaded mode
+    for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+    {
+      cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+      // In case of any thread partitioning or alloc errors, exit the compression process with error
+      if (cur_thread_info.is_error)
+      {
+        aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+#ifdef AOCL_THREADS_LOG
+        printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+        return false;
+      }
+      // Copy this thread's chunk to the output final buffer
+      memcpy(thread_group_handle.dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+      thread_group_handle.dst += cur_thread_info.dst_trap_size;
+    }
+    // free the memory allocated for the the thread_info_list and/or for each thread's dst_trap
+    aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+    return true;
+  }
+#else // Non-threaded
   // sanity checks ------------------------------------------------------------
      size_t ulength;
      if (!GetUncompressedLength(compressed, compressed_length, &ulength))
@@ -1870,9 +2066,10 @@ bool RawUncompress(const char* compressed, size_t compressed_length, char* uncom
      }
   // sanity checks ------------------------------------------------------------
   bool ret = false;
-    ret = SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
+  ret = SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
   LOG_UNFORMATTED(INFO, logCtx, "Exit");
   return ret;
+#endif
 }
 
 bool RawUncompress(Source* compressed, char* uncompressed) {
@@ -2001,15 +2198,166 @@ void RawCompress(const char* input,
     LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return;
   }
-  
   AOCL_SETUP_NATIVE();
 
+#ifdef AOCL_ENABLE_THREADS // Threaded
+  aocl_thread_group_t thread_group_handle;
+  aocl_thread_info_t cur_thread_info;
+  AOCL_INT32 ret_status = -1;
+  AOCL_INT32 maxCompressedLength = (AOCL_INT32)MaxCompressedLength(input_length);
+
+  ret_status = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)input, compressed,
+                                              (AOCL_INT32)input_length, maxCompressedLength,
+                                              (AOCL_INT32)kBlockSize, WINDOW_FACTOR);
+  if (ret_status < 0)
+    return;
+
+  if (thread_group_handle.num_threads == 1) {
+    ByteArraySource reader(input, input_length);
+    UncheckedByteArraySink writer(compressed);
+    Compress(&reader, &writer);
+
+    // Compute how many bytes were added
+    *compressed_length = (writer.CurrentDestination() - compressed);
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return;
+  }
+  else {
+#ifdef AOCL_THREADS_LOG
+      printf("Compress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
+#endif
+
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+    {
+#ifdef AOCL_THREADS_LOG
+      printf("Compress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
+#endif
+      AOCL_INT32 thread_max_src_size = thread_group_handle.common_part_src_size + thread_group_handle.leftover_part_src_bytes;
+      AOCL_UINT32 cmpr_bound_pad = (AOCL_INT32)MaxCompressedLength(thread_max_src_size) - thread_max_src_size;
+      AOCL_UINT32 is_error = 1;
+      AOCL_UINT32 thread_id = omp_get_thread_num();
+      AOCL_INT32 partition_compressed_length = 0;
+
+      if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
+      {
+        ByteArraySource reader(cur_thread_info.partition_src, cur_thread_info.partition_src_size);
+        UncheckedByteArraySink writer(cur_thread_info.dst_trap);
+        Compress(&reader, &writer);
+
+        // Compute how many bytes were added
+        partition_compressed_length = (writer.CurrentDestination() - cur_thread_info.dst_trap);
+        is_error = 0;
+      } // aocl_do_partition_compress_mt
+
+      thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+      thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+      thread_group_handle.threads_info_list[thread_id].dst_trap_size = partition_compressed_length;
+      thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+      thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+      thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+
+    } // #pragma omp parallel
+#ifdef AOCL_THREADS_LOG
+    printf("Compress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
+#endif
+    
+    // set pointers to the desired locations in their respective buffers
+    AOCL_CHAR* dst_org = thread_group_handle.dst;
+    AOCL_CHAR* dst_ptr = dst_org;
+    thread_group_handle.dst += ret_status /* on success, ret_status stores the RAP metadata length */;
+    dst_ptr += RAP_START_OF_PARTITIONS;
+
+    AOCL_UINT32 thread_cnt = 0;
+    aocl_thread_info_t *thread_info_iter;
+    AOCL_UINT32 combined_uncompressed_length = 0;
+
+    // compute the sum of all uncompressed lengths and check for errors
+    for (; thread_cnt < thread_group_handle.num_threads; ++thread_cnt) {
+      thread_info_iter = &thread_group_handle.threads_info_list[thread_cnt];
+
+      // check if this thread encountered any errors during compression
+      if (thread_info_iter->is_error) {
+        aocl_destroy_parallel_compress_mt(&thread_group_handle);
+
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+        return;
+      }
+
+      // read the uncompressed length from the snappy stream produced
+      AOCL_UINT32 uncompressed_length_from_stream;
+      AOCL_INT32 data_start_offset = AOCL_GetUncompressedLengthAndVarintByteWidth(thread_info_iter->dst_trap,
+                                                                             thread_info_iter->dst_trap_size,
+                                                                             &uncompressed_length_from_stream);
+
+      // check if the uncompressed length matches the source partition's size
+      if (data_start_offset == 0 || uncompressed_length_from_stream != thread_info_iter->partition_src_size) {
+        aocl_destroy_parallel_compress_mt(&thread_group_handle);
+
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+        return;
+      }
+
+      // add the uncompressed length to a length accumulator
+      combined_uncompressed_length += uncompressed_length_from_stream;
+
+      // store data start location (byte immediately after the varint) for later
+      thread_info_iter->additional_state_info = (AOCL_VOID*)(thread_info_iter->dst_trap + data_start_offset);
+
+      // modify the thread's buffer length to adjust for the varint
+      thread_info_iter->dst_trap_size -= data_start_offset;
+    }
+
+    // encode length accumulator's value as a varint and write to destination buffer
+    char* after_varint = Varint::Encode32(thread_group_handle.dst, combined_uncompressed_length);
+    *compressed_length = (size_t)(after_varint - dst_org);
+    thread_group_handle.dst = after_varint;
+
+    thread_cnt = 0;
+    // since at this point, 'compressed_length' stores the number of bytes
+    // between the start of the buffer and the byte immediately after the
+    // encoded varint, it also stores the offset for the starting location of
+    // the data of the first compressed buffer
+    AOCL_UINT32 thread_dst_offset = (AOCL_UINT32)(*compressed_length);
+    for (; thread_cnt < thread_group_handle.num_threads; ++thread_cnt) {
+      thread_info_iter = &thread_group_handle.threads_info_list[thread_cnt];
+
+      // copy compressed data of the current thread to the destination buffer.
+      // (the dst_trap_size for each thread has already been modified to take
+      // into account the varint at beginning and additional_state_info has the
+      // location in the dst_trap buffer that is just past the varint's bytes)
+      memcpy(thread_group_handle.dst, (AOCL_CHAR*)thread_info_iter->additional_state_info, thread_info_iter->dst_trap_size);
+
+      // push the dst buffer pointer ahead by the number of bytes copied
+      thread_group_handle.dst += thread_info_iter->dst_trap_size;
+
+      // generate RAP data and write to corresponding location in destination buffer
+      *(AOCL_UINT32*)dst_ptr = thread_dst_offset;
+      dst_ptr += RAP_OFFSET_BYTES;
+      thread_dst_offset += thread_info_iter->dst_trap_size;
+      *(AOCL_INT32*)dst_ptr = thread_info_iter->dst_trap_size;
+      dst_ptr += RAP_LEN_BYTES;
+      *(AOCL_INT32*)dst_ptr = thread_info_iter->partition_src_size;
+      dst_ptr += DECOMP_LEN_BYTES;
+
+      // update the compressed_length to include the current thread's compressed length
+      *compressed_length += thread_info_iter->dst_trap_size;
+    }
+
+    // free the memory allocated for the the thread_info_list and/or for each thread's dst_trap
+    aocl_destroy_parallel_compress_mt(&thread_group_handle);
+  }
+#else // Non-threaded
   ByteArraySource reader(input, input_length);
   UncheckedByteArraySink writer(compressed);
   Compress(&reader, &writer);
 
   // Compute how many bytes were added
   *compressed_length = (writer.CurrentDestination() - compressed);
+#endif // AOCL_ENABLE_THREADS
   LOG_UNFORMATTED(INFO, logCtx, "Exit");
 }
 
@@ -2033,6 +2381,9 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
         //C version
         SNAPPY_compress_fragment_fp    = internal::CompressFragment;
         SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
+#ifdef AOCL_ENABLE_THREADS
+        SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+#endif
     }
     else
     {
@@ -2042,21 +2393,33 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
 #ifdef AOCL_SNAPPY_AVX_OPT
             SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
             SNAPPY_SAW_raw_uncompress_fp   = AOCL_SAW_RawUncompress;
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
+#endif
 #else
             SNAPPY_compress_fragment_fp    = internal::CompressFragment;
             SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+#endif
 #endif
             break;
         case 0://C version
         case 1://SSE version
             SNAPPY_compress_fragment_fp    = internal::CompressFragment;
             SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+#endif
             break;
         case 2://AVX version
         case 3://AVX2 version
         default://AVX512 and other versions
             SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
             SNAPPY_SAW_raw_uncompress_fp   = AOCL_SAW_RawUncompress;
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
+#endif
             break;
         }
     }

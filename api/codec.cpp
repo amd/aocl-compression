@@ -261,14 +261,16 @@ AOCL_INT64 aocl_snappy_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
     if (outsize < max_compressed_length) {
         return CODEC_ERROR;
     }
-    // RawCompress modifies the value of the 4th parameter after successful completion
-    // of compression, but returns early on error. Hence, to detect failure we can set
-    // the value of the last parameter to something that is not a valid "compressed length"
-    // so that after it returns, that value can be checked. If the value remains invalid
-    // after RawCompress returns, it should indicate failure.
+    // RawCompress modifies the value of the 4th parameter after successful
+    // completion of compression, but returns early on error. Hence, to detect
+    // failure we can set the value of the last parameter to something that is
+    // not a valid "compressed length" so that after it returns, that value can
+    // be checked. If the value remains invalid after RawCompress returns, it
+    // should indicate failure.
 
-    // by definition, any value greater than the "max compressed length" is an invalid
-    // compressed length, so we choose the value "max_compressed_length + 1" here.
+    // by definition, any value greater than the "max compressed length" is an
+    // invalid compressed length, so we choose the value one more than the
+    // max_compressed_length here.
     outsize = max_compressed_length + 1;
     snappy::RawCompress(inbuf, insize, outbuf, &outsize);
     if (outsize <= max_compressed_length)
@@ -281,8 +283,13 @@ AOCL_INT64 aocl_snappy_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
 							 AOCL_UINTP outsize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR *)
 {
     AOCL_UINTP uncompressed_len;
+#ifdef AOCL_ENABLE_THREADS
+    if (!snappy::GetUncompressedLengthFromMTCompressedBuffer(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len)
+        return CODEC_ERROR;
+#else
     if (!snappy::GetUncompressedLength(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len)
         return CODEC_ERROR;
+#endif
     bool res = snappy::RawUncompress(inbuf, insize, outbuf);
     if (res)
         return uncompressed_len;
