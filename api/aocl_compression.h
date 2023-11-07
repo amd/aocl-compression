@@ -145,7 +145,6 @@ typedef struct
                                2 - AVX optimizations, \n
                                3 - AVX2 optimizations, \n
                                4 - AVX512 optimizations                               */
-    int printDebugLogs;  /**<  Print debug logs                                       */
     //size_t chunk_size; //Unused variable
 } aocl_compression_desc;
 

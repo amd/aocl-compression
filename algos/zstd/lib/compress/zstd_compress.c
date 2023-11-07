@@ -57,6 +57,8 @@
 #include "zstd_compress_superblock.h"
 #include  "../common/bits.h"      /* ZSTD_highbit32, ZSTD_rotateRight_U64 */
 
+#include "utils/utils.h"
+
 /* ***************************************************************
 *  Tuning parameters
 *****************************************************************/
@@ -127,7 +129,12 @@ static unsigned char aoclOptFlag = 0;
 
 ZSTD_CCtx* ZSTD_createCCtx(void)
 {
-    return ZSTD_createCCtx_advanced(ZSTD_defaultCMem);
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+
+    ZSTD_CCtx * temp_ZSTD_CCtx = ZSTD_createCCtx_advanced(ZSTD_defaultCMem);
+    
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return temp_ZSTD_CCtx;
 }
 
 static void ZSTD_initCCtx(ZSTD_CCtx* cctx, ZSTD_customMem memManager)
@@ -210,13 +217,19 @@ static void ZSTD_freeCCtxContent(ZSTD_CCtx* cctx)
 
 size_t ZSTD_freeCCtx(ZSTD_CCtx* cctx)
 {
-    if (cctx==NULL) return 0;   /* support free on NULL */
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    if (cctx==NULL)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return 0;   /* support free on NULL */
+    }
     RETURN_ERROR_IF(cctx->staticSize, memory_allocation,
                     "not compatible with static CCtx");
     {   int cctxInWorkspace = ZSTD_cwksp_owns_buffer(&cctx->workspace, cctx);
         ZSTD_freeCCtxContent(cctx);
         if (!cctxInWorkspace) ZSTD_customFree(cctx, cctx->customMem);
     }
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return 0;
 }
 
@@ -738,17 +751,23 @@ static int ZSTD_isUpdateAuthorized(ZSTD_cParameter param)
 
 size_t ZSTD_CCtx_setParameter(ZSTD_CCtx* cctx, ZSTD_cParameter param, int value)
 {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     DEBUGLOG(4, "ZSTD_CCtx_setParameter (%i, %i)", (int)param, value);
     if (cctx->streamStage != zcss_init) {
         if (ZSTD_isUpdateAuthorized(param)) {
             cctx->cParamsChanged = 1;
         } else {
+            LOG_UNFORMATTED(INFO, logCtx, "Exit");
             RETURN_ERROR(stage_wrong, "can only set params in cctx init stage");
     }   }
 
     switch(param)
     {
     case ZSTD_c_nbWorkers:
+        if((value!=0) && cctx->staticSize)
+        {
+            LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        }
         RETURN_ERROR_IF((value!=0) && cctx->staticSize, parameter_unsupported,
                         "MT not compatible with static alloc");
         break;
@@ -792,9 +811,15 @@ size_t ZSTD_CCtx_setParameter(ZSTD_CCtx* cctx, ZSTD_cParameter param, int value)
     case ZSTD_c_searchForExternalRepcodes:
         break;
 
-    default: RETURN_ERROR(parameter_unsupported, "unknown parameter");
+    default:
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        RETURN_ERROR(parameter_unsupported, "unknown parameter");
     }
-    return ZSTD_CCtxParams_setParameter(&cctx->requestedParams, param, value);
+
+    size_t ret = ZSTD_CCtxParams_setParameter(&cctx->requestedParams, param, value);
+    
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return ret;
 }
 
 size_t ZSTD_CCtxParams_setParameter(ZSTD_CCtx_params* CCtxParams,
@@ -3097,7 +3122,7 @@ ZSTD_blockCompressor ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_paramS
             AOCL_ZSTD_compressBlock_lazy2_dedicatedDictSearch_row}
         };
         DEBUGLOG(4, "Selecting a row-based matchfinder");
-        assert(useRowMatchFinder != ZSTD_urm_auto);
+        assert(useRowMatchFinder != ZSTD_ps_auto);
         int select = (int)strat - (int)ZSTD_greedy; //select in range : [0, 2] as strat in range : [ZSTD_greedy, ZSTD_lazy2]
 #ifdef AOCL_DYNAMIC_DISPATCHER
         select = (aoclOptFlag * 3) + select;
@@ -5276,17 +5301,30 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
                          const void* dict,size_t dictSize,
                                ZSTD_parameters params)
 {
-    if (cctx == NULL || src == NULL) return ERROR(GENERIC);
-    if (dst == NULL) return ERROR(dstBuffer_null);
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    if (cctx == NULL || src == NULL)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return ERROR(GENERIC);
+    }
+    if (dst == NULL) 
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return ERROR(dstBuffer_null);
+    }
 
     DEBUGLOG(4, "ZSTD_compress_advanced");
     FORWARD_IF_ERROR(ZSTD_checkCParams(params.cParams), "");
     ZSTD_CCtxParams_init_internal(&cctx->simpleApiParams, &params, ZSTD_NO_CLEVEL);
-    return ZSTD_compress_advanced_internal(cctx,
+    
+    size_t ret = ZSTD_compress_advanced_internal(cctx,
                                            dst, dstCapacity,
                                            src, srcSize,
                                            dict, dictSize,
                                            &cctx->simpleApiParams);
+    
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return ret;
 }
 
 /* Internal */
@@ -5566,13 +5604,19 @@ ZSTD_CDict* ZSTD_createCDict_byReference(const void* dict, size_t dictSize, int 
 
 size_t ZSTD_freeCDict(ZSTD_CDict* cdict)
 {
-    if (cdict==NULL) return 0;   /* support free on NULL */
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    if (cdict==NULL)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return 0;   /* support free on NULL */
+    }
     {   ZSTD_customMem const cMem = cdict->customMem;
         int cdictInWorkspace = ZSTD_cwksp_owns_buffer(&cdict->workspace, cdict);
         ZSTD_cwksp_free(&cdict->workspace, cMem);
         if (!cdictInWorkspace) {
             ZSTD_customFree(cdict, cMem);
         }
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return 0;
     }
 }
@@ -7094,8 +7138,13 @@ static ZSTD_parameters ZSTD_getParams_internal(int compressionLevel, unsigned lo
  * @return a `ZSTD_parameters` structure (instead of `ZSTD_compressionParameters`).
  *  Fields of `ZSTD_frameParameters` are set to default values */
 ZSTD_parameters ZSTD_getParams(int compressionLevel, unsigned long long srcSizeHint, size_t dictSize) {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if (srcSizeHint == 0) srcSizeHint = ZSTD_CONTENTSIZE_UNKNOWN;
-    return ZSTD_getParams_internal(compressionLevel, srcSizeHint, dictSize, ZSTD_cpm_unknown);
+
+    ZSTD_parameters temp_ZSTD_paramters = ZSTD_getParams_internal(compressionLevel, srcSizeHint, dictSize, ZSTD_cpm_unknown);
+    
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return temp_ZSTD_paramters;
 }
 
 void ZSTD_registerSequenceProducer(
@@ -7219,7 +7268,7 @@ ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder
     aoclOptFlag = _aoclOptFlag;
     assert(strat >= (int)(ZSTD_fast) && strat <= (int)(ZSTD_btultra2));
     ZSTD_strategy strat_e = (ZSTD_strategy)(strat);
-    assert(dictmode >= (int)(ZSTD_noDict) && dictMode <= (int)(ZSTD_dedicatedDictSearch));
+    assert(dictMode >= (int)(ZSTD_noDict) && dictMode <= (int)(ZSTD_dedicatedDictSearch));
     ZSTD_dictMode_e dictMode_e = (ZSTD_dictMode_e)(dictMode);
     ZSTD_paramSwitch_e useRowMatchFinder_e = useRowMatchFinder ? ZSTD_ps_enable : ZSTD_ps_disable;
     ZSTD_blockCompressor bc = ZSTD_selectBlockCompressor(strat_e, useRowMatchFinder_e, dictMode_e);

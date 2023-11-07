@@ -9,6 +9,8 @@
 #define ZLIB_INTERNAL
 #include "zlib.h"
 
+#include "utils/utils.h"
+
 /* ===========================================================================
      Decompresses the source buffer into the destination buffer.  *sourceLen is
    the byte length of the source buffer. Upon entry, *destLen is the total size
@@ -87,5 +89,8 @@ int ZEXPORT uncompress2(Bytef *dest, uLongf *destLen, const Bytef *source,
 
 int ZEXPORT uncompress(Bytef *dest, uLongf *destLen, const Bytef *source,
                        uLong sourceLen) {
-    return uncompress2(dest, destLen, source, &sourceLen);
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    int ret = uncompress2(dest, destLen, source, &sourceLen);
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return ret;
 }

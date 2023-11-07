@@ -81,11 +81,11 @@
 /* Wrapper functions defination for Compression and Decompression.  */
 
 //LZ4
-INT64 native_lz4_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize, UINTP level)
+AOCL_INT64 native_lz4_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize, AOCL_UINTP level)
 {   
     //Perform the compression
     #ifndef AOCL_EXCLUDE_LZ4
-    INT64 resultComp = LZ4_compress_default(inbuf, outbuf, insize, outsize);
+    AOCL_INT64 resultComp = LZ4_compress_default(inbuf, outbuf, insize, outsize);
     if (resultComp < 0)
     {
         fprintf(stderr, "LZ4 compression failed. \n");
@@ -97,11 +97,11 @@ INT64 native_lz4_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize
     #endif
 }
 
-INT64 native_lz4_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize)
+AOCL_INT64 native_lz4_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize)
 {   
     //Perform the decompression
     #ifndef AOCL_EXCLUDE_LZ4
-    INT64 resultDecomp = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
+    AOCL_INT64 resultDecomp = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
     if (resultDecomp < 0)
     {
         fprintf(stderr, "LZ4 decompression failed. \n");
@@ -114,11 +114,11 @@ INT64 native_lz4_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsi
 }
 
 //LZ4HC
-INT64 native_lz4hc_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize, UINTP level)
+AOCL_INT64 native_lz4hc_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize, AOCL_UINTP level)
 {
     //Perform the compression
     #if !defined(AOCL_EXCLUDE_LZ4HC) && !defined(AOCL_EXCLUDE_LZ4)
-    INT64 resultComp = LZ4_compress_HC(inbuf, outbuf, insize, outsize, level);
+    AOCL_INT64 resultComp = LZ4_compress_HC(inbuf, outbuf, insize, outsize, level);
     if (resultComp < 0)
     {
         fprintf(stderr, "LZ4 compression failed. \n");
@@ -130,11 +130,11 @@ INT64 native_lz4hc_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsi
     #endif
 }
 
-INT64 native_lz4hc_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize)
+AOCL_INT64 native_lz4hc_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize)
 {
     //Perform the decompression
     #if !defined(AOCL_EXCLUDE_LZ4HC) && !defined(AOCL_EXCLUDE_LZ4)
-    INT64 resultDecomp = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
+    AOCL_INT64 resultDecomp = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
     if (resultDecomp < 0)
     {
         fprintf(stderr, "LZ4 decompression failed. \n");
@@ -147,7 +147,7 @@ INT64 native_lz4hc_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP out
 }
 
 //SNAPPY
-INT64 native_snappy_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize, UINTP level)
+AOCL_INT64 native_snappy_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize, AOCL_UINTP level)
 {
     //Perform the compression
     #ifndef AOCL_EXCLUDE_SNAPPY
@@ -163,7 +163,7 @@ INT64 native_snappy_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outs
     #endif
 }
 
-INT64 native_snappy_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize)
+AOCL_INT64 native_snappy_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize)
 {
     //Perform the decompression
     #ifndef AOCL_EXCLUDE_SNAPPY
@@ -180,32 +180,32 @@ INT64 native_snappy_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP ou
 }
 
 //ZLIB
-INT64 native_zlib_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize, UINTP level)
+AOCL_INT64 native_zlib_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize, AOCL_UINTP level)
 {   
     #ifndef AOCL_EXCLUDE_ZLIB
     uLongf destLen = outsize;
 
     //Perform the compression
-    INTP result = compress2((UINT8 *)outbuf, &destLen, (UINT8 *)inbuf, insize, level);
+    AOCL_INTP result = compress2((AOCL_UINT8 *)outbuf, &destLen, (AOCL_UINT8 *)inbuf, insize, level);
     if (result != Z_OK)
     {
         fprintf(stderr, "ZLIB compression failed. \n");
         return -1;
     }
-    //UINTP outsize = destLen;
+    //AOCL_UINTP outsize = destLen;
     return destLen;
     #else
         return -2;
     #endif
 }
 
-INT64 native_zlib_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize)
+AOCL_INT64 native_zlib_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize)
 {   
     #ifndef AOCL_EXCLUDE_ZLIB
     uLongf destLen = outsize;
 
     //Perform the decompression
-    INTP result = uncompress((UINT8 *)outbuf, &destLen, (UINT8 *)inbuf, insize);
+    AOCL_INTP result = uncompress((AOCL_UINT8 *)outbuf, &destLen, (AOCL_UINT8 *)inbuf, insize);
     if (result != Z_OK)
     {
         fprintf(stderr, "ZLIB Decompression failed. \n");
@@ -218,12 +218,12 @@ INT64 native_zlib_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outs
 }
 
 //BZIP2
-INT64 native_bzip2_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize, UINTP level)
+AOCL_INT64 native_bzip2_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize, AOCL_UINTP level)
 {
     #ifndef AOCL_EXCLUDE_BZIP2
-    UINT32 outSizeL = outsize;
+    AOCL_UINT32 outSizeL = outsize;
     //workFactor(best compression) and verbosity are default(0,0)
-    INTP result = BZ2_bzBuffToBuffCompress(outbuf, &outSizeL, 
+    AOCL_INTP result = BZ2_bzBuffToBuffCompress(outbuf, &outSizeL, 
                 inbuf, insize, level, 0, 0);
 
     if (result != BZ_OK)
@@ -237,12 +237,12 @@ INT64 native_bzip2_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsi
     #endif
 }
 
-INT64 native_bzip2_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize)
+AOCL_INT64 native_bzip2_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize)
 {   
     //Perform the decompression
     #ifndef AOCL_EXCLUDE_BZIP2
-    UINT32 outSizeL = outsize;
-    INTP result = BZ2_bzBuffToBuffDecompress(outbuf, &outSizeL, inbuf, insize, 0, 0);
+    AOCL_UINT32 outSizeL = outsize;
+    AOCL_INTP result = BZ2_bzBuffToBuffDecompress(outbuf, &outSizeL, inbuf, insize, 0, 0);
 
     if (result != BZ_OK)
     {
@@ -261,11 +261,11 @@ INT64 native_bzip2_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP out
 static void *LzmaAlloc(ISzAllocPtr p, size_t size) { IGNORE_VAR(p); return malloc(size); }
 static void LzmaFree(ISzAllocPtr p, void *address) { IGNORE_VAR(p); free(address); }
 #endif
-INT64 native_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize, UINTP level)
+AOCL_INT64 native_lzma_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize, AOCL_UINTP level)
 {   
     #ifndef AOCL_EXCLUDE_LZMA
     CLzmaEncProps encProps;
-    UINTP headerSize = LZMA_PROPS_SIZE;
+    AOCL_UINTP headerSize = LZMA_PROPS_SIZE;
     SizeT outLen = outsize - LZMA_PROPS_SIZE;
 	
     LzmaEncProps_Init(&encProps);
@@ -273,8 +273,8 @@ INT64 native_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsiz
 	const ISzAlloc lzma_alloc = { LzmaAlloc, LzmaFree};
 
     //Perform the compression
-    INTP result = LzmaEncode((UINT8 *)outbuf+LZMA_PROPS_SIZE, &outLen, (UINT8 *)inbuf, 
-                     insize, &encProps, (UINT8 *)outbuf, &headerSize, 0, NULL, 
+    AOCL_INTP result = LzmaEncode((AOCL_UINT8 *)outbuf+LZMA_PROPS_SIZE, &outLen, (AOCL_UINT8 *)inbuf, 
+                     insize, &encProps, (AOCL_UINT8 *)outbuf, &headerSize, 0, NULL, 
                      &lzma_alloc, &lzma_alloc);
 	if (result != SZ_OK)
     {
@@ -287,7 +287,7 @@ INT64 native_lzma_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsiz
     #endif
 }
 
-INT64 native_lzma_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize)
+AOCL_INT64 native_lzma_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize)
 {   
     #ifndef AOCL_EXCLUDE_LZMA
     SizeT outLen = outsize;
@@ -296,8 +296,8 @@ INT64 native_lzma_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outs
 	const ISzAlloc lzma_alloc = { LzmaAlloc, LzmaFree};
 	
     //Perform the decompression
-    INTP result = LzmaDecode((UINT8 *)outbuf, &outLen, (UINT8 *)inbuf+LZMA_PROPS_SIZE, 
-                     &srcLen, (UINT8 *)inbuf, LZMA_PROPS_SIZE, LZMA_FINISH_END,
+    AOCL_INTP result = LzmaDecode((AOCL_UINT8 *)outbuf, &outLen, (AOCL_UINT8 *)inbuf+LZMA_PROPS_SIZE, 
+                     &srcLen, (AOCL_UINT8 *)inbuf, LZMA_PROPS_SIZE, LZMA_FINISH_END,
                      &status, &lzma_alloc);
     if (result != SZ_OK)
     {
@@ -311,7 +311,7 @@ INT64 native_lzma_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outs
 }
 
 //ZSTD
-INT64 native_zstd_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize, UINTP level)
+AOCL_INT64 native_zstd_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize, AOCL_UINTP level)
 {
     #ifndef AOCL_EXCLUDE_ZSTD
     #define ZSTD_STATIC_LINKING_ONLY
@@ -339,7 +339,7 @@ INT64 native_zstd_compress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsiz
     #endif 
 }
 
-INT64 native_zstd_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outsize)
+AOCL_INT64 native_zstd_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize)
 {
     #ifndef AOCL_EXCLUDE_ZSTD
     #define ZSTD_STATIC_LINKING_ONLY
@@ -367,11 +367,11 @@ INT64 native_zstd_decompress(CHAR *inbuf, UINTP insize, CHAR *outbuf, UINTP outs
 }
 
 // Function pointer type defination
-typedef INT64  (*native_compress)(CHAR *,  UINTP, CHAR *, UINTP, UINTP); 
-typedef INT64  (*native_decompress)(CHAR *,  UINTP, CHAR *, UINTP); 
+typedef AOCL_INT64  (*native_compress)(AOCL_CHAR *,  AOCL_UINTP, AOCL_CHAR *, AOCL_UINTP, AOCL_UINTP); 
+typedef AOCL_INT64  (*native_decompress)(AOCL_CHAR *,  AOCL_UINTP, AOCL_CHAR *, AOCL_UINTP); 
 
 /* Perform the native compression through a function pointer */
-INT64 native_run_compress(aocl_compression_desc* aocl_codec_handle, native_compress compress)
+AOCL_INT64 native_run_compress(aocl_compression_desc* aocl_codec_handle, native_compress compress)
 {
     #ifdef WIN32
         timer clkTick;
@@ -380,7 +380,7 @@ INT64 native_run_compress(aocl_compression_desc* aocl_codec_handle, native_compr
 
     initTimer(clkTick);
     getTime(startTime);
-    INT64 resultComp = compress(aocl_codec_handle->inBuf, aocl_codec_handle->inSize, 
+    AOCL_INT64 resultComp = compress(aocl_codec_handle->inBuf, aocl_codec_handle->inSize, 
         aocl_codec_handle->outBuf, aocl_codec_handle->outSize, aocl_codec_handle->level);
     getTime(endTime);
     aocl_codec_handle->cTime = diffTime(clkTick, startTime, endTime);
@@ -388,7 +388,7 @@ INT64 native_run_compress(aocl_compression_desc* aocl_codec_handle, native_compr
 }
 
 /* Perform the native decompression through a function pointer */
-INT64 native_run_decompress(aocl_compression_desc* aocl_codec_handle, native_decompress decompress)
+AOCL_INT64 native_run_decompress(aocl_compression_desc* aocl_codec_handle, native_decompress decompress)
 {
     #ifdef WIN32
         timer clkTick;
@@ -397,7 +397,7 @@ INT64 native_run_decompress(aocl_compression_desc* aocl_codec_handle, native_dec
 
     initTimer(clkTick);
     getTime(startTime);
-    INT64 resultDecomp = decompress(aocl_codec_handle->inBuf, aocl_codec_handle->inSize, 
+    AOCL_INT64 resultDecomp = decompress(aocl_codec_handle->inBuf, aocl_codec_handle->inSize, 
         aocl_codec_handle->outBuf, aocl_codec_handle->outSize);
     getTime(endTime);
     aocl_codec_handle->dTime = diffTime(clkTick, startTime, endTime);
@@ -405,15 +405,15 @@ INT64 native_run_decompress(aocl_compression_desc* aocl_codec_handle, native_dec
 }
 
 /* Run for a particular codec and level */
-INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
+AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     aocl_codec_bench_info* codec_bench_handle,
-    aocl_compression_type codec, INTP level) 
+    aocl_compression_type codec, AOCL_INTP level) 
 {
-    INTP status = 0;
-    UINTP inSize, file_size;
+    AOCL_INTP status = 0;
+    AOCL_UINTP inSize, file_size;
     FILE* inFp = codec_bench_handle->fp;
-    INT64 resultComp = 0;
-    INT64 resultDecomp = 0;
+    AOCL_INT64 resultComp = 0;
+    AOCL_INT64 resultDecomp = 0;
 
     LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
 
@@ -425,7 +425,7 @@ INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     codec_bench_handle->dBestTime = 0;
     aocl_codec_handle->level = level;
     
-    for (INTP k = 0; k < codec_bench_handle->iterations; k++)
+    for (AOCL_INTP k = 0; k < codec_bench_handle->iterations; k++)
     {
         inSize = codec_bench_handle->inSize;
         file_size = codec_bench_handle->file_size;
@@ -749,10 +749,10 @@ INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     return status;
 }
 
-INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
+AOCL_INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
                    aocl_codec_bench_info *codec_bench_handle)
 {
-    INTP retStatus = 0;
+    AOCL_INTP retStatus = 0;
 
     LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
 
@@ -778,9 +778,9 @@ INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
         for (aocl_compression_type codec = LZ4; codec < AOCL_COMPRESSOR_ALGOS_NUM; codec++)
         {
             aocl_codec_handle->optVar = codec_list[codec].extra_param;
-            for (INTP level = codec_list[codec].lower_level; level <= codec_list[codec].upper_level; level++)
+            for (AOCL_INTP level = codec_list[codec].lower_level; level <= codec_list[codec].upper_level; level++)
             {
-                INTP status = native_bench_codec_run(aocl_codec_handle, codec_bench_handle, 
+                AOCL_INTP status = native_bench_codec_run(aocl_codec_handle, codec_bench_handle, 
                     codec, level);
                 if (status < 0) 
                 {
@@ -794,8 +794,8 @@ INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
     }
     else
     {
-        INTP def_level = aocl_codec_handle->level;
-        INTP lower_level, upper_level;
+        AOCL_INTP def_level = aocl_codec_handle->level;
+        AOCL_INTP lower_level, upper_level;
 
         if (def_level == UNINIT_LEVEL)
         {
@@ -816,7 +816,7 @@ INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
         {
             /* In decompress only mode, given input file is decompressed.
              * Level information is not used. Run only once. */
-            INTP status = native_bench_codec_run(aocl_codec_handle, codec_bench_handle,
+            AOCL_INTP status = native_bench_codec_run(aocl_codec_handle, codec_bench_handle,
                 codec_bench_handle->codec_method, def_level);
             if (status < 0) 
             {
@@ -826,9 +826,9 @@ INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
         }
         else 
         {
-            for (INTP level = lower_level; level <= upper_level; level++) // run for requested levels
+            for (AOCL_INTP level = lower_level; level <= upper_level; level++) // run for requested levels
             {
-                INTP status = native_bench_codec_run(aocl_codec_handle, codec_bench_handle,
+                AOCL_INTP status = native_bench_codec_run(aocl_codec_handle, codec_bench_handle,
                     codec_bench_handle->codec_method, level);
                 if (status < 0) 
                 {

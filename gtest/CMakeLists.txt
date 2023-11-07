@@ -105,6 +105,10 @@ if (AOCL_LZ4_HASH_BITS_USED)
 	endif()
 endif()
 
+if (AOCL_ENABLE_LOG_FEATURE)
+    set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_LOG_FEATURE")
+endif()
+
 foreach(FILE ${GTEST_SRC_FILES})
     string(REGEX MATCH "[A-Za-z0-9]*_gtest" TNAME ${FILE})
     add_executable(${TNAME} ${FILE})

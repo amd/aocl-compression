@@ -42,6 +42,8 @@
 
 #include "LzmaEnc.h"
 
+#include "utils/utils.h"
+
 #include "LzFind.h"
 #define _7ZIP_ST
 #ifndef _7ZIP_ST
@@ -95,6 +97,7 @@ void (*LzmaEncProps_Normalize_fp)(CLzmaEncProps* p) = LzmaEncProps_Normalize;
 
 void LzmaEncProps_Init(CLzmaEncProps *p)
 {
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
   p->level = 5;
   p->dictSize = p->mc = 0;
   p->reduceSize = (UInt64)(Int64)-1;
@@ -105,6 +108,7 @@ void LzmaEncProps_Init(CLzmaEncProps *p)
   p->srcLen = 0;
   p->cacheEfficientStrategy = -1;
 #endif
+  LOG_UNFORMATTED(INFO, logCtx, "Exit");
 }
 
 // Default settings as per LZMA SDK 22.01
@@ -4422,18 +4426,28 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
   if (src == NULL || srcLen == 0 || dest == NULL || propsEncoded == NULL ||
       props == NULL || propsSize == NULL || destLen == NULL ||
       *destLen > (ULLONG_MAX - LZMA_PROPS_SIZE)) // handles case when dest size is < LZMA_PROPS_SIZE, resulting in destLen rolling over in calling APIs
+  {
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return SZ_ERROR_PARAM;
+  }
 
   if (ValidateParams(props) != SZ_OK)
+  {
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return SZ_ERROR_PARAM;
+  }
 
   CLzmaEnc *p = (CLzmaEnc *)LzmaEnc_Create(alloc);
   SRes res;
   if (!p)
+  {
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return SZ_ERROR_MEM;
+  }
 
 #ifdef AOCL_LZMA_OPT
   CLzmaEncProps props_cur = *props;
@@ -4456,6 +4470,8 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
   }
 
   LzmaEnc_Destroy(p, alloc, allocBig);
+  
+  LOG_UNFORMATTED(INFO, logCtx, "Exit");
   return res;
 }
 

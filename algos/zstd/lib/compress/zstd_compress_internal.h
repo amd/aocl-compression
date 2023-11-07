@@ -485,6 +485,7 @@ struct ZSTD_CCtx_s {
 
     /* Workspace for external matchfinder */
     ZSTD_externalMatchCtx externalMatchCtx;
+
 };
 
 typedef enum { ZSTD_dtlm_fast, ZSTD_dtlm_full } ZSTD_dictTableLoadMethod_e;

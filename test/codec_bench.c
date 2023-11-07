@@ -46,11 +46,11 @@
 
 
 //Input test file name
-CHAR inFile[MAX_FILENAME_LEN];
-CHAR dumpFile[MAX_FILENAME_LEN];
-INTP dumpEnabled = 0;
-CHAR valFile[MAX_FILENAME_LEN];
-INTP valEnabled = 0;
+AOCL_CHAR inFile[MAX_FILENAME_LEN];
+AOCL_CHAR dumpFile[MAX_FILENAME_LEN];
+AOCL_INTP dumpEnabled = 0;
+AOCL_CHAR valFile[MAX_FILENAME_LEN];
+AOCL_INTP valEnabled = 0;
 
 void print_user_options (void)
 {
@@ -75,8 +75,7 @@ void print_user_options (void)
     printf("-r          Run particular operation only. Supported options are 'compress' and 'decompress'.\n\n");
     printf("-d          File to dump output data. Based on -r, saves compressed/decompressed data.\n\n");
     printf("-f          Input uncompressed file to be used for validation in -rdecompress mode.\n\n");
-    printf("-v<>        Enable verbosity. Allowed values: 1 for Error (default), 2 for Info, 3 for Debug, 4 for Trace.\n");
-    printf("-c          Run IPP library methods. Make sure to set the library path with LD_LIBRARY_PATH.\n");
+    printf("-c          Run IPP library methods. Make sure to set the library path with LD_LIBRARY_PATH.\n\n");
     printf("-n          Use Native APIs for compression/decompression.\n\n");
 }
 
@@ -95,19 +94,19 @@ void print_supported_compressors (void)
    printf("BZIP2\t\t %td\t\t%td\n\n", codec_list[BZIP2].lower_level, codec_list[BZIP2].upper_level);
 }
 
-VOID *allocMem(UINTP size, INTP zeroInit)
+AOCL_VOID *allocMem(AOCL_UINTP size, AOCL_INTP zeroInit)
 {
-    VOID *bufPtr = (zeroInit == 0) ? calloc(1, size) : malloc(size);
+    AOCL_VOID *bufPtr = (zeroInit == 0) ? calloc(1, size) : malloc(size);
     return bufPtr;
 }
 
-INTP get_codec_method_level(CHAR *str, 
+AOCL_INTP get_codec_method_level(AOCL_CHAR *str, 
                           aocl_codec_bench_info *codec_bench_handle)
 {
-    CHAR *tok;
-    CHAR *save = str;
-    INTP i = 0;
-    INTP match = 99;
+    AOCL_CHAR *tok;
+    AOCL_CHAR *save = str;
+    AOCL_INTP i = 0;
+    AOCL_INTP match = 99;
  
     tok = strtok_r(save, ":", &save);
     tok = (tok != NULL) ? tok : str;
@@ -150,8 +149,8 @@ INTP get_codec_method_level(CHAR *str,
     return 0;
 }
 
-void read_file_name(CHAR* dst, const CHAR* src) {
-    UINTP src_sz = strlen(src);
+void read_file_name(AOCL_CHAR* dst, const AOCL_CHAR* src) {
+    AOCL_UINTP src_sz = strlen(src);
     if (src_sz > (MAX_FILENAME_LEN - 1)) { 
         memcpy(dst, src, MAX_FILENAME_LEN - 1); // truncate
         dst[MAX_FILENAME_LEN - 1] = '\0';
@@ -161,9 +160,9 @@ void read_file_name(CHAR* dst, const CHAR* src) {
     }
 }
 
-void append_file_name_ext(CHAR* dst, const CHAR* ext) {
-    UINTP cur_sz = strlen(dst);
-    UINTP ext_sz = strlen(ext);
+void append_file_name_ext(AOCL_CHAR* dst, const AOCL_CHAR* ext) {
+    AOCL_UINTP cur_sz = strlen(dst);
+    AOCL_UINTP ext_sz = strlen(ext);
     if ((cur_sz + ext_sz) > (MAX_FILENAME_LEN - 1)) {
         // truncate. Else it will overflow
         strcpy(dst + (MAX_FILENAME_LEN - 1 - ext_sz), ext);
@@ -173,20 +172,21 @@ void append_file_name_ext(CHAR* dst, const CHAR* ext) {
     }
 }
 
-INTP read_user_options (INTP argc, 
-                       CHAR **argv, 
+AOCL_INTP read_user_options (AOCL_INTP argc, 
+                       AOCL_CHAR **argv, 
                        aocl_codec_bench_info *codec_bench_handle)
 {
-    INTP cnt = 1;
-    INTP fileIn = 0;
-    INTP ret = 1;
-    CHAR option;
+    AOCL_INTP cnt = 1;
+    AOCL_INTP fileIn = 0;
+    AOCL_INTP ret = 1;
+    AOCL_CHAR option;
 
-    codec_bench_handle->enable_verbosity = 0;
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
     if (argc <= cnt)
     {
         print_user_options();
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return 2;
     }
 
@@ -267,18 +267,6 @@ INTP read_user_options (INTP argc,
                     codec_bench_handle->useNAPI = 1;
                 break;
                 
-                case 'v':
-                    if (argv[cnt][2] != '\0')
-                    {
-                        codec_bench_handle->enable_verbosity =
-                            atoi(&argv[cnt][2]);
-                        if (codec_bench_handle->enable_verbosity > TRACE ||
-                            codec_bench_handle->enable_verbosity < ERR)
-                            codec_bench_handle->enable_verbosity = ERR;
-                    }
-                    else
-                        codec_bench_handle->enable_verbosity = ERR;
-                break;
 #ifdef AOCL_DYNAMIC_DISPATCHER
                 case 'o':
                     codec_bench_handle->optOff = 1;
@@ -341,7 +329,7 @@ INTP read_user_options (INTP argc,
         {
             if (!fileIn)
             {
-                CHAR *tmpStr;
+                AOCL_CHAR *tmpStr;
                 read_file_name(inFile, argv[cnt]);
 #ifdef _WINDOWS
                 tmpStr = strrchr(inFile, '\\');
@@ -362,19 +350,20 @@ INTP read_user_options (INTP argc,
             break;
     }
 
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return ret;
 }
 
-UINTP compression_bound(UINTP inSize)
+AOCL_UINTP compression_bound(AOCL_UINTP inSize)
 {
-    UINTP outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
+    AOCL_UINTP outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
     return outSize;
 }
 
-INTP init(aocl_codec_bench_info *codec_bench_handle,
+AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
           aocl_compression_desc *aocl_codec_handle)
 {
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
     codec_bench_handle->inSize = 
          (codec_bench_handle->file_size > codec_bench_handle->mem_limit) ?
@@ -415,31 +404,32 @@ INTP init(aocl_codec_bench_info *codec_bench_handle,
     aocl_codec_handle->workBuf = NULL;
     aocl_codec_handle->optOff = codec_bench_handle->optOff;
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
 
     if (!codec_bench_handle->inPtr || !codec_bench_handle->outPtr ||
         !codec_bench_handle->decompPtr)
     {
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return -1;
     }
     else
     {
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return 0;
     }
 }
 
 /* Run for a particular codec and level */
-INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
+AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     aocl_codec_bench_info* codec_bench_handle,
-    aocl_compression_type codec, INTP level) 
+    aocl_compression_type codec, AOCL_INTP level) 
 {
-    INTP status = 0;
-    UINTP inSize, file_size;
+    AOCL_INTP status = 0;
+    AOCL_UINTP inSize, file_size;
     FILE* inFp = codec_bench_handle->fp;
-    INT64 resultComp = 0;
-    INT64 resultDecomp = 0;
+    AOCL_INT64 resultComp = 0;
+    AOCL_INT64 resultDecomp = 0;
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
     codec_bench_handle->cTime = 0;
     codec_bench_handle->cSize = 0;
@@ -452,15 +442,16 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     //setup the codec method
     if (aocl_llc_setup(aocl_codec_handle, codec) != 0)
     {
-        LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_FORMATTED(ERR, logCtx,
             "Setup failed for codec [%s].", codec_list[codec].codec_name);
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return -2;
     }
 
-    for (INTP k = 0; k < codec_bench_handle->iterations; k++)
+    for (AOCL_INTP k = 0; k < codec_bench_handle->iterations; k++)
     {
-        UINT64 temp_cTime = 0;
-        UINT64 temp_dTime = 0;
+        AOCL_UINT64 temp_cTime = 0;
+        AOCL_UINT64 temp_dTime = 0;
         inSize = codec_bench_handle->inSize;
         file_size = codec_bench_handle->file_size;
 
@@ -489,7 +480,7 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 if (dumpEnabled && k == 0 /* dump only during 1st iteration */) 
                 {
                     // dump compressed data to file
-                    UINTP written = fwrite(aocl_codec_handle->outBuf, sizeof(CHAR), resultComp,
+                    AOCL_UINTP written = fwrite(aocl_codec_handle->outBuf, sizeof(AOCL_CHAR), resultComp,
                         codec_bench_handle->dumpFp);
                     if (written < resultComp) 
                     {
@@ -592,7 +583,7 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             if (dumpEnabled && k == 0 /* dump only during 1st iteration */) 
             {
                 // dump decompressed data to file
-                UINTP written = fwrite(aocl_codec_handle->outBuf, sizeof(CHAR), resultDecomp,
+                AOCL_UINTP written = fwrite(aocl_codec_handle->outBuf, sizeof(AOCL_CHAR), resultDecomp,
                     codec_bench_handle->dumpFp);
                 if (written < resultDecomp) 
                 {
@@ -651,8 +642,9 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
     if (status != 0)
     {
-        LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_FORMATTED(ERR, logCtx,
             "Compression/Decompression/Verification operation failed for codec [%s].", codec_list[codec].codec_name);
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return status;
     }
 
@@ -730,16 +722,16 @@ INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         }
     }
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return status;
 }
 
-INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
+AOCL_INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                    aocl_codec_bench_info *codec_bench_handle)
 {
-    INTP retStatus = 0;
+    AOCL_INTP retStatus = 0;
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
     aocl_codec_handle->memLimit = codec_bench_handle->mem_limit;
 
@@ -752,9 +744,10 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
     {
         /* data decompressed using a certain codec can only be decompressed
          * by that particular codec. Run-all-codecs mode is not supported in this case */
-        LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_UNFORMATTED(ERR, logCtx,
             "Codec not specified. Specify codec using -e when running -rdecompress mode.");
         printf("Codec not specified. Specify codec using -e when running -rdecompress mode.\n\n");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return -2;
     }
 
@@ -763,9 +756,9 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
         for (aocl_compression_type codec = LZ4; codec < AOCL_COMPRESSOR_ALGOS_NUM; codec++)
         {
             aocl_codec_handle->optVar = codec_list[codec].extra_param;
-            for (INTP level = codec_list[codec].lower_level; level <= codec_list[codec].upper_level; level++)
+            for (AOCL_INTP level = codec_list[codec].lower_level; level <= codec_list[codec].upper_level; level++)
             {
-                INTP status = aocl_bench_codec_run(aocl_codec_handle, codec_bench_handle, 
+                AOCL_INTP status = aocl_bench_codec_run(aocl_codec_handle, codec_bench_handle, 
                     codec, level);
                 if (status < 0) 
                 {
@@ -779,8 +772,8 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
     }
     else
     {
-        INTP def_level = aocl_codec_handle->level;
-        INTP lower_level, upper_level;
+        AOCL_INTP def_level = aocl_codec_handle->level;
+        AOCL_INTP lower_level, upper_level;
 
         if (def_level == UNINIT_LEVEL)
         {
@@ -801,19 +794,20 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
         {
             /* In decompress only mode, given input file is decompressed.
              * Level information is not used. Run only once. */
-            INTP status = aocl_bench_codec_run(aocl_codec_handle, codec_bench_handle,
+            AOCL_INTP status = aocl_bench_codec_run(aocl_codec_handle, codec_bench_handle,
                 codec_bench_handle->codec_method, def_level);
             if (status < 0) 
             {
                 retStatus = status;
+                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
                 return retStatus;
             }
         }
         else 
         {
-            for (INTP level = lower_level; level <= upper_level; level++) // run for requested levels
+            for (AOCL_INTP level = lower_level; level <= upper_level; level++) // run for requested levels
             {
-                INTP status = aocl_bench_codec_run(aocl_codec_handle, codec_bench_handle,
+                AOCL_INTP status = aocl_bench_codec_run(aocl_codec_handle, codec_bench_handle,
                     codec_bench_handle->codec_method, level);
                 if (status < 0) 
                 {
@@ -824,14 +818,14 @@ INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
             }
         }
     }
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 
     return retStatus;
 }
 
 void destroy(aocl_codec_bench_info *codec_bench_handle)
 {
-    LOG_UNFORMATTED(TRACE, codec_bench_handle->enable_verbosity, "Enter");
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
     if (codec_bench_handle->inPtr)
         free(codec_bench_handle->inPtr);
@@ -840,37 +834,31 @@ void destroy(aocl_codec_bench_info *codec_bench_handle)
     if (codec_bench_handle->decompPtr)
         free(codec_bench_handle->decompPtr);
 
-    LOG_UNFORMATTED(TRACE, codec_bench_handle->enable_verbosity, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 }
-    
-INT32 main (INT32 argc, CHAR **argv)
+
+AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
 {
     aocl_codec_bench_info codec_bench_handle;
     aocl_compression_desc aocl_codec_ds;
     aocl_compression_desc *aocl_codec_handle = &aocl_codec_ds;
     FILE* inFp = NULL, * dumpFp = NULL, * valFp = NULL;
-    INTP result = 0;
-    INTP ret;
+    AOCL_INTP result = 0;
+    AOCL_INTP ret;
 
     ret = read_user_options (argc, argv, &codec_bench_handle);
 
-#ifdef AOCL_CL_DTL
-    aocl_codec_handle->printDebugLogs = codec_bench_handle.enable_verbosity;
-#else
-    aocl_codec_handle->printDebugLogs = 0;
-#endif
-
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
     if (ret == 0)
     {
-        LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_UNFORMATTED(ERR, logCtx,
         "Invalid option passed, ignoring more than one input file. Use -h to know supported user options.");
         printf("Invalid option passed, ignoring more than one input file. Use -h to know supported user options.\n");
     }
     else if (ret == ERR_CODEC_BENCH_ARGS)
     {
-        LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_UNFORMATTED(ERR, logCtx,
         "Invalid option passed. Use -h to know supported user options.");
         printf("Invalid option passed. Use -h to know supported user options.\n");
         result = ret;
@@ -878,7 +866,7 @@ INT32 main (INT32 argc, CHAR **argv)
     }
     else if (ret == ERR_CODEC_BENCH_METHOD)
     {
-        LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_UNFORMATTED(ERR, logCtx,
         "Unsupported compression method or level specified. Use -l to know supported methods and -h for exact user options.");
         printf("Unsupported option passed. Use -l to know supported methods and -h for exact user options.\n");
         result = ret;
@@ -889,7 +877,7 @@ INT32 main (INT32 argc, CHAR **argv)
 
     if (!(inFp = fopen(inFile, "rb")))
     {
-        LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_FORMATTED(ERR, logCtx,
         "Error in opening input file [%s].", inFile);
         printf("Error in opening input file [%s].\n", inFile);
         result = ERR_CODEC_BENCH_FILE_IO;
@@ -909,7 +897,7 @@ INT32 main (INT32 argc, CHAR **argv)
         // handle invalid cases
         if (codec_bench_handle.codec_method < 0) 
         {
-            LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+            LOG_UNFORMATTED(ERR, logCtx,
                 "Arg -d ignored. Specify codec and level using -e to avail this feature.");
             printf("Arg -d ignored. Specify codec and level using -e to avail this feature.\n\n");
             dumpEnabled = 0;
@@ -920,7 +908,7 @@ INT32 main (INT32 argc, CHAR **argv)
                     == codec_list[codec_bench_handle.codec_method].upper_level /* method supports only 1 level */)))
         {
             // Level must be specified in non-decompress only modes, as dump is for a single run only.
-            LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+            LOG_UNFORMATTED(ERR, logCtx,
                 "Arg -d ignored. Specify codec level with -e arg to avail this feature.");
             printf("Arg -d ignored. Specify codec level with -e arg to avail this feature.\n\n");
             dumpEnabled = 0;
@@ -939,7 +927,7 @@ INT32 main (INT32 argc, CHAR **argv)
             // open file to dump compressed/decompressed data
             if (!(dumpFp = fopen(dumpFile, "wb")))
             {
-                LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                LOG_FORMATTED(ERR, logCtx,
                     "Error in opening output file [%s].", dumpFile);
                 printf("Error in opening output file [%s].\n", dumpFile);
                 result = ERR_CODEC_BENCH_FILE_IO;
@@ -953,13 +941,13 @@ INT32 main (INT32 argc, CHAR **argv)
     {
         if (codec_bench_handle.runOperation != RUN_OPERATION_DECOMPRESS) 
         {
-            LOG_UNFORMATTED(INFO, aocl_codec_handle->printDebugLogs,
+            LOG_UNFORMATTED(INFO, logCtx,
                 "-f option ignored. It is valid only when -rdecompress is passed.");
         }
         // open file with reference decompressed data for validation
         if (!(valFp = fopen(valFile, "rb")))
         {
-            LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+            LOG_FORMATTED(ERR, logCtx,
                 "Error in opening validation file [%s].", valFile);
             printf("Error in opening validation file [%s].\n", valFile);
             result = ERR_CODEC_BENCH_FILE_IO;
@@ -987,7 +975,7 @@ INT32 main (INT32 argc, CHAR **argv)
 
     if (init(&codec_bench_handle, aocl_codec_handle) < 0)
     {
-        LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_UNFORMATTED(ERR, logCtx,
         "Error in allocating memory.");
         result = ERR_CODEC_BENCH_MEM;
 		goto exit;
@@ -996,7 +984,7 @@ INT32 main (INT32 argc, CHAR **argv)
 
     if (codec_bench_handle.useIPP)
 #ifdef _WINDOWS
-        LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_UNFORMATTED(ERR, logCtx,
             "IPP test execution not supported on Windows for now.");
 #else
         result = ipp_bench_run(aocl_codec_handle, &codec_bench_handle);
@@ -1009,7 +997,7 @@ INT32 main (INT32 argc, CHAR **argv)
         result = aocl_bench_run(aocl_codec_handle, &codec_bench_handle);
     if (result != 0)
     {
-        LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_UNFORMATTED(ERR, logCtx,
         "Error in compression and decompression operations.");
     }
 
@@ -1022,6 +1010,6 @@ exit:
         fclose(dumpFp);
     if (valFp)
         fclose(valFp);
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return result;
 }

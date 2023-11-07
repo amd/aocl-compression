@@ -100,13 +100,12 @@
 /*-************************************
 *  Debug
 **************************************/
-#if defined(LZ4_DEBUG) && (LZ4_DEBUG>=1)
-#  include <assert.h>
-#else
-#  ifndef assert
-#    define assert(condition) ((void)0)
-#  endif
-#endif
+/* 
+    In Release mode assert statements are disabled by CMake,
+    by passing NDEBUG flag, which disables assert statement.
+    In Debug mode assert statements are automatically enabled.
+*/
+#include <assert.h>
 
 #define LZ4F_STATIC_ASSERT(c)    { enum { LZ4F_static_assert = 1/(int)(!!(c)) }; }   /* use only *after* variable declarations */
 

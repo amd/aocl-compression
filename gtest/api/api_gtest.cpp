@@ -43,6 +43,7 @@
 
 #include "api/aocl_compression.h"
 #include "api/types.h"
+#include "utils/utils.h"
 
 using namespace std;
 
@@ -50,9 +51,9 @@ typedef aocl_compression_desc ACD;
 typedef aocl_compression_type ACT;
 
 typedef struct {
-    INTP lower;
-    INTP upper;
-    INTP def;
+    AOCL_INTP lower;
+    AOCL_INTP upper;
+    AOCL_INTP def;
 } algo_level_t;
 
 //List of supported compression methods along with their parameters
@@ -246,7 +247,7 @@ public:
 /*
 * Init ACD
 */
-void reset_ACD(ACD* desc, INTP level) {
+void reset_ACD(ACD* desc, AOCL_INTP level) {
     desc->inBuf = nullptr;
     desc->outBuf = nullptr;
     desc->workBuf = nullptr;
@@ -266,7 +267,9 @@ void reset_ACD(ACD* desc, INTP level) {
     desc->dSpeed = 0.0;
     desc->optOff = 0;
     desc->optLevel = DEFAULT_OPT_LEVEL;
-    desc->printDebugLogs = 0;
+#ifdef AOCL_ENABLE_LOG_FEATURE
+    logCtx.maxLevel = -1;
+#endif /* AOCL_ENABLE_LOG_FEATURE */
 }
 
 void set_ACD_io_bufs(ACD* desc, TestLoadBase* t) {
@@ -342,17 +345,19 @@ TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_ioSet_common_3) //ACD inBu
     destroy();
 }
 
+#ifdef AOCL_ENABLE_LOG_FEATURE
 TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_logs_common) //logs
 {
     skip_test_if_algo_invalid(algo)
     //Log levels: ERR:1,...TRACE:4
     for (int logLevel = 1; logLevel <= 4; ++logLevel) { //AOCL_Compression_api_aocl_llc_setup_logs_common_4-7
         reset_ACD(&desc, algo_levels[algo].def);
-        desc.printDebugLogs = logLevel;
+        logCtx.maxLevel = logLevel;
         setup_and_validate();
         destroy();
     }
 }
+#endif /* AOCL_ENABLE_LOG_FEATURE */
 
 /*
 * Crashes
@@ -630,7 +635,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_levelsOptOn_common) 
     skip_test_if_algo_invalid(algo)
     //AOCL_Compression_api_aocl_llc_compress_levelsOptOn_common_1-313
     for (int cpuOptLvl = 0; cpuOptLvl <= MAX_OPT_LEVEL; cpuOptLvl++) { //with optOn, test all dynamic dispatcher supported levels
-        for (INTP level = algo_levels[algo].lower; level <= algo_levels[algo].upper; level++) {
+        for (AOCL_INTP level = algo_levels[algo].lower; level <= algo_levels[algo].upper; level++) {
             if (level == algo_levels[algo].def && cpuOptLvl == DEFAULT_OPT_LEVEL) continue; //run non-default config only
             reset_ACD(&desc, level);
             desc.optLevel = cpuOptLvl;
@@ -644,7 +649,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_levelsOptOff_common)
 {
     skip_test_if_algo_invalid(algo)
     //AOCL_Compression_api_aocl_llc_compress_levelsOptOff_common_1-57
-    for (INTP level = algo_levels[algo].lower; level <= algo_levels[algo].upper; level++) {
+    for (AOCL_INTP level = algo_levels[algo].lower; level <= algo_levels[algo].upper; level++) {
         if (level == algo_levels[algo].def) continue;  //run non-default config only
         reset_ACD(&desc, level);
         desc.optOff = 1; //switch off optimizations

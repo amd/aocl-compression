@@ -31,7 +31,6 @@ int main (int argc, char **argv)
     aocl_compression_type method = LZ4;
     aocl_compression_handle->level = 0;
     aocl_compression_handle->optVar = 0;
-    aocl_compression_handle->printDebugLogs = 0;
     aocl_compression_handle->inSize = file_size;
     aocl_compression_handle->outSize = (file_size + (file_size / 6) + (16 * 1024));
     inPtr = (char *)calloc(1, aocl_compression_handle->inSize);

@@ -9,6 +9,8 @@
 #define ZLIB_INTERNAL
 #include "zlib.h"
 
+#include "utils/utils.h"
+
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
 #ifdef AOCL_DYNAMIC_DISPATCHER
@@ -40,8 +42,10 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
 */
 int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
                       uLong sourceLen, int level) {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if(destLen == NULL)
     {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return Z_BUF_ERROR;
     }
     
@@ -58,7 +62,11 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
     stream.opaque = (voidpf)0;
 
     err = deflateInit(&stream, level);
-    if (err != Z_OK) return err;
+    if (err != Z_OK)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return err;
+    }
 
     stream.next_out = dest;
     stream.avail_out = 0;
@@ -79,6 +87,8 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
 
     *destLen = stream.total_out;
     deflateEnd(&stream);
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    
     return err == Z_STREAM_END ? Z_OK : err;
 }
 

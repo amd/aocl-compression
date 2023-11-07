@@ -95,6 +95,8 @@
 #include "zstd_decompress_block.h"   /* ZSTD_decompressBlock_internal */
 #include "../common/bits.h"  /* ZSTD_highbit32 */
 
+#include "utils/utils.h"
+
 #if defined(ZSTD_LEGACY_SUPPORT) && (ZSTD_LEGACY_SUPPORT>=1)
 #  include "../legacy/zstd_legacy.h"
 #endif
@@ -333,8 +335,13 @@ ZSTD_DCtx* ZSTD_createDCtx_advanced(ZSTD_customMem customMem)
 
 ZSTD_DCtx* ZSTD_createDCtx(void)
 {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     DEBUGLOG(3, "ZSTD_createDCtx");
-    return ZSTD_createDCtx_internal(ZSTD_defaultCMem);
+
+    ZSTD_DCtx * temp_ZSTD_DCtx = ZSTD_createDCtx_internal(ZSTD_defaultCMem);
+
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return temp_ZSTD_DCtx;
 }
 
 static void ZSTD_clearDict(ZSTD_DCtx* dctx)
@@ -347,7 +354,12 @@ static void ZSTD_clearDict(ZSTD_DCtx* dctx)
 
 size_t ZSTD_freeDCtx(ZSTD_DCtx* dctx)
 {
-    if (dctx==NULL) return 0;   /* support free on NULL */
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    if (dctx==NULL)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return 0;   /* support free on NULL */
+    }
     RETURN_ERROR_IF(dctx->staticSize, memory_allocation, "not compatible with static DCtx");
     {   ZSTD_customMem const cMem = dctx->customMem;
         ZSTD_clearDict(dctx);
@@ -362,6 +374,8 @@ size_t ZSTD_freeDCtx(ZSTD_DCtx* dctx)
             dctx->ddictSet = NULL;
         }
         ZSTD_customFree(dctx, cMem);
+
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return 0;
     }
 }
@@ -1201,8 +1215,17 @@ static ZSTD_DDict const* ZSTD_getDDict(ZSTD_DCtx* dctx)
 
 size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
-    if (dctx == NULL) return ERROR(GENERIC);
-    return ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    if (dctx == NULL)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return ERROR(GENERIC);;
+    }
+
+    size_t ret = ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
+
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return ret;
 }
 
 

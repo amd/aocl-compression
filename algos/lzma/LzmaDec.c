@@ -36,6 +36,8 @@
 /* #include "CpuArch.h" */
 #include "LzmaDec.h"
 
+#include "utils/utils.h"
+
 #ifdef AOCL_LZMA_OPT
 #include <limits.h>
 #endif
@@ -1958,6 +1960,7 @@ SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
     const Byte* propData, unsigned propSize, ELzmaFinishMode finishMode,
     ELzmaStatus* status, ISzAllocPtr alloc)
 {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if (src == NULL || srcLen == NULL || dest == NULL || propData == NULL ||
         destLen == NULL || *srcLen == 0 ||
         *srcLen > (ULLONG_MAX - LZMA_PROPS_SIZE)) // handles case when src size is < LZMA_PROPS_SIZE, resulting in destLen rolling over in calling APIs

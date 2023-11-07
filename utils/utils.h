@@ -39,8 +39,6 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#define AOCL_CL_DTL
-
 #define AOCL_CL_STATS
 
 #define AOCL_CL_CPUID_SIMD_DETECTION
@@ -51,7 +49,7 @@
 #define FUNC_NAME __FUNCTION__
 #endif
 
-#ifdef AOCL_CL_DTL
+#ifdef AOCL_ENABLE_LOG_FEATURE
 #define ERR      1
 #define INFO     2
 #define DEBUG    3
@@ -62,10 +60,11 @@
 #define DEBUG    0
 #define TRACE    0
 
-#endif
+#endif /* AOCL_ENABLE_LOG_FEATURE */
 
 #ifdef AOCL_CL_STATS
 #ifdef _WINDOWS
+#define NOMINMAX
 #include <windows.h>
 typedef LARGE_INTEGER timer;
 typedef LARGE_INTEGER timeVal;
@@ -78,12 +77,50 @@ typedef struct timespec timeVal;
 #endif
 #endif
 
-//Logger - DTL
-#ifdef AOCL_CL_DTL
+#include <string.h>
 #include <stdio.h>
+#include "api/types.h"
+
+//Logger - DTL
+#ifdef AOCL_ENABLE_LOG_FEATURE
+typedef struct {
+int maxLevel; // set via AOCL_ENABLE_LOG
+//LOG* filePtr; in the future, we can add a pointer to a log file here and pass it instead of logging to stdout
+} aocl_log_ctx;
+
 #ifdef __cplusplus
-#define LOG_UNFORMATTED(logType, enableLog, str)     do {\
-                            if (enableLog)\
+extern "C" {
+#endif
+
+extern aocl_log_ctx logCtx;
+
+#ifdef __cplusplus
+}
+#endif
+
+#define SET_MAX_LOG_LEVEL(logCtx)\
+{\
+                            _Pragma("omp critical")\
+                            {\
+                                const char * AOCL_Compression_logs = getenv("AOCL_ENABLE_LOG");\
+                                if(AOCL_Compression_logs == NULL)\
+                                    logCtx.maxLevel = 0;\
+                                else if(!strcmp(AOCL_Compression_logs, "ERR"))\
+                                    logCtx.maxLevel = 1;\
+                                else if(!strcmp(AOCL_Compression_logs, "INFO"))\
+                                    logCtx.maxLevel = 2;\
+                                else if(!strcmp(AOCL_Compression_logs, "DEBUG"))\
+                                    logCtx.maxLevel = 3;\
+                                else if(!strcmp(AOCL_Compression_logs, "TRACE"))\
+                                    logCtx.maxLevel = 4;\
+                                else\
+                                    logCtx.maxLevel = 0;\
+                            }\
+}
+
+#define LOG_UNFORMATTED(logType, logCtx, str)     do {\
+                            SET_MAX_LOG_LEVEL(logCtx)\
+                            if (logType <= logCtx.maxLevel)\
                             {\
                                 const char *type=NULL;\
                                 if (logType == ERR)\
@@ -94,17 +131,25 @@ typedef struct timespec timeVal;
                                     type = "DEBUG";\
                                 else if (logType == TRACE)\
                                     type = "TRACE";\
-                                if (logType <= enableLog)\
+                                if(logType == ERR)\
                                 {\
-                                    fprintf (stdout, "[%s] : %s : %s : %d : ",\
+                                    fprintf(stderr, "[%s] : %s : %s : %d : ",\
+                                    type, __FILE__, FUNC_NAME, __LINE__);\
+                                    fprintf(stderr, str);\
+                                    fprintf(stderr, "\n");\
+                                }\
+                                else\
+                                {\
+                                    fprintf(stdout, "[%s] : %s : %s : %d : ",\
                                     type, __FILE__, FUNC_NAME, __LINE__);\
                                     fprintf(stdout, str);\
                                     fprintf(stdout, "\n");\
                                 }\
                             }\
                         } while (0)
-#define LOG_FORMATTED(logType, enableLog, str, ...)     do {\
-                            if (enableLog)\
+#define LOG_FORMATTED(logType, logCtx, str, ...)     do {\
+                            SET_MAX_LOG_LEVEL(logCtx)\
+                            if (logType <= logCtx.maxLevel)\
                             {\
                                 const char *type=NULL;\
                                 if (logType == ERR)\
@@ -115,9 +160,16 @@ typedef struct timespec timeVal;
                                     type = "DEBUG";\
                                 else if (logType == TRACE)\
                                     type = "TRACE";\
-                                if (logType <= enableLog)\
+                                if(logType == ERR)\
                                 {\
-                                    fprintf (stdout, "[%s] : %s : %s : %d : ",\
+                                    fprintf(stderr, "[%s] : %s : %s : %d : ",\
+                                    type, __FILE__, FUNC_NAME, __LINE__);\
+                                    fprintf(stderr, str, __VA_ARGS__);\
+                                    fprintf(stderr, "\n");\
+                                }\
+                                else\
+                                {\
+                                    fprintf(stdout, "[%s] : %s : %s : %d : ",\
                                     type, __FILE__, FUNC_NAME, __LINE__);\
                                     fprintf(stdout, str, __VA_ARGS__);\
                                     fprintf(stdout, "\n");\
@@ -125,54 +177,27 @@ typedef struct timespec timeVal;
                             }\
                         } while (0)
 #else
-#define LOG_UNFORMATTED(logType, enableLog, str)     do {\
-                            if (enableLog)\
-                            {\
-                                const char *type=NULL;\
-                                if (logType == ERR)\
-                                    type = "ERR";\
-                                else if (logType == INFO)\
-                                    type = "INFO";\
-                                else if (logType == DEBUG)\
-                                    type = "DEBUG";\
-                                else if (logType == TRACE)\
-                                    type = "TRACE";\
-                                if (logType <= enableLog)\
-                                    printf ("[%s] : %s : %s : %d : "str"\n",\
-                                    type, __FILE__, FUNC_NAME, __LINE__);\
-                            }\
-                        } while (0)
-#define LOG_FORMATTED(logType, enableLog, str, ...)     do {\
-                            if (enableLog)\
-                            {\
-                                const char *type=NULL;\
-                                if (logType == ERR)\
-                                    type = "ERR";\
-                                else if (logType == INFO)\
-                                    type = "INFO";\
-                                else if (logType == DEBUG)\
-                                    type = "DEBUG";\
-                                else if (logType == TRACE)\
-                                    type = "TRACE";\
-                                if (logType <= enableLog)\
-                                    printf ("[%s] : %s : %s : %d : "str"\n",\
-                                    type, __FILE__, FUNC_NAME, __LINE__, __VA_ARGS__);\
-                            }\
-                        } while (0)
-#endif
-#else
-#define LOG_UNFORMATTED(logType, enableLog, str)
-#define LOG_FORMATTED(logType, enableLog, str, ...)
+#define LOG_UNFORMATTED(logType, logCtx, str)
+#define LOG_FORMATTED(logType, logCtx, str, ...)
 #endif
 
 //Timer and stats keeping
 #ifdef AOCL_CL_STATS
 #ifdef _WINDOWS
+#ifdef __cplusplus
 #define initTimer(timerClk) if(!QueryPerformanceFrequency(&timerClk))\
                          {\
-                             LOG_UNFORMATTED(ERR, 1, \
-                             "QueryPerformanceFrequency based Timer failed.");\
+                            fprintf(stderr, "[ERR] : %s : %s : %d : ",\
+                                __FILE__, FUNC_NAME, __LINE__);\
+                            fprintf(stderr, "QueryPerformanceFrequency based Timer failed.\n");\
                          }
+#else
+#define initTimer(timerClk) if(!QueryPerformanceFrequency(&timerClk))\
+                         {\
+                            printf ("[ERR] : %s : %s : %d : QueryPerformanceFrequency based Timer failed.\n",\
+                                __FILE__, FUNC_NAME, __LINE__);\
+                         }
+#endif /* __cplusplus */
 #define getTime(timeVal) QueryPerformanceCounter(&timeVal)
 #define diffTime(timerClk, startTime, endTime) ((1000000000ULL * \
                 (endTime.QuadPart - startTime.QuadPart))/timerClk.QuadPart)
@@ -191,9 +216,9 @@ typedef struct timespec timeVal;
 //CPU Features detection using CPUID
 #ifdef AOCL_CL_CPUID_SIMD_DETECTION
 #ifndef _WINDOWS
-inline VOID cpu_features_detection(INTP fn, INTP optVal,
-                                   INTP *eax, INTP *ebx,
-                                   INTP *ecx, INTP *edx)
+inline AOCL_VOID cpu_features_detection(AOCL_INTP fn, AOCL_INTP optVal,
+                                   AOCL_INTP *eax, AOCL_INTP *ebx,
+                                   AOCL_INTP *ecx, AOCL_INTP *edx)
 {
     *eax = fn;
     *ecx = optVal;
@@ -204,9 +229,9 @@ inline VOID cpu_features_detection(INTP fn, INTP optVal,
 }
 #else
 #include <intrin.h>
-inline VOID cpu_features_detection(INTP fn, INTP optVal,
-    INTP* eax, INTP* ebx,
-    INTP* ecx, INTP* edx)
+inline AOCL_VOID cpu_features_detection(AOCL_INTP fn, AOCL_INTP optVal,
+    AOCL_INTP* eax, AOCL_INTP* ebx,
+    AOCL_INTP* ecx, AOCL_INTP* edx)
 {
     INT32 CPUInfo[4];
 
@@ -220,6 +245,6 @@ inline VOID cpu_features_detection(INTP fn, INTP optVal,
 #endif
 #endif
 
-VOID set_cpu_opt_flags(VOID *handle);
+AOCL_VOID set_cpu_opt_flags(AOCL_VOID *handle);
 
 #endif

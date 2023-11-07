@@ -33,13 +33,12 @@
 #define __LZ_FIND_H
 
 #include "7zTypes.h"
-#if defined(AOCL_LZMA_DEBUG) && (AOCL_LZMA_DEBUG>=1)
-#  include <assert.h>
-#else
-#  ifndef assert
-#    define assert(condition) ((void)0)
-#  endif
-#endif
+/* 
+    In Release mode assert statements are disabled by CMake,
+    by passing NDEBUG flag, which disables assert statement.
+    In Debug mode assert statements are automatically enabled.
+ */
+#include <assert.h>
 
 #ifdef AOCL_LZMA_OPT
 #include "LzHash.h"

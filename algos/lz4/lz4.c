@@ -116,6 +116,7 @@
 
 #define LZ4_STATIC_LINKING_ONLY  /* LZ4_DISTANCE_MAX */
 #include "lz4.h"
+#include "utils/utils.h"
 /* see also "memory routines" below */
 
 
@@ -239,13 +240,12 @@ static const int LZ4_minLength = (MFLIMIT+1);
 /*-************************************
 *  Error detection
 **************************************/
-#if defined(LZ4_DEBUG) && (LZ4_DEBUG>=1)
-#  include <assert.h>
-#else
-#  ifndef assert
-#    define assert(condition) ((void)0)
-#  endif
-#endif
+/* 
+    In Release mode assert statements are disabled by CMake,
+    by passing NDEBUG flag, which disables assert statement.
+    In Debug mode assert statements are automatically enabled.
+*/
+#include <assert.h>
 
 #define LZ4_STATIC_ASSERT(c)   { enum { LZ4_static_assert = 1/(int)(!!(c)) }; }   /* use after variable declarations */
 
@@ -2914,7 +2914,12 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
 
 int LZ4_compress_default(const char* src, char* dst, int srcSize, int maxOutputSize)
 {
-    return LZ4_compress_fast(src, dst, srcSize, maxOutputSize, 1);
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+
+    int ret = LZ4_compress_fast(src, dst, srcSize, maxOutputSize, 1);
+    
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return ret;
 }
 
 
@@ -4836,27 +4841,31 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
 
 #else //Non-threaded
 
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    int ret = 0;
 #ifdef AOCL_LZ4_OPT
 #ifdef AOCL_DYNAMIC_DISPATCHER
-    return LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
+    ret = LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
 #else
 #ifdef AOCL_LZ4_AVX2_OPT
-    return AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
+    ret = AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                     endOnInputSize, decode_full_block, noDict,
                                     (BYTE*)dest, NULL, 0);
 #else
-    return LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
+    ret = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                   endOnInputSize, decode_full_block, noDict,
                                   (BYTE*)dest, NULL, 0);
 #endif /* AOCL_LZ4_AVX2_OPT */
 #endif /* AOCL_DYNAMIC_DISPATCHER */
 #else
-    return LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
+    ret = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                   endOnInputSize, decode_full_block, noDict,
                                   (BYTE*)dest, NULL, 0);
 #endif /* AOCL_LZ4_OPT */
-#endif
+#endif /* AOCL_ENABLE_THREADS */
 
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return ret;
 }
 
 #ifdef AOCL_DYNAMIC_DISPATCHER

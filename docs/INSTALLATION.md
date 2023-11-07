@@ -103,6 +103,7 @@ AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for lev
 AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST|  Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Disabled by default)
 AOCL_ZSTD_WILDCOPY_LONG             |  Faster wildcopy when match lengths are long in ZSTD decompression (Disabled by default)
 AOCL_TEST_COVERAGE                  |  Enable GTest and AOCL test bench based CTest suite (Disabled by default)
+AOCL_ENABLE_LOG_FEATURE               |  Enables logging through enironment variable `AOCL_ENABLE_LOG` (Disabled by default)
 CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
 ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
 VALGRIND                            |  Enable Valgrind checks. Only supported on Linux/Debug and incompatible with ASAN=ON (Disabled by default)
@@ -161,13 +162,30 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
    Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
   
 
-* To run the test bench with error/debug/trace/info logs, use the command:<br>
-   `aocl_compression_bench -a -t -v <input filename>`<br>
-   Here, `-v` can be passed with a number such as v<n> that can take values:
-      * 1 for Error (default)
-      * 2 for Info
-      * 3 for Debug
-      * 4 for Trace.
+* To run the test bench with error/debug/trace/info logs, build the library by using `-DAOCL_ENABLE_LOG_FEATURE=ON` & set the environment variable `AOCL_ENABLE_LOG` to any of the following:<br>
+   * `AOCL_ENABLE_LOG=ERR`   for Error logs.
+   * `AOCL_ENABLE_LOG=INFO`  for Error, Info logs.
+   * `AOCL_ENABLE_LOG=DEBUG` for Error, Info, Debug logs.
+   * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.
+
+
+* To run the test bench but only compression or decompression <br>
+   for a given input file, use the command:<br>
+   `aocl_compression_bench -rcompress <input filename>` or <br>
+   `aocl_compression_bench -rdecompress -ezstd <compressed input filename>` or <br>
+   `aocl_compression_bench -rdecompress -ezstd -t -f<uncompressed file for validation> <compressed input filename>` <br>
+   Note: In -rdecompress mode, compression method must be specified using -e option. <br>
+   If validation of decompressed data is needed, specify -t and -f options additionally.
+
+* To run the test bench and dump output data generated <br>
+   for a given input file, use the command:<br>
+   `aocl_compression_bench -d<dump filename> -ezstd:1 <input filename>` or <br>
+   `aocl_compression_bench -d<dump filename> -rcompress -ezstd:1 <input filename>` or <br>
+   `aocl_compression_bench -d<dump filename> -rdecompress -ezstd <compressed input filename>` <br>
+   Here, when -rcompress operation is selected, compressed file gets dumped <br>
+   and when -rdecompress operation is selected, decompressed file gets dumped. <br>
+   Method name and level must be specified using -e for default and -rcompress modes. <br>
+   Method name must be specified using -e for -rdecompress mode.
 
 ---
   

@@ -2018,19 +2018,23 @@ int AOCL_LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int d
 
 int LZ4_compress_HC(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    int ret = 0;
 #ifdef AOCL_LZ4HC_OPT
 
 if(compressionLevel >= 6 && compressionLevel <=9)
 #ifdef AOCL_DYNAMIC_DISPATCHER
-    return LZ4_compress_HC_fp(src, dst, srcSize, dstCapacity, compressionLevel);
+    ret = LZ4_compress_HC_fp(src, dst, srcSize, dstCapacity, compressionLevel);
 #else
-    return AOCL_LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
+    ret = AOCL_LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
 #endif /* AOCL_DYNAMIC_DISPATCHER */
 else
-    return LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
+    ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
 #else
-    return LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
+    ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
 #endif /* AOCL_LZ4HC_OPT */
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return ret;
 }
 
 /* state is presumed sized correctly (>= sizeof(LZ4_streamHC_t)) */

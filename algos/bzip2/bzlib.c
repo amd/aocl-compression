@@ -31,6 +31,7 @@
 
 #include "bzlib_private.h"
 
+#include "utils/utils.h"
 
 /*---------------------------------------------------*/
 /*--- Compression stuff                           ---*/
@@ -1488,14 +1489,18 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
                            int           workFactor )
 {
    bz_stream strm;
+   LOG_UNFORMATTED(TRACE, logCtx, "Enter");
    int ret;
 
    if (dest == NULL || destLen == NULL || 
        source == NULL ||
        blockSize100k < 1 || blockSize100k > 9 ||
        verbosity < 0 || verbosity > 4 ||
-       workFactor < 0 || workFactor > 250) 
+       workFactor < 0 || workFactor > 250)
+   {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
       return BZ_PARAM_ERROR;
+   }
 
    if (workFactor == 0) workFactor = 30;
    strm.bzalloc = NULL;
@@ -1503,7 +1508,11 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
    strm.opaque = NULL;
    ret = BZ2_bzCompressInit ( &strm, blockSize100k, 
                               verbosity, workFactor );
-   if (ret != BZ_OK) return ret;
+   if (ret != BZ_OK)
+   {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
+      return ret;
+   }
 
    strm.next_in = source;
    strm.next_out = dest;
@@ -1517,14 +1526,17 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
    /* normal termination */
    *destLen -= strm.avail_out;   
    BZ2_bzCompressEnd ( &strm );
+   LOG_UNFORMATTED(INFO, logCtx, "Exit");
    return BZ_OK;
 
    output_overflow:
    BZ2_bzCompressEnd ( &strm );
+   LOG_UNFORMATTED(INFO, logCtx, "Exit");
    return BZ_OUTBUFF_FULL;
 
    errhandler:
    BZ2_bzCompressEnd ( &strm );
+   LOG_UNFORMATTED(INFO, logCtx, "Exit");
    return ret;
 }
 
@@ -1539,19 +1551,27 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)
                              int           verbosity )
 {
    bz_stream strm;
+   LOG_UNFORMATTED(TRACE, logCtx, "Enter");
    int ret;
 
    if (dest == NULL || destLen == NULL || 
        source == NULL ||
        (small != 0 && small != 1) ||
        verbosity < 0 || verbosity > 4) 
+       {
+          LOG_UNFORMATTED(INFO, logCtx, "Exit");
           return BZ_PARAM_ERROR;
+       }
 
    strm.bzalloc = NULL;
    strm.bzfree = NULL;
    strm.opaque = NULL;
    ret = BZ2_bzDecompressInit ( &strm, verbosity, small );
-   if (ret != BZ_OK) return ret;
+   if (ret != BZ_OK)
+   {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
+      return ret;
+   }
 
    strm.next_in = source;
    strm.next_out = dest;
@@ -1565,19 +1585,24 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)
    /* normal termination */
    *destLen -= strm.avail_out;
    BZ2_bzDecompressEnd ( &strm );
+   LOG_UNFORMATTED(INFO, logCtx, "Exit");
    return BZ_OK;
 
    output_overflow_or_eof:
    if (strm.avail_out > 0) {
       BZ2_bzDecompressEnd ( &strm );
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
       return BZ_UNEXPECTED_EOF;
    } else {
       BZ2_bzDecompressEnd ( &strm );
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
       return BZ_OUTBUFF_FULL;
    };      
 
    errhandler:
    BZ2_bzDecompressEnd ( &strm );
+   
+   LOG_UNFORMATTED(INFO, logCtx, "Exit");
    return ret; 
 }
 

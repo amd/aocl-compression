@@ -30,6 +30,21 @@
 #include "snappy-internal.h"
 #include "snappy-sinksource.h"
 
+#include "utils/utils.h"
+/*
+  max & min MACROS are defined internally inside windows.h, when library
+  is built for windows, those MACROS gets imported and override member functions
+  hence those macros are undefined after importing from windows.
+*/
+#ifdef _WINDOWS
+#ifdef max
+#undef max
+#endif /* max */
+#ifdef min
+#undef min
+#endif /* min */
+#endif /* _WINDOWS */
+
 #if !defined(SNAPPY_HAVE_SSSE3)
 // __SSSE3__ is defined by GCC and Clang. Visual Studio doesn't target SIMD
 // support between SSE2 and AVX (so SSSE3 instructions require AVX support), and
@@ -1827,17 +1842,28 @@ bool AOCL_SAW_RawUncompress(const char* compressed, size_t compressed_length, ch
 
 #ifdef AOCL_SNAPPY_OPT 
 bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
   // sanity checks ------------------------------------------------------------
      size_t ulength;
-     if (!GetUncompressedLength(compressed, compressed_length, &ulength)) return false;
-     if (ulength != 0 && uncompressed == NULL) return false;
+     if (!GetUncompressedLength(compressed, compressed_length, &ulength))
+     {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return false;
+     }
+     if (ulength != 0 && uncompressed == NULL)
+     {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return false;
+     }
   // sanity checks ------------------------------------------------------------
-
+  bool ret = false;
   #ifdef AOCL_DYNAMIC_DISPATCHER
-    return SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
+    ret = SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
   #else
-    return AOCL_SAW_RawUncompress(compressed, compressed_length, uncompressed);
+    ret = AOCL_SAW_RawUncompress(compressed, compressed_length, uncompressed);
   #endif
+  LOG_UNFORMATTED(INFO, logCtx, "Exit");
+  return ret;
 }
 
 bool RawUncompress(Source* compressed, char* uncompressed) {
@@ -1856,8 +1882,13 @@ bool RawUncompress(Source* compressed, char* uncompressed) {
 #else
 bool RawUncompress(const char* compressed, size_t compressed_length,
                    char* uncompressed) {
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
   ByteArraySource reader(compressed, compressed_length);
-  return RawUncompress(&reader, uncompressed);
+
+  bool ret = RawUncompress(&reader, uncompressed);
+
+  LOG_UNFORMATTED(INFO, logCtx, "Exit");
+  return ret;
 }
 
 bool RawUncompress(Source* compressed, char* uncompressed) {
@@ -1951,13 +1982,19 @@ void RawCompress(const char* input,
                  size_t input_length,
                  char* compressed,
                  size_t* compressed_length) {
-  if (input == NULL || compressed == NULL || compressed_length == NULL) return;
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+  if (input == NULL || compressed == NULL || compressed_length == NULL)
+  {
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return;
+  }
   ByteArraySource reader(input, input_length);
   UncheckedByteArraySink writer(compressed);
   Compress(&reader, &writer);
 
   // Compute how many bytes were added
   *compressed_length = (writer.CurrentDestination() - compressed);
+  LOG_UNFORMATTED(INFO, logCtx, "Exit");
 }
 
 size_t Compress(const char* input, size_t input_length,

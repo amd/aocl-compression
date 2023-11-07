@@ -77,12 +77,12 @@
 //Data structure for storing levels and other parametric details of compressors
 typedef struct
 {
-    const CHAR* codec_name;
-    INTP lower_level;
-    INTP upper_level;
-    INTP extra_param;
-    INTP max_block_size_param;
-    const CHAR* extension;
+    const AOCL_CHAR* codec_name;
+    AOCL_INTP lower_level;
+    AOCL_INTP upper_level;
+    AOCL_INTP extra_param;
+    AOCL_INTP max_block_size_param;
+    const AOCL_CHAR* extension;
 } codec_list_t;
 
 //List of supported compression methods along with their parameters
@@ -101,54 +101,53 @@ static const codec_list_t codec_list[AOCL_COMPRESSOR_ALGOS_NUM] =
 //Main data structure for Test bench functionality
 typedef struct
 {
-    CHAR *inPtr;            //buffer containing input data
-    CHAR *outPtr;           //buffer containing output data
-    CHAR *decompPtr;        //buffer containing decompressed data for validation
-    UINTP inSize;           //input data length
-    UINTP outSize;          //output data length
-    UINTP optVar;           //optional param used by compression method
-    INTP use_all_codecs;		
-    UINTP mem_limit;
-    INTP codec_method;
-    INTP codec_level;
-    INTP iterations;
-    INTP verify;
-    INTP print_stats;
-    INTP enable_verbosity;
-    INTP optOff;
-    UINTP file_size;
-    INTP useIPP;
-    INTP useNAPI;
+    AOCL_CHAR *inPtr;            //buffer containing input data
+    AOCL_CHAR *outPtr;           //buffer containing output data
+    AOCL_CHAR *decompPtr;        //buffer containing decompressed data for validation
+    AOCL_UINTP inSize;           //input data length
+    AOCL_UINTP outSize;          //output data length
+    AOCL_UINTP optVar;           //optional param used by compression method
+    AOCL_INTP use_all_codecs;		
+    AOCL_UINTP mem_limit;
+    AOCL_INTP codec_method;
+    AOCL_INTP codec_level;
+    AOCL_INTP iterations;
+    AOCL_INTP verify;
+    AOCL_INTP print_stats;
+    AOCL_INTP optOff;
+    AOCL_UINTP file_size;
+    AOCL_INTP useIPP;
+    AOCL_INTP useNAPI;
     FILE *fp;
-    CHAR *fName;
-    UINT64 cSize;           //size of compressed output
-    UINT64 dSize;           //size of decompressed output
-    UINT64 cTime;           //time to compress input
-    UINT64 dTime;           //time to decompress input
-    UINT64 cBestTime;       //best time to compress input
-    UINT64 dBestTime;       //best time to decompress input
-    FLOAT32 cSpeed;         //speed of compression
-    FLOAT32 dSpeed;         //speed of decompression
-    FLOAT32 cBestSpeed;     //best speed to compress
-    FLOAT32 dBestSpeed;     //best speed to decompress
+    AOCL_CHAR *fName;
+    AOCL_UINT64 cSize;           //size of compressed output
+    AOCL_UINT64 dSize;           //size of decompressed output
+    AOCL_UINT64 cTime;           //time to compress input
+    AOCL_UINT64 dTime;           //time to decompress input
+    AOCL_UINT64 cBestTime;       //best time to compress input
+    AOCL_UINT64 dBestTime;       //best time to decompress input
+    AOCL_FLOAT32 cSpeed;         //speed of compression
+    AOCL_FLOAT32 dSpeed;         //speed of decompression
+    AOCL_FLOAT32 cBestSpeed;     //best speed to compress
+    AOCL_FLOAT32 dBestSpeed;     //best speed to decompress
     FILE* dumpFp;           //optional file for saving output data
     FILE* valFp;            //optional file for loading validation data in decompress only mode
-    UINTP val_file_size;    //size of valFp
-    INTP runOperation;      //operation to run: compress, decompress, both (default)
+    AOCL_UINTP val_file_size;    //size of valFp
+    AOCL_INTP runOperation;      //operation to run: compress, decompress, both (default)
 } aocl_codec_bench_info;
 
 //Function declarations
-INTP init(aocl_codec_bench_info *codec_bench_handle,
+AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
           aocl_compression_desc *aocl_codec_handle);
-INTP read_user_options (INTP argc,
-                       CHAR **argv,
+AOCL_INTP read_user_options (AOCL_INTP argc,
+                       AOCL_CHAR **argv,
                        aocl_codec_bench_info *codec_bench_handle);
-INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
+AOCL_INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
                     aocl_codec_bench_info *codec_bench_handle);
-INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
+AOCL_INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
                     aocl_codec_bench_info *codec_bench_handle);
-INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle, 
+AOCL_INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle, 
                     aocl_codec_bench_info *codec_bench_handle);
-VOID destroy(aocl_codec_bench_info *codec_bench_handle);
+AOCL_VOID destroy(aocl_codec_bench_info *codec_bench_handle);
 
 #endif

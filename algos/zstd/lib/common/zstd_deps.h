@@ -28,6 +28,8 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "utils/utils.h"
+
 #if defined(__GNUC__) && __GNUC__ >= 4
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
