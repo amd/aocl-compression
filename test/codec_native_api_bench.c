@@ -38,7 +38,6 @@
 
 #include "api/types.h"
 #include "api/aocl_compression.h"
-#include "utils/utils.h"
 #include "codec_bench.h"
 
 //Include the LZ4 and LZ4HC headers
@@ -415,7 +414,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     AOCL_INT64 resultComp = 0;
     AOCL_INT64 resultDecomp = 0;
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
     codec_bench_handle->cTime = 0;
     codec_bench_handle->cSize = 0;
@@ -676,7 +675,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
     if (status != 0)
     {
-        LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_FORMATTED(ERR, log_ctx,
             "Compression/Decompression/Verification operation failed for codec [%s].", codec_list[codec].codec_name);
         return status;
     }
@@ -745,7 +744,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         }
     }
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return status;
 }
 
@@ -754,7 +753,7 @@ AOCL_INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
 {
     AOCL_INTP retStatus = 0;
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
     aocl_codec_handle->memLimit = codec_bench_handle->mem_limit;
 
@@ -767,7 +766,7 @@ AOCL_INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
     {
         /* data decompressed using a certain codec can only be decompressed
          * by that particular codec. Run-all-codecs mode is not supported in this case */
-        LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_UNFORMATTED(ERR, log_ctx,
             "Codec not specified. Specify codec using -e when running -rdecompress mode.");
         printf("Codec not specified. Specify codec using -e when running -rdecompress mode.\n\n");
         return -2;
@@ -839,7 +838,7 @@ AOCL_INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
             }
         }
     }
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return retStatus;
 }

@@ -45,6 +45,8 @@
 #define strcasecmp _stricmp
 #endif
 
+#include "utils/utils.h"
+
 #define MAX_FILENAME_LEN 128
 
 //Number of iterations of compression/decompression operations
@@ -135,6 +137,10 @@ typedef struct
     AOCL_UINTP val_file_size;    //size of valFp
     AOCL_INTP runOperation;      //operation to run: compress, decompress, both (default)
 } aocl_codec_bench_info;
+
+#ifdef AOCL_ENABLE_LOG_FEATURE
+static aocl_log_ctx log_ctx = {-1};
+#endif /* AOCL_ENABLE_LOG_FEATURE */
 
 //Function declarations
 AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,

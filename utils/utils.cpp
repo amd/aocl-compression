@@ -41,7 +41,17 @@
 #include "utils/utils.h"
 
 #ifdef AOCL_ENABLE_LOG_FEATURE
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 aocl_log_ctx logCtx = {-1};
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* AOCL_ENABLE_LOG_FEATURE */
 
 AOCL_INTP is_SSE2_supported(aocl_compression_desc *aocl_codec_handle)

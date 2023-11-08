@@ -44,14 +44,14 @@
 //Writes the RAP Frame header to the dest buffer.
 //window_len and window_factor passed to this function shall be positive values.
 //Returns number of bytes for the RAP frame (RAP header + RAP metadata) on success
-INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp, 
-                                      CHAR *src, CHAR *dst, INT32 in_size,
-                                      INT32 out_size, INT32 window_len,
-                                      INT32 window_factor)
+AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp, 
+                                      AOCL_CHAR *src, AOCL_CHAR *dst, AOCL_INT32 in_size,
+                                      AOCL_INT32 out_size, AOCL_INT32 window_len,
+                                      AOCL_INT32 window_factor)
 {
-    UINT32 max_threads = omp_get_max_threads();
-    INT32 rap_frame_len = 0;
-    INT32 chunk_size = window_len * window_factor;
+    AOCL_UINT32 max_threads = omp_get_max_threads();
+    AOCL_INT32 rap_frame_len = 0;
+    AOCL_INT32 chunk_size = window_len * window_factor;
 
     thread_grp->src = src;
     thread_grp->dst = dst;
@@ -67,8 +67,8 @@ INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
     else
     {
         //Find number of partitions in the src stream
-        INT32 num_parallel_partitions = thread_grp->src_size / chunk_size;
-        INT32 leftover_size = thread_grp->src_size % chunk_size;
+        AOCL_INT32 num_parallel_partitions = thread_grp->src_size / chunk_size;
+        AOCL_INT32 leftover_size = thread_grp->src_size % chunk_size;
         
         //Sufficiently large leftover bytes adds another thread for processing
         if (leftover_size >= 
@@ -99,11 +99,11 @@ INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
             return -1;
 
         rap_frame_len = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(thread_grp->num_threads, 0);
-        *(INT64*)dst = RAP_MAGIC_WORD; //For storing the magic word
+        *(AOCL_INT64*)dst = RAP_MAGIC_WORD; //For storing the magic word
         dst += RAP_MAGIC_WORD_BYTES;
-        *(UINT32*)dst = rap_frame_len; //For storing the total RAP frame length
+        *(AOCL_UINT32*)dst = rap_frame_len; //For storing the total RAP frame length
         dst += RAP_METADATA_LEN_BYTES;
-        *(UINT32*)dst = thread_grp->num_threads; //For storing the no. of threads
+        *(AOCL_UINT32*)dst = thread_grp->num_threads; //For storing the no. of threads
     }
 #ifdef AOCL_THREADS_LOG
     printf("Input stream size: [%td], Minimum per thread chunk size: [%d]\n",
@@ -119,9 +119,9 @@ INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
 //Each thread holds its own local cur_thread_info that is allocated here.
 //At end of the compression, references from cur_thread_info should be copied 
 //into thread_grp->threads_info_list[thread_id].
-INT32 aocl_do_partition_compress_mt(aocl_thread_group_t *thread_grp,
+AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t *thread_grp,
                                    aocl_thread_info_t *cur_thread_info,
-                                   UINT32 cmpr_bound_pad, UINT32 thread_id)
+                                   AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id)
 {
     cur_thread_info->partition_src = thread_grp->src + 
                                 (thread_grp->common_part_src_size * thread_id);
@@ -136,7 +136,7 @@ INT32 aocl_do_partition_compress_mt(aocl_thread_group_t *thread_grp,
     cur_thread_info->dst_trap_size = cur_thread_info->partition_src_size +
                                         cmpr_bound_pad;
 
-    cur_thread_info->dst_trap = (CHAR *)malloc(cur_thread_info->dst_trap_size);
+    cur_thread_info->dst_trap = (AOCL_CHAR *)malloc(cur_thread_info->dst_trap_size);
 
 #ifdef AOCL_THREADS_LOG
     printf("aocl_do_partition_compress_mt(): thread id: [%d] dest_trap_size [%td]\n",
@@ -154,7 +154,7 @@ INT32 aocl_do_partition_compress_mt(aocl_thread_group_t *thread_grp,
 //Call from the master thread : Frees the thread related buffers and context
 void aocl_destroy_parallel_compress_mt(aocl_thread_group_t *thread_grp)
 {
-    UINT32 thread_cnt;
+    AOCL_UINT32 thread_cnt;
     for (thread_cnt = 0; thread_cnt < thread_grp->num_threads; thread_cnt++)
     {
         if (thread_grp->threads_info_list[thread_cnt].dst_trap)
@@ -179,13 +179,13 @@ void aocl_destroy_parallel_compress_mt(aocl_thread_group_t *thread_grp)
 //length without setting up the thread group for multi-threaded execution.
 //The master thread shall allocate and hold thread_grp before calling this function.
 //Returns number of bytes for the RAP frame (RAP header + RAP metadata) on success
-INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
-                                        CHAR* src, CHAR* dst, INT32 in_size,
-                                        INT32 out_size, INT32 use_ST_decompressor)
+AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
+                                        AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_INT32 in_size,
+                                        AOCL_INT32 out_size, AOCL_INT32 use_ST_decompressor)
 {
-    CHAR *src_base;
-    UINT32 rap_metadata_len;
-    UINT32 max_threads = omp_get_max_threads();
+    AOCL_CHAR *src_base;
+    AOCL_UINT32 rap_metadata_len;
+    AOCL_UINT32 max_threads = omp_get_max_threads();
 
     thread_grp->src = src;
     thread_grp->dst = dst;
@@ -195,7 +195,7 @@ INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
     src_base = thread_grp->src;
 
     if ((thread_grp->src_size < RAP_MAGIC_WORD_BYTES) ||
-        (RAP_MAGIC_WORD != *(INT64*)src_base))
+        (RAP_MAGIC_WORD != *(AOCL_INT64*)src_base))
     {
         //Stream is very small or not in multi-threaded RAP format
         //Decompress in single threaded mode
@@ -204,12 +204,12 @@ INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
     }
     else
     {
-        CHAR *src_ptr;
-        UINT32 num_main_threads;
+        AOCL_CHAR *src_ptr;
+        AOCL_UINT32 num_main_threads;
         src_ptr = src_base + RAP_MAGIC_WORD_BYTES;
-        rap_metadata_len = *(UINT32 *)(src_ptr);
+        rap_metadata_len = *(AOCL_UINT32 *)(src_ptr);
         src_ptr += RAP_METADATA_LEN_BYTES;
-        num_main_threads = *(UINT32*)(src_ptr);
+        num_main_threads = *(AOCL_UINT32*)(src_ptr);
 
         if (use_ST_decompressor == 1)
             return rap_metadata_len;
@@ -253,15 +253,15 @@ INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
 //Each thread holds its own local cur_thread_info that is allocated here.
 //At end of the decompression, references from cur_thread_info should be copied
 //into thread_grp->threads_info_list[thread_id].
-INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
+AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
                                       aocl_thread_info_t* cur_thread_info,
-                                      UINT32 cmpr_bound_pad, UINT32 thread_id)
+                                      AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id)
 {
-    UINT32 cur_rap_pos = RAP_START_OF_PARTITIONS + 
+    AOCL_UINT32 cur_rap_pos = RAP_START_OF_PARTITIONS + 
                             (thread_id * (RAP_DATA_BYTES_WITH_DECOMP_LEN));
     cur_thread_info->partition_src = thread_grp->src +
-                            *(UINT32*)(thread_grp->src + cur_rap_pos);
-    cur_thread_info->partition_src_size = *(UINT32*)(thread_grp->src +
+                            *(AOCL_UINT32*)(thread_grp->src + cur_rap_pos);
+    cur_thread_info->partition_src_size = *(AOCL_UINT32*)(thread_grp->src +
                                             cur_rap_pos + RAP_OFFSET_BYTES);
     cur_thread_info->thread_id = thread_id;
 
@@ -275,12 +275,12 @@ INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
     cur_thread_info->dst_trap_size = 
         (thread_grp->dst_size / thread_grp->num_threads) + 
         (thread_grp->dst_size % thread_grp->num_threads) + cmpr_bound_pad;
-    cur_thread_info->dst_trap = (CHAR*)malloc(cur_thread_info->dst_trap_size);
+    cur_thread_info->dst_trap = (AOCL_CHAR*)malloc(cur_thread_info->dst_trap_size);
 #else
-    cur_thread_info->dst_trap_size = (*(UINT32*)(thread_grp->src +
+    cur_thread_info->dst_trap_size = (*(AOCL_UINT32*)(thread_grp->src +
                                         cur_rap_pos + RAP_DATA_BYTES)) +
                                         cmpr_bound_pad;
-    cur_thread_info->dst_trap = (CHAR*)malloc(cur_thread_info->dst_trap_size);
+    cur_thread_info->dst_trap = (AOCL_CHAR*)malloc(cur_thread_info->dst_trap_size);
 #endif
 
 #ifdef AOCL_THREADS_LOG
@@ -297,7 +297,7 @@ INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
 //Call from a single master thread : Frees the thread related buffers and context
 void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp)
 {
-    UINT32 thread_cnt;
+    AOCL_UINT32 thread_cnt;
     for (thread_cnt = 0; thread_cnt < thread_grp->num_threads; thread_cnt++)
     {
         if (thread_grp->threads_info_list[thread_cnt].dst_trap)

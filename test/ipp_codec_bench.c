@@ -45,17 +45,16 @@
 #include <string.h>
 #include "api/types.h"
 #include "api/aocl_compression.h"
-#include "utils/utils.h"
 #include "codec_bench.h"
 #include "algos/zlib/zlib.h"
 
 #ifdef AOCL_ENABLE_LOG_FEATURE
 #define LOG_LIBRARY_OPENED(algo, fn_name, lib_name)\
-            if (logCtx.maxLevel)\
+            if (log_ctx.maxLevel)\
             {\
                 Dl_info dl_info;\
                 dladdr(dlsym(hDL[algo], fn_name), &dl_info);\
-                LOG_FORMATTED(INFO, logCtx.maxLevel,\
+                LOG_FORMATTED(INFO, log_ctx.maxLevel,\
                 "Library ["+lib_name+"] opened from path: [%s]", dl_info.dli_fname);\
             }
 #else
@@ -82,7 +81,7 @@ AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
 AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
               aocl_compression_desc *aocl_codec_handle)
 { 
-    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
     
     switch (codec_bench_handle->codec_method)
     {
@@ -92,10 +91,10 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
 			    dlopen("liblz4.so", RTLD_NOW | RTLD_DEEPBIND);
             if (hDL[LZ4] == NULL)
             {
-                LOG_FORMATTED(ERR, logCtx,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [liblz4.so]:[%s]",
                 dlerror());
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
@@ -106,9 +105,9 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
             hDL[ZLIB] = dlopen("libz.so", RTLD_NOW | RTLD_DEEPBIND);
             if (hDL[ZLIB] == NULL)
             {
-                LOG_FORMATTED(ERR, logCtx,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [libz.so]:[%s]", dlerror());
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
@@ -119,9 +118,9 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
             hDL[BZIP2] = dlopen("libbz2.so", RTLD_NOW | RTLD_DEEPBIND);
             if (hDL[BZIP2] == NULL)
             {
-                LOG_FORMATTED(ERR, logCtx,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [libbz2.so]:[%s]", dlerror());
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
@@ -131,9 +130,9 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
         case LZMA:
         case SNAPPY:
         case ZSTD:
-            LOG_UNFORMATTED(ERR, logCtx,
+            LOG_UNFORMATTED(ERR, log_ctx,
             "Only supported compression methods are: LZ4, LZ4HC, ZLIB and BZIP2");
-            LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+            LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
             return ERR_CODEC_BENCH_ARGS;
             break;
         case -1:
@@ -141,10 +140,10 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
                 dlopen("liblz4.so", RTLD_NOW | RTLD_DEEPBIND);
             if (hDL[LZ4] == NULL)
             {
-                LOG_FORMATTED(ERR, logCtx,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [liblz4.so]:[%s]",
                 dlerror());
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
@@ -153,9 +152,9 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
             hDL[ZLIB] = dlopen("libz.so", RTLD_NOW | RTLD_DEEPBIND);
             if (hDL[ZLIB] == NULL)
             {
-                LOG_FORMATTED(ERR, logCtx,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [libz.so]:[%s]", dlerror());
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
@@ -164,9 +163,9 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
             hDL[BZIP2] = dlopen("libbz2.so", RTLD_NOW | RTLD_DEEPBIND);
             if (hDL[BZIP2] == NULL)
             {
-                LOG_FORMATTED(ERR, logCtx,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [libbz2.so]:[%s]", dlerror());
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
@@ -174,14 +173,14 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
 #endif
             break;
         default:
-            LOG_UNFORMATTED(ERR, logCtx,
+            LOG_UNFORMATTED(ERR, log_ctx,
             "Only supported compression methods are: LZ4, LZ4HC, ZLIB and BZIP2");
-            LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+            LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
             return ERR_CODEC_BENCH_ARGS;
             break;
     }
     
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return 0;
 }
 
@@ -202,15 +201,15 @@ AOCL_INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
     AOCL_INT64 (*fCompDL) (AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP, AOCL_UINTP);
     AOCL_INT64 (*fDecompDL) (AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP, AOCL_UINTP);
 
-    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
     fCompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP,  AOCL_UINTP))(uintptr_t)dlsym(hDL, "LZ4_compress_default");
     fDecompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP,  AOCL_UINTP))(uintptr_t)dlsym(hDL, "LZ4_decompress_safe");
     if (fCompDL == NULL || fDecompDL == NULL)
     {
-        LOG_FORMATTED(ERR, logCtx,
+        LOG_FORMATTED(ERR, log_ctx,
         "Error in loading symbols from dynamic library: [%s]", dlerror());
-        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
         return ERR_CODEC_BENCH_METHOD;
     }
 #ifdef WINDOWS_
@@ -244,7 +243,7 @@ AOCL_INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
 
             if (resultComp <= 0)
             {
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_ARGS;
             }
 
@@ -266,7 +265,7 @@ AOCL_INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
 
             if (resultDecomp <= 0)
             {
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_ARGS;
             }
 
@@ -276,7 +275,7 @@ AOCL_INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
                                     codec_bench_handle->decompPtr, inSize);
                 if (*verifyRes != 0)
                 {
-                    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                     return ERR_CODEC_BENCH_FILE_IO;
                 }
             }
@@ -308,7 +307,7 @@ AOCL_INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
         }
     }
 
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 }
@@ -329,15 +328,15 @@ AOCL_INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
     AOCL_INT64 (*fCompDL) (AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP, AOCL_UINTP, AOCL_UINTP);
     AOCL_INT64 (*fDecompDL) (AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP, AOCL_UINTP);
 
-    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
     fCompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP,  AOCL_UINTP,  AOCL_UINTP))(uintptr_t)dlsym(hDL, "LZ4_compress_HC");
     fDecompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP,  AOCL_UINTP))(uintptr_t)dlsym(hDL, "LZ4_decompress_safe");
     if (fCompDL == NULL || fDecompDL == NULL)
     {
-        LOG_FORMATTED(ERR, logCtx,
+        LOG_FORMATTED(ERR, log_ctx,
         "Error in loading symbols from dynamic library: [%s]", dlerror());
-        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
         return ERR_CODEC_BENCH_METHOD;
     }
 #ifdef WINDOWS_
@@ -372,7 +371,7 @@ AOCL_INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
 
             if (resultComp <= 0)
             {
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_ARGS;
             }
 
@@ -394,7 +393,7 @@ AOCL_INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
 
             if (resultDecomp <= 0)
             {
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_ARGS;
             }
 
@@ -404,7 +403,7 @@ AOCL_INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
                                     codec_bench_handle->decompPtr, inSize);
                 if (*verifyRes != 0)
                 {
-                    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                     return ERR_CODEC_BENCH_FILE_IO;
                 }
             }
@@ -436,7 +435,7 @@ AOCL_INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
         }
     }
 
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 }
@@ -457,15 +456,15 @@ AOCL_INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
     AOCL_INT64 (*fCompDL) (AOCL_UINT8 *, uLongf *, AOCL_UINT8 *, AOCL_UINTP, AOCL_UINTP);
     AOCL_INT64 (*fDecompDL) (AOCL_UINT8 *, uLongf *, AOCL_UINT8 *, AOCL_UINTP);
 
-    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
     fCompDL = (AOCL_INT64 (*)(AOCL_UINT8 *, uLongf *, AOCL_UINT8 *, AOCL_UINTP,  AOCL_UINTP))(uintptr_t)dlsym(hDL, "compress2");
     fDecompDL = (AOCL_INT64 (*)(AOCL_UINT8 *, uLongf *, AOCL_UINT8 *, AOCL_UINTP))(uintptr_t)dlsym(hDL, "uncompress");
     if (fCompDL == NULL || fDecompDL == NULL)
     {
-        LOG_FORMATTED(ERR, logCtx,
+        LOG_FORMATTED(ERR, log_ctx,
         "Error in loading symbols from dynamic library: [%s]", dlerror());
-        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
         return ERR_CODEC_BENCH_METHOD;
     }
 #ifdef WINDOWS_
@@ -500,7 +499,7 @@ AOCL_INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
 
             if (ret != Z_OK)
             {
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_ARGS;
             }
 
@@ -529,7 +528,7 @@ AOCL_INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
                                     codec_bench_handle->decompPtr, inSize);
                 if (*verifyRes != 0)
                 {
-                    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                     return ERR_CODEC_BENCH_FILE_IO;
                 }
             }
@@ -561,7 +560,7 @@ AOCL_INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
         }
     }
 
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 }
@@ -582,15 +581,15 @@ AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
     AOCL_INT64 (*fCompDL) (AOCL_CHAR *, AOCL_UINT32 *, AOCL_CHAR *, AOCL_UINT32, AOCL_UINT32, AOCL_UINT32, AOCL_UINT32);
     AOCL_INT64 (*fDecompDL) (AOCL_CHAR *, AOCL_UINT32 *, AOCL_CHAR *, AOCL_UINT32, AOCL_UINT32, AOCL_UINT32);
 
-    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
     fCompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_UINT32 *, AOCL_CHAR *, AOCL_UINT32,  AOCL_UINT32,  AOCL_UINT32,  AOCL_UINT32))(uintptr_t)dlsym(hDL, "BZ2_bzBuffToBuffCompress");
     fDecompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_UINT32 *, AOCL_CHAR *, AOCL_UINT32,  AOCL_UINT32,  AOCL_UINT32))(uintptr_t)dlsym(hDL, "BZ2_bzBuffToBuffDecompress");
     if (fCompDL == NULL || fDecompDL == NULL)
     {
-        LOG_FORMATTED(ERR, logCtx,
+        LOG_FORMATTED(ERR, log_ctx,
         "Error in loading symbols from dynamic library: [%s]", dlerror());
-        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
         return ERR_CODEC_BENCH_METHOD;
     }
 #ifdef WINDOWS_
@@ -625,7 +624,7 @@ AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
 
             if (ret != Z_OK)
             {
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_ARGS;
             }
 
@@ -647,7 +646,7 @@ AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
 
             if (ret != Z_OK)
             {
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_ARGS;
             }
 
@@ -657,7 +656,7 @@ AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
                                     codec_bench_handle->decompPtr, inSize);
                 if (*verifyRes != 0)
                 {
-                    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                     return ERR_CODEC_BENCH_FILE_IO;
                 }
             }
@@ -689,7 +688,7 @@ AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
         }
     }
 
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 }
@@ -700,7 +699,7 @@ AOCL_INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
     aocl_compression_type i; 
     AOCL_INTP l, verifyRes, ret;
 
-    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
     aocl_codec_handle->memLimit = codec_bench_handle->mem_limit;
 
@@ -752,16 +751,16 @@ AOCL_INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
                                         &verifyRes);
                         break;
                     default:
-                        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                         return ERR_CODEC_BENCH_METHOD;
 
                 }
                 
                 if (ret != 0 && ret != -3)
                 {
-                    LOG_UNFORMATTED(ERR, logCtx,
+                    LOG_UNFORMATTED(ERR, log_ctx,
                         "Error in executing the dynamic library");
-                    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                     return ERR_CODEC_BENCH_ARGS;
                 }
 
@@ -876,7 +875,7 @@ AOCL_INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
                                     &verifyRes);
                     break;
                 default:
-                    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                     return ERR_CODEC_BENCH_METHOD;
             }
 
@@ -884,7 +883,7 @@ AOCL_INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
             {
                 LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
                     "Error in executing the dynamic library");
-                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_ARGS;
             }
 
@@ -896,7 +895,7 @@ AOCL_INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
                             codec_list[codec_bench_handle->codec_method].codec_name,
                             aocl_codec_handle->level,
                             codec_bench_handle->fName);
-                    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                     return ERR_CODEC_BENCH_ARGS;
                 }
                 else
@@ -944,27 +943,27 @@ AOCL_INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
             }
         }
     }
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 }
 
 AOCL_INTP ipp_destroy(aocl_compression_desc *aocl_codec_handle)
 {
-    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
     for (aocl_compression_type i = LZ4; i < AOCL_COMPRESSOR_ALGOS_NUM; i++)
     {
         if (hDL[i])
             dlclose(hDL[i]);
     }
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return 0;
 }
 
 AOCL_INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
                   aocl_codec_bench_info *codec_bench_handle)
 {
-    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
     AOCL_INT64 ret = 0;
     
@@ -978,12 +977,12 @@ AOCL_INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
 
     ipp_destroy(aocl_codec_handle);
 
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 
 error_exit:
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return ret;
 }
 

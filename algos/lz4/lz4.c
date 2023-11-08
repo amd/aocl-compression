@@ -2637,9 +2637,9 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
     aocl_thread_group_t thread_group_handle;
     aocl_thread_info_t cur_thread_info;
     aocl_thread_info_t prev_thread_info;
-    INT32 rap_metadata_len = -1;
-    UINT32 thread_cnt = 0;
-    UINT32 dst_offset = 0;
+    AOCL_INT32 rap_metadata_len = -1;
+    AOCL_UINT32 thread_cnt = 0;
+    AOCL_UINT32 dst_offset = 0;
     
     rap_metadata_len = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)source,
                                                  dest, inputSize, maxOutputSize,
@@ -2663,14 +2663,14 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
 #ifdef AOCL_THREADS_LOG
             printf("Compress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
 #endif
-            UCHAR *last_anchor_ptr = NULL;
-            UINT32 cmpr_bound_pad = ((thread_group_handle.common_part_src_size + 
+            AOCL_UCHAR *last_anchor_ptr = NULL;
+            AOCL_UINT32 cmpr_bound_pad = ((thread_group_handle.common_part_src_size + 
                                         thread_group_handle.leftover_part_src_bytes) / 255) + 
                                         16 + rap_metadata_len;
-            UINT32 is_error = 1;
-            UINT32 thread_id = omp_get_thread_num();
-            INT32 local_result = -1;
-            UINT32 last_bytes_len = 0;
+            AOCL_UINT32 is_error = 1;
+            AOCL_UINT32 thread_id = omp_get_thread_num();
+            AOCL_INT32 local_result = -1;
+            AOCL_UINT32 last_bytes_len = 0;
 
             if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
             {
@@ -2695,7 +2695,7 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
             
             thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
             thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
-            thread_group_handle.threads_info_list[thread_id].additional_state_info = (VOID *)last_anchor_ptr;
+            thread_group_handle.threads_info_list[thread_id].additional_state_info = (AOCL_VOID *)last_anchor_ptr;
             thread_group_handle.threads_info_list[thread_id].dst_trap_size = local_result;
             thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
             thread_group_handle.threads_info_list[thread_id].last_bytes_len = last_bytes_len;
@@ -2714,10 +2714,10 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
         
         // <-- RAP Header -->
         //Add at the start of the stream : Although it can be at the end or at any other point in the stream, but it is more easier for parsing at the start
-        CHAR* dst_org = thread_group_handle.dst;
-        CHAR* dst_ptr = dst_org;
-        UINT32 prev_offset, prev_len;
-        UINT32 decomp_len;
+        AOCL_CHAR* dst_org = thread_group_handle.dst;
+        AOCL_CHAR* dst_ptr = dst_org;
+        AOCL_UINT32 prev_offset, prev_len;
+        AOCL_UINT32 decomp_len;
         thread_group_handle.dst += rap_metadata_len;
         dst_ptr += RAP_START_OF_PARTITIONS;
         // <-- RAP Header -->
@@ -2737,13 +2737,13 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
         }
         //Copy first chunk as it is to the output final buffer
         memcpy((thread_group_handle.dst + dst_offset), prev_thread_info.dst_trap, prev_thread_info.dst_trap_size);
-        *(UINT32*)dst_ptr = rap_metadata_len; //For storing this thread's RAP offset
+        *(AOCL_UINT32*)dst_ptr = rap_metadata_len; //For storing this thread's RAP offset
         dst_ptr += RAP_OFFSET_BYTES;
-        *(INT32*)dst_ptr = prev_thread_info.dst_trap_size; //For storing this thread's RAP length
+        *(AOCL_INT32*)dst_ptr = prev_thread_info.dst_trap_size; //For storing this thread's RAP length
         dst_ptr += RAP_LEN_BYTES;
         //For storing this thread's decompressed (src) length
         decomp_len = prev_thread_info.partition_src_size - prev_thread_info.last_bytes_len;
-        if (((UCHAR *)prev_thread_info.additional_state_info - (UCHAR*)prev_thread_info.partition_src) !=
+        if (((AOCL_UCHAR *)prev_thread_info.additional_state_info - (AOCL_UCHAR*)prev_thread_info.partition_src) !=
             decomp_len)
         {
 #ifdef AOCL_THREADS_LOG
@@ -2753,7 +2753,7 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
             aocl_destroy_parallel_compress_mt(&thread_group_handle);
             return result;
         }
-        *(INT32*)dst_ptr = decomp_len;
+        *(AOCL_INT32*)dst_ptr = decomp_len;
         dst_ptr += DECOMP_LEN_BYTES;
         thread_group_handle.dst += prev_thread_info.dst_trap_size;
 
@@ -2786,12 +2786,12 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
             {
                 cur_thread_info.last_bytes_len = cur_thread_info.last_bytes_len + prev_thread_info.last_bytes_len;
                 cur_thread_info.additional_state_info = prev_thread_info.additional_state_info;
-                *(UINT32*)dst_ptr = (prev_offset + prev_len); //For storing this thread's RAP offset
-                *(INT32*)(dst_ptr + RAP_OFFSET_BYTES) = dst_offset; //For storing this thread's RAP length
+                *(AOCL_UINT32*)dst_ptr = (prev_offset + prev_len); //For storing this thread's RAP offset
+                *(AOCL_INT32*)(dst_ptr + RAP_OFFSET_BYTES) = dst_offset; //For storing this thread's RAP length
                 dst_ptr += RAP_DATA_BYTES;
                 //For storing this thread's decompressed (src) length
                 decomp_len = 0;
-                *(INT32*)dst_ptr = decomp_len;
+                *(AOCL_INT32*)dst_ptr = decomp_len;
                 dst_ptr += DECOMP_LEN_BYTES;
                 prev_thread_info = cur_thread_info;
                 prev_offset = (prev_offset + prev_len);
@@ -2799,7 +2799,7 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
             }
             else //Normal situation when cur thread's dst_trap_size > 0
             {
-                cur_token = *(UCHAR*)cur_thread_info.dst_trap;
+                cur_token = *(AOCL_UCHAR*)cur_thread_info.dst_trap;
                 cur_thread_info.dst_trap++;
                 cur_thread_info.dst_trap_size--;
                 cur_lit = (cur_token >> 4);
@@ -2816,14 +2816,14 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
                     }
                     if (cur_lit >= RUN_MASK)
                     {
-                        while (*(UCHAR*)cur_thread_info.dst_trap == 255)
+                        while (*(AOCL_UCHAR*)cur_thread_info.dst_trap == 255)
                         {
                             *thread_group_handle.dst++ = (BYTE)255;
                             dst_offset++;
                             cur_thread_info.dst_trap++;
                             cur_thread_info.dst_trap_size--;
                         }
-                        new_token = *(UCHAR*)cur_thread_info.dst_trap;
+                        new_token = *(AOCL_UCHAR*)cur_thread_info.dst_trap;
                         cur_thread_info.dst_trap++;
                         cur_thread_info.dst_trap_size--;
                         accumulator += new_token;
@@ -2853,13 +2853,13 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
                 dst_offset += cur_thread_info.dst_trap_size;
                 thread_group_handle.dst += cur_thread_info.dst_trap_size;
 
-                *(UINT32*)dst_ptr = (prev_offset + prev_len); //For storing this thread's RAP offset
-                *(INT32*)(dst_ptr + RAP_OFFSET_BYTES) = dst_offset; //For storing this thread's RAP length
+                *(AOCL_UINT32*)dst_ptr = (prev_offset + prev_len); //For storing this thread's RAP offset
+                *(AOCL_INT32*)(dst_ptr + RAP_OFFSET_BYTES) = dst_offset; //For storing this thread's RAP length
                 dst_ptr += RAP_DATA_BYTES;
                 //For storing this thread's decompressed (src) length
                 decomp_len = cur_thread_info.partition_src_size - cur_thread_info.last_bytes_len;
                 if ((thread_cnt != (thread_group_handle.num_threads - 1)) &&
-                    ((UCHAR*)cur_thread_info.additional_state_info - (UCHAR*)cur_thread_info.partition_src) !=
+                    ((AOCL_UCHAR*)cur_thread_info.additional_state_info - (AOCL_UCHAR*)cur_thread_info.partition_src) !=
                     decomp_len)
                 {
 #ifdef AOCL_THREADS_LOG
@@ -2869,7 +2869,7 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
                     aocl_destroy_parallel_compress_mt(&thread_group_handle);
                     return result;
                 }
-                *(INT32*)dst_ptr = decomp_len + prev_thread_info.last_bytes_len;
+                *(AOCL_INT32*)dst_ptr = decomp_len + prev_thread_info.last_bytes_len;
                 dst_ptr += DECOMP_LEN_BYTES;
 
                 prev_thread_info = cur_thread_info;
@@ -4744,26 +4744,35 @@ int LZ4_decompress_safe_ST(const char* source, char* dest, int compressedSize, i
 LZ4_FORCE_O2
 int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int maxDecompressedSize)
 {
-#ifdef AOCL_ENABLE_THREADS //Threaded
     int result = 0;
+#ifdef AOCL_ENABLE_THREADS //Threaded
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if (source == NULL || dest == NULL)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return -1;
+    }
     
     aocl_thread_group_t thread_group_handle;
     aocl_thread_info_t cur_thread_info;
-    INT32 ret_status = -1;
-    UINT32 thread_cnt = 0;
-    INT32 use_ST_decompressor = 0;
+    AOCL_INT32 ret_status = -1;
+    AOCL_UINT32 thread_cnt = 0;
+    AOCL_INT32 use_ST_decompressor = 0;
 
     ret_status = aocl_setup_parallel_decompress_mt(&thread_group_handle, (char *)source, dest,
                                                    compressedSize, maxDecompressedSize, use_ST_decompressor);
     if (ret_status < 0)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return -1;
+    }
     
 
     if (thread_group_handle.num_threads == 1 || use_ST_decompressor == 1)
     {
-        return LZ4_decompress_safe_ST(source + ret_status, dest, compressedSize - ret_status, maxDecompressedSize);
+        result = LZ4_decompress_safe_ST(source + ret_status, dest, compressedSize - ret_status, maxDecompressedSize);
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return result;
     }
     else
     {
@@ -4775,11 +4784,11 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
 #ifdef AOCL_THREADS_LOG
             printf("Decompress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
 #endif
-            UINT32 cmpr_bound_pad = MATCH_SAFEGUARD_DISTANCE + MFLIMIT;
-            UINT32 is_error = 1;
-            UINT32 thread_id = omp_get_thread_num();
-            INT32 local_result = -1;
-            INT32 thread_parallel_res = 0;
+            AOCL_UINT32 cmpr_bound_pad = MATCH_SAFEGUARD_DISTANCE + MFLIMIT;
+            AOCL_UINT32 is_error = 1;
+            AOCL_UINT32 thread_id = omp_get_thread_num();
+            AOCL_INT32 local_result = -1;
+            AOCL_INT32 thread_parallel_res = 0;
 
             thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id);
             if (thread_parallel_res == 0)
@@ -4824,6 +4833,7 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
 #ifdef AOCL_THREADS_LOG
                 printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
 #endif
+                LOG_UNFORMATTED(INFO, logCtx, "Exit");
                 return result;
             }
 
@@ -4836,36 +4846,36 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
 
         aocl_destroy_parallel_decompress_mt(&thread_group_handle);
 
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return result;
     }//thread_group_handle.num_threads > 1
 
 #else //Non-threaded
 
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-    int ret = 0;
 #ifdef AOCL_LZ4_OPT
 #ifdef AOCL_DYNAMIC_DISPATCHER
-    ret = LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
+    result = LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
 #else
 #ifdef AOCL_LZ4_AVX2_OPT
-    ret = AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
+    result = AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                     endOnInputSize, decode_full_block, noDict,
                                     (BYTE*)dest, NULL, 0);
 #else
-    ret = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
+    result = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                   endOnInputSize, decode_full_block, noDict,
                                   (BYTE*)dest, NULL, 0);
 #endif /* AOCL_LZ4_AVX2_OPT */
 #endif /* AOCL_DYNAMIC_DISPATCHER */
 #else
-    ret = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
+    result = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                   endOnInputSize, decode_full_block, noDict,
                                   (BYTE*)dest, NULL, 0);
 #endif /* AOCL_LZ4_OPT */
 #endif /* AOCL_ENABLE_THREADS */
 
     LOG_UNFORMATTED(INFO, logCtx, "Exit");
-    return ret;
+    return result;
 }
 
 #ifdef AOCL_DYNAMIC_DISPATCHER

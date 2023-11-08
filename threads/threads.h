@@ -113,15 +113,15 @@ extern "C"
 //Thread Info data structure per thread holding its necessary state information and buffers
 typedef struct thread_info
 {
-    CHAR *partition_src;        //Pointer to current src partition
-    CHAR *dst_trap;             //Pointer to current thread's random access point for dst
-    VOID *additional_state_info;//This may save info like the pointer to the last src position upto which compression is valid
-    INTP partition_src_size;    //Length of current src partition
-    INTP dst_trap_size;         //Length of current thread's random access point for dst
-    UINT32 last_bytes_len;      //Left over uncompressed bytes that exist beyond last anchor point
-    UINT32 num_child_threads;   //Child threads : May be used in future for further overlapped parallel processing
-    UINT32 is_error;            //Has the compression or decompression executed for this chunk: Does not gurantee correctness of results
-    UINT32 thread_id;           //Thread id of the current thread
+    AOCL_CHAR *partition_src;        //Pointer to current src partition
+    AOCL_CHAR *dst_trap;             //Pointer to current thread's random access point for dst
+    AOCL_VOID *additional_state_info;//This may save info like the pointer to the last src position upto which compression is valid
+    AOCL_INTP partition_src_size;    //Length of current src partition
+    AOCL_INTP dst_trap_size;         //Length of current thread's random access point for dst
+    AOCL_UINT32 last_bytes_len;      //Left over uncompressed bytes that exist beyond last anchor point
+    AOCL_UINT32 num_child_threads;   //Child threads : May be used in future for further overlapped parallel processing
+    AOCL_UINT32 is_error;            //Has the compression or decompression executed for this chunk: Does not gurantee correctness of results
+    AOCL_UINT32 thread_id;           //Thread id of the current thread
     struct thread_info *next;   //In case, more no. of compressed chunks/partitions needs to be decompressed using a smaller no. of threads
 } aocl_thread_info_t;
 
@@ -130,36 +130,36 @@ typedef struct thread_info
 typedef struct thread_group
 {
     aocl_thread_info_t *threads_info_list;  //List of thread info related to all the spawned threads 
-    CHAR *src;                              //Actual input stream buffer pointer
-    CHAR *dst;                              //Actual output stream buffer pointer
-    INTP src_size;                          //Actual input stream buffer length
-    INTP dst_size;                          //Actual output stream buffer length
-    INTP common_part_src_size;              //Partitioned src length based on num_threads (may not be equal)
-    INTP leftover_part_src_bytes;           //Leftover src length after partitioning
-    UINT32 num_threads;                     //Dynamically determined threads to be used for processing
-    UINT32 search_window_length;            //Search window (dictionary) size used by the partitioning scheme
+    AOCL_CHAR *src;                              //Actual input stream buffer pointer
+    AOCL_CHAR *dst;                              //Actual output stream buffer pointer
+    AOCL_INTP src_size;                          //Actual input stream buffer length
+    AOCL_INTP dst_size;                          //Actual output stream buffer length
+    AOCL_INTP common_part_src_size;              //Partitioned src length based on num_threads (may not be equal)
+    AOCL_INTP leftover_part_src_bytes;           //Leftover src length after partitioning
+    AOCL_UINT32 num_threads;                     //Dynamically determined threads to be used for processing
+    AOCL_UINT32 search_window_length;            //Search window (dictionary) size used by the partitioning scheme
 } aocl_thread_group_t;
 
 //Setup the multi-threaded compressor
-INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t* thread_grp, 
-                                      CHAR* src, CHAR* dst, INT32 in_size,
-                                      INT32 out_size, INT32 win_len,
-                                      INT32 window_factor);
+AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t* thread_grp, 
+                                      AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_INT32 in_size,
+                                      AOCL_INT32 out_size, AOCL_INT32 win_len,
+                                      AOCL_INT32 window_factor);
 //Perform partitioning for the multi-threaded compressor
-INT32 aocl_do_partition_compress_mt(aocl_thread_group_t* thread_grp, 
+AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t* thread_grp, 
                                    aocl_thread_info_t* cur_thread_info,
-                                   UINT32 cmpr_bound_pad, UINT32 thread_id);
+                                   AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id);
 //Destroy the memory associated with the multi-threaded compressor
 void aocl_destroy_parallel_compress_mt(aocl_thread_group_t* thread_grp);
 //Setup the multi-threaded decompressor
-INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
-                                        CHAR* src, CHAR* dst, INT32 in_size,
-                                        INT32 out_size, 
-                                        INT32 use_ST_decoompressor);
+AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
+                                        AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_INT32 in_size,
+                                        AOCL_INT32 out_size, 
+                                        AOCL_INT32 use_ST_decoompressor);
 //Perform partitioning for the multi-threaded decompressor
-INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
+AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
                                      aocl_thread_info_t* cur_thread_info,
-                                     UINT32 cmpr_bound_pad, UINT32 thread_id);
+                                     AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id);
 //Destroy the memory associated with the multi-threaded decompressor
 void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp);
 

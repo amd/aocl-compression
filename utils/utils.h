@@ -83,6 +83,7 @@ typedef struct timespec timeVal;
 
 //Logger - DTL
 #ifdef AOCL_ENABLE_LOG_FEATURE
+
 typedef struct {
 int maxLevel; // set via AOCL_ENABLE_LOG
 //LOG* filePtr; in the future, we can add a pointer to a log file here and pass it instead of logging to stdout
@@ -98,6 +99,30 @@ extern aocl_log_ctx logCtx;
 }
 #endif
 
+#ifdef _WINDOWS
+#include <stdlib.h>
+#define SET_MAX_LOG_LEVEL(logCtx)\
+{\
+                            _Pragma("omp critical")\
+                            {\
+                                char AOCL_Compression_logs[8] = {0};\
+                                size_t env_var_size = 8;\
+                                getenv_s(&env_var_size, AOCL_Compression_logs, env_var_size, "AOCL_ENABLE_LOG");\
+                                if(env_var_size == 0)\
+                                    logCtx.maxLevel = 0;\
+                                else if(!strcmp(AOCL_Compression_logs, "ERR"))\
+                                    logCtx.maxLevel = 1;\
+                                else if(!strcmp(AOCL_Compression_logs, "INFO"))\
+                                    logCtx.maxLevel = 2;\
+                                else if(!strcmp(AOCL_Compression_logs, "DEBUG"))\
+                                    logCtx.maxLevel = 3;\
+                                else if(!strcmp(AOCL_Compression_logs, "TRACE"))\
+                                    logCtx.maxLevel = 4;\
+                                else\
+                                    logCtx.maxLevel = 0;\
+                            }\
+}
+#else
 #define SET_MAX_LOG_LEVEL(logCtx)\
 {\
                             _Pragma("omp critical")\
@@ -117,6 +142,7 @@ extern aocl_log_ctx logCtx;
                                     logCtx.maxLevel = 0;\
                             }\
 }
+#endif /* _WINDOWS */
 
 #define LOG_UNFORMATTED(logType, logCtx, str)     do {\
                             SET_MAX_LOG_LEVEL(logCtx)\
