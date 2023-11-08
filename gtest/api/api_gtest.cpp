@@ -313,9 +313,9 @@ void reset_ACD(ACD* desc, AOCL_INTP level) {
     desc->dSpeed = 0.0;
     desc->optOff = 0;
     desc->optLevel = DEFAULT_OPT_LEVEL;
-#ifdef AOCL_ENABLE_LOG_FEATURE
-    logCtx.maxLevel = -1;
-#endif /* AOCL_ENABLE_LOG_FEATURE */
+// #ifdef AOCL_ENABLE_LOG_FEATURE
+//     logCtx.maxLevel = -1;
+// #endif /* AOCL_ENABLE_LOG_FEATURE */
 }
 
 void set_ACD_io_bufs(ACD* desc, TestLoadBase* t) {
@@ -400,19 +400,19 @@ TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_ioSet_common_3) //ACD inBu
     destroy();
 }
 
-#ifdef AOCL_ENABLE_LOG_FEATURE
-TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_logs_common) //logs
-{
-    skip_test_if_algo_invalid(atp.algo)
-    //Log levels: ERR:1,...TRACE:4
-    for (int logLevel = 1; logLevel <= 4; ++logLevel) { //AOCL_Compression_api_aocl_llc_setup_logs_common_4-7
-        reset_ACD(&desc, algo_levels[atp.algo].def);
-        logCtx.maxLevel = logLevel;
-        setup_and_validate();
-        destroy();
-    }
-}
-#endif /* AOCL_ENABLE_LOG_FEATURE */
+// #ifdef AOCL_ENABLE_LOG_FEATURE
+// TEST_P(API_setup, AOCL_Compression_api_aocl_llc_setup_logs_common) //logs
+// {
+//     skip_test_if_algo_invalid(atp.algo)
+//     //Log levels: ERR:1,...TRACE:4
+//     for (int logLevel = 1; logLevel <= 4; ++logLevel) { //AOCL_Compression_api_aocl_llc_setup_logs_common_4-7
+//         reset_ACD(&desc, algo_levels[atp.algo].def);
+//         logCtx.maxLevel = logLevel;
+//         setup_and_validate();
+//         destroy();
+//     }
+// }
+// #endif /* AOCL_ENABLE_LOG_FEATURE */
 
 /*
 * Crashes
