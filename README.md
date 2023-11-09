@@ -24,7 +24,7 @@ Installation
 ------------
 
 1. Download the latest stable release from the Github repository:<br>
-https://github.amd.com/AOCL/aocl-compression
+https://github.com/amd/aocl-compression
 2. Install CMake on the machine where the sources are to be compiled.
 3. Make any one of the compilers GCC or Clang available on the machine.
 4. Then, use the cmake based build system to compile and generate AOCL-Compression <br>
