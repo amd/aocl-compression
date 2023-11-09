@@ -45,6 +45,10 @@
 #include "api/aocl_compression.h"
 #include "api/types.h"
 
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif /* AOCL_ENABLE_THREADS */
+
 using namespace std;
 
 typedef aocl_compression_desc ACD;
@@ -55,6 +59,13 @@ typedef struct {
     AOCL_INTP upper;
     AOCL_INTP def;
 } algo_level_t;
+
+typedef struct {
+    AOCL_UINTP src_sz;
+    ACT algo;
+} api_test_params_mt;
+
+typedef api_test_params_mt ATP_mt;
 
 typedef struct {
     int optOff;
@@ -143,6 +154,33 @@ vector<ATP> get_api_test_params() {
 
     if (atps.size() == 0) { //no algo enabled
         atps.push_back({ 0, -1, AOCL_COMPRESSOR_ALGOS_NUM }); //add dummy entry. Else parameterized tests will fail.
+    }
+    return atps;
+}
+
+/*
+* This function provides list of valid algo ids and test environment configurations
+*/
+vector<ATP_mt> get_api_test_params_mt() {
+    vector<ATP_mt> atps;
+    AOCL_UINTP minSz = 512;
+    for (int szFactor = 1; szFactor < 16; ++szFactor) { // 1KB - 16 MB
+#ifndef AOCL_EXCLUDE_LZ4
+        atps.push_back({ minSz << szFactor, LZ4 });
+#endif
+#ifndef AOCL_EXCLUDE_SNAPPY
+        atps.push_back({ minSz << szFactor, SNAPPY });
+#endif
+#ifndef AOCL_EXCLUDE_ZLIB
+        atps.push_back({ minSz << szFactor, ZLIB });
+#endif
+#ifndef AOCL_EXCLUDE_ZSTD
+        atps.push_back({ minSz << szFactor, ZSTD });
+#endif
+    }
+
+    if (atps.size() == 0) { //no algo enabled
+        atps.push_back({ 0, AOCL_COMPRESSOR_ALGOS_NUM }); //add dummy entry. Else parameterized tests will fail.
     }
     return atps;
 }
@@ -925,3 +963,194 @@ INSTANTIATE_TEST_SUITE_P(
 /*********************************************
  * End Decompress Tests
  ********************************************/
+
+#ifdef AOCL_ENABLE_THREADS
+
+ /*********************************************
+  * Begin Multithreaded Compress Tests
+  ********************************************/
+
+  /*
+  * Testing all algos that have multithreaded compress/decompress support
+  * in multithreaded mode by using input files of varying sizes [1KB - 16 MB].
+  * As thread counts are decided based on input file size, this validates the algos
+  * for compress/decompress operation with different thread counts.
+  */
+
+class API_compress_MT : public ::testing::TestWithParam<ATP_mt> {
+public:
+    void SetUp() override {
+        atp = GetParam();
+        cpr = new TestLoad(atp.src_sz, atp.src_sz * 2, true);
+    }
+
+    void destroy() {
+        if (atp.algo < AOCL_COMPRESSOR_ALGOS_NUM)
+            aocl_llc_destroy(&desc, atp.algo);
+        desc.workBuf = nullptr;
+    }
+
+    void TearDown() override {
+        destroy();
+    }
+
+    void setup() {
+        ASSERT_NO_THROW(aocl_llc_setup(&desc, atp.algo));
+        switch (atp.algo) {
+        case ZSTD:
+            ASSERT_NE(desc.workBuf, nullptr); //ztd saves params and context 
+            break;
+        default:
+            ASSERT_EQ(desc.workBuf, nullptr);
+            break;
+        }
+    }
+
+    int64_t compress() {
+        return aocl_llc_compress(&desc, atp.algo);
+    }
+
+    //decompress data in desc and match it with src
+    void decompress_and_validate(TestLoadBase* src) {
+        int64_t dSize = aocl_llc_decompress(&desc, atp.algo);
+        EXPECT_EQ(dSize, src->getInpSize()); //is decompressed data size == src size?
+        EXPECT_EQ(memcmp(src->getInpData(), desc.outBuf, dSize), 0);
+    }
+
+    void run_test() {
+        set_ACD_io_bufs(&desc, (TestLoadBase*)cpr); //set desc. inp=uncompressed data, out=empty output buffer.
+        setup();
+
+        int64_t cSize = compress();
+        EXPECT_GT(cSize, 0);
+
+        TestLoadSingle dpr(cSize, cpr->getOutData(), cpr->getInpSize());
+        set_ACD_io_bufs(&desc, (TestLoadBase*)(&dpr));  //set desc. inp=compressed data, out=empty output buffer.
+        decompress_and_validate((TestLoadBase*)cpr);
+        destroy();
+    }
+
+    int64_t run_compress(int num_threads_compr)
+    {
+        omp_set_num_threads(num_threads_compr);
+        uint64_t csize = compress();
+        return csize;
+    }
+
+    uint64_t run_decompress(int num_threads_decompr)
+    {
+        omp_set_num_threads(num_threads_decompr);
+        int64_t dSize = aocl_llc_decompress(&desc, atp.algo);
+        return dSize;
+    }
+
+    void run_test_different_threads(int num_threads_compr, int num_threads_decompr) {
+        set_ACD_io_bufs(&desc, (TestLoadBase*)cpr); //set desc. inp=uncompressed data, out=empty output buffer.
+        setup();
+
+        int64_t cSize = run_compress(num_threads_compr);
+
+        EXPECT_GT(cSize, 0);
+
+        TestLoadSingle dpr(cSize, cpr->getOutData(), cpr->getInpSize());
+        set_ACD_io_bufs(&desc, (TestLoadBase*)(&dpr));  //set desc. inp=compressed data, out=empty output buffer.
+        uint64_t dSize = run_decompress(num_threads_decompr);
+
+        // validating
+        EXPECT_EQ(dSize, cpr->getInpSize()); //is decompressed data size == src size?
+        EXPECT_EQ(memcmp(cpr->getInpData(), desc.outBuf, dSize), 0);
+
+        destroy();
+    }
+
+    ATP_mt atp;
+    ACD desc;
+
+private:
+    TestLoad* cpr = nullptr;
+};
+
+TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_defaultOptOn_common_1) //default optOn
+{
+    skip_test_if_algo_invalid(atp.algo)
+    reset_ACD(&desc, algo_levels[atp.algo].def);
+    run_test();
+}
+
+TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_defaultOptOff_common_2) //default optOff
+{
+    skip_test_if_algo_invalid(atp.algo)
+    reset_ACD(&desc, algo_levels[atp.algo].def);
+    desc.optOff = 1; //switch off optimizations
+    run_test();
+}
+
+TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_equal_for_compr_and_decompr_common)  //compr_thread_count == decompr_thread_count
+{
+    skip_test_if_algo_invalid(atp.algo);
+    reset_ACD(&desc, algo_levels[atp.algo].def);
+    int num_threads = omp_get_max_threads() - 1;
+    omp_set_num_threads(num_threads);
+    run_test();
+}
+
+TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_greater_than_decompr_thread_count_common) // compr_thread_count > decompr_thread_count
+{
+    skip_test_if_algo_invalid(atp.algo);
+    reset_ACD(&desc, algo_levels[atp.algo].def);
+    int max_threads = omp_get_max_threads();
+    int compr_num_threads = max_threads - 1;
+    int decompr_num_threads = max_threads - 2;
+    run_test_different_threads(compr_num_threads, decompr_num_threads);
+}
+
+TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_less_than_decompr_thread_count_common) // compr_thread_count < decompr_thread_count
+{
+    skip_test_if_algo_invalid(atp.algo);
+    reset_ACD(&desc, algo_levels[atp.algo].def);
+    int max_threads = omp_get_max_threads();
+    int compr_num_threads = max_threads - 2;
+    int decompr_num_threads = max_threads - 1;
+    run_test_different_threads(compr_num_threads, decompr_num_threads);
+}
+
+TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_greater_than_maximum_available_threads_common) // compr_thread_count > omp_get_max_threads()
+{
+    skip_test_if_algo_invalid(atp.algo);
+    reset_ACD(&desc, algo_levels[atp.algo].def);
+    int max_threads = omp_get_max_threads();
+    int compr_num_threads = max_threads + 2;
+    int decompr_num_threads = max_threads - 1;
+    run_test_different_threads(compr_num_threads, decompr_num_threads);
+}
+
+TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_decompress_thread_count_greater_than_maximum_available_threads_common) // decompr_thread_count > omp_get_max_threads()
+{
+    skip_test_if_algo_invalid(atp.algo);
+    reset_ACD(&desc, algo_levels[atp.algo].def);
+    int max_threads = omp_get_max_threads();
+    int compr_num_threads = max_threads - 1;
+    int decompr_num_threads = max_threads + 2;
+    run_test_different_threads(compr_num_threads, decompr_num_threads);
+}
+
+TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_and_decompr_thread_count_greater_than_maximum_available_threads_common) // decompr_thread_count > omp_get_max_threads() & compr_thread_count > omp_get_max_threads()
+{
+    skip_test_if_algo_invalid(atp.algo);
+    reset_ACD(&desc, algo_levels[atp.algo].def);
+    int max_threads = omp_get_max_threads();
+    int compr_num_threads = max_threads + 1;
+    int decompr_num_threads = max_threads + 2;
+    run_test_different_threads(compr_num_threads, decompr_num_threads);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    API_TEST,
+    API_compress_MT,
+    ::testing::ValuesIn(get_api_test_params_mt()));
+
+/*********************************************
+ * End Multithreaded Compress Tests
+ ********************************************/
+
+#endif /* AOCL_ENABLE_THREADS */
