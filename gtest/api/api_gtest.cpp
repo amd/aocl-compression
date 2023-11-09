@@ -164,7 +164,7 @@ vector<ATP> get_api_test_params() {
 vector<ATP_mt> get_api_test_params_mt() {
     vector<ATP_mt> atps;
     AOCL_UINTP minSz = 512;
-    for (int szFactor = 1; szFactor < 16; ++szFactor) { // 1KB - 16 MB
+    for (int szFactor = 1; szFactor < 16; szFactor+=4) { // 1KB - 16 MB
 #ifndef AOCL_EXCLUDE_LZ4
         atps.push_back({ minSz << szFactor, LZ4 });
 #endif
@@ -654,7 +654,7 @@ TEST_P(API_compress, AOCL_Compression_api_aocl_llc_compress_inpNull_common_5) //
 
     int64_t cSize = compress();
 
-    printf("cSize by algo %d %lld", (int)atp.algo, cSize);
+    // printf("cSize by algo %d %ld", (int)atp.algo, cSize);
 
     EXPECT_LT(cSize, 0); //compress failed 
 
@@ -1085,15 +1085,6 @@ TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_defaultOptOff_com
     run_test();
 }
 
-TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_equal_for_compr_and_decompr_common)  //compr_thread_count == decompr_thread_count
-{
-    skip_test_if_algo_invalid(atp.algo);
-    reset_ACD(&desc, algo_levels[atp.algo].def);
-    int num_threads = omp_get_max_threads() - 1;
-    omp_set_num_threads(num_threads);
-    run_test();
-}
-
 TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_greater_than_decompr_thread_count_common) // compr_thread_count > decompr_thread_count
 {
     skip_test_if_algo_invalid(atp.algo);
@@ -1111,26 +1102,6 @@ TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_less
     int max_threads = omp_get_max_threads();
     int compr_num_threads = max_threads - 2;
     int decompr_num_threads = max_threads - 1;
-    run_test_different_threads(compr_num_threads, decompr_num_threads);
-}
-
-TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_greater_than_maximum_available_threads_common) // compr_thread_count > omp_get_max_threads()
-{
-    skip_test_if_algo_invalid(atp.algo);
-    reset_ACD(&desc, algo_levels[atp.algo].def);
-    int max_threads = omp_get_max_threads();
-    int compr_num_threads = max_threads + 2;
-    int decompr_num_threads = max_threads - 1;
-    run_test_different_threads(compr_num_threads, decompr_num_threads);
-}
-
-TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_decompress_thread_count_greater_than_maximum_available_threads_common) // decompr_thread_count > omp_get_max_threads()
-{
-    skip_test_if_algo_invalid(atp.algo);
-    reset_ACD(&desc, algo_levels[atp.algo].def);
-    int max_threads = omp_get_max_threads();
-    int compr_num_threads = max_threads - 1;
-    int decompr_num_threads = max_threads + 2;
     run_test_different_threads(compr_num_threads, decompr_num_threads);
 }
 

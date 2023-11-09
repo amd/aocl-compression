@@ -47,7 +47,8 @@
 
 #include "utils/utils.h"
 
-#define MAX_FILENAME_LEN 128
+#define MAX_FILENAME_LEN 256
+#define MAX_FOLDER_LEN 256
 
 //Number of iterations of compression/decompression operations
 #define BENCH_NUM_ITERS 10
@@ -133,9 +134,10 @@ typedef struct
     AOCL_FLOAT32 dSpeed;         //speed of decompression
     AOCL_FLOAT32 cBestSpeed;     //best speed to compress
     AOCL_FLOAT32 dBestSpeed;     //best speed to decompress
+    AOCL_CHAR *dumpFile;
+    AOCL_INTP cfile_count;
     FILE* dumpFp;           //optional file for saving output data
     FILE* valFp;            //optional file for loading validation data in decompress only mode
-    AOCL_UINTP val_file_size;    //size of valFp
     AOCL_INTP runOperation;      //operation to run: compress, decompress, both (default)
 } aocl_codec_bench_info;
 
