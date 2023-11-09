@@ -368,10 +368,11 @@ uInt ZLIB_INTERNAL longest_match_x86_internal(deflate_state* s, IPos cur_match)
 
 #endif //AOCL_ZLIB_OPT
 
+#ifdef AOCL_ZLIB_AVX2_OPT
 void aocl_register_longest_match_fmv(int optOff, int optLevel,
-uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match))
+    uInt(*longest_match_c_fp)(deflate_state* s, IPos cur_match))
 {
-    if (UNLIKELY(optOff==1))
+    if (UNLIKELY(optOff == 1))
     {
         longest_match_fp = longest_match_c_fp;
     }
@@ -380,19 +381,11 @@ uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match))
         switch (optLevel)
         {
         case -1: // undecided. use defaults based on compiler flags
-#ifdef AOCL_ZLIB_AVX2_OPT
 #ifdef HAVE_BUILTIN_CTZ
             longest_match_fp = longest_match_avx2_opt;
-#elif defined(AOCL_ZLIB_AVX_OPT)
+#else
             longest_match_fp = longest_match_avx_opt;
-#else
-            longest_match_fp = longest_match_c_opt;
 #endif /* HAVE_BUILTIN_CTZ */
-#elif defined(AOCL_ZLIB_OPT)
-            longest_match_fp = longest_match_c_opt;
-#else
-            longest_match_fp = longest_match_c_fp;
-#endif
             break;
         case 0://C version
         case 1://SSE version
@@ -405,15 +398,72 @@ uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match))
         default://AVX512 and other versions
 #ifdef HAVE_BUILTIN_CTZ
             longest_match_fp = longest_match_avx2_opt;
-#elif defined(AOCL_ZLIB_AVX_OPT)
-            longest_match_fp = longest_match_avx_opt;
 #else
-            longest_match_fp = longest_match_c_opt;
+            longest_match_fp = longest_match_avx_opt;
 #endif
             break;
         }
     }
 }
+#elif defined(AOCL_ZLIB_AVX_OPT)
+void aocl_register_longest_match_fmv(int optOff, int optLevel,
+    uInt(*longest_match_c_fp)(deflate_state* s, IPos cur_match))
+{
+    if (UNLIKELY(optOff == 1))
+    {
+        longest_match_fp = longest_match_c_fp;
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case -1: // undecided. use defaults based on compiler flags
+            longest_match_fp = longest_match_avx_opt;
+            break;
+        case 0://C version
+        case 1://SSE version
+            longest_match_fp = longest_match_c_opt;
+            break;
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            longest_match_fp = longest_match_avx_opt;
+            break;
+        }
+    }
+}
+#elif defined(AOCL_ZLIB_OPT)
+void aocl_register_longest_match_fmv(int optOff, int optLevel,
+    uInt(*longest_match_c_fp)(deflate_state* s, IPos cur_match))
+{
+    if (UNLIKELY(optOff == 1))
+    {
+        longest_match_fp = longest_match_c_fp;
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case -1: // undecided. use defaults based on compiler flags
+            longest_match_fp = longest_match_c_opt;
+            break;
+        case 0://C version
+        case 1://SSE version
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            longest_match_fp = longest_match_c_opt;
+            break;
+        }
+    }
+}
+#else
+void aocl_register_longest_match_fmv(int optOff, int optLevel,
+    uInt(*longest_match_c_fp)(deflate_state* s, IPos cur_match))
+{
+    longest_match_fp = longest_match_c_fp;
+}
+#endif
 
 void aocl_register_longest_match(int optOff, int optLevel,
 uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match)){

@@ -76,6 +76,7 @@ static int setup_ok_zlib_adler = 0; // flag to indicate status of dynamic dispat
 static uint32_t (*adler32_x86_fp)(uint32_t adler, const Bytef* buf, z_size_t len) =
 (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
 
+#ifdef AOCL_ZLIB_AVX_OPT
 // This function separation prevents compiler from generating VZEROUPPER instruction
 // because of transition from VEX to Non-VEX code resulting in performance drop
 static inline uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_t len)
@@ -103,7 +104,6 @@ static inline uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_
     return sum_A | (sum_B << 16);
 }
 
-#ifdef AOCL_ZLIB_AVX_OPT
 __attribute__((__target__("avx"))) // uses SSSE3 intrinsics
 static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_t len)
 {
@@ -363,39 +363,34 @@ uint32_t ZLIB_INTERNAL adler32_x86(uint32_t sum_A, const Bytef* buf, z_size_t le
 }
 #endif /* AOCL_ZLIB_OPT */
 
+#ifdef AOCL_ZLIB_AVX2_OPT
 static void aocl_setup_adler32_fmv(int optOff, int optLevel)
 {
-    if (UNLIKELY(optOff==1))
+    if (UNLIKELY(optOff == 1))
     {
-        adler32_x86_fp = (uint32_t (*)(uint32_t, const Bytef *, z_size_t))adler32;
+        adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
     }
     else
     {
         switch (optLevel)
         {
         case -1: // undecided. use defaults based on compiler flags
-#ifdef AOCL_ZLIB_AVX2_OPT
-#if defined(AOCL_ZLIB_AVX2_OPT) && defined(USE_AOCL_ADLER32_AVX2)
+#if defined(USE_AOCL_ADLER32_AVX2)
             adler32_x86_fp = adler32_x86_avx2;
 #else
             adler32_x86_fp = adler32_x86_avx;
 #endif
-#elif defined(AOCL_ZLIB_AVX_OPT)
-            adler32_x86_fp = adler32_x86_avx;
-#else
-            adler32_x86_fp = (uint32_t (*)(uint32_t, const Bytef *, z_size_t))adler32;
-#endif
             break;
         case 0://C version
         case 1://SSE version
-            adler32_x86_fp = (uint32_t (*)(uint32_t, const Bytef *, z_size_t))adler32;
+            adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
             break;
         case 2://AVX version
             adler32_x86_fp = adler32_x86_avx;
             break;
         case 3://AVX2 version
         default://AVX512 and other versions
-#if defined(AOCL_ZLIB_AVX2_OPT) && defined(USE_AOCL_ADLER32_AVX2)
+#if defined(USE_AOCL_ADLER32_AVX2)
             adler32_x86_fp = adler32_x86_avx2;
 #else
             adler32_x86_fp = adler32_x86_avx;
@@ -404,6 +399,38 @@ static void aocl_setup_adler32_fmv(int optOff, int optLevel)
         }
     }
 }
+#elif defined(AOCL_ZLIB_AVX_OPT)
+static void aocl_setup_adler32_fmv(int optOff, int optLevel)
+{
+    if (UNLIKELY(optOff == 1))
+    {
+        adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case -1: // undecided. use defaults based on compiler flags
+            adler32_x86_fp = adler32_x86_avx;
+            break;
+        case 0://C version
+        case 1://SSE version
+            adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
+            break;
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            adler32_x86_fp = adler32_x86_avx;
+            break;
+        }
+    }
+}
+#else
+static void aocl_setup_adler32_fmv(int optOff, int optLevel)
+{
+    adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
+}
+#endif
 
 void aocl_setup_adler32(int optOff, int optLevel){
     AOCL_ENTER_CRITICAL(setup_zlib_adler)
@@ -435,8 +462,10 @@ void aocl_destroy_adler32(void){
 }
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_ZLIB_OPT
 uint32_t ZEXPORT Test_adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len)
 {
     return adler32_x86(adler, buf, len);
 }
+#endif
 #endif /* AOCL_UNIT_TEST */

@@ -54,11 +54,13 @@ using namespace std;
 
 #define MIN(a,b)    ( (a) < (b) ? (a) : (b) )
 
+#ifdef AOCL_ZLIB_OPT
 #ifdef __cplusplus
 extern "C" {
     extern void AOCL_bi_flush(deflate_state* s);
     extern void AOCL_bi_windup(deflate_state* s);
 }
+#endif
 #endif
 
 /* This base class can be used for all fixtures
@@ -1832,6 +1834,7 @@ TEST(ZLIB_inflateCodesUsed, pass_cases)
   rsti(strm);
 }
 
+#ifdef AOCL_ZLIB_OPT
 class ZLIB_adler32_x86 : public AOCL_setup_zlib {
 };
 
@@ -1879,6 +1882,7 @@ TEST_F(ZLIB_adler32_x86, all_cases)
 
   free(buf);
 }
+#endif
 
 /* inflate small amount of data and validate with adler32 checksum */
 const char* orig = "The quick brown fox jumped over the lazy dog";
@@ -2252,6 +2256,7 @@ TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_3)
     free(uncompr);
 }
 
+#ifdef AOCL_ZLIB_OPT
 /*=====================================
  *  Test cases for AOCL_bi_flush
  *=====================================*/
@@ -2588,6 +2593,7 @@ TEST_F(ZLIB_AOCL_send_bits, AOCL_Compression_zlib_AOCL_send_bits_common_3)
     EXPECT_EQ(state->bi_buf, 179);
     EXPECT_EQ(state->bi_valid, 8);
 }
+#endif
 
 #ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
 TEST(ZLIB_deflate_quick, AOCL_Compression_zlib_defqck_dist_code_verify)

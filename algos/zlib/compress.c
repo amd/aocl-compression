@@ -10,6 +10,8 @@
 #include "zlib.h"
 #include "utils/utils.h"
 
+int zlibOptOff = 0; // default, run reference code
+
 #ifdef AOCL_ZLIB_OPT
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
@@ -22,7 +24,6 @@ static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE()
 #endif
 
-int zlibOptOff = 0; // default, run reference code
 static int setup_ok_zlib = 0; // flag to indicate status of dynamic dispatcher setup
 
 /* AOCL-Compression defined setup function that sets up ZLIB with the right

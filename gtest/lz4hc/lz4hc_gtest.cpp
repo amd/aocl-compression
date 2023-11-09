@@ -182,6 +182,7 @@ public:
     }
 };
 
+#ifdef AOCL_LZ4HC_OPT
 // Create AOCL stream
 class AOCL_Stream
 {
@@ -243,6 +244,7 @@ public:
         }
     }
 };
+#endif
 
 bool lz4hc_check_uncompressed_equal_to_original(char *src, unsigned srcSize, char *compressed, unsigned compressedLen)
 {
@@ -330,10 +332,10 @@ TEST(LZ4HC_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_LZ4_sizeofStateHC_common)
  * "End" of LZ4_sizeofStateHC Test
  *********************************************/
 
+#ifdef AOCL_LZ4HC_OPT
  /*********************************************
   * "Begin" of AOCL_LZ4_sizeofStateHC Test
   *********************************************/
-
 
 TEST(LZ4HC_AOCL_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_sizeofStateHC_common)
 {
@@ -343,6 +345,7 @@ TEST(LZ4HC_AOCL_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_sizeofStateHC
 /*********************************************
  * "End" of AOCL_LZ4_sizeofStateHC Test
  *********************************************/
+#endif
 
 /*************************************************
  * "Begin" of LZ4_compress_HC_extStateHC Tests
@@ -505,6 +508,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_
  * "End" of LZ4_compress_HC_extStateHC Tests
  *********************************************/
 
+#ifdef AOCL_LZ4HC_OPT
  /*************************************************
   * "Begin" of AOCL_LZ4_compress_HC_extStateHC Tests
   *************************************************/
@@ -643,6 +647,7 @@ TEST_F(LZ4HC_AOCL_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_co
 /*************************************************
  * "End" of AOCL_LZ4_compress_HC_extStateHC Tests
  *************************************************/
+#endif
 
 /*********************************************
  * "Begin" of LZ4_compress_HC_destSize Tests
@@ -741,6 +746,7 @@ TEST(LZ4HC_LZ4_createStreamHC, AOCL_Compression_lz4hc_LZ4_createStreamHC_common)
  * "End" of LZ4_createStreamHC Test
  *********************************************/
 
+#ifdef AOCL_LZ4HC_OPT
  /*********************************************
   * "Begin" of AOCL_LZ4_createStreamHC Test
   *********************************************/
@@ -756,6 +762,7 @@ TEST(LZ4HC_AOCL_LZ4_createStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_createStream
 /*********************************************
  * "End" of AOCL_LZ4_createStreamHC Test
  *********************************************/
+#endif
 
 /*********************************************
  * "Begin" of LZ4_freeStreamHC Tests
@@ -778,6 +785,7 @@ TEST(LZ4HC_LZ4_freeStreamHC, AOCL_Compression_lz4hc_LZ4_freeStreamHC_common_2) /
  * "End" of LZ4_freeStreamHC Tests
  *********************************************/
 
+#ifdef AOCL_LZ4HC_OPT
 /*********************************************
  * "Begin" of AOCL_LZ4_freeStreamHC Tests
  *********************************************/
@@ -794,6 +802,7 @@ TEST(LZ4HC_AOCL_LZ4_freeStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_freeStreamHC_c
     EXPECT_EQ(AOCL_LZ4_freeStreamHC(State_stream.Get_Stream()), 0);
     State_stream.Set_Stream(NULL);
 }
+#endif
 
 /*********************************************
  * "End" of AOCL_LZ4_freeStreamHC Tests
@@ -864,6 +873,7 @@ TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast
  * "End" of LZ4_resetStream_fast Tests
  *********************************************/
 
+#ifdef AOCL_LZ4HC_OPT
  /*********************************************
   * "Begin" of AOCL_LZ4_resetStreamHC_fast Tests
   *********************************************/
@@ -940,6 +950,7 @@ TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStr
 /*********************************************
  * "End" of AOCL_LZ4_resetStream_fast Tests
  *********************************************/
+#endif
 
 /*********************************************
  * "Begin" of LZ4_loadDictHC Tests
@@ -1728,6 +1739,7 @@ TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_6) // 
  * "End" of LZ4_saveDictHC Tests
  *********************************************/
 
+#ifdef AOCL_LZ4HC_OPT
 /*********************************************
  * "Begin" of AOCL_LZ4HC_countBack Tests
  *********************************************/
@@ -2247,4 +2259,4 @@ TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4H
 /*****************************************************
  * "End" of AOCL_LZ4HC_insertAndGetWiderMatch Tests
  *****************************************************/
-
+#endif

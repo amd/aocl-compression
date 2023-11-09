@@ -1844,6 +1844,11 @@ _last_literals:
 }
 
 #ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_LZ4_AVX_OPT
+/* Even though this function does not use AVX2 instructions, output format it generates (with RAP frame) is
+ * not directly compatible with single threaded decompressor. Hence to pair it with 
+ * AOCL_LZ4_decompress_safe_mt it is enabled only for AOCL_LZ4_AVX_OPT case.
+*/
 //Same as AOCL_LZ4_compress_generic_validated, but with state information for Multi-threaded support
 LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated_mt(
     LZ4_stream_t_internal* const cctx,
@@ -2342,6 +2347,7 @@ _last_literals:
     DEBUGLOG(5, "LZ4_compress_generic: compressed %i bytes into %i bytes", inputSize, result);
     return result;
 }
+#endif /* AOCL_LZ4_AVX_OPT */
 #endif /* AOCL_ENABLE_THREADS */
 #endif /* AOCL_LZ4_OPT */
 
@@ -2427,8 +2433,10 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic(
         dstCapacity, outputDirective,
         tableType, dictDirective, dictIssue, acceleration);
 }
+#endif /* AOCL_LZ4_OPT */
 
 #ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_LZ4_AVX_OPT
 //For multi-threaded compression
 LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_mt(
     LZ4_stream_t_internal* const cctx,
@@ -2470,8 +2478,8 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_mt(
         dstCapacity, outputDirective,
         tableType, dictDirective, dictIssue, acceleration);
 }
+#endif /* AOCL_LZ4_AVX_OPT */
 #endif /* AOCL_ENABLE_THREADS */
-#endif /* AOCL_LZ4_OPT */
 
 int LZ4_compress_fast_extState(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
@@ -2530,8 +2538,10 @@ int AOCL_LZ4_compress_fast_extState(void* state, const char* source, char* dest,
         }
     }
 }
+#endif /* AOCL_LZ4_OPT */
 
 #ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_LZ4_AVX_OPT
 //For mutli-threaded compression
 int AOCL_LZ4_compress_fast_extState_mt(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration, unsigned char** last_anchor_ptr, unsigned int* last_bytes_len)
 {
@@ -2561,8 +2571,8 @@ int AOCL_LZ4_compress_fast_extState_mt(void* state, const char* source, char* de
         }
     }
 }
+#endif /* AOCL_LZ4_AVX_OPT */
 #endif /* AOCL_ENABLE_THREADS */
-#endif /* AOCL_LZ4_OPT */
 
 /**
  * LZ4_compress_fast_extState_fastReset() :
@@ -2624,11 +2634,7 @@ int LZ4_compress_fast_ST(const char* source, char* dest, int inputSize, int maxO
     LZ4_stream_t* const ctxPtr = &ctx;
 #endif
 #ifdef AOCL_LZ4_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     result = LZ4_compress_fast_extState_fp(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
-#else
-    result = AOCL_LZ4_compress_fast_extState(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
-#endif
 #else
     result = LZ4_compress_fast_extState(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
 #endif
@@ -2639,17 +2645,17 @@ int LZ4_compress_fast_ST(const char* source, char* dest, int inputSize, int maxO
 
     return result;
 }
-#endif /* AOCL_ENABLE_THREADS */
 
-int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
-{
-    AOCL_SETUP_NATIVE();
-    int result;
-
-#ifdef AOCL_ENABLE_THREADS //Threaded
+#ifdef AOCL_LZ4_AVX_OPT
+/* This function does not use any AVX2 code, but it produces output with RAP frame added.
+* This data is not compatible with the single threaded decompress APIs. Hence, it is placed under
+* AOCL_LZ4_AVX_OPT and made to pair with AOCL_LZ4_decompress_safe_mt().
+*/
+int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration){
     if (source == NULL || dest == NULL)
         return 0;
     
+    int result;
     aocl_thread_group_t thread_group_handle;
     aocl_thread_info_t cur_thread_info;
     aocl_thread_info_t prev_thread_info;
@@ -2898,9 +2904,44 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
         result = thread_group_handle.dst - dest;
         aocl_destroy_parallel_compress_mt(&thread_group_handle);
     }//thread_group_handle.num_threads > 1
+    return result;
+}
+#endif /* AOCL_LZ4_AVX_OPT */
 
-#else //Non-threaded
+int AOCL_LZ4_compress_fast_st(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration){
+    int result = 0;
+    #if (LZ4_HEAPMODE)
+        LZ4_stream_t* ctxPtr = ALLOC(sizeof(LZ4_stream_t));   /* malloc-calloc always properly aligned */
+        if (ctxPtr == NULL) return 0;
+    #else
+        LZ4_stream_t ctx;
+        LZ4_stream_t* const ctxPtr = &ctx;
+    #endif
+    #ifdef AOCL_LZ4_OPT
+        result = LZ4_compress_fast_extState_fp(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
+    #else
+        result = LZ4_compress_fast_extState(ctxPtr, source, dest, inputSize, maxOutputSize, acceleration);
+    #endif
 
+    #if (LZ4_HEAPMODE)
+        FREEMEM(ctxPtr);
+    #endif
+        return result;
+}
+
+static int (*LZ4_compress_fast_mt_fp)(const char* source, char* dest, int inputSize, 
+    int maxOutputSize, int acceleration) = AOCL_LZ4_compress_fast_st;
+#endif
+
+int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
+{
+    AOCL_SETUP_NATIVE();
+    int result;
+
+#ifdef AOCL_ENABLE_THREADS
+    result = LZ4_compress_fast_mt_fp(source, dest, inputSize, maxOutputSize, acceleration);
+    return result;
+#else
 #if (LZ4_HEAPMODE)
     LZ4_stream_t* ctxPtr = ALLOC(sizeof(LZ4_stream_t));   /* malloc-calloc always properly aligned */
     if (ctxPtr == NULL) return 0;
@@ -2917,10 +2958,9 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
 #if (LZ4_HEAPMODE)
     FREEMEM(ctxPtr);
 #endif
-
-#endif //AOCL_ENABLE_THREADS
-
     return result;
+    
+#endif /* AOCL_ENABLE_THREADS */
 }
 
 int LZ4_compress_default(const char* src, char* dst, int srcSize, int maxOutputSize)
@@ -4713,20 +4753,16 @@ static int LZ4_decompress_wrapper(const char* source, char* dest, int compressed
                                   (BYTE*)dest, NULL, 0);
 }
 
+#ifdef AOCL_LZ4_AVX_OPT
 /* Wrapper function for static inlined AOCL_LZ4_decompress_generic function for extending dynamic dispatcher support to decompression functions. */
 LZ4_FORCE_O2
 static int AOCL_LZ4_decompress_wrapper(const char* source, char* dest, int compressedSize, int maxDecompressedSize)
 {
-#ifdef AOCL_LZ4_AVX_OPT
     return AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                     endOnInputSize, decode_full_block, noDict,
                                     (BYTE*)dest, NULL, 0);
-#else
-    return LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
-                                    endOnInputSize, decode_full_block, noDict,
-                                    (BYTE*)dest, NULL, 0);
-#endif /* AOCL_LZ4_AVX_OPT */
 }
+#endif
 
 static int (*LZ4_decompress_wrapper_fp) (const char* source, char* dest, int compressedSize, int maxDecompressedSize) = LZ4_decompress_wrapper;
 
@@ -4743,13 +4779,9 @@ int LZ4_decompress_safe_ST(const char* source, char* dest, int compressedSize, i
 #endif /* AOCL_LZ4_OPT */
 
 }
-#endif /* AOCL_ENABLE_THREADS */
 
-LZ4_FORCE_O2
-int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int maxDecompressedSize)
-{
-    int result = 0;
-#ifdef AOCL_ENABLE_THREADS //Threaded
+#ifdef AOCL_LZ4_AVX_OPT
+int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSize, int maxDecompressedSize){
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if (source == NULL || dest == NULL)
     {
@@ -4757,6 +4789,7 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
         return -1;
     }
     
+    int result;
     aocl_thread_group_t thread_group_handle;
     aocl_thread_info_t cur_thread_info;
     AOCL_INT32 ret_status = -1;
@@ -4853,24 +4886,30 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
         LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return result;
     }//thread_group_handle.num_threads > 1
+}
 
-#else //Non-threaded
+static int (*LZ4_decompress_wrapper_mt_fp) (const char* source, char* dest, 
+            int compressedSize, int maxDecompressedSize) = LZ4_decompress_wrapper;
+#endif /* AOCL_LZ4_AVX_OPT */
+#endif /* AOCL_ENABLE_THREADS */
 
+LZ4_FORCE_O2
+int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int maxDecompressedSize)
+{
+    int result = 0;
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-#ifdef AOCL_LZ4_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
-    result = LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
-#else
+
+#ifdef AOCL_ENABLE_THREADS
 #ifdef AOCL_LZ4_AVX_OPT
-    result = AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
-                                    endOnInputSize, decode_full_block, noDict,
-                                    (BYTE*)dest, NULL, 0);
+    result = LZ4_decompress_wrapper_mt_fp(source, dest, compressedSize, maxDecompressedSize);
 #else
     result = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                   endOnInputSize, decode_full_block, noDict,
                                   (BYTE*)dest, NULL, 0);
-#endif /* AOCL_LZ4_AVX_OPT */
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+#endif
+#else /* !AOCL_ENABLE_THREADS */
+#ifdef AOCL_LZ4_OPT
+    result = LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
 #else
     result = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                   endOnInputSize, decode_full_block, noDict,
@@ -4898,37 +4937,68 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
 #ifdef AOCL_LZ4_AVX_OPT
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = AOCL_LZ4_decompress_wrapper;
+#ifdef AOCL_THREADS
+            LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;
+            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_mt;
+#endif
 #elif defined(AOCL_LZ4_OPT)
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
+#ifdef AOCL_THREADS
+            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
+            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
+#endif
 #else
             LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
+#ifdef AOCL_THREADS
+            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
+            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
+#endif
 #endif
             break;
+#ifdef AOCL_LZ4_OPT
         case 0://C version
         case 1://SSE version
-#ifdef AOCL_LZ4_OPT
-            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
-#else
-            LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
-#endif
-            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-            break;
         case 2://AVX version
+            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
+            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
+#ifdef AOCL_THREADS
+            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
+            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
+#endif
+            break;
         case 3://AVX2 version
         default://AVX512 and other versions
 #ifdef AOCL_LZ4_AVX_OPT
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = AOCL_LZ4_decompress_wrapper;
+#ifdef AOCL_THREADS
+            LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;
+            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_mt;
+#endif
 #elif defined(AOCL_LZ4_OPT)
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
+#ifdef AOCL_THREADS
+            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
+            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
+#endif
 #else
             LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
 #endif
             break;
+#else
+        default:
+            LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
+            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
+#ifdef AOCL_THREADS
+            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
+            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
+#endif
+            break;
+#endif
         }
     }
 }
@@ -4946,6 +5016,12 @@ char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
     return NULL;
 }
 
+void aocl_destroy_lz4(void){
+    AOCL_ENTER_CRITICAL(setup_lz4)
+    setup_ok_lz4 = 0;
+    AOCL_EXIT_CRITICAL(setup_lz4)
+}
+
 #ifdef AOCL_LZ4_OPT
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_lz4)
@@ -4957,22 +5033,17 @@ static void aocl_setup_native(void) {
     }
     AOCL_EXIT_CRITICAL(setup_lz4)
 }
-
-void aocl_destroy_lz4(void){
-    AOCL_ENTER_CRITICAL(setup_lz4)
-    setup_ok_lz4 = 0;
-    AOCL_EXIT_CRITICAL(setup_lz4)
-}
+#endif /* AOCL_LZ4_OPT */
 
 #ifdef AOCL_UNIT_TEST
-/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX function for unit testing. */
+#ifdef AOCL_LZ4_AVX_OPT
+/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX2 function for unit testing. */
 void Test_AOCL_LZ4_wildCopy64_AVX(void*dstPtr, const void* srcPtr, void*dstEnd)
 {
     AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstEnd);
 }
-
+#endif /* AOCL_LZ4_AVX_OPT */
 #endif /* AOCL_UNIT_TEST */
-#endif /* AOCL_LZ4_OPT */
 
 LZ4_FORCE_O2
 int LZ4_decompress_safe_partial(const char* src, char* dst, int compressedSize, int targetOutputSize, int dstCapacity)

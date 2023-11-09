@@ -550,12 +550,20 @@ typedef uLong FAR uLongf;
 /* AOCL optimization flags */
 #define AOCL_ZLIB_OPT /* Main flag to control all AOCL ZLIB optimizations */
 #ifdef AOCL_ZLIB_OPT
-/* Note: For native compilation comment out below flags based on ISA support */
-#define AOCL_ZLIB_AVX512_OPT
-#define AOCL_ZLIB_AVX2_OPT
-#define AOCL_ZLIB_AVX_OPT
-#define AOCL_ZLIB_SSE2_OPT
-//#define USE_AOCL_ADLER32_AVX2
+     /* Note: For native compilation comment out below flags based on ISA support */
+     #define AOCL_ZLIB_SSE2_OPT
+     #ifdef AOCL_ZLIB_SSE2_OPT
+          #define AOCL_ZLIB_AVX_OPT
+          #ifdef AOCL_ZLIB_AVX_OPT
+               #define AOCL_ZLIB_AVX2_OPT
+               #ifdef AOCL_ZLIB_AVX2_OPT
+                    #define AOCL_ZLIB_AVX512_OPT
+               #endif /* AOCL_ZLIB_AVX2_OPT */
+          #endif /* AOCL_ZLIB_AVX_OPT */
+     #endif /* AOCL_ZLIB_SSE2_OPT */
+     //#define USE_AOCL_ADLER32_AVX2
+     #include <stdint.h>
+#endif /* AOCL_ZLIB_OPT */
 #ifdef HAVE_BUILTIN_EXPECT
 #define LIKELY(x) (__builtin_expect((x), 1))
 #define UNLIKELY(x) (__builtin_expect((x), 0))
@@ -563,7 +571,5 @@ typedef uLong FAR uLongf;
 #define LIKELY(x) x
 #define UNLIKELY(x) x
 #endif
-#include <stdint.h>
 extern int zlibOptOff; /* Flag to choose code paths based on dynamic dispatcher settings */
-#endif /* AOCL_ZLIB_OPT */
 #endif /* ZCONF_H */

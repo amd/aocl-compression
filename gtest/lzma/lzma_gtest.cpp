@@ -51,6 +51,7 @@ using namespace std;
 
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
 
+#ifdef AOCL_LZMA_OPT
 void aocl_setup_lzma_test() {
     int optLevel = DEFAULT_OPT_LEVEL;
     aocl_setup_lzma_encode(0, optLevel, 0, 0, 0);
@@ -1204,7 +1205,6 @@ TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_REV_BIT_lowRange_common_1)
 /*********************************************
  * End of Unit Tests
  *********************************************/
-
 
 /*********************************************
  * Begin API tests for LzmaEnc
@@ -3414,6 +3414,7 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_headerNull_common_1)
 /*********************************************
  * End API tests for LzmaDec
  *********************************************/
+#endif /* AOCL_LZMA_OPT */
 
 /*********************************************
  * Begin API tests for xz utils lzma

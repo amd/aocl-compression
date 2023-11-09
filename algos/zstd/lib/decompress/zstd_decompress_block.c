@@ -2596,21 +2596,28 @@ static void aocl_register_zstd_decompress_block_fmv(int optOff, int optLevel)
     }
     else
     {
-#ifdef AOCL_ZSTD_OPT
         switch (optLevel)
         {
         case 0://C version
         case 1://SSE version
         case 2://AVX version
         case 3://AVX2 version
+#ifdef AOCL_ZSTD_OPT
         default://AVX512 and other versions
 #if DYNAMIC_BMI2
             ZSTD_decompressSequences_bmi2_fp = AOCL_ZSTD_decompressSequences_bmi2;
 #endif
             ZSTD_decompressSequences_default_fp = AOCL_ZSTD_decompressSequences_default;
             break;
-        }
+#else
+        default:
+#if DYNAMIC_BMI2
+            ZSTD_decompressSequences_bmi2_fp = ZSTD_decompressSequences_bmi2;
 #endif
+            ZSTD_decompressSequences_default_fp = ZSTD_decompressSequences_default;
+            break;
+#endif
+        }
     }
 }
 

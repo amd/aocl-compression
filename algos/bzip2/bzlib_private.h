@@ -510,8 +510,8 @@ BZ2_hbCreateDecodeTables ( Int32*, Int32*, Int32*, UChar*,
 #ifdef AOCL_BZIP2_OPT
 #define AOCL_BZIP2_AVX_OPT
 extern Int32 AOCL_BZ2_decompress ( DState* );
-extern void aocl_register_mainSimpleSort_fmv (int optOff, int optLevel);
 #endif
+extern void aocl_register_mainSimpleSort_fmv (int optOff, int optLevel);
 
 /*-------------------------------------------------------------*/
 /*--- end                                   bzlib_private.h ---*/

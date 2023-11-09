@@ -788,6 +788,7 @@ void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel)
             AOCL_mainSimpleSort_fp = mainSimpleSort;
 #endif
             break;
+#ifdef AOCL_BZIP2_OPT
          case 0://C version
          case 1://SSE version
          case 2://AVX version
@@ -795,6 +796,11 @@ void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel)
          default://AVX512 and other versions
             AOCL_mainSimpleSort_fp = AOCL_mainSimpleSort;
             break;
+#else
+         default:
+            AOCL_mainSimpleSort_fp = mainSimpleSort;
+            break;
+#endif
       }
    }
 }

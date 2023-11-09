@@ -1365,6 +1365,7 @@ void aocl_register_compressfast_fmv(int optOff, int optLevel)
                 ZSTD_compressBlock_fast_noDict_7_0_fp = ZSTD_compressBlock_fast_noDict_7_0;
 #endif
                 break;
+#ifdef AOCL_ZSTD_OPT
             case 0://C version
             case 1://SSE version
             case 2://AVX version
@@ -1379,6 +1380,18 @@ void aocl_register_compressfast_fmv(int optOff, int optLevel)
                 ZSTD_compressBlock_fast_noDict_6_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_6_0;
                 ZSTD_compressBlock_fast_noDict_7_0_fp = AOCL_ZSTD_compressBlock_fast_noDict_7_0;
                 break;
+#else
+            default:
+                ZSTD_compressBlock_fast_noDict_4_1_fp = ZSTD_compressBlock_fast_noDict_4_1;
+                ZSTD_compressBlock_fast_noDict_5_1_fp = ZSTD_compressBlock_fast_noDict_5_1;
+                ZSTD_compressBlock_fast_noDict_6_1_fp = ZSTD_compressBlock_fast_noDict_6_1;
+                ZSTD_compressBlock_fast_noDict_7_1_fp = ZSTD_compressBlock_fast_noDict_7_1;
+                ZSTD_compressBlock_fast_noDict_4_0_fp = ZSTD_compressBlock_fast_noDict_4_0;
+                ZSTD_compressBlock_fast_noDict_5_0_fp = ZSTD_compressBlock_fast_noDict_5_0;
+                ZSTD_compressBlock_fast_noDict_6_0_fp = ZSTD_compressBlock_fast_noDict_6_0;
+                ZSTD_compressBlock_fast_noDict_7_0_fp = ZSTD_compressBlock_fast_noDict_7_0;
+                break;
+#endif
         }
     }
 }

@@ -112,10 +112,11 @@ void ZLIB_INTERNAL slide_hash_x86_internal(deflate_state* s)
 }
 #endif /* AOCL_ZLIB_OPT */
 
+#ifdef AOCL_ZLIB_AVX2_OPT
 void aocl_register_slide_hash_fmv(int optOff, int optLevel,
-void (*slide_hash_c_fp)(deflate_state* s))
+    void (*slide_hash_c_fp)(deflate_state* s))
 {
-    if (UNLIKELY(optOff==1))
+    if (UNLIKELY(optOff == 1))
     {
         slide_hash_fp = slide_hash_c_fp;
     }
@@ -124,13 +125,7 @@ void (*slide_hash_c_fp)(deflate_state* s))
         switch (optLevel)
         {
         case -1: // undecided. use defaults based on compiler flags
-#ifdef AOCL_ZLIB_AVX2_OPT
             slide_hash_fp = slide_hash_avx2;
-#elif defined(AOCL_ZLIB_OPT)
-            slide_hash_fp = slide_hash_c_opt;
-#else
-            slide_hash_fp = slide_hash_c_fp;
-#endif
             break;
         case 0://C version
         case 1://SSE version
@@ -144,6 +139,38 @@ void (*slide_hash_c_fp)(deflate_state* s))
         }
     }
 }
+#elif defined(AOCL_ZLIB_OPT)
+void aocl_register_slide_hash_fmv(int optOff, int optLevel,
+    void (*slide_hash_c_fp)(deflate_state* s))
+{
+    if (UNLIKELY(optOff == 1))
+    {
+        slide_hash_fp = slide_hash_c_fp;
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case -1: // undecided. use defaults based on compiler flags
+            slide_hash_fp = slide_hash_c_opt;
+            break;
+        case 0://C version
+        case 1://SSE version
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            slide_hash_fp = slide_hash_c_opt;
+            break;
+        }
+    }
+}
+#else
+void aocl_register_slide_hash_fmv(int optOff, int optLevel,
+    void (*slide_hash_c_fp)(deflate_state* s))
+{
+    slide_hash_fp = slide_hash_c_fp;
+}
+#endif
 
 void aocl_register_slide_hash(int optOff, int optLevel,
 void (*slide_hash_c_fp)(deflate_state* s)){

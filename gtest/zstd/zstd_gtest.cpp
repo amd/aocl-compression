@@ -715,6 +715,7 @@ TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_commo
  * End of ZSTD_decompressDCtx
  *********************************************/
 
+#ifdef AOCL_ZSTD_OPT
  /*********************************************
   * Begin of ZSTD_AOCL_ZSTD_row_getMatchMask
   *********************************************/
@@ -840,8 +841,9 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::ValuesIn({ 16, 32, 64 })); // 3 configurations supported for rowEntries
 
 /*********************************************
- * End of ZSTD_AOCL_reset_n_highest_set_bits
+ * End of ZSTD_AOCL_ZSTD_row_getMatchMask
  *********************************************/
+#endif
 
  /*********************************************
  * Begin of ZSTD_ZSTD_selectBlockCompressor

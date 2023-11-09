@@ -439,8 +439,10 @@ local int updatewindow(z_streamp strm, const Bytef *end, unsigned copy) {
     return 0;
 }
 
+#ifdef AOCL_ZLIB_SSE2_OPT
 /* Flag to choose code paths based on dynamic dispatcher settings */
 static int inflateOptLevel = 0;
+#endif
 /* Function pointers holding the optimized variant as per dynamic dispatcher settings */
 static int (*updatewindow_fp)(z_streamp strm, const Bytef * end, unsigned copy) = updatewindow;
 static void (*inflate_fast_fp)(z_streamp strm, unsigned start) = inflate_fast;
@@ -1782,12 +1784,18 @@ unsigned long ZEXPORT inflateCodesUsed(z_streamp strm) {
 
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
+#ifdef AOCL_ZLIB_SSE2_OPT
 static void aocl_setup_inflate_fmv(int optOff, int optLevel)
 {
     inflateOptLevel = optLevel;
-    if(LIKELY(optOff == 0 && optLevel > 0)) {
+    if (LIKELY(optOff == 0 && optLevel > 0)) {
+#ifdef AOCL_ZLIB_OPT
         updatewindow_fp = aocl_updatewindow;
         inflate_fast_fp = inflate_fast_chunk_;
+#else
+        updatewindow_fp = updatewindow;
+        inflate_fast_fp = inflate_fast;
+#endif
     }
     else if (UNLIKELY(optLevel == -1)) { // undecided. use defaults based on compiler flags
 #ifdef AOCL_ZLIB_OPT
@@ -1803,6 +1811,13 @@ static void aocl_setup_inflate_fmv(int optOff, int optLevel)
         inflate_fast_fp = inflate_fast;
     }
 }
+#else
+static void aocl_setup_inflate_fmv(int optOff, int optLevel)
+{
+    updatewindow_fp = updatewindow;
+    inflate_fast_fp = inflate_fast;
+}
+#endif
 
 ZEXTERN char * ZEXPORT aocl_setup_inflate(int optOff, int optLevel){
     AOCL_ENTER_CRITICAL(setup_zlib_inflate)

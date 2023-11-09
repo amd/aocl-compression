@@ -1751,8 +1751,10 @@ size_t AOCL_ZSTD_RowFindBestMatch_NbAttempts(
 #define ZSTD_HC_SEARCH_FN(dictMode, mls) ZSTD_HcFindBestMatch_##dictMode##_##mls
 #define ZSTD_ROW_SEARCH_FN(dictMode, mls, rowLog) ZSTD_RowFindBestMatch_##dictMode##_##mls##_##rowLog
 
+#ifdef AOCL_ZSTD_OPT
 #define AOCL_ZSTD_ROW_SEARCH_FN(dictMode, mls, rowLog) AOCL_ZSTD_RowFindBestMatch_##dictMode##_##mls##_##rowLog
 #define AOCL_ZSTD_ROW_SEARCH_NB_ATTEMPTS_FN(dictMode, mls, rowLog) AOCL_ZSTD_RowFindBestMatch_NbAttempts_##dictMode##_##mls##_##rowLog
+#endif
 
 #define ZSTD_SEARCH_FN_ATTRS FORCE_NOINLINE
 
@@ -1840,8 +1842,10 @@ ZSTD_FOR_EACH_DICT_MODE(ZSTD_FOR_EACH_MLS, GEN_ZSTD_BT_SEARCH_FN)
 ZSTD_FOR_EACH_DICT_MODE(ZSTD_FOR_EACH_MLS, GEN_ZSTD_HC_SEARCH_FN)
 
 /* Generate AOCL optimized row search fns for each combination of (dictMode, mls, rowLog) */
+#ifdef AOCL_ZSTD_OPT
 ZSTD_FOR_EACH_DICT_MODE(ZSTD_FOR_EACH_MLS_ROWLOG, AOCL_GEN_ZSTD_ROW_SEARCH_FN)
 ZSTD_FOR_EACH_DICT_MODE(ZSTD_FOR_EACH_MLS_ROWLOG, AOCL_GEN_ZSTD_ROW_SEARCH_NB_ATTEMPTS_FN)
+#endif
 
 typedef enum { search_hashChain=0, search_binaryTree=1, search_rowHash=2 } searchMethod_e;
 
@@ -3007,8 +3011,10 @@ size_t ZSTD_compressBlock_lazy2_extDict_row(
 }
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_ZSTD_OPT
 U64 Test_AOCL_ZSTD_row_getMatchMask(const BYTE* const tagRow, const BYTE tag,
     const U32 headGrouped, const U32 rowEntries) {
     return AOCL_ZSTD_row_getMatchMask(tagRow, tag, headGrouped, rowEntries);
 }
+#endif
 #endif

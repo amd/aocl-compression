@@ -78,9 +78,7 @@ local void static_emit_tree(deflate_state *z_const s,
     OPT_send_bits(s, (STATIC_TREES<<1) + last, 3);
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 extern void (*bi_windup_fp)(deflate_state *s);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
 
 local void static_emit_end_block(deflate_state *z_const s,
         int last)
@@ -88,13 +86,11 @@ local void static_emit_end_block(deflate_state *z_const s,
     send_code(s, END_BLOCK, static_ltree);
 
     if (last)
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_ZLIB_OPT
         bi_windup_fp(s);
-#elif defined(AOCL_ZLIB_OPT)
-        AOCL_bi_windup(s);
 #else
 		bi_windup(s);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+#endif /* AOCL_ZLIB_OPT */
 
     s->block_start = s->strstart;
     flush_pending_fp(s->strm);

@@ -356,8 +356,14 @@ static char* aocl_setup_tree_fmv(int optOff, int optLevel)
 #endif
     }
     else {
+#ifdef AOCL_ZLIB_OPT
         bi_flush_fp = AOCL_bi_flush;
         bi_windup_fp = AOCL_bi_windup;
+#else
+        bi_flush_fp = bi_flush;
+        bi_windup_fp = bi_windup;
+#endif
+
     }
     return NULL;
 }

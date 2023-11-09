@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef AOCL_ZLIB_AVX_OPT
 // This header file is an template for avx and above function multiversion, application should not use it directly
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
 ZLIB_INTERNAL uint32_t LONGEST_MATCH_AVX_FAMILY(deflate_state* s, IPos cur_match)
@@ -224,3 +225,4 @@ break_matching: /* sorry for goto's, but such code is smaller and easier to view
     if ((uInt)best_len <= s->lookahead) return (uInt)best_len;
     return s->lookahead;
 }
+#endif /* AOCL_ZLIB_AVX_OPT */

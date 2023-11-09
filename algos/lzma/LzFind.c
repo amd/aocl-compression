@@ -2992,6 +2992,7 @@ void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable) {
 #endif
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZMA_OPT
 /* Move these APIs within the scope of gtest once the framework is ready */
 void Test_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
     Byte btMode, UInt32 fixedHashSize, UInt32 cyclicBufferSize, UInt32 hashSizeSum,
@@ -3077,4 +3078,5 @@ UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 hv, UInt32 
         return du - d;
     }
 }
+#endif
 #endif

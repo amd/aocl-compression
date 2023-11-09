@@ -71,6 +71,7 @@
 #include "lz4.c"   /* LZ4_count, constants, mem */
 #endif
 
+#ifdef AOCL_LZ4HC_OPT
 /* The array to be used as HASH_CHAIN_SLOT_SIZE array for levels, 
  * This strategy is only for level 6, 7, 8 and 9, So HASH_CHAIN_SLOT_SIZE
  * for other levels are 0. */
@@ -89,6 +90,7 @@ static const int AOCL_hashchain_slot[LZ4HC_CLEVEL_MAX + 1] = {
            0,     /* 11 */
            0,     /* 12==LZ4HC_CLEVEL_MAX */
 };
+#endif
 
 /*===   Enums   ===*/
 //typedef enum { noDictCtx, usingDictCtxHc } dictCtx_directive;
@@ -185,11 +187,13 @@ static void AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* 
 #endif /* AOCL_LZ4HC_OPT */
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZ4HC_OPT
 /* Wrapper function to be used for Unit Testing. */
 void Test_AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* start)
 {
     AOCL_LZ4HC_init_internal(hc4, start);
 }
+#endif
 #endif
 
 /* Update chains up to ip (excluded) */
@@ -238,10 +242,12 @@ LZ4_FORCE_INLINE void AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const BYT
 #endif /* AOCL_LZ4HC_OPT */
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZ4HC_OPT
 void Test_AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const BYTE* ip, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz)
 {
     AOCL_LZ4HC_Insert(hc4, ip, Hash_Chain_Max, Hash_Chain_Slot_Sz);
 }
+#endif
 #endif /* AOCL_UNIT_TEST */
 
 #ifdef AOCL_LZ4HC_OPT
@@ -408,6 +414,7 @@ static int (*LZ4HC_countBack_fp)(const BYTE* const ip, const BYTE* const match,
     const BYTE* const iMin, const BYTE* const mMin) = LZ4HC_countBack;
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZ4HC_OPT
 /* Wrapper functions for static inlined LZ4HC_countBack and AOCL_LZ4HC_countBack function for unit testing. */
 
 int Test_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
@@ -421,6 +428,7 @@ int Test_AOCL_LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
 {
     return AOCL_LZ4HC_countBack(ip, match, iMin, mMin);
 }
+#endif
 #endif /* AOCL_UNIT_TEST */
 
 #if defined(_MSC_VER)
@@ -980,6 +988,7 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
 #endif /* AOCL_LZ4HC_OPT */
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZ4HC_OPT
 int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
     AOCL_LZ4HC_CCtx_internal* hc4,
     const BYTE* const ip,
@@ -999,6 +1008,7 @@ int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
     return AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, iLowLimit, iHighLimit, longest, matchpos, startpos, maxNbAttempts,
         patternAnalysis, chainSwap, dict, favorDecSpeed, Hash_Chain_Max, Hash_Chain_Slot_Sz);
 }
+#endif
 #endif /* AOCL_UNIT_TEST */
 
 LZ4_FORCE_INLINE
@@ -2811,6 +2821,7 @@ static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
             LZ4_compress_HC_fp = LZ4_compress_HC_internal;
 #endif
             break;
+#ifdef AOCL_LZ4HC_OPT
         case 0://C version
         case 1://SSE version
         case 2://AVX version
@@ -2819,6 +2830,12 @@ static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
             LZ4HC_countBack_fp = AOCL_LZ4HC_countBack;
             LZ4_compress_HC_fp = AOCL_LZ4_compress_HC_internal;
             break;
+#else
+        default:
+            LZ4HC_countBack_fp = LZ4HC_countBack;
+            LZ4_compress_HC_fp = LZ4_compress_HC_internal;
+            break;
+#endif
         }
     }
 }

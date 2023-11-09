@@ -236,6 +236,7 @@ EXTERN_C_END
 #define SetUi32(p, v) { *(UInt32 *)(void *)(p) = (v); }
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZMA_OPT
 EXTERN_C_BEGIN
 LZMALIB_API void Test_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
     Byte btMode, UInt32 fixedHashSize, UInt32 cyclicBufferSize, UInt32 hashSizeSum,
@@ -259,5 +260,6 @@ LZMALIB_API UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32
     const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
     UInt32 cutValue, UInt32* d, unsigned maxLen, int blockSz);
 EXTERN_C_END
-#endif
+#endif /* AOCL_LZMA_OPT */
+#endif /* AOCL_UNIT_TEST */
 #endif

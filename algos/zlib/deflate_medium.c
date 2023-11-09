@@ -8,10 +8,10 @@
 #include "utils/utils.h"
 #include "aocl_zlib_x86.h"
 
+#ifdef AOCL_ZLIB_OPT
  /* Flag to choose code paths based on dynamic dispatcher settings */
 static int zlibOptLevel = 0; // default, use reference code paths
 
-#ifdef AOCL_ZLIB_OPT
 struct match {
     uInt    match_start;
     uInt    match_length;
@@ -103,9 +103,10 @@ static void aocl_insert_match_v1(deflate_state *s, struct match match)
     }
 }
 
+#ifdef AOCL_ZLIB_AVX_OPT
 /* It will insert the matches strings into the hash table based on match length 
 It uses INSERT_HASH_CRC optimized function */
-__attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
+__attribute__((__target__("avx"))) // uses AVX intrinsics
 static void aocl_insert_match_v2(deflate_state *s, struct match match)
 {
 
@@ -158,6 +159,7 @@ static void aocl_insert_match_v2(deflate_state *s, struct match match)
         */
     }
 }
+#endif
 
 /* It basically finds the longest match moving backwards in the window in order to 
 find better match than the current match */
@@ -370,7 +372,8 @@ local block_state aocl_deflate_medium_v1(deflate_state *s, int flush)
     return block_done;
 }
 
-__attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
+#ifdef AOCL_ZLIB_AVX_OPT
+__attribute__((__target__("avx"))) // uses AVX intrinsics
 local block_state aocl_deflate_medium_v2(deflate_state *s, int flush)
 {
     struct match current_match, next_match;
@@ -504,13 +507,18 @@ local block_state aocl_deflate_medium_v2(deflate_state *s, int flush)
         FLUSH_BLOCK(s, 0);
     return block_done;
 }
+#endif
 
 block_state ZLIB_INTERNAL deflate_medium(deflate_state *s, int flush)
 {
+#ifdef AOCL_ZLIB_AVX_OPT
     if(LIKELY(zlibOptLevel > 1))
         return aocl_deflate_medium_v2(s, flush);
     else
         return aocl_deflate_medium_v1(s, flush);
+#else
+    return aocl_deflate_medium_v1(s, flush);
+#endif
 }
 
 void aocl_register_deflate_medium(int optOff, int optLevel)

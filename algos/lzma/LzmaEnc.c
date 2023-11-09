@@ -52,9 +52,7 @@
 #include "LzFindMt.h"
 #endif
 
-#ifdef AOCL_LZMA_OPT
 #include <limits.h>
-#endif
 /* the following LzmaEnc_* declarations is internal LZMA interface for LZMA2 encoder */
 
 SRes LzmaEnc_PrepareForLzma2(CLzmaEncHandle pp, ISeqInStream *inStream, UInt32 keepWindowSize,
@@ -4495,6 +4493,7 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
             LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
 #endif
             break;
+#ifdef AOCL_LZMA_OPT
         case 0://C version
         case 1://SSE version
         case 2://AVX version
@@ -4507,6 +4506,16 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
             LzmaEncProps_Normalize_fp   = AOCL_LzmaEncProps_Normalize;
             LzmaEnc_SetProps_fp         = AOCL_LzmaEnc_SetProps;
             break;
+#else
+        default:
+            MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
+            MatchFinder_Create_fp       = MatchFinder_Create;
+            MatchFinder_Free_fp         = MatchFinder_Free;
+            GetOptimum_fp               = GetOptimum;
+            LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
+            LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
+            break;
+#endif
         }
     }
 }
@@ -4543,6 +4552,7 @@ void aocl_destroy_lzma_encode(void){
 }
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZMA_OPT
 void Test_LzmaEncProps_Normalize_Dyn(CLzmaEncProps* p) {
 #ifdef AOCL_LZMA_OPT
     LzmaEncProps_Normalize_fp(p);
@@ -4596,4 +4606,5 @@ TestCLzmaEnc Get_CLzmaEnc_Params(CLzmaEncHandle pp) {
     params.numHashBytes         = p->matchFinderBase.numHashBytes;
     return params;
 }
-#endif
+#endif /* AOCL_LZMA_OPT */
+#endif /* AOCL_UNIT_TEST */

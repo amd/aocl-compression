@@ -1088,6 +1088,7 @@ void aocl_register_compressdoublefast_fmv(int optOff, int optLevel)
                 ZSTD_compressBlock_doubleFast_noDict_7_fp = ZSTD_compressBlock_doubleFast_noDict_7;
 #endif
                 break;
+#ifdef AOCL_ZSTD_OPT
             case 0://C version
             case 1://SSE version
             case 2://AVX version
@@ -1098,6 +1099,14 @@ void aocl_register_compressdoublefast_fmv(int optOff, int optLevel)
                 ZSTD_compressBlock_doubleFast_noDict_6_fp = AOCL_ZSTD_compressBlock_doubleFast_noDict_6;
                 ZSTD_compressBlock_doubleFast_noDict_7_fp = AOCL_ZSTD_compressBlock_doubleFast_noDict_7;
                 break;
+#else
+            default:
+                ZSTD_compressBlock_doubleFast_noDict_4_fp = ZSTD_compressBlock_doubleFast_noDict_4;
+                ZSTD_compressBlock_doubleFast_noDict_5_fp = ZSTD_compressBlock_doubleFast_noDict_5;
+                ZSTD_compressBlock_doubleFast_noDict_6_fp = ZSTD_compressBlock_doubleFast_noDict_6;
+                ZSTD_compressBlock_doubleFast_noDict_7_fp = ZSTD_compressBlock_doubleFast_noDict_7;
+                break;
+#endif
         }
     }
 }

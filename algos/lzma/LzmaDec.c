@@ -39,9 +39,7 @@
 
 #include "utils/utils.h"
 
-#ifdef AOCL_LZMA_OPT
 #include <limits.h>
-#endif
 
 #define kNumTopBits 24
 #define kTopValue ((UInt32)1 << kNumTopBits)
@@ -2019,6 +2017,7 @@ static void aocl_register_lzma_decode_fmv(int optOff, int optLevel)
                 Lzma_Decode_Real_fp = LZMA_DECODE_REAL;
     #endif
                 break;
+#ifdef AOCL_LZMA_OPT
             case 0://C version
             case 1://SSE version
             case 2://AVX version
@@ -2026,6 +2025,11 @@ static void aocl_register_lzma_decode_fmv(int optOff, int optLevel)
             default://AVX512 and other versions
                 Lzma_Decode_Real_fp = AOCL_LZMA_DECODE_REAL;
                 break;
+#else
+            default:
+                Lzma_Decode_Real_fp = LZMA_DECODE_REAL;
+                break;
+#endif
         }
     }
 }
@@ -2062,6 +2066,7 @@ void aocl_destroy_lzma_decode(void){
 }
 
 #ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZMA_OPT
 /* Move these APIs within the scope of gtest once the framework is ready */
 void Test_Rc_Get_Bit_2_Dec_Ref(const Byte* buf, UInt32* _range, UInt32* _code, CLzmaProb* prob, unsigned symbol) {
     unsigned ttt;
@@ -2098,4 +2103,5 @@ void Test_Rc_Rev_Bit_Dec_Opt(const Byte* buf, UInt32* _range, UInt32* _code, CLz
     *_range = range;
     *_code = code;
 }
-#endif
+#endif /* AOCL_LZMA_OPT */
+#endif /* AOCL_UNIT_TEST */
