@@ -206,7 +206,7 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
 ---
   
 To test and benchmark the performance of IPP's compression methods, use the
-test bench option `-c` along with other relevant options (as explained above).
+test bench option `-c<path to IPP library method>` along with other relevant options (as explained above).
 IPP's lz4, lz4hc, zlib and bzip2 methods are supported by the test bench.
 Check the following details for the exact steps:
 1. Set the library path environment variable (export LD_LIBRARY_PATH on <br>
@@ -220,15 +220,15 @@ Check the following details for the exact steps:
 4. Build the patched IPP lz4, zlib and bzip2 libraries per the steps <br>
    in the IPP readme files in the corresponding patch file <br>
    locations for these compression methods.
-5. Set the library path environment variable (export LD_LIBRARY_PATH on <br>
-   Linux) to point to the patched IPP lz4, zlib and bzip2 libraries.
+5. Append the library path to `-c` option and pass it to executable as command line argument <br>
+   (Linux is only supported) for running patched IPP lz4, zlib and bzip2 libraries.
 6. Run the test bench to benchmark the IPP library methods as follows:
 ```
-    aocl_compression_bench -a -p -c <input filename>
-    aocl_compression_bench -elz4 -p -c <input filename>
-    aocl_compression_bench -elz4hc -p -c <input filename>
-    aocl_compression_bench -ezlib -p -c <input filename>
-    aocl_compression_bench -ebzip2 -p -c <input filename>
+    aocl_compression_bench -a -p -c/path/to/ipp_patch <input filename>
+    aocl_compression_bench -elz4 -p -c/path/to/ipp_patch <input filename>
+    aocl_compression_bench -elz4hc -p -c/path/to/ipp_patch <input filename>
+    aocl_compression_bench -ezlib -p -c/path/to/ipp_patch <input filename>
+    aocl_compression_bench -ebzip2 -p -c/path/to/ipp_patch <input filename>
 ```
 
 Running AOCL-Compression Test Bench On Windows

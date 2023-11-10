@@ -156,12 +156,6 @@ def download_datasets(url, extract_dir):
 # Retrieve the relevant components and move to the processing steps
 ## ================================================================
         
-rx_dict = {
-    'libdata': re.compile(r'AOCL-COMPRESSION \[(.*)\] \[Filename:(.*)\] --'),
-    'comp': re.compile(r'Compression: (.*) speed\(best\) (.*) MB/s,'),
-    'decomp': re.compile(r'Decompression: (.*) speed\(best\) (.*) MB/s,'),
-    'ratio': re.compile(r'Ratio:(.*)\n'),
-}
 
 def parse_line(line, amd_opt):
     """
@@ -169,6 +163,13 @@ def parse_line(line, amd_opt):
     return the key and match result of the first matching regex
 
     """
+    rx_dict = {
+        'libdata': re.compile(r'AOCL-COMPRESSION \[(.*)\] \[Filename:(.*)\] --'),
+        'comp': re.compile(r'Compression: (.*) speed\(best\) (.*) MB/s,'),
+        'decomp': re.compile(r'Decompression: (.*) speed\(best\) (.*) MB/s,'),
+        'ratio': re.compile(r'Ratio:(.*)\n'),
+    }
+    
     # Check if Error occurred
     if "Error" in line:
         print("\n" + line)
@@ -465,8 +466,7 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
         for dataset in datasetFile_lst:
             testOptions = ["-t", "-p"]
             if amd_opt == "IPP" or amd_opt == "ipp":
-                testOptions.append("-c")
-                testOptions.append("-v3")
+                testOptions.append("-c{}".format(args.ipp))
             if amd_opt == "AMD_OPT_OFF" or amd_opt == "off":
                 testOptions.append("-o")
             if amd_opt == "NAPI" or amd_opt == "napi":
@@ -568,7 +568,7 @@ if __name__ == '__main__':
         'install_cmd': 'cmake --build build -v -j --target uninstall --target install'}
     # Windows specific library configuration and installation commands with default flags
     compression_cmds_windows = {
-        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
+        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
         'install_cmd': 'cmake --build ./build --config Release --target INSTALL'
     }
                 
@@ -644,13 +644,10 @@ if __name__ == '__main__':
     datasetFile_lst = sorted(os.listdir("{}".format(args.dataset)))
     ipp_supports_methods = ['lz4', 'lz4hc', 'zlib', "bzip2"]
 
-    # Sets the IPP enviroment variable before running IPP patched method
+    # Checks IPP supports before running IPP patched method
     if (args.ipp != "off" or "ipp" in [args.comparewith, args.optimization]):
-        if (args.method[0].split(":")[0] in ipp_supports_methods) and which_platform != 'Windows':
-            os.environ['LD_LIBRARY_PATH'] = args.ipp
-        else:
-            print(
-                error + "Compression test framework does not support IPP method: {} on {}".format(args.method, which_platform))
+        if (not ((args.method[0].split(":")[0] in ipp_supports_methods) and which_platform != 'Windows')):
+            print(error + "Compression test framework does not support IPP method: {} on {}".format(args.method, which_platform))
             exit()
     
     ## =====================================

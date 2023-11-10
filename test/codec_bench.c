@@ -72,7 +72,7 @@ void print_user_options (void)
     printf("-r          Run particular operation only. Supported options are 'compress' and 'decompress'.\n\n");
     printf("-d          File to dump output data. Based on -r, saves compressed/decompressed data.\n\n");
     printf("-f          Input uncompressed file to be used for validation in -rdecompress mode.\n\n");
-    printf("-c          Run IPP library methods. Make sure to set the library path with LD_LIBRARY_PATH.\n\n");
+    printf("-c          Run IPP library methods. Provide the path for the IPP library path after the -c option.\n\n");
     printf("-n          Use Native APIs for compression/decompression.\n\n");
 }
 
@@ -268,6 +268,7 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                 break;
                 case 'c':
                     codec_bench_handle->useIPP = 1;
+                    codec_bench_handle->ippDir = &argv[cnt][2];
                 break;
 
                 case 'r': /* Select operation to run. If not specified, run both. */

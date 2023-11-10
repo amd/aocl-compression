@@ -49,16 +49,16 @@
 #include "algos/zlib/zlib.h"
 
 #ifdef AOCL_ENABLE_LOG_FEATURE
-#define LOG_LIBRARY_OPENED(algo, fn_name, lib_name)\
+#define LOG_LIBRARY_OPENED(algo, log_ctx, fn_name, lib_name)\
             if (log_ctx.maxLevel)\
             {\
                 Dl_info dl_info;\
                 dladdr(dlsym(hDL[algo], fn_name), &dl_info);\
-                LOG_FORMATTED(INFO, log_ctx.maxLevel,\
-                "Library ["+lib_name+"] opened from path: [%s]", dl_info.dli_fname);\
+                LOG_FORMATTED(INFO, log_ctx,\
+                "Library [%s] opened from path: [%s]" , lib_name, dl_info.dli_fname);\
             }
 #else
-#define LOG_LIBRARY_OPENED(algo, fn_name, lib_name)
+#define LOG_LIBRARY_OPENED(algo, log_ctx, fn_name, lib_name)
 #endif /* AOCL_ENABLE_LOG_FEATURE */
 
 //Handle to IPP dynamic library
@@ -82,13 +82,28 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
               aocl_compression_desc *aocl_codec_handle)
 { 
     LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
-    
+    AOCL_CHAR ippDir[MAX_FILENAME_LEN] = {0};
+    AOCL_UINT32 ippDirLen = strlen(codec_bench_handle->ippDir);
+
+    strncpy(ippDir, codec_bench_handle->ippDir, MAX_FILENAME_LEN);
+
+    if(!(ippDirLen == 0 || (ippDirLen < (MAX_FILENAME_LEN-1) && ippDir[ippDirLen-1] == '/' )))
+    {
+        ippDir[ippDirLen] = '/';
+        ippDir[ippDirLen+1] = '\0';
+    }
+
     switch (codec_bench_handle->codec_method)
     {
         case LZ4:
         case LZ4HC:
-            hDL[LZ4] = hDL[LZ4HC] =
-			    dlopen("liblz4.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "liblz4.so");
+                hDL[LZ4] = hDL[LZ4HC] =
+			        dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[LZ4] == NULL)
             {
                 LOG_FORMATTED(ERR, log_ctx,
@@ -98,11 +113,16 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            LOG_LIBRARY_OPENED(LZ4, "LZ4_decompress_safe", "liblz4.so")
+            LOG_LIBRARY_OPENED(LZ4, log_ctx, "LZ4_decompress_safe", "liblz4.so")
 #endif
             break;
         case ZLIB:
-            hDL[ZLIB] = dlopen("libz.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "libz.so");
+                hDL[ZLIB] = dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[ZLIB] == NULL)
             {
                 LOG_FORMATTED(ERR, log_ctx,
@@ -111,11 +131,16 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            LOG_LIBRARY_OPENED(ZLIB, "uncompress", "libz.so")
+            LOG_LIBRARY_OPENED(ZLIB, log_ctx, "uncompress", "libz.so")
 #endif
             break;
         case BZIP2:
-            hDL[BZIP2] = dlopen("libbz2.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "libbz2.so");
+                hDL[BZIP2] = dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[BZIP2] == NULL)
             {
                 LOG_FORMATTED(ERR, log_ctx,
@@ -124,7 +149,7 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            LOG_LIBRARY_OPENED(BZIP2, "BZ2_bzBuffToBuffDecompress", "libbz2.so")
+            LOG_LIBRARY_OPENED(BZIP2, log_ctx, "BZ2_bzBuffToBuffDecompress", "libbz2.so")
 #endif
             break;
         case LZMA:
@@ -136,8 +161,13 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
             return ERR_CODEC_BENCH_ARGS;
             break;
         case -1:
-            hDL[LZ4] = hDL[LZ4HC] = 
-                dlopen("liblz4.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "liblz4.so");
+                hDL[LZ4] = hDL[LZ4HC] = 
+                    dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[LZ4] == NULL)
             {
                 LOG_FORMATTED(ERR, log_ctx,
@@ -147,9 +177,14 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            LOG_LIBRARY_OPENED(LZ4, "LZ4_decompress_safe", "liblz4.so")
+            LOG_LIBRARY_OPENED(LZ4, log_ctx, "LZ4_decompress_safe", "liblz4.so")
 #endif
-            hDL[ZLIB] = dlopen("libz.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "libz.so");
+                hDL[ZLIB] = dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[ZLIB] == NULL)
             {
                 LOG_FORMATTED(ERR, log_ctx,
@@ -158,9 +193,14 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            LOG_LIBRARY_OPENED(ZLIB, "uncompress", "libz.so")
+            LOG_LIBRARY_OPENED(ZLIB, log_ctx, "uncompress", "libz.so")
 #endif
-            hDL[BZIP2] = dlopen("libbz2.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "libbz2.so");
+                hDL[BZIP2] = dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[BZIP2] == NULL)
             {
                 LOG_FORMATTED(ERR, log_ctx,
@@ -169,7 +209,7 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
                 return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            LOG_LIBRARY_OPENED(BZIP2, "BZ2_bzBuffToBuffDecompress", "libbz2.so")
+            LOG_LIBRARY_OPENED(BZIP2, log_ctx, "BZ2_bzBuffToBuffDecompress", "libbz2.so")
 #endif
             break;
         default:
@@ -881,7 +921,7 @@ AOCL_INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
 
             if (ret != 0 && ret != -3)
             {
-                LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                LOG_UNFORMATTED(ERR, log_ctx,
                     "Error in executing the dynamic library");
                 LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
                 return ERR_CODEC_BENCH_ARGS;

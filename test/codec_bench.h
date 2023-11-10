@@ -119,6 +119,7 @@ typedef struct
     AOCL_INTP optOff;
     AOCL_UINTP file_size;
     AOCL_INTP useIPP;
+    AOCL_CHAR *ippDir;
     AOCL_INTP useNAPI;
     FILE *fp;
     AOCL_CHAR *fName;
