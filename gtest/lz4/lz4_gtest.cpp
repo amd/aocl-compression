@@ -1765,14 +1765,14 @@ TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
  *********************************************/
 
 /*********************************************
- * "Begin" of LZ4_AOCL_LZ4_wildCopy64_AVX2
+ * "Begin" of LZ4_AOCL_LZ4_wildCopy64_AVX
  *********************************************/
 
 /*
-* AOCL_LZ4_wildCopy64_AVX2() is AVX2 implementation of wildCopy that copies two times 32 bytes in an iteration. 
+* AOCL_LZ4_wildCopy64_AVX() is AVX implementation of wildCopy that copies two times 32 bytes in an iteration. 
 */
-#ifdef AOCL_LZ4_OPT
-class LZ4_AOCL_LZ4_wildCopy64_AVX2 : public AOCL_setup_lz4
+#ifdef AOCL_LZ4_AVX_OPT
+class LZ4_AOCL_LZ4_wildCopy64_AVX : public AOCL_setup_lz4
 {
 protected:
     
@@ -1799,43 +1799,43 @@ protected:
         }
     }
     
-    // Destructor function of `LZ4_AOCL_LZ4_wildCopy64_AVX2` class.
-    ~LZ4_AOCL_LZ4_wildCopy64_AVX2()
+    // Destructor function of `LZ4_AOCL_LZ4_wildCopy64_AVX` class.
+    ~LZ4_AOCL_LZ4_wildCopy64_AVX()
     {
         if (srcPtr) { free(srcPtr); }            
         if (dstPtr) { free(dstPtr); }
     }
 };
 
-TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX2_common_1) // len_multiple_of_64
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX_common_1) // len_multiple_of_64
 {
     // case1: When no. of bytes to copy is multiple of 64
     //        exact no. of bytes are copied
     int length = 64;
 
-    Test_AOCL_LZ4_wildCopy64_AVX2(dstPtr, srcPtr, dstPtr+length);
+    Test_AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstPtr+length);
     EXPECT_EQ(memcmp(dstPtr, srcPtr, length), 0);
     EXPECT_NE(memcmp(dstPtr, srcPtr, length+1), 0); 
 }
 
-TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX2_common_2) // len_NOT_multiple_of_64
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX_common_2) // len_NOT_multiple_of_64
 {
     // case2: When no. of bytes to copy is not a multiple of 64
     //        additional byte/s is/are copied 
     int length = 1;
 
-    Test_AOCL_LZ4_wildCopy64_AVX2(dstPtr, srcPtr, dstPtr+length);                 
+    Test_AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstPtr+length);                 
     EXPECT_EQ(memcmp(dstPtr, srcPtr, 64), 0);          // additional 63 bytes are copied            
     EXPECT_NE(memcmp(dstPtr, srcPtr, 65), 0);                
 
     length = 127;
 
-    Test_AOCL_LZ4_wildCopy64_AVX2(dstPtr, srcPtr, dstPtr+length);               
+    Test_AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstPtr+length);               
     EXPECT_EQ(memcmp(dstPtr, srcPtr, 128), 0);         // additional 1 byte is copied                 
     EXPECT_NE(memcmp(dstPtr, srcPtr, 129), 0); 
 }
 
-TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX2_common_3) // offset_less_than_32
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX_common_3) // offset_less_than_32
 {
     // case 1: offset < 32 
 
@@ -1860,11 +1860,11 @@ TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AV
     char* src = dstPtr;             
     char* dst = dstPtr+offset;
 
-    Test_AOCL_LZ4_wildCopy64_AVX2(dst, src, dst+length);
+    Test_AOCL_LZ4_wildCopy64_AVX(dst, src, dst+length);
     EXPECT_NE(memcmp(dst, src, length), 0);
 }
 
-TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX2_common_4) // offset_equal_32
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX_common_4) // offset_equal_32
 {
     // case 2: offset = 32
     int length = 100;
@@ -1878,11 +1878,11 @@ TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AV
     char* src = dstPtr;
     char* dst = dstPtr+offset;
 
-    Test_AOCL_LZ4_wildCopy64_AVX2(dst, src, dst+length);
+    Test_AOCL_LZ4_wildCopy64_AVX(dst, src, dst+length);
     EXPECT_EQ(memcmp(dst, src, length), 0);
 }
 
-TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX2_common_5) // offset_greater_than_32
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX_common_5) // offset_greater_than_32
 {
     // case 3: offset > 32
     int length = 100;
@@ -1896,14 +1896,13 @@ TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX2, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AV
     char* src = dstPtr;
     char* dst = dstPtr+offset;
 
-    Test_AOCL_LZ4_wildCopy64_AVX2(dst, src, dst+length);
+    Test_AOCL_LZ4_wildCopy64_AVX(dst, src, dst+length);
     EXPECT_EQ(memcmp(dst, src, length), 0);
 }
-
-#endif /* AOCL_LZ4_OPT */
+#endif /* AOCL_LZ4_AVX_OPT */
 
 /*********************************************
- * End of LZ4_AOCL_LZ4_wildCopy64_AVX2
+ * End of LZ4_AOCL_LZ4_wildCopy64_AVX
  ********************************************/ 
 
 /*********************************************

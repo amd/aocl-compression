@@ -488,9 +488,9 @@ LZ4_wildCopy32(void* dstPtr, const void* srcPtr, void* dstEnd)
     do { LZ4_memcpy(d,s,16); LZ4_memcpy(d+16,s+16,16); d+=32; s+=32; } while (d<e);
 }
 
-#ifdef AOCL_LZ4_AVX2_OPT
+#ifdef AOCL_LZ4_AVX_OPT
 #include<immintrin.h>
-__attribute__((__target__("avx2")))
+__attribute__((__target__("avx")))
 static inline void
 AOCL_memcpy64(BYTE* dst, const BYTE* src){
     LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
@@ -503,11 +503,11 @@ AOCL_memcpy64(BYTE* dst, const BYTE* src){
     _mm256_storeu_si256((__m256i*)dst, src_reg);
 }
 
-/* AVX2 implementation of wildCopy, which can overwrite up to 64 bytes beyond dstEnd
+/* AVX implementation of wildCopy, which can overwrite up to 64 bytes beyond dstEnd
  * this version copies two times 32 bytes in an iteration.
  */
 static inline void
-AOCL_LZ4_wildCopy64_AVX2(void*dstPtr, const void* srcPtr, void*dstEnd){
+AOCL_LZ4_wildCopy64_AVX(void*dstPtr, const void* srcPtr, void*dstEnd){
 
     BYTE* d = (BYTE*)dstPtr;
     const BYTE* s = (const BYTE*)srcPtr;
@@ -520,7 +520,7 @@ AOCL_LZ4_wildCopy64_AVX2(void*dstPtr, const void* srcPtr, void*dstEnd){
     }while(d<e);
 
 }
-#endif /* AOCL_LZ4_AVX2_OPT */
+#endif /* AOCL_LZ4_AVX_OPT */
 
 /* LZ4_memcpy_using_offset()  presumes :
  * - dstEnd >= dstPtr + MINMATCH
@@ -3310,14 +3310,14 @@ read_variable_length(const BYTE**ip, const BYTE* lencheck,
     return length;
 }
 
-#ifdef AOCL_LZ4_OPT
+#ifdef AOCL_LZ4_AVX_OPT
 /*! AOCL_LZ4_decompress_generic() :
  *  This generic decompression function covers all use cases.
  *  It shall be instantiated several times, using different sets of directives.
  *  Note that it is important for performance that this function really get inlined,
  *  in order to remove useless branches during compilation optimization.
  *  
- *  Same as LZ4_decompress_generic(), but calls `AOCL_LZ4_wildCopy64_AVX2()` instead 
+ *  Same as LZ4_decompress_generic(), but calls `AOCL_LZ4_wildCopy64_AVX()` instead 
  *  of `LZ4_wildCopy32()` to copy
  *  - literals (when endCondition_directive is endOnInput and literal length >= 15), 
  *  - matched characters (when offset>=32)
@@ -3405,7 +3405,7 @@ AOCL_LZ4_decompress_generic(
                 LZ4_STATIC_ASSERT(MFLIMIT >= WILDCOPYLENGTH);
                 if (endOnInput) {  /* LZ4_decompress_safe() */
                     if ((cpy>oend-64) || (ip+length>iend-64)) { goto safe_literal_copy; }
-                    AOCL_LZ4_wildCopy64_AVX2(op, ip, cpy);
+                    AOCL_LZ4_wildCopy64_AVX(op, ip, cpy);
                 } else {   /* LZ4_decompress_fast() */
                     if (cpy>oend-8) { goto safe_literal_copy; }
                     LZ4_wildCopy8(op, ip, cpy); /* LZ4_decompress_fast() cannot copy more than 8 bytes at a time :
@@ -3505,7 +3505,7 @@ AOCL_LZ4_decompress_generic(
             assert((op <= oend) && (oend-op >= 32));
 
             if(offset >= 32){
-                AOCL_LZ4_wildCopy64_AVX2(op, match, cpy);
+                AOCL_LZ4_wildCopy64_AVX(op, match, cpy);
                 op = cpy;
                 continue;
             }
@@ -3851,7 +3851,7 @@ AOCL_LZ4_decompress_generic_mt(
             LZ4_STATIC_ASSERT(MFLIMIT >= WILDCOPYLENGTH);
             if (endOnInput) {  /* LZ4_decompress_safe() */
                 if ((cpy > oend - 64) || (ip + length > iend - 64)) { goto safe_literal_copy; }
-                AOCL_LZ4_wildCopy64_AVX2(op, ip, cpy);
+                AOCL_LZ4_wildCopy64_AVX(op, ip, cpy);
             }
             else {   /* LZ4_decompress_fast() */
                 if (cpy > oend - 8) { goto safe_literal_copy; }
@@ -3974,7 +3974,7 @@ AOCL_LZ4_decompress_generic_mt(
         assert((op <= oend) && (oend - op >= 32));
 
         if (offset >= 32) {
-            AOCL_LZ4_wildCopy64_AVX2(op, match, cpy);
+            AOCL_LZ4_wildCopy64_AVX(op, match, cpy);
             op = cpy;
             continue;
         }
@@ -4717,10 +4717,15 @@ static int LZ4_decompress_wrapper(const char* source, char* dest, int compressed
 LZ4_FORCE_O2
 static int AOCL_LZ4_decompress_wrapper(const char* source, char* dest, int compressedSize, int maxDecompressedSize)
 {
-
+#ifdef AOCL_LZ4_AVX_OPT
     return AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                     endOnInputSize, decode_full_block, noDict,
                                     (BYTE*)dest, NULL, 0);
+#else
+    return LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
+                                    endOnInputSize, decode_full_block, noDict,
+                                    (BYTE*)dest, NULL, 0);
+#endif /* AOCL_LZ4_AVX_OPT */
 }
 
 static int (*LZ4_decompress_wrapper_fp) (const char* source, char* dest, int compressedSize, int maxDecompressedSize) = LZ4_decompress_wrapper;
@@ -4856,7 +4861,7 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
 #ifdef AOCL_DYNAMIC_DISPATCHER
     result = LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
 #else
-#ifdef AOCL_LZ4_AVX2_OPT
+#ifdef AOCL_LZ4_AVX_OPT
     result = AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                     endOnInputSize, decode_full_block, noDict,
                                     (BYTE*)dest, NULL, 0);
@@ -4864,7 +4869,7 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
     result = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                   endOnInputSize, decode_full_block, noDict,
                                   (BYTE*)dest, NULL, 0);
-#endif /* AOCL_LZ4_AVX2_OPT */
+#endif /* AOCL_LZ4_AVX_OPT */
 #endif /* AOCL_DYNAMIC_DISPATCHER */
 #else
     result = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
@@ -4890,7 +4895,7 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
         switch (optLevel)
         {
         case -1: // undecided. use defaults based on compiler flags
-#ifdef AOCL_LZ4_AVX2_OPT
+#ifdef AOCL_LZ4_AVX_OPT
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = AOCL_LZ4_decompress_wrapper;
 #elif defined(AOCL_LZ4_OPT)
@@ -4903,15 +4908,26 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
             break;
         case 0://C version
         case 1://SSE version
+#ifdef AOCL_LZ4_OPT
+            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
+#else
+            LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
+#endif
+            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
+            break;
         case 2://AVX version
-                LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
-                LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-                break;
-            
         case 3://AVX2 version
         default://AVX512 and other versions
+#ifdef AOCL_LZ4_AVX_OPT
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = AOCL_LZ4_decompress_wrapper;
+#elif defined(AOCL_LZ4_OPT)
+            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
+            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
+#else
+            LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
+            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
+#endif
             break;
         }
     }
@@ -4949,10 +4965,10 @@ void aocl_destroy_lz4(void){
 }
 
 #ifdef AOCL_UNIT_TEST
-/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX2 function for unit testing. */
-void Test_AOCL_LZ4_wildCopy64_AVX2(void*dstPtr, const void* srcPtr, void*dstEnd)
+/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX function for unit testing. */
+void Test_AOCL_LZ4_wildCopy64_AVX(void*dstPtr, const void* srcPtr, void*dstEnd)
 {
-    AOCL_LZ4_wildCopy64_AVX2(dstPtr, srcPtr, dstEnd);
+    AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstEnd);
 }
 
 #endif /* AOCL_UNIT_TEST */

@@ -104,7 +104,9 @@ static Bool copy_input_until_stop ( EState* s );
 static Bool copy_output_until_stop ( EState* s );
 static Bool AOCL_copy_input_until_stop ( EState* s );
 static Bool AOCL_copy_output_until_stop ( EState* s );
-static Bool AOCL_copy_output_until_stop_avx2 ( EState* s );
+#ifdef AOCL_BZIP2_AVX_OPT
+static Bool AOCL_copy_output_until_stop_avx ( EState* s );
+#endif /* AOCL_BZIP2_AVX_OPT */
 
  Int32 (*AOCL_BZ2_decompress_fp) ( DState* ) = BZ2_decompress;
  Bool  (*AOCL_copy_input_until_stop_fp) ( EState* s) = copy_input_until_stop;
@@ -132,7 +134,11 @@ void aocl_register_decompress_fmv(int optOff, int optLevel)
          case 2://AVX version
          case 3://AVX2 version
          default://AVX512 and other versions
+#ifdef AOCL_BZIP2_OPT
             AOCL_BZ2_decompress_fp = AOCL_BZ2_decompress;
+#else
+            AOCL_BZ2_decompress_fp = BZ2_decompress;
+#endif
             break;
       }
    }
@@ -150,9 +156,9 @@ void aocl_register_copy_fmv(int optOff, int optLevel)
       switch (optLevel)
       {
          case -1: // undecided. use defaults based on compiler flags
-#ifdef AOCL_BZIP2_AVX2_OPT
+#ifdef AOCL_BZIP2_AVX_OPT
             AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
-            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop_avx2;
+            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop_avx;
 #elif defined(AOCL_BZIP2_OPT)
             AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
             AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop;
@@ -163,14 +169,21 @@ void aocl_register_copy_fmv(int optOff, int optLevel)
             break;
          case 0://C version
          case 1://SSE version
-         case 2://AVX version
             AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
             AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop;
             break;
+         case 2://AVX version
          case 3://AVX2 version
          default://AVX512 and other versions
+#ifdef AOCL_BZIP2_AVX_OPT
+            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop_avx;
+#elif defined(AOCL_BZIP2_OPT)
             AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
-            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop_avx2;
+            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop;
+#else
+            AOCL_copy_input_until_stop_fp = copy_input_until_stop;
+            AOCL_copy_output_until_stop_fp = copy_output_until_stop;
+#endif
             break;
       }
    }
@@ -538,9 +551,9 @@ Bool copy_output_until_stop ( EState* s )
 }
 
 #ifdef AOCL_BZIP2_OPT
-#ifdef AOCL_BZIP2_AVX2_OPT
+#ifdef AOCL_BZIP2_AVX_OPT
 #include <immintrin.h>
-__attribute__((__target__("avx2")))
+__attribute__((__target__("avx")))
 static inline void FastMemcopy64Bytes(UChar* dst, UChar* src) {
    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
    __m256i* dst1 = (__m256i*)dst;
@@ -561,7 +574,7 @@ static inline void memcpy_ (UChar* dst, UChar* src, UInt32 length) {
    memcpy(dst + fastLen, src + fastLen, length-fastLen);
 }
 
-static Bool AOCL_copy_output_until_stop_avx2 ( EState* s ) {
+static Bool AOCL_copy_output_until_stop_avx ( EState* s ) {
    Bool progress_out = False;
    UInt32 chars_to_copy = 0;
 
@@ -585,7 +598,7 @@ static Bool AOCL_copy_output_until_stop_avx2 ( EState* s ) {
    
    return progress_out;
 }
-#endif /* AOCL_BZIP2_AVX2_OPT */
+#endif /* AOCL_BZIP2_AVX_OPT */
 
 static Bool AOCL_copy_output_until_stop ( EState* s ) {
    Bool progress_out = False;

@@ -32,19 +32,13 @@
 #include "snappy-sinksource.h"
 
 #include "utils/utils.h"
-/*
-  max & min MACROS are defined internally inside windows.h, when library
-  is built for windows, those MACROS gets imported and override member functions
-  hence those macros are undefined after importing from windows.
-*/
-#ifdef _WINDOWS
-#ifdef max
-#undef max
-#endif /* max */
-#ifdef min
-#undef min
-#endif /* min */
-#endif /* _WINDOWS */
+
+#ifdef AOCL_SNAPPY_AVX_OPT
+#include<immintrin.h>
+#define AOCL_SNAPPY_TARGET_AVX __attribute__((__target__("avx")))
+#else
+#define AOCL_SNAPPY_TARGET_AVX
+#endif /* AOCL_SNAPPY_AVX_OPT */
 
 #if !defined(SNAPPY_HAVE_SSSE3)
 // __SSSE3__ is defined by GCC and Clang. Visual Studio doesn't target SIMD
@@ -89,7 +83,6 @@
 #include <cstring>
 #include <string>
 #include <vector>
-#include "utils/utils.h"
 
 #ifdef AOCL_ENABLE_THREADS
 #include "threads/threads.h"
@@ -183,7 +176,10 @@ size_t MaxCompressedLength(size_t source_bytes) {
 
 namespace {
 
+#ifdef AOCL_SNAPPY_AVX_OPT
+AOCL_SNAPPY_TARGET_AVX
 inline void FastMemcopy64Bytes(char* dst, char* src) {
+  LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
   // assume: kSlopBytes is 64
   // assume: there is always space to copy 64 bytes
   // assume: copy is always from a lower address to a higher address (op - offset) to (op)
@@ -210,6 +206,7 @@ inline void FastMemcopy64Bytes(char* dst, char* src) {
   _mm256_storeu_si256(dst1, s1);
   _mm256_storeu_si256(dst1 + 1, s2);
 }
+#endif /* AOCL_SNAPPY_AVX_OPT */
 
 void UnalignedCopy64(const void* src, void* dst) {
   char tmp[8];
@@ -531,6 +528,7 @@ static inline char* EmitCopy(char* op, size_t offset, size_t len) {
   }
 }
 
+#ifdef AOCL_SNAPPY_OPT
 template <bool len_less_than_12>
 static inline char* AOCL_EmitCopy(char* op, size_t offset, size_t len) {
   assert(len_less_than_12 == (len < 12));
@@ -541,11 +539,7 @@ static inline char* AOCL_EmitCopy(char* op, size_t offset, size_t len) {
     // it's in the noise.
 
     // Emit 64 byte copies but make sure to keep at least four bytes reserved.
-#ifdef AOCL_SNAPPY_OPT 
     while (len >= 68) {
-#else
-    while (SNAPPY_PREDICT_FALSE(len >= 68)) {
-#endif
       op = EmitCopyAtMost64</*len_less_than_12=*/false>(op, offset, 64);
       len -= 64;
     }
@@ -565,6 +559,7 @@ static inline char* AOCL_EmitCopy(char* op, size_t offset, size_t len) {
     return op;
   }
 }
+#endif /* AOCL_SNAPPY_OPT */
 
 bool GetUncompressedLength(const char* start, size_t n, size_t* result) {
   if (start == NULL || result == NULL) return false;
@@ -840,6 +835,7 @@ char* CompressFragment(const char* input,
   return op;
 }
 
+#ifdef AOCL_SNAPPY_OPT
 char* AOCL_CompressFragment(const char* input,
                        size_t input_size,
                        char* op,
@@ -855,11 +851,7 @@ char* AOCL_CompressFragment(const char* input,
   const char* base_ip = ip;
 
   const size_t kInputMarginBytes = 15;
-#ifdef AOCL_SNAPPY_OPT 
   if (input_size >= kInputMarginBytes) {
-#else
-  if (SNAPPY_PREDICT_TRUE(input_size >= kInputMarginBytes)) {
-#endif  
     const char* ip_limit = input + input_size - kInputMarginBytes;
 
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
@@ -919,11 +911,7 @@ char* AOCL_CompressFragment(const char* input,
             assert(candidate >= base_ip);
             assert(candidate < ip + i);
             table[hash] = delta + i;
-#ifdef AOCL_SNAPPY_OPT 
             if (LittleEndian::AOCL_Load32(candidate) == dword) {
-#else
-            if (SNAPPY_PREDICT_FALSE(LittleEndian::AOCL_Load32(candidate) == dword)) {
-#endif
               *op = LITERAL | (i << 2);
               UnalignedCopy128(next_emit, op + 1);
               ip += i;
@@ -949,11 +937,7 @@ char* AOCL_CompressFragment(const char* input,
         skip += bytes_between_hash_lookups;
 #endif
         const char* next_ip = ip + bytes_between_hash_lookups;
-#ifdef AOCL_SNAPPY_OPT 
         if (next_ip > ip_limit) {
-#else
-        if (SNAPPY_PREDICT_FALSE(next_ip > ip_limit)) {
-#endif
           ip = next_emit;
           goto emit_remainder;
         }
@@ -962,13 +946,8 @@ char* AOCL_CompressFragment(const char* input,
         assert(candidate < ip);
 
         table[hash] = ip - base_ip;
-#ifdef AOCL_SNAPPY_OPT 
         if (static_cast<uint32_t>(data) ==
                                 LittleEndian::AOCL_Load32(candidate)) {
-#else
-        if (SNAPPY_PREDICT_FALSE(static_cast<uint32_t>(data) ==
-                                LittleEndian::AOCL_Load32(candidate))) {
-#endif
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
             //set offset to 0 or 1/2 of current value depending on how large 
             //bytes_between_hash_lookups(bbhl) is.
@@ -1002,9 +981,7 @@ char* AOCL_CompressFragment(const char* input,
       // by proceeding to the next iteration of the main loop.  We also can exit
       // this loop via goto if we get close to exhausting the input.
     emit_match:
-#ifdef AOCL_SNAPPY_OPT 
       uint32_t candidate_data;
-#endif
       do {
         // We have a 4-byte match at ip, and no need to emit any
         // "literal bytes" prior to ip.
@@ -1020,11 +997,7 @@ char* AOCL_CompressFragment(const char* input,
         } else {
           op = AOCL_EmitCopy</*len_less_than_12=*/false>(op, offset, matched);
         }
-#ifdef AOCL_SNAPPY_OPT 
         if (ip >= ip_limit) {
-#else
-        if (SNAPPY_PREDICT_FALSE(ip >= ip_limit)) {
-#endif
           goto emit_remainder;
         }
         // Expect 5 bytes to match
@@ -1037,9 +1010,7 @@ char* AOCL_CompressFragment(const char* input,
             ip - base_ip - 1;
         uint32_t hash = HashBytes(data, shift);
         candidate = base_ip + table[hash];
-#ifdef AOCL_SNAPPY_OPT 
         candidate_data = LittleEndian::AOCL_Load32(candidate);
-#endif
         table[hash] = ip - base_ip;
         // Measurements on the benchmarks have shown the following probabilities
         // for the loop to exit (ie. avg. number of iterations is reciprocal).
@@ -1051,11 +1022,7 @@ char* AOCL_CompressFragment(const char* input,
         // BM_Flat/11 gaviota p = 0.1
         // BM_Flat/12 cp      p = 0.5
         // BM_Flat/13 c       p = 0.3
-#ifdef AOCL_SNAPPY_OPT 
       } while (static_cast<uint32_t>(data) == candidate_data);
-#else
-      } while (static_cast<uint32_t>(data) == LittleEndian::AOCL_Load32(candidate));
-#endif
       // Because the least significant 5 bytes matched, we can utilize data
       // for the next iteration.
       preload = data >> 8;
@@ -1070,6 +1037,7 @@ char* AOCL_CompressFragment(const char* input,
 
   return op;
 }
+#endif /* AOCL_SNAPPY_OPT */
 }  // end namespace internal
 
 // Called back at avery compression call to trace parameters and sizes.
@@ -1236,6 +1204,7 @@ class SnappyDecompressor {
 #if defined(__GNUC__) && defined(__x86_64__)
   __attribute__((aligned(32)))
 #endif
+AOCL_SNAPPY_TARGET_AVX
   void DecompressAllTags(Writer* writer) {
     const char* ip = ip_;
     ResetLimit(ip);
@@ -1401,6 +1370,7 @@ bool SnappyDecompressor::RefillTag() {
 }
 
 template <typename Writer>
+AOCL_SNAPPY_TARGET_AVX
 static bool InternalUncompress(Source* r, Writer* writer) {
   // Read the uncompressed length from the front of the compressed input
   SnappyDecompressor decompressor(r);
@@ -1425,6 +1395,7 @@ static bool InternalUncompressDirect(Source* r, Writer* writer, AOCL_UINT32 unco
 #endif
 
 template <typename Writer>
+AOCL_SNAPPY_TARGET_AVX
 static bool InternalUncompressAllTags(SnappyDecompressor* decompressor,
                                       Writer* writer,
                                       uint32_t compressed_len,
@@ -1731,7 +1702,8 @@ bool RawUncompressToIOVec(Source* compressed, const struct iovec* iov,
 // A type that writes to a flat array.
 // Note that this is not a "ByteSink", but a type that matches the
 // Writer template argument to SnappyDecompressor::DecompressAllTags().
-class AOCL_SnappyArrayWriter {
+#ifdef AOCL_SNAPPY_AVX_OPT
+class AOCL_SnappyArrayWriter_AVX {
  private:
   char* base_;
   char* op_;
@@ -1741,7 +1713,7 @@ class AOCL_SnappyArrayWriter {
   char* op_limit_min_slop_;
 
  public:
-  inline explicit AOCL_SnappyArrayWriter(char* dst)
+  inline explicit AOCL_SnappyArrayWriter_AVX(char* dst)
       : base_(dst),
         op_(dst),
         op_limit_(dst),
@@ -1783,6 +1755,7 @@ class AOCL_SnappyArrayWriter {
     }
   }
 
+  AOCL_SNAPPY_TARGET_AVX
   SNAPPY_ATTRIBUTE_ALWAYS_INLINE
   inline bool AppendFromSelf(size_t offset, size_t len, char** op_p) {
     char* const op = *op_p;
@@ -1802,7 +1775,6 @@ class AOCL_SnappyArrayWriter {
       *op_p = IncrementalCopy(op - offset, op, op_end, op_limit_);
       return true;
     }
-
     FastMemcopy64Bytes(op, op - offset);
     *op_p = op_end;
     return true;
@@ -1814,6 +1786,7 @@ class AOCL_SnappyArrayWriter {
   }
   inline void Flush() {}
 };
+#endif /* AOCL_SNAPPY_AVX_OPT */
 
 // -----------------------------------------------------------------------
 // Flat array interfaces
@@ -1908,11 +1881,14 @@ bool SAW_RawUncompress(const char* compressed, size_t compressed_length, char* u
   return InternalUncompress(&reader, &output);
 }
 
-bool AOCL_SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
+#ifdef AOCL_SNAPPY_AVX_OPT
+AOCL_SNAPPY_TARGET_AVX
+bool AOCL_SAW_RawUncompress_AVX(const char* compressed, size_t compressed_length, char* uncompressed) {
   ByteArraySource reader(compressed, compressed_length);
-  AOCL_SnappyArrayWriter output(uncompressed);
+  AOCL_SnappyArrayWriter_AVX output(uncompressed);
   return InternalUncompress(&reader, &output);
 }
+#endif /* AOCL_SNAPPY_AVX_OPT */
 
 #ifdef AOCL_ENABLE_THREADS // Threaded
 // for multithreaded decompression, where the uncompressed length is not available
@@ -1927,7 +1903,7 @@ bool SAW_RawUncompressDirect(const char* compressed, size_t compressed_length, c
 
 bool AOCL_SAW_RawUncompressDirect(const char* compressed, size_t compressed_length, char* uncompressed, AOCL_UINT32 uncompressed_len) {
   ByteArraySource reader(compressed, compressed_length);
-  AOCL_SnappyArrayWriter output(uncompressed);
+  AOCL_SnappyArrayWriter_AVX output(uncompressed);
   return InternalUncompressDirect(&reader, &output, uncompressed_len);
 }
 
@@ -2083,8 +2059,11 @@ bool RawUncompress(Source* compressed, char* uncompressed) {
      if (!GetUncompressedLength(_compressed_buffer, _readable_length, &ulength)) return false;
      if (ulength != 0 && uncompressed == NULL) return false;
   // sanity checks ------------------------------------------------------------
-
-  AOCL_SnappyArrayWriter output(uncompressed);
+#ifdef AOCL_SNAPPY_AVX_OPT
+  AOCL_SnappyArrayWriter_AVX output(uncompressed);
+#else
+  SnappyArrayWriter output(uncompressed);
+#endif
   return InternalUncompress(compressed, &output);
 }
 #else
@@ -2393,7 +2372,7 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
           case -1: // undecided. use defaults based on compiler flags
 #ifdef AOCL_SNAPPY_AVX_OPT
             SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
-            SNAPPY_SAW_raw_uncompress_fp   = AOCL_SAW_RawUncompress;
+            SNAPPY_SAW_raw_uncompress_fp   = AOCL_SAW_RawUncompress_AVX;
 #ifdef AOCL_ENABLE_THREADS
             SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
 #endif
@@ -2407,7 +2386,11 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
             break;
         case 0://C version
         case 1://SSE version
+#ifdef AOCL_SNAPPY_OPT
+            SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
+#else
             SNAPPY_compress_fragment_fp    = internal::CompressFragment;
+#endif
             SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
 #ifdef AOCL_ENABLE_THREADS
             SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
@@ -2416,10 +2399,18 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
         case 2://AVX version
         case 3://AVX2 version
         default://AVX512 and other versions
+#ifdef AOCL_SNAPPY_AVX_OPT
             SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
-            SNAPPY_SAW_raw_uncompress_fp   = AOCL_SAW_RawUncompress;
+            SNAPPY_SAW_raw_uncompress_fp   = AOCL_SAW_RawUncompress_AVX;
 #ifdef AOCL_ENABLE_THREADS
             SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
+#endif
+#else
+            SNAPPY_compress_fragment_fp    = internal::CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+#endif
 #endif
             break;
         }

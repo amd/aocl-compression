@@ -147,7 +147,7 @@ LZ4LIB_API const char* LZ4_versionString (void);
 #ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
 #define AOCL_LZ4_MATCH_SKIPPING_THRESHOLD 3
 #endif /* AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 */
-#define AOCL_LZ4_AVX2_OPT
+#define AOCL_LZ4_AVX_OPT
 #endif /* AOCL_LZ4_OPT */
 
 /*-************************************
@@ -239,8 +239,8 @@ LZ4LIB_API int LZ4_decompress_safe (const char* src, char* dst, int compressedSi
 
 #ifdef AOCL_LZ4_OPT
 #ifdef AOCL_UNIT_TEST
-/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX2 function for unit testing. */
-LZ4LIB_API void Test_AOCL_LZ4_wildCopy64_AVX2(void*dstPtr, const void* srcPtr, void*dstEnd);
+/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX function for unit testing. */
+LZ4LIB_API void Test_AOCL_LZ4_wildCopy64_AVX(void*dstPtr, const void* srcPtr, void*dstEnd);
 #endif /* AOCL_UNIT_TEST */
 #endif /* AOCL_LZ4_OPT */
 

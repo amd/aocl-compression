@@ -56,10 +56,11 @@
 #include <intrin.h>
 #endif  // defined(_MSC_VER)
 
-#define AOCL_SNAPPY_OPT 
+#define AOCL_SNAPPY_OPT
+
 #ifdef AOCL_SNAPPY_OPT
 #define AOCL_SNAPPY_AVX_OPT 
-#endif
+#endif /* AOCL_SNAPPY_OPT */
 
 #ifndef __has_feature
 #define __has_feature(x) 0
@@ -176,56 +177,26 @@ inline void UNALIGNED_STORE64(void *p, uint64_t v) {
 //    x = LittleEndian.Load16(p);
 class LittleEndian {
  public:
+ #ifdef AOCL_SNAPPY_OPT
   // Functions to do unaligned loads and stores in little-endian order.
     static inline uint16_t AOCL_Load16(const void *ptr) {
-#ifdef AOCL_SNAPPY_OPT 
     uint16_t x;
     memcpy(&x, ptr, 2);
     return x;
-#else
-    const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
-
-    // Compiles to a single mov/str on recent clang and gcc.
-    return (static_cast<uint16_t>(buffer[0])) |
-            (static_cast<uint16_t>(buffer[1]) << 8);
-#endif
   }
 
   static inline uint32_t AOCL_Load32(const void *ptr) {
-#ifdef AOCL_SNAPPY_OPT 
     uint32_t x;
     memcpy(&x, ptr, 4);
     return x;
-#else
-    const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
-
-    // Compiles to a single mov/str on recent clang and gcc.
-    return (static_cast<uint32_t>(buffer[0])) |
-            (static_cast<uint32_t>(buffer[1]) << 8) |
-            (static_cast<uint32_t>(buffer[2]) << 16) |
-            (static_cast<uint32_t>(buffer[3]) << 24);
-#endif
   }
 
   static inline uint64_t AOCL_Load64(const void *ptr) {
-#ifdef AOCL_SNAPPY_OPT 
     uint64_t x;
     memcpy(&x, ptr, 8);
     return x;
-#else
-    const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
-
-    // Compiles to a single mov/str on recent clang and gcc.
-    return (static_cast<uint64_t>(buffer[0])) |
-            (static_cast<uint64_t>(buffer[1]) << 8) |
-            (static_cast<uint64_t>(buffer[2]) << 16) |
-            (static_cast<uint64_t>(buffer[3]) << 24) |
-            (static_cast<uint64_t>(buffer[4]) << 32) |
-            (static_cast<uint64_t>(buffer[5]) << 40) |
-            (static_cast<uint64_t>(buffer[6]) << 48) |
-            (static_cast<uint64_t>(buffer[7]) << 56);
-#endif
   }
+#endif /* AOCL_SNAPPY_OPT */
 
   static inline uint16_t Load16(const void *ptr) {
     const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
