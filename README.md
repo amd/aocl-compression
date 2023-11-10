@@ -17,7 +17,10 @@ of the supported compression and decompression methods. This suite also
 supports the benchmarking of IPP compression methods, such as, lz4, lz4hc, zlib and bzip2.
 The library build framework offers CTest based testing of the test cases
 implemented using GTest and the library test suite. Starting from AOCL-Compression 4.1.1,
-the library offers openMP based multi-threaded compression for a few methods.
+the library offers openMP based multi-threaded implementations for lz4, zlib, zstd and 
+snappy compression methods that can be enabled using CMake option AOCL_ENABLE_THREADS.
+The multi-threaded compression support is optimally tuned for AMD CPUs with Linux® OS
+whereas this support is experimental for Windows® platforms.
 
 
 Installation
@@ -184,6 +187,7 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
    * `AOCL_ENABLE_LOG=INFO`  for Error, Info logs.
    * `AOCL_ENABLE_LOG=DEBUG` for Error, Info, Debug logs.
    * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.
+  When building the library for highest performance, do not enable `DAOCL_ENABLE_LOG_FEATURE`.
 
 
 * To run the test bench but only compression or decompression <br>
