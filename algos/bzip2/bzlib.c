@@ -568,7 +568,7 @@ Bool copy_output_until_stop ( EState* s )
 #include <immintrin.h>
 __attribute__((__target__("avx")))
 static inline void FastMemcopy64Bytes(UChar* dst, UChar* src) {
-   LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
+   AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
    __m256i* dst1 = (__m256i*)dst;
    __m256i* src1 = (__m256i*)src;
    __m256i s1 = _mm256_lddqu_si256(src1);

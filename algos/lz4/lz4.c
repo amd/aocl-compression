@@ -493,7 +493,7 @@ LZ4_wildCopy32(void* dstPtr, const void* srcPtr, void* dstEnd)
 __attribute__((__target__("avx")))
 static inline void
 AOCL_memcpy64(BYTE* dst, const BYTE* src){
-    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     __m256i src_reg = _mm256_lddqu_si256((__m256i*)src);
     _mm256_storeu_si256((__m256i*)dst, src_reg);
 

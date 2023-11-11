@@ -1149,6 +1149,7 @@ local void lm_init(deflate_state *s) {
 #endif /* AOCL_ZLIB_OPT */
 
     s->strstart = 0;
+    s->match_start = 0;
     s->block_start = 0L;
     s->lookahead = 0;
     s->insert = 0;

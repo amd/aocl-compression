@@ -73,7 +73,7 @@ static inline void slide_hash_c_opt(deflate_state *s)
 __attribute__((__target__("avx2")))
 static inline void slide_hash_avx2(deflate_state *s)
 {
-    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     Pos *hc;
     uint16_t wsz = (uint16_t)s->w_size;
     uInt hchnsz = s->hash_size;

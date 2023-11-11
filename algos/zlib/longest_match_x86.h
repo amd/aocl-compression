@@ -31,7 +31,7 @@
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
 ZLIB_INTERNAL uint32_t LONGEST_MATCH_AVX_FAMILY(deflate_state* s, IPos cur_match)
 {
-    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     unsigned chain_length = s->max_chain_length;/* max hash chain length */
     register Bytef *scan = s->window + s->strstart; /* current string */
     register int len;                           /* length of current match */

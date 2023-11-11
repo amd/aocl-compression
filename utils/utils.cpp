@@ -236,17 +236,22 @@ unordered_map<string, size_t> unit_test_log_counter;
 #endif
 
 void update_test_log_counter(const char* name) {
+    AOCL_ENTER_CRITICAL(unit_test_log_counter_update);
     if (unit_test_log_counter.find(name) == unit_test_log_counter.end())
         unit_test_log_counter[name] = 0;
     unit_test_log_counter[name]++; /* keep count of function hits */
+    AOCL_EXIT_CRITICAL(unit_test_log_counter_update);
 }
 
 void clear_test_log_counter(void) {
+    AOCL_ENTER_CRITICAL(unit_test_log_counter_update);
     unit_test_log_counter.clear();
+    AOCL_EXIT_CRITICAL(unit_test_log_counter_update);
 }
 
 int validate_simd_func_access(const aocl_func_info* aocl_simd_funcs, size_t cnt, int maxOptLevel) {
     int access_ok = 1;
+    AOCL_ENTER_CRITICAL(unit_test_log_counter_update);
     for (size_t i = 0; i < cnt; ++i) {
         if (aocl_simd_funcs[i].optLevel <= maxOptLevel)
             continue; // ok to have hits for functions with optLevel <= maxOptLevel
@@ -257,6 +262,7 @@ int validate_simd_func_access(const aocl_func_info* aocl_simd_funcs, size_t cnt,
             break;
         }
     }
+    AOCL_EXIT_CRITICAL(unit_test_log_counter_update);
     return access_ok;
 }
 

@@ -61,7 +61,7 @@ typedef struct {
 } algo_level_t;
 
 typedef struct {
-    AOCL_UINTP src_sz;
+    int src_sz_factor;
     ACT algo;
 } api_test_params_mt;
 
@@ -163,19 +163,18 @@ vector<ATP> get_api_test_params() {
 */
 vector<ATP_mt> get_api_test_params_mt() {
     vector<ATP_mt> atps;
-    AOCL_UINTP minSz = 512;
     for (int szFactor = 1; szFactor < 16; szFactor+=4) { // 1KB - 16 MB
 #ifndef AOCL_EXCLUDE_LZ4
-        atps.push_back({ minSz << szFactor, LZ4 });
+        atps.push_back({ szFactor, LZ4 });
 #endif
 #ifndef AOCL_EXCLUDE_SNAPPY
-        atps.push_back({ minSz << szFactor, SNAPPY });
+        atps.push_back({ szFactor, SNAPPY });
 #endif
 #ifndef AOCL_EXCLUDE_ZLIB
-        atps.push_back({ minSz << szFactor, ZLIB });
+        atps.push_back({ szFactor, ZLIB });
 #endif
 #ifndef AOCL_EXCLUDE_ZSTD
-        atps.push_back({ minSz << szFactor, ZSTD });
+        atps.push_back({ szFactor, ZSTD });
 #endif
     }
 
@@ -981,7 +980,9 @@ class API_compress_MT : public ::testing::TestWithParam<ATP_mt> {
 public:
     void SetUp() override {
         atp = GetParam();
-        cpr = new TestLoad(atp.src_sz, atp.src_sz * 2, true);
+        const AOCL_UINTP min_sz = 512;
+        AOCL_UINTP src_sz = min_sz << atp.src_sz_factor;
+        cpr = new TestLoad(src_sz, src_sz * 2, true);
     }
 
     void destroy() {

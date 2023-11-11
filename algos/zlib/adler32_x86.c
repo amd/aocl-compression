@@ -107,7 +107,7 @@ static inline uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_
 __attribute__((__target__("avx"))) // uses SSSE3 intrinsics
 static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_t len)
 {
-    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     uint32_t sum_A = adler & 0xffff;
     uint32_t sum_B = adler >> 16;
 
@@ -201,7 +201,7 @@ static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_
 __attribute__((__target__("avx2")))
 static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size_t len)
 {
-    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     uint32_t sum_A = adler & 0xffff;
     uint32_t sum_B = adler >> 16;
 

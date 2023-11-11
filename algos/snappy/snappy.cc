@@ -179,7 +179,7 @@ namespace {
 #ifdef AOCL_SNAPPY_AVX_OPT
 AOCL_SNAPPY_TARGET_AVX
 inline void FastMemcopy64Bytes(char* dst, char* src) {
-  LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
+  AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
   // assume: kSlopBytes is 64
   // assume: there is always space to copy 64 bytes
   // assume: copy is always from a lower address to a higher address (op - offset) to (op)

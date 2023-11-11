@@ -283,7 +283,7 @@ break_matching: /* sorry for goto's, but such code is smaller and easier to view
 __attribute__((__target__("avx2")))
 static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
 {
-    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     uint32_t match_len = 0;
     while(match_len < 256) {
         __m256i buff1 = _mm256_lddqu_si256((__m256i*)src1);
@@ -322,7 +322,7 @@ static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
 static inline uint32_t compare256_avx(const Bytef *src1, const Bytef *src2)
 {
-    LOG_UNFORMATTED(DEBUG, logCtx, "Enter");
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     uint32_t match_len = 0;
     while(match_len < 256) {
         __m128i buff1 = _mm_lddqu_si128((__m128i *)src1);

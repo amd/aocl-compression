@@ -153,7 +153,6 @@ extern "C" {
 #endif /* _WINDOWS */
 #endif
 
-#ifndef AOCL_UNIT_TEST
 #define LOG_UNFORMATTED(logType, logCtx, str)     do {\
                             SET_MAX_LOG_LEVEL(logCtx)\
                             if (logType <= logCtx.maxLevel)\
@@ -183,7 +182,6 @@ extern "C" {
                                 }\
                             }\
                         } while (0)
-#endif
 #define LOG_FORMATTED(logType, logCtx, str, ...)     do {\
                             SET_MAX_LOG_LEVEL(logCtx)\
                             if (logType <= logCtx.maxLevel)\
@@ -320,38 +318,12 @@ extern "C" {
 
 
 #ifdef AOCL_UNIT_TEST
-//Logger - DTL
-#ifdef AOCL_ENABLE_LOG_FEATURE
-#define LOG_UNFORMATTED(logType, logCtx, str)     do {\
-                            SET_MAX_LOG_LEVEL(logCtx)\
+#ifndef AOCL_ENABLE_THREADS
+#define AOCL_SIMD_UNIT_TEST(logType, logCtx, str)     do {\
                             update_test_log_counter(FUNC_NAME); \
-                            if (logType <= logCtx.maxLevel)\
-                            {\
-                                const char *type=NULL;\
-                                if (logType == ERR)\
-                                    type = "ERR";\
-                                else if (logType == INFO)\
-                                    type = "INFO";\
-                                else if (logType == DEBUG)\
-                                    type = "DEBUG";\
-                                else if (logType == TRACE)\
-                                    type = "TRACE";\
-                                if(logType == ERR)\
-                                {\
-                                    fprintf(stderr, "[%s] : %s : %s : %d : ",\
-                                    type, __FILE__, FUNC_NAME, __LINE__);\
-                                    fprintf(stderr, str);\
-                                    fprintf(stderr, "\n");\
-                                }\
-                                else\
-                                {\
-                                    fprintf(stdout, "[%s] : %s : %s : %d : ",\
-                                    type, __FILE__, FUNC_NAME, __LINE__);\
-                                    fprintf(stdout, str);\
-                                    fprintf(stdout, "\n");\
-                                }\
-                            }\
                         } while (0)
+#else
+#define AOCL_SIMD_UNIT_TEST(logType, logCtx, str)
 #endif
 
 #ifdef __cplusplus
@@ -394,5 +366,7 @@ extern "C" {
 }
 #endif
 
+#else
+#define AOCL_SIMD_UNIT_TEST(logType, logCtx, str)
 #endif /* AOCL_UNIT_TEST */
 #endif
