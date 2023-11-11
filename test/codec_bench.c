@@ -437,7 +437,7 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                 codec_bench_handle->fName = tmpStr ? tmpStr+1 : inFile;
 
                 if(is_dir(argv[cnt])) {
-                    strcpy(inFolder, codec_bench_handle->fName);
+                    strcpy(inFolder, argv[cnt]);
                     isFolder = 1;
                 }
                 fileIn = 1;
@@ -564,7 +564,7 @@ AOCL_INTP open_file_in_folder(aocl_codec_bench_info* codec_bench_handle,
     AOCL_CHAR filePath[MAX_FILENAME_LEN];
 
     // Copy folder name
-    strcpy(filePath, codec_bench_handle->fName);
+    strcpy(filePath, inFolder);
     CODEC_STRCAT(filePath);
     
     get_file_name(codec_bench_handle, filename, file_number);
@@ -1241,7 +1241,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
             AOCL_CHAR filename[MAX_FILENAME_LEN];
             AOCL_CHAR filePath[MAX_FILENAME_LEN];
 
-            strcpy(filePath, codec_bench_handle.fName);
+            strcpy(filePath, inFolder);
             CODEC_STRCAT(filePath);
 
             get_file_name(&codec_bench_handle, filename, 1);

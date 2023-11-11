@@ -129,7 +129,7 @@ __asm__(".p2align 4");
 AOCL_INT64 aocl_lz4_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
                         AOCL_UINTP outsize, AOCL_UINTP level, AOCL_UINTP, AOCL_CHAR *)
 {
-    INT32 res = LZ4_compress_default(inbuf, outbuf, insize, outsize);
+    AOCL_INT32 res = LZ4_compress_default(inbuf, outbuf, insize, outsize);
     if (res > 0)
         return res;
     
@@ -146,7 +146,7 @@ __asm__(".p2align 5");
 AOCL_INT64 aocl_lz4_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
                           AOCL_UINTP outsize, AOCL_UINTP level, AOCL_UINTP, AOCL_CHAR *)
 {
-    INT32 res = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
+    AOCL_INT32 res = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
     if (res >= 0)
         return res;
 
@@ -170,7 +170,7 @@ AOCL_CHAR *aocl_lz4hc_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
 AOCL_INT64 aocl_lz4hc_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
                           AOCL_UINTP outsize, AOCL_UINTP level, AOCL_UINTP, AOCL_CHAR *)
 {
-    INT32 res = LZ4_compress_HC(inbuf, outbuf, insize, outsize, level);
+    AOCL_INT32 res = LZ4_compress_HC(inbuf, outbuf, insize, outsize, level);
     if (res > 0)
         return res;
 
@@ -180,7 +180,7 @@ AOCL_INT64 aocl_lz4hc_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *o
 AOCL_INT64 aocl_lz4hc_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
 							AOCL_UINTP outsize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR *)
 {
-    INT32 res = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
+    AOCL_INT32 res = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
     if (res >= 0)
         return res;
 

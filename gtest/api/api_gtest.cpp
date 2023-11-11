@@ -992,6 +992,7 @@ public:
 
     void TearDown() override {
         destroy();
+        delete cpr;
     }
 
     void setup() {

@@ -314,52 +314,59 @@ AOCL_INT64 native_zstd_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
 {
     #ifndef AOCL_EXCLUDE_ZSTD
     #define ZSTD_STATIC_LINKING_ONLY
+    AOCL_INT64 res;
     ZSTD_CCtx*  cctx = ZSTD_createCCtx();
     if (!cctx)
     {
         fprintf(stderr, "ZSTD compression context creation failed. \n");
-        return 1;
+        return -1;
     }
     ZSTD_parameters zparams = ZSTD_getParams(level, insize, 0);
 
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     //Perform the compression
-    outsize = ZSTD_compress_advanced(cctx, outbuf, outsize, inbuf, insize, NULL, 0, zparams);
+    res = ZSTD_compress_advanced(cctx, outbuf, outsize, inbuf, insize, NULL, 0, zparams);
     #pragma GCC diagnostic pop
-    if (ZSTD_isError(outsize))
-    {
-        ZSTD_freeCCtx(cctx);
-        return 1;
+
+    if (ZSTD_isError(res)) {
+        fprintf(stderr, "ZSTD compression error: %s", ZSTD_getErrorName(res));
+        res = -1;
     }
-    return outsize;
+
+    if (cctx)
+        ZSTD_freeCCtx(cctx);
+
+    return res;
     #else
         return -2;
     #endif 
 }
-
 AOCL_INT64 native_zstd_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize)
 {
     #ifndef AOCL_EXCLUDE_ZSTD
     #define ZSTD_STATIC_LINKING_ONLY
+    AOCL_INT64 res;
     ZSTD_DCtx* dctx = ZSTD_createDCtx();
     if(!dctx)
     {
         fprintf(stderr, "ZSTD decompression context creation failed. \n");
-        ZSTD_freeDCtx(dctx);
-        return 1;
+        return -1;
     }
 
     //Perform the decompression
-    outsize = ZSTD_decompressDCtx(dctx, outbuf, outsize, inbuf, insize);
-    if (ZSTD_isError(outsize))
+    res = ZSTD_decompressDCtx(dctx, outbuf, outsize, inbuf, insize);
+    if (ZSTD_isError(res))
     {
-        fprintf(stderr, "ZSTD decompression error: %s", ZSTD_getErrorName(outsize));
-        ZSTD_freeDCtx(dctx);
-        return -1;
+        fprintf(stderr, "ZSTD decompression error: %s", ZSTD_getErrorName(res));
+        res = -1;
 
     }
-    return outsize;
+
+    if(dctx)
+        ZSTD_freeDCtx(dctx);
+
+    return res;
     #else
         return -2;
     #endif

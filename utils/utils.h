@@ -270,7 +270,7 @@ inline AOCL_VOID cpu_features_detection(AOCL_INTP fn, AOCL_INTP optVal,
     AOCL_INTP* eax, AOCL_INTP* ebx,
     AOCL_INTP* ecx, AOCL_INTP* edx)
 {
-    INT32 CPUInfo[4];
+    AOCL_INT32 CPUInfo[4];
 
     __cpuid(CPUInfo, fn);
 
