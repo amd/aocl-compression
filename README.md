@@ -8,6 +8,8 @@ compression and decompression methods which facilitate the applications to
 easily integrate and use them.
 AOCL-Compression supports lz4, zlib/deflate, lzma, zstd, bzip2, snappy, and lz4hc
 based compression and decompression methods along with their native APIs.
+The library offers openMP based multi-threaded implementation of lz4, zlib, 
+zstd and snappy compression methods.
 It supports the dynamic dispatcher feature that executes the most optimal
 function variant implemented using Function Multi-versioning thereby offering
 a single optimized library portable across different x86 CPU architectures.
@@ -16,11 +18,7 @@ A test suite is provided for the validation and performance benchmarking
 of the supported compression and decompression methods. This suite also
 supports the benchmarking of IPP compression methods, such as, lz4, lz4hc, zlib and bzip2.
 The library build framework offers CTest based testing of the test cases
-implemented using GTest and the library test suite. Starting from AOCL-Compression 4.1.1,
-the library offers openMP based multi-threaded implementations for lz4, zlib, zstd and 
-snappy compression methods that can be enabled using CMake option AOCL_ENABLE_THREADS.
-The multi-threaded compression support is optimally tuned for AMD CPUs with Linux® OS
-whereas this support is experimental for Windows® platforms.
+implemented using GTest and the library test suite.
 
 
 Installation
@@ -186,8 +184,8 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
    * `AOCL_ENABLE_LOG=ERR`   for Error logs.
    * `AOCL_ENABLE_LOG=INFO`  for Error, Info logs.
    * `AOCL_ENABLE_LOG=DEBUG` for Error, Info, Debug logs.
-   * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.
-  When building the library for highest performance, do not enable `DAOCL_ENABLE_LOG_FEATURE`.
+   * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.<br>
+  Note: When building the library for highest performance, do not enable `DAOCL_ENABLE_LOG_FEATURE`.
 
 
 * To run the test bench but only compression or decompression <br>
@@ -333,6 +331,19 @@ Enabling specific instructions (ISA)
 - It takes precedence over aocl_compression_desc::optLevel setting passed to aocl_llc_setup().
 - Note: When calling aocl_llc_setup() API from multiple threads, changing aocl_compression_desc::optOff
   and aocl_compression_desc::optLevel values between threads can lead to undefined behaviour.
+
+Multi-threaded Compression and Decompression
+--------------------------------------------
+- Parallel compression and decompression of lz4, zlib, zstd and snappy is implemented using
+  openMP multi-threading. A RAP (random access point) frame is introduced in AOCL-Compression
+  to support parallel decompression of the compressed streams/files. Use AOCL_ENABLE_THREADS
+  config option to enable the multi-threading.
+- A stream compressed with multi-threaded AOCL-Compression library can be decompressed using any
+  single-threaded standard decompressor by simply skipping the initial block of bytes containing
+  the RAP frame present at the start of the stream.
+- The multi-threaded compression support is optimally tuned for AMD CPUs on Linux® OS whereas
+  this support is experimental for Windows® platforms.
+
 
 CONTACTS
 --------
