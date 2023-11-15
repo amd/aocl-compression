@@ -4937,21 +4937,21 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
 #ifdef AOCL_LZ4_AVX_OPT
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = AOCL_LZ4_decompress_wrapper;
-#ifdef AOCL_THREADS
+#ifdef AOCL_ENABLE_THREADS
             LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_mt;
 #endif
 #elif defined(AOCL_LZ4_OPT)
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-#ifdef AOCL_THREADS
+#ifdef AOCL_ENABLE_THREADS
             LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
 #endif
 #else
             LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-#ifdef AOCL_THREADS
+#ifdef AOCL_ENABLE_THREADS
             LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
 #endif
@@ -4960,27 +4960,27 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
 #ifdef AOCL_LZ4_OPT
         case 0://C version
         case 1://SSE version
-        case 2://AVX version
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-#ifdef AOCL_THREADS
+#ifdef AOCL_ENABLE_THREADS
             LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
 #endif
             break;
+        case 2://AVX version
         case 3://AVX2 version
         default://AVX512 and other versions
 #ifdef AOCL_LZ4_AVX_OPT
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = AOCL_LZ4_decompress_wrapper;
-#ifdef AOCL_THREADS
+#ifdef AOCL_ENABLE_THREADS
             LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_mt;
 #endif
 #elif defined(AOCL_LZ4_OPT)
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-#ifdef AOCL_THREADS
+#ifdef AOCL_ENABLE_THREADS
             LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
 #endif
@@ -4993,7 +4993,7 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
         default:
             LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-#ifdef AOCL_THREADS
+#ifdef AOCL_ENABLE_THREADS
             LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
 #endif
