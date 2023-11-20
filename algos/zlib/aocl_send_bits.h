@@ -31,8 +31,12 @@
 #include "deflate.h"
 
  /* Dynamically opting AOCL variant of send_bits */
+#ifdef AOCL_ZLIB_OPT
 #define OPT_send_bits(s, c, v) \
     { if (zlibOptOff == 1) { send_bits((s), (c), (v)); } else { AOCL_send_bits((s), (c), (v)); } }
+#else
+#define OPT_send_bits(s, c, v) send_bits((s), (c), (v))
+#endif /* AOCL_ZLIB_OPT */
 
 #ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
 #ifndef ZLIB_DEBUG

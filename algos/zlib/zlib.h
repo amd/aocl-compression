@@ -3154,63 +3154,19 @@ ZEXTERN int            ZEXPORTVA gzvprintf(gzFile file,
  * 
  * @return \b NULL
  */
-ZEXTERN char * ZEXPORT aocl_setup_zlib OF((int optOff, int optLevel,
-                                        int insize, int level, int windowLog));
-
-/**
- * @brief AOCL-Compression defined deflate setup function that configures with the right
- * AMD optimized ZLIB routines depending upon the detected CPU features.
- * 
- * @param optOff Turn off all optimizations
- * @param optLevel Optimization level:0-NA,1-SSE2,2-AVX,3-AVX2,4-AVX512
- * @param insize input data length
- * @param level requested compression level
- * @param windowLog largest match distance : larger == more compression, more memory needed during decompression
- * 
- * @return \b NULL
- */
-ZEXTERN char * ZEXPORT aocl_setup_deflate OF((int optOff, int optLevel));
-ZEXTERN char*  ZEXPORT aocl_setup_tree OF((int optOff, int optLevel));
-ZEXTERN char * ZEXPORT aocl_setup_inflate OF((int optOff, int optLevel));
-
-/**
- * @brief AOCL-Compression adler defined setup function that configures with the right
- * AMD optimized ZLIB routines depending upon the detected CPU features.
- * 
- * @param optOff Turn off all optimizations
- * @param optLevel Optimization level:0-NA,1-SSE2,2-AVX,3-AVX2,4-AVX512
- * @param insize input data length
- * @param level requested compression level
- * @param windowLog largest match distance : larger == more compression, more memory needed during decompression
- * 
- * @return \b NULL
- */
-ZEXTERN void ZEXPORT aocl_setup_adler32 OF((int optOff, int optLevel));
+ZEXTERN char * ZEXPORT aocl_setup_zlib (int optOff, int optLevel,
+                                        int insize, int level, int windowLog);
 
 /**
  * @brief AOCL-Compression defined destroy function for zlib.
  */
-ZEXTERN void ZEXPORT aocl_destroy_zlib OF((void));
+ZEXTERN void ZEXPORT aocl_destroy_zlib (void);
 
 /**
- * @brief AOCL-Compression defined destroy function for zlib deflate.
+ * @brief AOCL-Compression optimized adler32 checksum for zlib.
  */
-ZEXTERN void ZEXPORT aocl_destroy_deflate OF((void));
 
-/**
- * @brief AOCL-Compression defined destroy function for zlib tree.
- */
-ZEXTERN void ZEXPORT aocl_destroy_tree OF((void));
-
-/**
- * @brief AOCL-Compression defined destroy function for inflate.
- */
-ZEXTERN void ZEXPORT aocl_destroy_inflate OF((void));
-
-/**
- * @brief AOCL-Compression defined destroy function for adler32.
- */
-ZEXTERN void ZEXPORT aocl_destroy_adler32 OF((void));
+ZEXTERN uint32_t ZEXPORT adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
 
 #ifdef __cplusplus
 }

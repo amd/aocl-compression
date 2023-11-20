@@ -10,9 +10,12 @@
 #include "zlib.h"
 #include "utils/utils.h"
 
-int zlibOptOff = 0; // default, run reference code
-
 #ifdef AOCL_ZLIB_OPT
+#include "aocl_zlib_setup.h"
+
+int zlibOptOff = 0; // default, run reference code
+static int setup_ok_zlib = 0; // flag to indicate status of dynamic dispatcher setup
+
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
  * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
@@ -22,15 +25,14 @@ static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE() aocl_setup_native()
 #else
 #define AOCL_SETUP_NATIVE()
-#endif
-
-static int setup_ok_zlib = 0; // flag to indicate status of dynamic dispatcher setup
+#endif /* AOCL_ZLIB_OPT */
 
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
 ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
     int level, int windowLog)
 {
+#ifdef AOCL_ZLIB_OPT
     AOCL_ENTER_CRITICAL(setup_zlib)
     if (!setup_ok_zlib) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
@@ -42,6 +44,7 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
         setup_ok_zlib = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib)
+#endif /* AOCL_ZLIB_OPT */
     return NULL;
 }
 
@@ -63,6 +66,7 @@ static void aocl_setup_native(void) {
 #endif
 
 ZEXTERN void ZEXPORT aocl_destroy_zlib (void) {
+#ifdef AOCL_ZLIB_OPT
     AOCL_ENTER_CRITICAL(setup_zlib)
     setup_ok_zlib = 0;
     AOCL_EXIT_CRITICAL(setup_zlib)
@@ -70,6 +74,7 @@ ZEXTERN void ZEXPORT aocl_destroy_zlib (void) {
     aocl_destroy_deflate();
     aocl_destroy_tree();
     aocl_destroy_inflate();
+#endif /* AOCL_ZLIB_OPT */
 }
 
 #ifdef AOCL_ENABLE_THREADS

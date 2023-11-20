@@ -52,8 +52,11 @@
 #include "utils/utils.h"
 #include "deflate.h"
 #include "aocl_zlib_x86.h"
+#include "aocl_zlib_setup.h"
 
 #ifdef AOCL_ZLIB_OPT
+#undef FASTEST // not supported with AOCL zlib optimizations
+static int setup_ok_zlib_deflate = 0; // flag to indicate status of dynamic dispatcher setup
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
  * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
@@ -64,8 +67,6 @@ static void aocl_setup_native(void);
 #else
 #define AOCL_SETUP_NATIVE()
 #endif
-
-static int setup_ok_zlib_deflate = 0; // flag to indicate status of dynamic dispatcher setup
 
 const char deflate_copyright[] =
    " deflate 1.3 Copyright 1995-2023 Jean-loup Gailly and Mark Adler ";
@@ -83,7 +84,7 @@ typedef enum {
     finish_started, /* finish started, need only more output at next deflate */
     finish_done     /* finish done, accept no more input or output */
 } block_state;
-#endif
+#endif /* moved to deflate.h */
 
 typedef block_state (*compress_func)(deflate_state *s, int flush);
 /* Compression function. Returns the block state after the call. */
@@ -102,7 +103,7 @@ local int aocl_deflateSetDictionary_v2(z_streamp strm, const Bytef* dictionary, 
 local void aocl_fill_window_v2(deflate_state* s);
 local block_state aocl_deflate_fast_v2(deflate_state* s, int flush);
 local block_state aocl_deflate_slow_v2(deflate_state* s, int flush);
-#endif
+#endif /* AOCL_ZLIB_AVX_OPT */
 uint32_t mask = 0xFFFFFFFF;
 /* v1 versions of functions uses non-avx optimizations and v2 versions utilizes avx based optimizations */
 local int aocl_deflateSetDictionary_v1(z_streamp strm, const Bytef *dictionary, uInt  dictLength);
@@ -113,7 +114,7 @@ extern block_state deflate_medium(deflate_state *s, int flush);
 #ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
 block_state (*aocl_deflate_lvl1_fp)(deflate_state *s, int flush) = deflate_fast;
 extern block_state deflate_quick(deflate_state *s, int flush);
-#endif
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 #endif /* AOCL_ZLIB_OPT */
 
 /* ===========================================================================
@@ -163,10 +164,10 @@ local const config configuration_table[10] = {
 /* 7 */ {8,   32, 128, 256, deflate_slow},
 /* 8 */ {32, 128, 258, 1024, deflate_slow},
 /* 9 */ {32, 258, 258, 4096, deflate_slow}}; /* max compression */
-#endif
+#endif /* FASTEST */
 
-local const config *config_table = configuration_table;
 #ifdef AOCL_ZLIB_OPT
+local const config *config_table = configuration_table;
 local const config configuration_table_opt[10] = {
 /*      good lazy nice chain */
 /* 0 */ {0,    0,  0,    0, deflate_stored},  /* store only */
@@ -180,7 +181,7 @@ local const config configuration_table_opt[10] = {
 /* 7 */ {8,   32, 128, 256, deflate_slow},
 /* 8 */ {32, 128, 258, 1024, deflate_slow},
 /* 9 */ {32, 258, 258, 256, deflate_slow}}; /* max compression */
-#endif
+#endif /* AOCL_ZLIB_OPT */
 
 /* Note: the deflate() code requires max_lazy >= MIN_MATCH and max_chain >= 4
  * For deflate_fast() (levels <= 3) good is ignored and lazy has a different
@@ -198,7 +199,7 @@ local const config configuration_table_opt[10] = {
  */
 #ifndef AOCL_ZLIB_OPT
 #define UPDATE_HASH(s,h,c) (h = (((h) << s->hash_shift) ^ (c)) & s->hash_mask)
-#endif
+#endif /* moved to deflate.h */
 
 /* ===========================================================================
  * Insert string str in the dictionary and set match_head to the previous head
@@ -222,7 +223,7 @@ local const config configuration_table_opt[10] = {
     match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
     s->head[s->ins_h] = (Pos)(str))
 #endif
-#endif /* AOCL_ZLIB_OPT */
+#endif /* !AOCL_ZLIB_OPT moved to deflate.h */
 
 /* ===========================================================================
  * Initialize the hash table (avoiding 64K overflow for 16 bit systems).
@@ -306,12 +307,14 @@ local unsigned read_buf(z_streamp strm, Bytef *buf, unsigned size) {
 /* forward declaration */
 local void fill_window(deflate_state* s);
 
+#ifdef AOCL_ZLIB_OPT
 /* Function pointers holding the optimized variant as per the detected CPU
  * features */
 static  int (*aocl_deflateSetDictionary_fp) (z_streamp strm, const Bytef *dictionary, uInt  dictLength) = deflateSetDictionary;
 static  void (*aocl_fill_window_fp) (deflate_state *s) = fill_window;
 static  block_state (*aocl_deflate_fast_fp)(deflate_state *s, int flush) = deflate_fast;
 static  block_state (*aocl_deflate_slow_fp)(deflate_state *s, int flush) = deflate_slow;
+#endif /* AOCL_ZLIB_OPT */
 
 /* ===========================================================================
  * Fill the window when the lookahead becomes insufficient.
@@ -446,10 +449,10 @@ local void fill_window(deflate_state *s) {
 #endif /* AOCL_ZLIB_OPT */
 }
 
+#ifdef AOCL_ZLIB_OPT
 /* Function pointers holding the optimized variant as per dynamic dispatcher settings */
 static void (*deflate_slide_hash_fp)(deflate_state* s) = slide_hash;
 
-#ifdef AOCL_ZLIB_OPT
 local void aocl_fill_window_v1(deflate_state *s)
 {
     unsigned n;
@@ -1146,9 +1149,9 @@ local void lm_init(deflate_state *s) {
     s->good_match       = config_table[s->level].good_length;
     s->nice_match       = config_table[s->level].nice_length;
     s->max_chain_length = config_table[s->level].max_chain;
-#endif /* AOCL_ZLIB_OPT */
+#endif /* !AOCL_ZLIB_OPT */
 
-    s->strstart = 0;
+    s->strstart = 0; /* ToDo: Fix GTest and remove this initialization */
     s->match_start = 0;
     s->block_start = 0L;
     s->lookahead = 0;
@@ -1240,12 +1243,13 @@ int ZEXPORT deflateParams(z_streamp strm, int level, int strategy) {
     func = configuration_table[s->level].func;
 
     if ((strategy != s->strategy || func != configuration_table[level].func) &&
+            s->last_flush != -2) {
 #else
     func = config_table[s->level].func;
 
     if ((strategy != s->strategy || func != config_table[level].func) &&
-#endif
-        s->last_flush != -2) {
+            s->last_flush != -2) {
+#endif /* !AOCL_ZLIB_OPT */
         /* Flush the last buffer: */
         int err = deflate(strm, Z_BLOCK);
         if (err == Z_STREAM_ERROR)
@@ -1685,7 +1689,7 @@ int ZEXPORT deflate(z_streamp strm, int flush) {
                  (*(configuration_table[s->level].func))(s, flush);
 #else
                  (*(config_table[s->level].func))(s, flush);
-#endif
+#endif /* !AOCL_ZLIB_OPT */
 
         if (bstate == finish_started || bstate == finish_done) {
             s->status = FINISH_STATE;
@@ -2100,7 +2104,7 @@ local void check_match(deflate_state *s, IPos start, IPos match, int length) {
    FLUSH_BLOCK_ONLY(s, last); \
    if (s->strm->avail_out == 0) return (last) ? finish_started : need_more; \
 }
-#endif /* AOCL_ZLIB_OPT */
+#endif /* !AOCL_ZLIB_OPT moved to deflate.h */
 
 /* Maximum stored block length in deflate format (not including header). */
 #define MAX_STORED 65535
@@ -2404,11 +2408,11 @@ local block_state deflate_fast(deflate_state *s, int flush) {
 #endif /* AOCL_ZLIB_OPT */
 }
 
+#ifdef AOCL_ZLIB_OPT
 /* Function pointers holding the optimized variant as per the detected CPU
  * features */
 static uInt(*deflate_longest_match_fp)(deflate_state* s, IPos cur_match) = longest_match;
 
-#ifdef AOCL_ZLIB_OPT
 local block_state aocl_deflate_fast_v1(deflate_state *s, int flush)
 {
     IPos hash_head;       /* head of the hash chain */
@@ -3093,41 +3097,19 @@ void (*check_match_fp) (deflate_state *s, IPos start, IPos match,
 #endif /* ZLIB_DEBUG */
 #endif /* AOCL_ZLIB_OPT */
 
+#ifdef AOCL_ZLIB_OPT
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
-#ifdef AOCL_ZLIB_AVX_OPT
 static void aocl_setup_deflate_fmv(int optOff, int optLevel)
 {
-    if (UNLIKELY(optOff == 1 || optLevel == -1)) {
+    aocl_register_slide_hash(optOff, optLevel);
+    aocl_register_longest_match(optOff, optLevel);
+    aocl_register_deflate_medium(optOff, optLevel);
+
+    if (UNLIKELY(optOff == 1)) {
         config_table = configuration_table;
         deflate_slide_hash_fp = slide_hash;
         deflate_longest_match_fp = longest_match;
-    }
-    else {
-        config_table = configuration_table_opt;
-        deflate_slide_hash_fp = slide_hash_x86_internal;
-        deflate_longest_match_fp = longest_match_x86_internal;
-    }
-
-    if (LIKELY(optOff == 0 && optLevel > 1)) {
-        aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_v2;
-        aocl_fill_window_fp = aocl_fill_window_v2;
-        aocl_deflate_fast_fp = aocl_deflate_fast_v2;
-        aocl_deflate_slow_fp = aocl_deflate_slow_v2;
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
-        aocl_deflate_lvl1_fp = deflate_quick;
-#endif
-    }
-    else if (UNLIKELY(optLevel == -1)) { // undecided. use defaults based on compiler flags
-        aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_v2;
-        aocl_fill_window_fp = aocl_fill_window_v2;
-        aocl_deflate_fast_fp = aocl_deflate_fast_v2;
-        aocl_deflate_slow_fp = aocl_deflate_slow_v2;
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
-        aocl_deflate_lvl1_fp = deflate_quick;
-#endif
-    }
-    else {
         aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_v1;
         aocl_fill_window_fp = aocl_fill_window_v1;
         aocl_deflate_fast_fp = aocl_deflate_fast_v1;
@@ -3136,57 +3118,56 @@ static void aocl_setup_deflate_fmv(int optOff, int optLevel)
         aocl_deflate_lvl1_fp = deflate_fast;
 #endif
     }
-
-    aocl_register_slide_hash(optOff, optLevel, slide_hash);
-    aocl_register_longest_match(optOff, optLevel, longest_match);
-    aocl_register_deflate_medium(optOff, optLevel);
-}
-#elif defined(AOCL_ZLIB_OPT)
-static void aocl_setup_deflate_fmv(int optOff, int optLevel)
-{
-    if (UNLIKELY(optOff == 1 || optLevel == -1)) {
-        config_table = configuration_table;
-        deflate_slide_hash_fp = slide_hash;
-        deflate_longest_match_fp = longest_match;
-    }
-    else {
-        config_table = configuration_table_opt;
-        deflate_slide_hash_fp = slide_hash_x86_internal;
-        deflate_longest_match_fp = longest_match_x86_internal;
-    }
-
-    aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_v1;
-    aocl_fill_window_fp = aocl_fill_window_v1;
-    aocl_deflate_fast_fp = aocl_deflate_fast_v1;
-    aocl_deflate_slow_fp = aocl_deflate_slow_v1;
+    else
+    {
+        switch (optLevel)
+        {
+            case 0://C version
+            case 1://SSE version
+                config_table = configuration_table_opt;
+                deflate_slide_hash_fp = slide_hash_x86;
+                deflate_longest_match_fp = longest_match_x86;
+                aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_v1;
+                aocl_fill_window_fp = aocl_fill_window_v1;
+                aocl_deflate_fast_fp = aocl_deflate_fast_v1;
+                aocl_deflate_slow_fp = aocl_deflate_slow_v1;
 #ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
-    aocl_deflate_lvl1_fp = deflate_fast;
+                aocl_deflate_lvl1_fp = deflate_fast;
 #endif
-
-    aocl_register_slide_hash(optOff, optLevel, slide_hash);
-    aocl_register_longest_match(optOff, optLevel, longest_match);
-    aocl_register_deflate_medium(optOff, optLevel);
-}
-#else /* !AOCL_ZLIB_OPT */
-static void aocl_setup_deflate_fmv(int optOff, int optLevel)
-{
-    config_table = configuration_table;
-    deflate_slide_hash_fp = slide_hash;
-    deflate_longest_match_fp = longest_match;
-    aocl_deflateSetDictionary_fp = deflateSetDictionary;
-    aocl_fill_window_fp = fill_window;
-    aocl_deflate_fast_fp = deflate_fast;
-    aocl_deflate_slow_fp = deflate_slow;
+            break;
+            case -1: // undecided. use defaults based on compiler flags
+            case 2://AVX version
+            case 3://AVX2 version
+            default://AVX512 and other versions
+#ifdef AOCL_ZLIB_AVX_OPT
+                config_table = configuration_table_opt;
+                deflate_slide_hash_fp = slide_hash_x86;
+                deflate_longest_match_fp = longest_match_x86;
+                aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_v2;
+                aocl_fill_window_fp = aocl_fill_window_v2;
+                aocl_deflate_fast_fp = aocl_deflate_fast_v2;
+                aocl_deflate_slow_fp = aocl_deflate_slow_v2;
 #ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
-    aocl_deflate_lvl1_fp = deflate_fast;
-#endif
-
-    aocl_register_slide_hash(optOff, optLevel, slide_hash);
-    aocl_register_longest_match(optOff, optLevel, longest_match);
+                aocl_deflate_lvl1_fp = deflate_quick;
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
+#else
+                config_table = configuration_table_opt;
+                deflate_slide_hash_fp = slide_hash_x86;
+                deflate_longest_match_fp = longest_match_x86;
+                aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_v1;
+                aocl_fill_window_fp = aocl_fill_window_v1;
+                aocl_deflate_fast_fp = aocl_deflate_fast_v1;
+                aocl_deflate_slow_fp = aocl_deflate_slow_v1;
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
+                aocl_deflate_lvl1_fp = deflate_fast;
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
+#endif /* AOCL_ZLIB_AVX_OPT */
+            break;
+        }
+    }
 }
-#endif
 
-ZEXTERN char * ZEXPORT aocl_setup_deflate(int optOff, int optLevel)
+void ZLIB_INTERNAL aocl_setup_deflate(int optOff, int optLevel)
 {
     AOCL_ENTER_CRITICAL(setup_zlib_deflate)
     if (!setup_ok_zlib_deflate) {
@@ -3195,10 +3176,16 @@ ZEXTERN char * ZEXPORT aocl_setup_deflate(int optOff, int optLevel)
         setup_ok_zlib_deflate = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_deflate)
-    return NULL;
 }
 
-#ifdef AOCL_ZLIB_OPT
+void ZLIB_INTERNAL aocl_destroy_deflate(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_deflate)
+    setup_ok_zlib_deflate = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib_deflate)
+    aocl_destroy_longest_match();
+    aocl_destroy_slide_hash();
+}
+
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_zlib_deflate)
     if (!setup_ok_zlib_deflate) {
@@ -3209,12 +3196,4 @@ static void aocl_setup_native(void) {
     }
     AOCL_EXIT_CRITICAL(setup_zlib_deflate)
 }
-#endif
-
-ZEXTERN void ZEXPORT aocl_destroy_deflate(void) {
-    AOCL_ENTER_CRITICAL(setup_zlib_deflate)
-    setup_ok_zlib_deflate = 0;
-    AOCL_EXIT_CRITICAL(setup_zlib_deflate)
-    aocl_destroy_longest_match();
-    aocl_destroy_slide_hash();
-}
+#endif /* AOCL_ZLIB_OPT */

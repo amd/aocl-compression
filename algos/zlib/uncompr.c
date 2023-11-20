@@ -33,10 +33,16 @@
    an incomplete zlib stream.
 */
 #ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ZLIB_OPT
 extern uint32_t adler32_x86_internal(uint32_t adler, const Bytef *buf, z_size_t len);
+#endif /* AOCL_ZLIB_OPT */
 static inline AOCL_UINT32 partition_checksum(Bytef *source, AOCL_INTP length)
 {
+#ifdef AOCL_ZLIB_OPT
     return adler32_x86_internal(1, source, length);
+#else
+    return adler32(1, source, length);
+#endif /* AOCL_ZLIB_OPT */
 }
 static inline int uncompress2_ST(Bytef *dest, uLongf *destLen, const Bytef *source,
                         uLong *sourceLen, short winBits) {

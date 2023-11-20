@@ -95,6 +95,10 @@
 #include "aocl_zlib_x86.h"
 
 #ifdef AOCL_ZLIB_OPT
+#include "aocl_zlib_setup.h"
+
+static int setup_ok_zlib_inflate = 0; // flag to indicate status of dynamic dispatcher setup
+
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
  * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
@@ -105,8 +109,6 @@ static void aocl_setup_native(void);
 #else
 #define AOCL_SETUP_NATIVE()
 #endif
-
-static int setup_ok_zlib_inflate = 0; // flag to indicate status of dynamic dispatcher setup
 
 #ifdef MAKEFIXED
 #  ifndef BUILDFIXED
@@ -439,13 +441,14 @@ local int updatewindow(z_streamp strm, const Bytef *end, unsigned copy) {
     return 0;
 }
 
-#ifdef AOCL_ZLIB_SSE2_OPT
+
+#ifdef AOCL_ZLIB_OPT
 /* Flag to choose code paths based on dynamic dispatcher settings */
 static int inflateOptLevel = 0;
-#endif
 /* Function pointers holding the optimized variant as per dynamic dispatcher settings */
 static int (*updatewindow_fp)(z_streamp strm, const Bytef * end, unsigned copy) = updatewindow;
 static void (*inflate_fast_fp)(z_streamp strm, unsigned start) = inflate_fast;
+#endif /* AOCL_ZLIB_OPT */
 
 #ifdef AOCL_ZLIB_SSE2_OPT
 local int aocl_updatewindow(z_streamp strm, const Bytef *end, unsigned copy)
@@ -1782,44 +1785,44 @@ unsigned long ZEXPORT inflateCodesUsed(z_streamp strm) {
     return (unsigned long)(state->next - state->codes);
 }
 
+#ifdef AOCL_ZLIB_OPT
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
-#ifdef AOCL_ZLIB_SSE2_OPT
 static void aocl_setup_inflate_fmv(int optOff, int optLevel)
 {
     inflateOptLevel = optLevel;
-    if (LIKELY(optOff == 0 && optLevel > 0)) {
-#ifdef AOCL_ZLIB_OPT
-        updatewindow_fp = aocl_updatewindow;
-        inflate_fast_fp = inflate_fast_chunk_;
-#else
+    
+    if(UNLIKELY(optOff == 1))
+    {
         updatewindow_fp = updatewindow;
         inflate_fast_fp = inflate_fast;
-#endif
     }
-    else if (UNLIKELY(optLevel == -1)) { // undecided. use defaults based on compiler flags
-#ifdef AOCL_ZLIB_OPT
-        updatewindow_fp = aocl_updatewindow;
-        inflate_fast_fp = inflate_fast_chunk_;
+    else
+    {
+        switch (optLevel)
+        {
+            case 0://C version
+                updatewindow_fp = updatewindow;
+                inflate_fast_fp = inflate_fast;
+            break;
+            case -1: // undecided. use defaults based on compiler flags
+            case 1://SSE version
+            case 2://AVX version
+            case 3://AVX2 version
+            default://AVX512 and other versions
+#ifdef AOCL_ZLIB_SSE2_OPT
+                updatewindow_fp = aocl_updatewindow;
+                inflate_fast_fp = inflate_fast_chunk_;
 #else
-        updatewindow_fp = updatewindow;
-        inflate_fast_fp = inflate_fast;
-#endif
-    }
-    else {
-        updatewindow_fp = updatewindow;
-        inflate_fast_fp = inflate_fast;
+                updatewindow_fp = updatewindow;
+                inflate_fast_fp = inflate_fast;
+#endif /* AOCL_ZLIB_SSE2_OPT */
+            break;
+        }
     }
 }
-#else
-static void aocl_setup_inflate_fmv(int optOff, int optLevel)
-{
-    updatewindow_fp = updatewindow;
-    inflate_fast_fp = inflate_fast;
-}
-#endif
 
-ZEXTERN char * ZEXPORT aocl_setup_inflate(int optOff, int optLevel){
+void ZLIB_INTERNAL aocl_setup_inflate(int optOff, int optLevel) {
     AOCL_ENTER_CRITICAL(setup_zlib_inflate)
     if (!setup_ok_zlib_inflate) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
@@ -1827,10 +1830,8 @@ ZEXTERN char * ZEXPORT aocl_setup_inflate(int optOff, int optLevel){
         setup_ok_zlib_inflate = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_inflate)
-    return NULL;
 }
 
-#ifdef AOCL_ZLIB_OPT
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_zlib_inflate)
     if (!setup_ok_zlib_inflate) {
@@ -1841,10 +1842,10 @@ static void aocl_setup_native(void) {
     }
     AOCL_EXIT_CRITICAL(setup_zlib_inflate)
 }
-#endif
 
-ZEXTERN void ZEXPORT aocl_destroy_inflate (void) {
+void ZLIB_INTERNAL aocl_destroy_inflate (void) {
     AOCL_ENTER_CRITICAL(setup_zlib_inflate)
     setup_ok_zlib_inflate = 0;
     AOCL_EXIT_CRITICAL(setup_zlib_inflate)
 }
+#endif /* AOCL_ZLIB_OPT */
