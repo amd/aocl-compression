@@ -25,24 +25,31 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef AOCL_ZLIB_SETUP_H
+#define AOCL_ZLIB_SETUP_H
 
-#ifndef AOCL_ZLIB_TEST_H
-#define AOCL_ZLIB_TEST_H
+#ifdef AOCL_ZLIB_OPT
 
-#include "zlib.h"
+extern void aocl_register_slide_hash(int optOff, int optLevel);
+extern void aocl_destroy_slide_hash(void);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+extern void aocl_register_longest_match(int optOff, int optLevel);
+extern void aocl_destroy_longest_match(void);
 
-#ifdef AOCL_UNIT_TEST
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
-ZEXTERN uint32_t ZEXPORT Test_quick_dist_code(void);
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
-#endif /* AOCL_UNIT_TEST */
+extern void aocl_register_deflate_medium(int optOff, int optLevel);
 
-#ifdef __cplusplus
-}
-#endif
+extern void aocl_setup_adler32(int optOff, int optLevel);
+extern void aocl_destroy_adler32(void);
 
-#endif /* AOCL_ZLIB_TEST_H */
+extern void aocl_setup_deflate(int optOff, int optLevel);
+extern void aocl_destroy_deflate(void);
+
+extern void aocl_setup_tree(int optOff, int optLevel);
+extern void aocl_destroy_tree(void);
+
+extern void aocl_setup_inflate(int optOff, int optLevel);
+extern void aocl_destroy_inflate(void);
+
+#endif /* AOCL_ZLIB_OPT */
+
+#endif /* AOCL_ZLIB_SETUP_H */

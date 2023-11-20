@@ -379,17 +379,7 @@ void ZLIB_INTERNAL _tr_stored_block(deflate_state *s, charf *buf,
               flush = _tr_tally(s, distance, length)
 #endif
 
-/* AOCL-Compression defined register routines to setup the appropriate function
- * variant out of the multiple function versions for performing deflate
- * related tasks */
-void aocl_register_slide_hash(int optOff, int optLevel, 
-                                  void (*slide_hash_c_fp)(deflate_state* s));
-void aocl_register_longest_match(int optOff, int optLevel,
-                                  uInt (*longest_match_fp)(deflate_state* s, IPos cur_match));
-void aocl_register_deflate_medium(int optOff, int optLevel);
 
-void aocl_destroy_slide_hash(void);
-void aocl_destroy_longest_match(void);
 
 #ifdef AOCL_ZLIB_OPT
 typedef enum {

@@ -43,7 +43,10 @@
 #  include <ctype.h>
 #endif
 
+#ifdef AOCL_ZLIB_OPT
+#include "aocl_zlib_setup.h"
 static int setup_ok_zlib_tree = 0; // flag to indicate status of dynamic dispatcher setup
+#endif /* AOCL_ZLIB_OPT */
 
 /* ===========================================================================
  * Constants
@@ -73,7 +76,7 @@ local const int extra_lbits[LENGTH_CODES] /* extra bits for each length code */
 const ZLIB_INTERNAL int extra_dbits[D_CODES] 
 #else
 local const int extra_dbits[D_CODES] /* extra bits for each distance code */
-#endif /* AOCL_UNIT_TEST */
+#endif /* AOCL_UNIT_TEST && AOCL_ZLIB_DEFLATE_FAST_MODE */
    = {0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13};
 
 local const int extra_blbits[BL_CODES]/* extra bits for each bit length code */
@@ -336,39 +339,26 @@ local void gen_codes(ct_data *tree, int max_code, ushf *bl_count) {
 local void gen_trees_header(void);
 #endif
 
+#ifdef AOCL_ZLIB_OPT
 /* Function pointers holding the AOCL optimized variant. */
 static void (*bi_flush_fp)(deflate_state *s) = bi_flush;
 void (*bi_windup_fp)(deflate_state *s) = bi_windup;
+#endif /* AOCL_ZLIB_OPT */
 
-static char* aocl_setup_tree_fmv(int optOff, int optLevel)
+#ifdef AOCL_ZLIB_OPT
+static inline void aocl_setup_tree_fmv(int optOff, int optLevel)
 {
     if (UNLIKELY(optOff == 1)) {
         bi_flush_fp = bi_flush;
         bi_windup_fp = bi_windup;
     }
-    else if (UNLIKELY(optLevel == -1)) { // undecided. use defaults based on compiler flags
-#ifdef AOCL_ZLIB_OPT
-        bi_flush_fp = AOCL_bi_flush;
-        bi_windup_fp = AOCL_bi_windup;
-#else
-        bi_flush_fp = bi_flush;
-        bi_windup_fp = bi_windup;
-#endif
-    }
     else {
-#ifdef AOCL_ZLIB_OPT
         bi_flush_fp = AOCL_bi_flush;
         bi_windup_fp = AOCL_bi_windup;
-#else
-        bi_flush_fp = bi_flush;
-        bi_windup_fp = bi_windup;
-#endif
-
     }
-    return NULL;
 }
 
-ZEXTERN char* ZEXPORT aocl_setup_tree(int optOff, int optLevel) 
+void ZLIB_INTERNAL aocl_setup_tree(int optOff, int optLevel) 
 {
     AOCL_ENTER_CRITICAL(setup_zlib_tree)
     if (!setup_ok_zlib_tree) {
@@ -377,14 +367,14 @@ ZEXTERN char* ZEXPORT aocl_setup_tree(int optOff, int optLevel)
         setup_ok_zlib_tree = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_tree)
-    return NULL;
 }
 
-ZEXTERN void ZEXPORT aocl_destroy_tree(void) {
+void ZLIB_INTERNAL aocl_destroy_tree(void) {
     AOCL_ENTER_CRITICAL(setup_zlib_tree)
     setup_ok_zlib_tree = 0;
     AOCL_EXIT_CRITICAL(setup_zlib_tree)
 }
+#endif /* AOCL_ZLIB_OPT */
 
 #ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
 #ifndef ZLIB_DEBUG
@@ -437,7 +427,7 @@ local void send_bits(deflate_state *s, int value, int length) {
   }\
 }
 #endif /* ZLIB_DEBUG */
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
+#endif /* !AOCL_ZLIB_DEFLATE_FAST_MODE */
 
 /* the arguments must not have side effects */
 

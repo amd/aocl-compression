@@ -82,7 +82,7 @@ uLong ZEXPORT zlibCompileFlags(void) {
 #ifdef PKZIP_BUG_WORKAROUND
     flags += 1L << 20;
 #endif
-#ifdef FASTEST
+#if defined(FASTEST) && !defined(AOCL_ZLIB_OPT)
     flags += 1L << 21;
 #endif
 #if defined(STDC) || defined(Z_HAVE_STDARG_H)

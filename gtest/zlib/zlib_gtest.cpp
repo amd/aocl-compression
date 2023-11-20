@@ -1849,36 +1849,36 @@ TEST_F(ZLIB_adler32_x86, all_cases)
 
   uLong adler = 1 << 16;
   len = 10;
-  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len)); // AOCL_Compression_zlib_adler32_x86_common_1
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len)); // AOCL_Compression_zlib_adler32_x86_common_1
 
   adler = 0;
   len = 10;
-  EXPECT_EQ(Test_adler32_x86(adler, NULL, len), adler32(adler, NULL, len));  // AOCL_Compression_zlib_adler32_x86_common_2
+  EXPECT_EQ(adler32_x86(adler, NULL, len), adler32(adler, NULL, len));  // AOCL_Compression_zlib_adler32_x86_common_2
 
   adler = ((uLong)1L << 31) - 1;
   len = 1;
-  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_3
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_3
 
   len = 10;
-  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_4
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_4
 
   len = 19;
-  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len)); // AOCL_Compression_zlib_adler32_x86_common_5
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len)); // AOCL_Compression_zlib_adler32_x86_common_5
 
   len = 5552;
-  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_6
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_6
 
   len = 64;
   adler = 1;
-  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_7
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_7
 
   len = 1;
   adler = 0xFFFFFFFF;
-  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_8
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_8
 
   len = 60;
   adler = 0xFFFFFFFF;
-  EXPECT_EQ(Test_adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_9
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_9
 
   free(buf);
 }
