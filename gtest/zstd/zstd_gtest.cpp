@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,6 +25,18 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+ /*
+  * Copyright (c) Meta Platforms, Inc. and affiliates.
+  * All rights reserved.
+  *
+  * This source code is licensed under both the BSD-style license (found in the
+  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
+  * in the COPYING file in the root directory of this source tree).
+  * You may select, at your option, one of the above-listed licenses.
+  * 
+  * https://github.com/facebook/zstd/blob/dev/tests/fullbench.c#L345
+  */
  
  /** @file zstd_gtest.cc
  *  
@@ -46,6 +58,10 @@
 #include "algos/zstd/lib/compress/zstd_lazy.h"
 #include "algos/zstd/lib/decompress/zstd_decompress_block.h"
 #endif
+
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif /* AOCL_ENABLE_THREADS */
 
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
 
@@ -193,6 +209,55 @@ size_t Test_ZSTD_frameHeaderSize(const void* src, size_t srcSize)
     return ZSTD_frameHeaderSize(src, srcSize);
 }
 
+// Test wrapper function for ZSTD_CCtx_setParameter()
+size_t Test_ZSTD_CCtx_setParameter(ZSTD_CCtx* cctx, ZSTD_cParameter param, int value) {
+    return ZSTD_CCtx_setParameter(cctx, param, value);
+}
+
+// Test wrapper function for ZSTD_createCStream()
+ZSTD_CStream* Test_ZSTD_createCStream(void) {
+    return ZSTD_createCStream();
+}
+
+// Test wrapper function for ZSTD_freeCStream()
+size_t Test_ZSTD_freeCStream(ZSTD_CStream* zcs) {
+    return ZSTD_freeCStream(zcs);
+}
+
+// Test wrapper function for ZSTD_initCStream_advanced()
+size_t Test_ZSTD_initCStream_advanced(ZSTD_CStream* zcs,
+    const void* dict, size_t dictSize,
+    ZSTD_parameters params, unsigned long long pss) {
+    return ZSTD_initCStream_advanced(zcs, dict, dictSize, params, pss);
+}
+
+// Test wrapper function for ZSTD_compressStream()
+size_t Test_ZSTD_compressStream(ZSTD_CStream* zcs, ZSTD_outBuffer* output, ZSTD_inBuffer* input) {
+    return ZSTD_compressStream(zcs, output, input);
+}
+
+// Test wrapper function for ZSTD_endStream()
+size_t Test_ZSTD_endStream(ZSTD_CStream* zcs, ZSTD_outBuffer* output) {
+    return ZSTD_endStream(zcs, output);
+}
+
+// Test wrapper function for ZSTD_compressStream2()
+size_t Test_ZSTD_compressStream2(ZSTD_CCtx* cctx,
+    ZSTD_outBuffer* output,
+    ZSTD_inBuffer* input,
+    ZSTD_EndDirective endOp) {
+    return ZSTD_compressStream2(cctx, output, input, endOp);
+}
+
+// Test wrapper function for ZSTD_initDStream()
+size_t Test_ZSTD_initDStream(ZSTD_DStream* zds) {
+    return ZSTD_initDStream(zds);
+}
+
+// Test wrapper function for ZSTD_decompressStream()
+size_t Test_ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input) {
+    return ZSTD_decompressStream(zds, output, input);
+}
 
 /***********************************************
  * "Begin" of Version Tests
@@ -221,7 +286,7 @@ class ZSTD_ZSTD_compress : public AOCL_setup_zstd {
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_1) // compress_FAIL_src_is_NULL
 {
     TestLoad_2 d(8000);
-
+    
     // ZSTD_error_GENERIC
     size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), NULL, d.getOrigSize(), 1);
     EXPECT_TRUE(Test_ZSTD_isError(outLen));
@@ -846,10 +911,10 @@ INSTANTIATE_TEST_SUITE_P(
 #endif
 
  /*********************************************
- * Begin of ZSTD_ZSTD_selectBlockCompressor
- *********************************************/
+  * Begin of ZSTD_ZSTD_selectBlockCompressor
+  *********************************************/
 
- // Test valid compressors are set on optOff
+  // Test valid compressors are set on optOff
 TEST(ZSTD_ZSTD_selectBlockCompressor, AOCL_Compression_zstd_ZSTD_selectBlockCompressor_optOff_common_1)
 {
     int aoclOptFlag = 0; //optOff
@@ -877,13 +942,14 @@ TEST(ZSTD_ZSTD_selectBlockCompressor, AOCL_Compression_zstd_ZSTD_selectBlockComp
     }
 }
 
- /*********************************************
- * End of ZSTD_ZSTD_selectBlockCompressor
- *********************************************/
+/*********************************************
+* End of ZSTD_ZSTD_selectBlockCompressor
+*********************************************/
 
- /*********************************************
- * Begin of ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long
- *********************************************/
+#ifdef AOCL_ZSTD_OPT
+/*********************************************
+* Begin of ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long
+*********************************************/
 class ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long : public AOCL_setup_zstd
 {
 public:
@@ -906,7 +972,7 @@ public:
     void reset() {
         ASSERT_NE(src, nullptr);
         memset(stream, 0, sizeof(char) * buf_len);
-        
+
         for (size_t i = 0; i < src_len; ++i) { //fill non-0 values for src
             src[i] = (i % 256);
             if (src[i] == 0) src[i] = 1;
@@ -921,9 +987,9 @@ public:
 
     void validate() {
         EXPECT_EQ(memcmp(src, dst, src_len), 0); //validate src and dst are equal
-        
-        
-        if (dst > (src + src_len)) 
+
+
+        if (dst > (src + src_len))
         { //validate bytes HERE are not polluted: [src...src+length..<HERE>..dst..dst+len]
             bool polluted = false;
             char* cur = src + src_len;
@@ -947,7 +1013,7 @@ public:
     char* getDst() {
         return dst;
     }
-    
+
 private:
     char* stream, *src, *dst;
     size_t buf_len, src_len;
@@ -1022,6 +1088,7 @@ TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildco
 /*********************************************
 * End of ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long
 *********************************************/
+#endif /* AOCL_ZSTD_OPT */
 
 #ifdef AOCL_ENABLE_THREADS
 /*********************************************
@@ -1057,3 +1124,653 @@ TEST(ZSTD_ZSTD_GET_WINDOW_FACTOR, AOCL_Compression_zstd_ZSTD_GET_WINDOW_FACTOR_c
 * End of ZSTD_GET_WINDOW_FACTOR
 *********************************************/
 #endif /* AOCL_ENABLE_THREADS */
+
+#define ZSTD_EXPECT_NO_ERR 0
+#define ZSTD_EXPECT_ERR 1
+class ZSTD_with_cctx : public AOCL_setup_zstd {
+public:
+    ZSTD_with_cctx()
+    {
+        cctx = ZSTD_createCCtx();
+    }
+
+    ~ZSTD_with_cctx()
+    {
+        ZSTD_freeCCtx(cctx);
+    }
+
+    ZSTD_CCtx* getCtx() {
+        return cctx;
+    }
+
+private:
+    ZSTD_CCtx* cctx;
+};
+
+/***********************************************
+ * "Begin" of ZSTD_compress2
+ ***********************************************/
+class ZSTD_ZSTD_compress2 : public ZSTD_with_cctx {
+public:
+    size_t compress(const void* src, size_t srcSize, void* dst, size_t dstCapacity) 
+    {
+        return ZSTD_compress2(getCtx(), dst, dstCapacity, src, srcSize);
+    }
+};
+
+TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_ZSTD_ZSTD_compress2_pass_common_1) //compress2
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+}
+
+TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_ZSTD_ZSTD_compress2_fail_common_2) //compress2 src null
+{
+    TestLoad_2 d(1024);
+    size_t ret = compress(NULL, d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
+}
+
+TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_ZSTD_ZSTD_compress2_fail_common_3) //compress2 dst null
+{
+    TestLoad_2 d(1024);
+    size_t ret = compress(d.getOrigData(), d.getOrigSize(), NULL, d.getCompressedSize());
+    EXPECT_EQ(ret, ERROR(dstSize_tooSmall));
+}
+
+TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_ZSTD_ZSTD_compress2_fail_common_4) //compress2 dst size 0
+{
+    TestLoad_2 d(1024);
+    size_t ret = compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), 0);
+    EXPECT_EQ(ret, ERROR(dstSize_tooSmall));
+}
+
+TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_ZSTD_ZSTD_compress2_fail_common_5) //compress2 cctx null
+{
+    TestLoad_2 d(1024);
+    size_t ret = ZSTD_compress2(NULL, d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize());
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
+
+TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_ZSTD_ZSTD_compress2_pass_common_6) //compress2 src size 0
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(d.getOrigData(), 0, d.getCompressedBuff(), d.getCompressedSize());
+    //src size = 0 is a valid input and is expected to return valid zstd frame 
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(*((uint32_t*)d.getCompressedBuff()), ZSTD_MAGICNUMBER); //validate that it is a valid zstd frame
+}
+
+TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_ZSTD_ZSTD_compress2_pass_common_7) //compress2 src null and src size 0
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(NULL, 0, d.getCompressedBuff(), d.getCompressedSize());
+    //src size = 0 is a valid input and is expected to return valid zstd frame 
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(*((uint32_t*)d.getCompressedBuff()), ZSTD_MAGICNUMBER); //validate that it is a valid zstd frame
+}
+/*********************************************
+ * End of ZSTD_compress2
+ *********************************************/
+
+/***********************************************
+ * "Begin" of ZSTD_compressCCtx
+ ***********************************************/
+class ZSTD_ZSTD_compressCCtx : public ZSTD_with_cctx {
+public:
+    size_t compress(const void* src, size_t srcSize, void* dst, size_t dstCapacity, int compressionLevel = ZSTD_CLEVEL_DEFAULT)
+    {
+        return ZSTD_compressCCtx(getCtx(), dst, dstCapacity, src, srcSize, compressionLevel);
+    }
+};
+
+TEST_F(ZSTD_ZSTD_compressCCtx, AOCL_Compression_ZSTD_ZSTD_compressCCtx_pass_common_1) //compressCCtx
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+}
+
+TEST_F(ZSTD_ZSTD_compressCCtx, AOCL_Compression_ZSTD_ZSTD_compressCCtx_fail_common_2) //compressCCtx src null
+{
+    TestLoad_2 d(1024);
+    size_t ret = compress(NULL, d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
+}
+
+TEST_F(ZSTD_ZSTD_compressCCtx, AOCL_Compression_ZSTD_ZSTD_compressCCtx_fail_common_3) //compressCCtx dst null
+{
+    TestLoad_2 d(1024);
+    size_t ret = compress(d.getOrigData(), d.getOrigSize(), NULL, d.getCompressedSize());
+    EXPECT_EQ(ret, ERROR(dstSize_tooSmall));
+}
+
+TEST_F(ZSTD_ZSTD_compressCCtx, AOCL_Compression_ZSTD_ZSTD_compressCCtx_fail_common_4) //compressCCtx dst size 0
+{
+    TestLoad_2 d(1024);
+    size_t ret = compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), 0);
+    EXPECT_EQ(ret, ERROR(dstSize_tooSmall));
+}
+
+TEST_F(ZSTD_ZSTD_compressCCtx, AOCL_Compression_ZSTD_ZSTD_compressCCtx_fail_common_5) //compressCCtx cctx null
+{
+    TestLoad_2 d(1024);
+    size_t ret = ZSTD_compressCCtx(NULL, d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), 9);
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
+
+TEST_F(ZSTD_ZSTD_compressCCtx, AOCL_Compression_ZSTD_ZSTD_compressCCtx_pass_common_6) //compressCCtx src size 0
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(d.getOrigData(), 0, d.getCompressedBuff(), d.getCompressedSize());
+    //src size = 0 is a valid input and is expected to return valid zstd frame 
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(*((uint32_t*)d.getCompressedBuff()), ZSTD_MAGICNUMBER); //validate that it is a valid zstd frame
+}
+
+TEST_F(ZSTD_ZSTD_compressCCtx, AOCL_Compression_ZSTD_ZSTD_compressCCtx_pass_common_7) //compressCCtx src null and src size 0
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(NULL, 0, d.getCompressedBuff(), d.getCompressedSize());
+    //src size = 0 is a valid input and is expected to return valid zstd frame 
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(*((uint32_t*)d.getCompressedBuff()), ZSTD_MAGICNUMBER); //validate that it is a valid zstd frame
+}
+
+TEST_F(ZSTD_ZSTD_compressCCtx, AOCL_Compression_ZSTD_ZSTD_compressCCtx_pass_common_8) //compressCCtx compressionLevel < min
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize(), -1);
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+}
+
+TEST_F(ZSTD_ZSTD_compressCCtx, AOCL_Compression_ZSTD_ZSTD_compressCCtx_pass_common_9) //compressCCtx compressionLevel > max
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize(), 23);
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+}
+/*********************************************
+ * End of ZSTD_compressCCtx
+ *********************************************/
+
+class ZSTD_stream_base : public AOCL_setup_zstd {
+public:
+    ZSTD_stream_base() 
+    {
+        if (g_cstream == NULL) g_cstream = Test_ZSTD_createCStream();
+        if (g_dstream == NULL) g_dstream = ZSTD_createDStream();
+    }
+
+    void setup(ZSTD_compressionParameters* cparamsPtr, int level = -1) 
+    {
+        if (cparamsPtr == NULL) {
+            // { W,  C,  H,   S,  L, TL, strat }
+            cparams = ZSTD_compressionParameters{ 22, 20, 21,  4,  5, 16, ZSTD_lazy2 }; /* settings for : srcSize > 256 KB, level  9 */
+        }
+        else {
+            cparams = *cparamsPtr;
+        }
+        Test_ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_windowLog, (int)cparams.windowLog);
+        Test_ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_hashLog, (int)cparams.hashLog);
+        Test_ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_chainLog, (int)cparams.chainLog);
+        Test_ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_searchLog, (int)cparams.searchLog);
+        Test_ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_minMatch, (int)cparams.minMatch);
+        Test_ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_targetLength, (int)cparams.targetLength);
+        Test_ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_strategy, cparams.strategy);
+
+        if (level == -1) {
+            Test_ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_compressionLevel, 9);
+        }
+        else {
+            Test_ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_compressionLevel, level);
+        }
+    }
+
+    virtual ~ZSTD_stream_base() 
+    {
+        Test_ZSTD_freeCStream(g_cstream); g_cstream = NULL;
+        ZSTD_freeDStream(g_dstream); g_dstream = NULL;
+    }
+
+protected:
+    ZSTD_compressionParameters cparams;
+    ZSTD_CStream* g_cstream = NULL;
+    ZSTD_DStream* g_dstream = NULL;
+};
+
+/***********************************************
+ * "Begin" of ZSTD_ZSTD_compressStream
+ ***********************************************/
+class ZSTD_ZSTD_compressStream : public ZSTD_stream_base {
+public:
+    ZSTD_ZSTD_compressStream() : ZSTD_stream_base() 
+    {
+        setup(NULL);
+
+        ZSTD_parameters p;
+        ZSTD_frameParameters f = { 1 /* contentSizeHeader*/, 0, 0 };
+        p.fParams = f;
+        p.cParams = cparams;
+
+        Test_ZSTD_initCStream_advanced(g_cstream, NULL, 0, p, ZSTD_CONTENTSIZE_UNKNOWN);
+    }
+
+    size_t compress(const void* src, size_t srcSize, void* dst, size_t dstCapacity) 
+    {
+        ZSTD_outBuffer buffOut;
+        ZSTD_inBuffer buffIn;
+        buffOut.dst = dst;
+        buffOut.size = dstCapacity;
+        buffOut.pos = 0;
+        buffIn.src = src;
+        buffIn.size = srcSize;
+        buffIn.pos = 0;
+        /* Streaming APIs expect ctx, output and input buffers to be valid non-NULL objects. Hence, not testing for these. */
+        size_t ret = Test_ZSTD_compressStream(g_cstream, &buffOut, &buffIn);
+        EXPECT_EQ(ZSTD_isError(ret), ZSTD_EXPECT_NO_ERR);
+        if (buffIn.pos > 0) { //compress ok
+            ret = Test_ZSTD_endStream(g_cstream, &buffOut);
+            EXPECT_EQ(ZSTD_isError(ret), ZSTD_EXPECT_NO_ERR);
+        }
+        return buffOut.pos;
+    }
+};
+
+TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_ZSTD_ZSTD_compressStream_pass_common_1) //compressStream
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+}
+
+TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_ZSTD_ZSTD_compressStream_pass_common_2) //compressStream src NULL
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(NULL, d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(outLen, 0); //no error, expects future calls to pass src data
+}
+
+TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_ZSTD_ZSTD_compressStream_pass_common_3) //compressStream dst NULL
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(d.getOrigData(), d.getOrigSize(), NULL, d.getCompressedSize());
+    EXPECT_EQ(outLen, 0);  //no error, expects future calls to flush dst data
+}
+
+TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_ZSTD_ZSTD_compressStream_pass_common_4) //compressStream dst size 0
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), 0);
+    EXPECT_EQ(outLen, 0);  //no error, expects future calls to flush dst data
+}
+
+TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_ZSTD_ZSTD_compressStream_pass_common_5) //compressStream src size 0
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(d.getOrigData(), 0, d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(outLen, 0);  //no error, expects future calls to pass src data
+}
+
+TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_ZSTD_ZSTD_compressStream_pass_common_6) //compressStream src NULL and src size 0
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress(NULL, 0, d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(outLen, 0);  //no error, expects future calls to pass src data
+}
+
+/*********************************************
+ * End of ZSTD_ZSTD_compressStream
+ *********************************************/
+
+/***********************************************
+ * "Begin" of ZSTD_ZSTD_compress_extDict
+ ***********************************************/
+#define FIRST_BLOCK_SIZE 8
+class ZSTD_ZSTD_compress_extDict : public AOCL_setup_zstd {
+public:
+    ZSTD_parameters setup(int level, int opt_on) {
+        ZSTD_compressionParameters cparams = Test_Get_ZSTD_defaultCParameters(512 KB, level, opt_on);
+        if (g_zcc == NULL) g_zcc = ZSTD_createCCtx();
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_compressionLevel, level);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_windowLog, (int)cparams.windowLog);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_hashLog, (int)cparams.hashLog);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_chainLog, (int)cparams.chainLog);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_searchLog, (int)cparams.searchLog);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_minMatch, (int)cparams.minMatch);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_targetLength, (int)cparams.targetLength);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_strategy, cparams.strategy);
+
+        ZSTD_parameters p;
+        ZSTD_frameParameters f = { 1 /* contentSizeHeader*/, 0, 0 };
+        p.fParams = f;
+        p.cParams = cparams;
+
+        return p;
+    }
+
+    /* compress in multiple blocks. 1st block gets used as dict for 2nd block and
+    *_extDict functions gets called for the 2nd block */
+    size_t multi_block_compress(ZSTD_parameters p, void* dst, size_t dstCapacity, void* src, size_t srcSize) {
+        BYTE firstBlockBuf[FIRST_BLOCK_SIZE];
+        size_t ret = ZSTD_compressBegin_advanced(g_zcc, NULL, 0, p, srcSize);
+        if (ZSTD_isError(ret)) {
+            EXPECT_EQ(ret, 0); //ret > 0 if error. Test should fail.
+            return 0;
+        }
+        memcpy(firstBlockBuf, src, FIRST_BLOCK_SIZE);
+
+        size_t outLen = 0;
+        //compress first block
+        //first block acts as extDict for 2nd block
+        {
+            ret = ZSTD_compressContinue(g_zcc,
+                dst, dstCapacity,
+                firstBlockBuf, FIRST_BLOCK_SIZE);
+            if (ZSTD_isError(ret)) {
+                EXPECT_EQ(ret, 0); //ret > 0 if error. Test should fail.
+                return 0;
+            }
+            dst = (BYTE*)dst + ret;
+            dstCapacity -= ret;
+            outLen += ret;
+        }
+
+        //compress second block
+        ret = ZSTD_compressEnd(g_zcc, dst, dstCapacity,
+            (const BYTE*)src + FIRST_BLOCK_SIZE,
+            srcSize - FIRST_BLOCK_SIZE);
+        if (ZSTD_isError(ret)) {
+            EXPECT_EQ(ret, 0); //ret > 0 if error. Test should fail.
+            return 0;
+        }
+        outLen += ret;
+
+        return outLen;
+    }
+
+private:
+    ZSTD_CCtx* g_zcc = NULL;
+};
+
+
+TEST_F(ZSTD_ZSTD_compress_extDict, AOCL_Compression_ZSTD_ZSTD_compressStream_common_1) //compress multiple blocks
+{
+    for (int level = 0; level <= 22; ++level) {
+        for (int opt_on = 0; opt_on <= 1; ++opt_on) {
+            //setup
+            TestLoad_2 d(1024);
+            void* src = d.getOrigData();
+            size_t srcSize = d.getOrigSize();
+            void* dst = d.getCompressedBuff();
+            size_t dstCapacity = d.getCompressedSize();
+            ZSTD_parameters p = setup(level, opt_on);
+
+            //compress
+            size_t outLen = multi_block_compress(p, dst, dstCapacity, src, srcSize);
+
+            //validate
+            EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+        }
+    }
+}
+
+/*********************************************
+ * End of ZSTD_ZSTD_compress_extDict
+ *********************************************/
+
+ /***********************************************
+  * "Begin" of ZSTD_ZSTD_compressStream2
+  ***********************************************/
+class ZSTD_ZSTD_compressStream2 : public ZSTD_stream_base {
+public:
+    ZSTD_ZSTD_compressStream2() : ZSTD_stream_base() 
+    {
+        setup(NULL);
+    }
+
+    size_t compress_end(const void* src, size_t srcSize, void* dst, size_t dstCapacity) 
+    {
+        ZSTD_outBuffer buffOut;
+        ZSTD_inBuffer buffIn;
+        buffOut.dst = dst;
+        buffOut.size = dstCapacity;
+        buffOut.pos = 0;
+        buffIn.src = src;
+        buffIn.size = srcSize;
+        buffIn.pos = 0;
+        /* Streaming APIs expect ctx, output and input buffers to be valid non-NULL objects. Hence, not testing for these. */
+        size_t ret = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_end);
+        return buffOut.pos;
+    }
+
+    size_t compress_continue(const void* src, size_t srcSize, void* dst, size_t dstCapacity) 
+    {
+        ZSTD_outBuffer buffOut;
+        ZSTD_inBuffer buffIn;
+        buffOut.dst = dst;
+        buffOut.size = dstCapacity;
+        buffOut.pos = 0;
+        buffIn.src = src;
+        buffIn.size = srcSize;
+        buffIn.pos = 0;
+        size_t ret = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_continue);
+        EXPECT_EQ(ZSTD_isError(ret), ZSTD_EXPECT_NO_ERR);
+        ret        = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_end);
+        EXPECT_EQ(ZSTD_isError(ret), ZSTD_EXPECT_NO_ERR);
+        return buffOut.pos;
+    }
+
+    void set_num_ref_threads(int numThreads) {
+        ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_nbWorkers, numThreads);
+    }
+};
+
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_ZSTD_ZSTD_compressStream2_pass_common_1) //end
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress_end(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+}
+
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_ZSTD_ZSTD_compressStream2_pass_common_2) //end src NULL
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress_end(NULL, d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(outLen, 0);  //no error, expects future calls to push src data
+}
+
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_ZSTD_ZSTD_compressStream2_pass_common_3) //end dst NULL
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress_end(d.getOrigData(), d.getOrigSize(), NULL, d.getCompressedSize());
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(outLen, 0);  //no error, expects future calls to flush dst data
+}
+
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_ZSTD_ZSTD_compressStream2_pass_common_4) //end dst size 0
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress_end(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), 0);
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(outLen, 0);  //no error, expects future calls to flush dst data
+}
+
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_ZSTD_ZSTD_compressStream2_pass_common_5) //end, insufficient dst
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress_end(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize() - 1);
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+}
+
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_ZSTD_ZSTD_compressStream2_pass_common_6) //continue & end
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress_continue(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+}
+
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_ZSTD_ZSTD_compressStream2_pass_common_7) //end src size 0
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress_end(d.getOrigData(), 0, d.getCompressedBuff(), d.getCompressedSize());
+    //src size = 0 is a valid input and is expected to return valid zstd frame 
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(*((uint32_t*)d.getCompressedBuff()), ZSTD_MAGICNUMBER); //validate that it is a valid zstd frame
+}
+
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_ZSTD_ZSTD_compressStream2_pass_common_8) //end src NULL and src size 0
+{
+    TestLoad_2 d(1024);
+    size_t outLen = compress_end(NULL, 0, d.getCompressedBuff(), d.getCompressedSize());
+    //src size = 0 is a valid input and is expected to return valid zstd frame 
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(*((uint32_t*)d.getCompressedBuff()), ZSTD_MAGICNUMBER); //validate that it is a valid zstd frame
+}
+
+#ifdef AOCL_ENABLE_THREADS
+/* Library must be built with ZSTD_MULTITHREAD flag defined for this test to take multithreaded code path in zstd reference */
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_ZSTD_ZSTD_compressStream2_common_7) //reference multi-threaded
+{
+    TestLoad_2 d((512 * 1024) + 1); //ZSTDMT_JOBSIZE_MIN + 1 : minimum size for reference multi-threading to get activated
+    int max_threads = omp_get_max_threads();
+    set_num_ref_threads(max_threads);
+    size_t outLen = compress_end(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(ZSTD_isError(outLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+}
+#endif
+
+/*********************************************
+ * End of ZSTD_ZSTD_compressStream2
+ *********************************************/
+
+/***********************************************
+* "Begin" of ZSTD_ZSTD_decompressStream
+***********************************************/
+class ZSTD_ZSTD_decompressStream : public ZSTD_stream_base {
+public:
+    ZSTD_ZSTD_decompressStream() : ZSTD_stream_base() {}
+
+    ~ZSTD_ZSTD_decompressStream() 
+    {
+        if (out) free(out);
+    }
+
+    void compress(const void* src, size_t srcSize, void* dst, size_t dstCapacity) 
+    {
+        g_cSize = Test_ZSTD_compress(dst, dstCapacity, src, srcSize, 9);
+        outCapacity = srcSize;
+        out = (char*)malloc(outCapacity);
+        ASSERT_GT(g_cSize, 0);
+    }
+
+    size_t decompress(const void* src, size_t srcSize, void* dst, size_t dstCapacity) 
+    {
+        ZSTD_outBuffer buffOut;
+        ZSTD_inBuffer buffIn;
+        Test_ZSTD_initDStream(g_dstream);
+        buffOut.dst = dst;
+        buffOut.size = dstCapacity;
+        buffOut.pos = 0;
+        buffIn.src = src;
+        buffIn.size = srcSize;
+        buffIn.pos = 0;
+        /* Streaming APIs expect ctx, output and input buffers to be valid non-NULL objects. Hence, not testing for these. */
+        size_t ret = Test_ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
+        return buffOut.pos;
+    }
+
+    int validate(char* ref, size_t len) 
+    {
+        return memcmp(out, ref, len);
+    }
+
+    char* getOutData() 
+    {
+        return out;
+    }
+
+    size_t getOutSize() 
+    {
+        return outCapacity;
+    }
+
+    size_t getCompressedSize() 
+    {
+        return g_cSize;
+    }
+
+private:
+    char* out;
+    size_t outCapacity;
+    size_t g_cSize;
+};
+
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_ZSTD_ZSTD_decompressStream_pass_common_1) //decompressStream
+{
+    TestLoad_2 d(1024);
+    compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    size_t decLen = decompress(d.getCompressedBuff(), getCompressedSize(), getOutData(), getOutSize());
+    EXPECT_EQ(ZSTD_isError(decLen), ZSTD_EXPECT_NO_ERR);
+    ASSERT_EQ(d.getOrigSize(), decLen);
+    EXPECT_EQ(0, validate(d.getOrigData(), decLen));
+}
+
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_ZSTD_ZSTD_decompressStream_pass_common_2) //decompressStream src NULL
+{
+    TestLoad_2 d(1024);
+    compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    size_t decLen = decompress(NULL, getCompressedSize(), getOutData(), getOutSize());
+    EXPECT_EQ(ZSTD_isError(decLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(decLen, 0); //no error, expects future calls to push src data
+}
+
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_ZSTD_ZSTD_decompressStream_pass_common_4) //decompressStream dst NULL
+{
+    TestLoad_2 d(1024);
+    compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    size_t decLen = decompress(d.getCompressedBuff(), getCompressedSize(), NULL, getOutSize());  //no error, expects future calls to flush dst data
+    EXPECT_EQ(ZSTD_isError(decLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(decLen, 0); //no error, expects future calls to flush dst data
+}
+
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_ZSTD_ZSTD_decompressStream_pass_common_5) //decompressStream dst size 0
+{
+    TestLoad_2 d(1024);
+    compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    int decLen = decompress(d.getCompressedBuff(), getCompressedSize(), getOutData(), 0); //no error, expects future calls to flush dst data
+    EXPECT_EQ(ZSTD_isError(decLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(decLen, 0); //no error, expects future calls to flush dst data
+}
+
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_ZSTD_ZSTD_decompressStream_pass_common_6) //decompressStream src size 0
+{
+    TestLoad_2 d(1024);
+    compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    size_t decLen = decompress(d.getCompressedBuff(), 0, getOutData(), getOutSize());
+    EXPECT_EQ(ZSTD_isError(decLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(decLen, 0); //no error, expects future calls to push src data
+}
+
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_ZSTD_ZSTD_decompressStream_pass_common_7) //decompressStream src null and src size 0
+{
+    TestLoad_2 d(1024);
+    compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    size_t decLen = decompress(NULL, 0, getOutData(), getOutSize());
+    EXPECT_EQ(ZSTD_isError(decLen), ZSTD_EXPECT_NO_ERR);
+    EXPECT_EQ(decLen, 0); //no error, expects future calls to push src data
+}
+
+/*********************************************
+ * End of ZSTD_ZSTD_decompressStream
+ *********************************************/

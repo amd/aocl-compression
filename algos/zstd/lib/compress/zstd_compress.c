@@ -5632,8 +5632,9 @@ size_t ZSTD_compressCCtx(ZSTD_CCtx* cctx,
     AOCL_SETUP_NATIVE();
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_compressCCtx (srcSize=%u)", (unsigned)srcSize);
     DEBUGLOG(4, "ZSTD_compressCCtx (srcSize=%u)", (unsigned)srcSize);
-    if (src == NULL && srcSize > 0) return ERROR(GENERIC); // src == NULL is a valid input when srcSize == 0. Empty frame is returned in this case.
-    if (dst == NULL) return ERROR(dstBuffer_null);
+    if (cctx == NULL) return ERROR(GENERIC);
+    if (src == NULL && srcSize > 0) return ERROR(srcSize_wrong);
+    if (dst == NULL) return ERROR(dstSize_tooSmall);
 
     assert(cctx != NULL);
     return ZSTD_compress_usingDict(cctx, dst, dstCapacity, src, srcSize, NULL, 0, compressionLevel);
@@ -6732,6 +6733,7 @@ size_t ZSTD_compress2(ZSTD_CCtx* cctx,
                       const void* src, size_t srcSize)
 {
     AOCL_SETUP_NATIVE();
+    if (cctx == NULL) return ERROR(GENERIC); 
     ZSTD_bufferMode_e const originalInBufferMode = cctx->requestedParams.inBufferMode;
     ZSTD_bufferMode_e const originalOutBufferMode = cctx->requestedParams.outBufferMode;
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_compress2 (srcSize=%u)", (unsigned)srcSize);
@@ -7682,4 +7684,27 @@ ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder
 #endif
     return 0; //bc matched expected
 }
-#endif
+
+ZSTDLIB_API ZSTD_compressionParameters Test_Get_ZSTD_defaultCParameters(size_t srcSize, int level, int opt_on) {
+    assert(level < ZSTD_MAX_CLEVEL);
+
+    int tableId = 0;
+    if (srcSize <= 16 KB) {
+        tableId = 3;
+    }
+    else if (srcSize <= 128 KB) {
+        tableId = 2;
+    }
+    else if (srcSize <= 256 KB) {
+        tableId = 1;
+    }
+
+    if (opt_on) {
+        return AOCL_ZSTD_defaultCParameters[tableId][level];
+    }
+    else {
+        return ZSTD_defaultCParameters[tableId][level];
+    }
+}
+
+#endif /* AOCL_UNIT_TEST */
