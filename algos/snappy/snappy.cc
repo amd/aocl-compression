@@ -1901,12 +1901,13 @@ bool SAW_RawUncompressDirect(const char* compressed, size_t compressed_length, c
   return InternalUncompressDirect(&reader, &output, uncompressed_len);
 }
 
+#ifdef AOCL_SNAPPY_AVX_OPT
 bool AOCL_SAW_RawUncompressDirect(const char* compressed, size_t compressed_length, char* uncompressed, AOCL_UINT32 uncompressed_len) {
   ByteArraySource reader(compressed, compressed_length);
   AOCL_SnappyArrayWriter_AVX output(uncompressed);
   return InternalUncompressDirect(&reader, &output, uncompressed_len);
 }
-
+#endif /* AOCL_SNAPPY_AVX_OPT */
 // similar to GetUncompressedLength; difference being that in addition to setting the 
 // value encoded within the varint in `result`, it returns a non-zero value signifying
 // the number of bytes occupied by the varint in the stream. In case of errors during
@@ -2180,7 +2181,7 @@ void RawCompress(const char* input,
   }
   AOCL_SETUP_NATIVE();
 
-#ifdef AOCL_ENABLE_THREADS // Threaded
+#if defined(AOCL_ENABLE_THREADS) && defined(AOCL_SNAPPY_OPT) // Threaded
   aocl_thread_group_t thread_group_handle;
   aocl_thread_info_t cur_thread_info;
   AOCL_INT32 ret_status = -1;
@@ -2330,14 +2331,15 @@ void RawCompress(const char* input,
     // free the memory allocated for the the thread_info_list and/or for each thread's dst_trap
     aocl_destroy_parallel_compress_mt(&thread_group_handle);
   }
-#else // Non-threaded
+#else /* !(defined(AOCL_ENABLE_THREADS) && defined(AOCL_SNAPPY_OPT)) */ // Non-threaded
   ByteArraySource reader(input, input_length);
   UncheckedByteArraySink writer(compressed);
   Compress(&reader, &writer);
 
   // Compute how many bytes were added
   *compressed_length = (writer.CurrentDestination() - compressed);
-#endif // AOCL_ENABLE_THREADS
+#endif /* defined(AOCL_ENABLE_THREADS) && defined(AOCL_SNAPPY_OPT) */
+
   LOG_UNFORMATTED(INFO, logCtx, "Exit");
 }
 
@@ -2377,12 +2379,16 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
             SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
 #endif
 #else
+#ifdef AOCL_SNAPPY_OPT
+            SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
+#else
             SNAPPY_compress_fragment_fp    = internal::CompressFragment;
+#endif /* AOCL_SNAPPY_OPT */
             SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
 #ifdef AOCL_ENABLE_THREADS
             SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
 #endif
-#endif
+#endif /* AOCL_SNAPPY_AVX_OPT */
             break;
         case 0://C version
         case 1://SSE version
@@ -2406,7 +2412,11 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
             SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
 #endif
 #else
+#ifdef AOCL_SNAPPY_OPT
+            SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
+#else
             SNAPPY_compress_fragment_fp    = internal::CompressFragment;
+#endif /* AOCL_SNAPPY_OPT */
             SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
 #ifdef AOCL_ENABLE_THREADS
             SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;

@@ -59,6 +59,7 @@ extern "C" {
 /* --- Dependency --- */
 /* note : lz4hc requires lz4.h/lz4.c for compilation */
 #include "lz4.h"   /* stddef, LZ4LIB_API, LZ4_DEPRECATED */
+#include "algos/common/aoclAlgoOpt.h" /* AOCL Optimization flags */
 
 /// @cond DOXYGEN_SHOULD_SKIP_THIS 
 
@@ -70,8 +71,6 @@ extern "C" {
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
-/*----- AOCL Optimization flags -----*/
-#define AOCL_LZ4HC_OPT
 
 /*-************************************
  *  Block Compression

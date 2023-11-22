@@ -37,6 +37,7 @@
 #endif
 
 #include <stdint.h>
+#include "algos/common/aoclAlgoOpt.h" /* AOCL Optimization flags */
 
 #include <cassert>
 #include <cstdlib>
@@ -56,11 +57,6 @@
 #include <intrin.h>
 #endif  // defined(_MSC_VER)
 
-#define AOCL_SNAPPY_OPT
-
-#ifdef AOCL_SNAPPY_OPT
-#define AOCL_SNAPPY_AVX_OPT 
-#endif /* AOCL_SNAPPY_OPT */
 
 #ifndef __has_feature
 #define __has_feature(x) 0

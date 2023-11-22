@@ -548,20 +548,9 @@ typedef uLong FAR uLongf;
 #endif
 
 /* AOCL optimization flags */
-#define AOCL_ZLIB_OPT /* Main flag to control all AOCL ZLIB optimizations */
+#include "algos/common/aoclAlgoOpt.h"
 #ifdef AOCL_ZLIB_OPT
-     /* Note: For native compilation comment out below flags based on ISA support */
-     #define AOCL_ZLIB_SSE2_OPT
-     #ifdef AOCL_ZLIB_SSE2_OPT
-          #define AOCL_ZLIB_AVX_OPT
-          #ifdef AOCL_ZLIB_AVX_OPT
-               #define AOCL_ZLIB_AVX2_OPT
-               #ifdef AOCL_ZLIB_AVX2_OPT
-                    #define AOCL_ZLIB_AVX512_OPT
-               #endif /* AOCL_ZLIB_AVX2_OPT */
-          #endif /* AOCL_ZLIB_AVX_OPT */
-     #endif /* AOCL_ZLIB_SSE2_OPT */
-     //#define USE_AOCL_ADLER32_AVX2
+     #include <stdint.h>
 #endif /* AOCL_ZLIB_OPT */
 #include <stdint.h>
 #ifdef HAVE_BUILTIN_EXPECT
