@@ -42,6 +42,7 @@ extern "C" {
 
 /* --- Dependency --- */
 #include <stddef.h>   /* size_t */
+#include "algos/common/aoclAlgoOpt.h"
 
 
 /*!
@@ -138,7 +139,6 @@ LZ4LIB_API const char* LZ4_versionString (void);
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
 
 /**----- AOCL Optimization flags -----*/
-#define AOCL_LZ4_OPT
 
 #ifdef AOCL_LZ4_OPT
 #define AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
@@ -147,7 +147,6 @@ LZ4LIB_API const char* LZ4_versionString (void);
 #ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
 #define AOCL_LZ4_MATCH_SKIPPING_THRESHOLD 3
 #endif /* AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 */
-#define AOCL_LZ4_AVX_OPT
 #endif /* AOCL_LZ4_OPT */
 
 /*-************************************

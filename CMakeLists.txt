@@ -233,7 +233,8 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
-set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h)
+set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h
+                      ${ALGOS_PATH}/common/aoclAlgoOpt.h)
 set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.cpp
 						utils/utils.h)
@@ -250,7 +251,8 @@ set(DEST_LIB_PATH aocl_compression/lib)
 set(DEST_INC_PATH aocl_compression/include)
 set(DEST_BIN_PATH aocl_compression/bin)
 
-set(INC_FILES api/aocl_compression.h)
+set(INC_FILES api/aocl_compression.h
+              ${ALGOS_PATH}/common/aoclAlgoOpt.h)
 if (NOT AOCL_EXCLUDE_BZIP2)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/bzip2/bzlib.h)
 endif ()

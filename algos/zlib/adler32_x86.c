@@ -68,6 +68,7 @@ static int setup_ok_zlib_adler = 0; // flag to indicate status of dynamic dispat
 static uint32_t (*adler32_x86_fp)(uint32_t adler, const Bytef* buf, z_size_t len) =
 (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
 
+#ifdef AOCL_ZLIB_AVX_OPT
 // This function separation prevents compiler from generating VZEROUPPER instruction
 // because of transition from VEX to Non-VEX code resulting in performance drop
 static inline uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_t len)
@@ -95,7 +96,6 @@ static inline uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_
     return sum_A | (sum_B << 16);
 }
 
-#ifdef AOCL_ZLIB_AVX_OPT
 __attribute__((__target__("avx"))) // uses SSSE3 intrinsics
 static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_t len)
 {

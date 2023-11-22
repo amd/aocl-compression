@@ -46,6 +46,7 @@ extern "C" {
 #include <limits.h>   /* INT_MAX */
 #include <stddef.h>   /* size_t */
 
+#include "algos/common/aoclAlgoOpt.h" /* AOCL Optimization flags */
 
 /* =====   ZSTDLIB_API : control library symbols visibility   ===== */
 #ifndef ZSTDLIB_VISIBLE
@@ -403,7 +404,6 @@ ZSTDLIB_API size_t ZSTD_findFrameCompressedSize(const void* src, size_t srcSize)
 /**
  * @}
  */
-#define AOCL_ZSTD_OPT //Main AOCL optimization switch for ZSTD
 
 /**
  * @brief AOCL-Compression defined setup functions that configures ZSTD

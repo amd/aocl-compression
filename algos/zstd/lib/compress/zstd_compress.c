@@ -7410,8 +7410,13 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
             case 2://AVX version
             case 3://AVX2 version
             default://AVX512 and other versions
+#ifdef AOCL_ZSTD_OPT
                 aoclOptFlag = 1;
                 AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
+#else
+                aoclOptFlag = 0;
+                AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
+#endif /* AOCL_ZSTD_OPT */
                 break;
         }
     }

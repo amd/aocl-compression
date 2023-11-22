@@ -1845,7 +1845,7 @@ _last_literals:
 
 #ifdef AOCL_ENABLE_THREADS
 #ifdef AOCL_LZ4_AVX_OPT
-/* Even though this function does not use AVX2 instructions, output format it generates (with RAP frame) is
+/* Even though this function does not use AVX instructions, output format it generates (with RAP frame) is
  * not directly compatible with single threaded decompressor. Hence to pair it with 
  * AOCL_LZ4_decompress_safe_mt it is enabled only for AOCL_LZ4_AVX_OPT case.
 */
@@ -2647,7 +2647,7 @@ int LZ4_compress_fast_ST(const char* source, char* dest, int inputSize, int maxO
 }
 
 #ifdef AOCL_LZ4_AVX_OPT
-/* This function does not use any AVX2 code, but it produces output with RAP frame added.
+/* This function does not use any AVX code, but it produces output with RAP frame added.
 * This data is not compatible with the single threaded decompress APIs. Hence, it is placed under
 * AOCL_LZ4_AVX_OPT and made to pair with AOCL_LZ4_decompress_safe_mt().
 */
@@ -4945,14 +4945,12 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
 #ifdef AOCL_ENABLE_THREADS
-            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
 #endif
 #else
             LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
 #ifdef AOCL_ENABLE_THREADS
-            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
 #endif
 #endif
@@ -4963,7 +4961,6 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
 #ifdef AOCL_ENABLE_THREADS
-            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
 #endif
             break;
@@ -4977,16 +4974,12 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
             LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_mt;
 #endif
-#elif defined(AOCL_LZ4_OPT)
+#else
             LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
 #ifdef AOCL_ENABLE_THREADS
-            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
 #endif
-#else
-            LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
-            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
 #endif
             break;
 #else
@@ -4994,7 +4987,6 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
             LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState;
             LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
 #ifdef AOCL_ENABLE_THREADS
-            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;
             LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
 #endif
             break;
@@ -5037,7 +5029,7 @@ static void aocl_setup_native(void) {
 
 #ifdef AOCL_UNIT_TEST
 #ifdef AOCL_LZ4_AVX_OPT
-/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX2 function for unit testing. */
+/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX function for unit testing. */
 void Test_AOCL_LZ4_wildCopy64_AVX(void*dstPtr, const void* srcPtr, void*dstEnd)
 {
     AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstEnd);
