@@ -139,7 +139,11 @@ public:
     Stream(int CREATE_USING_MALLOC)   /* creating stream by malloc if parameter is passed as 1, else creating by API. */
     {
         create_using_malloc = CREATE_USING_MALLOC;
-        if (create_using_malloc == 1) stream = (LZ4_streamHC_t*)malloc(sizeof(LZ4_streamHC_t));
+        if (create_using_malloc == 1)
+        {
+            stream = (LZ4_streamHC_t*)malloc(sizeof(LZ4_streamHC_t));
+            memset(stream, 0, sizeof(LZ4_streamHC_t));
+        }
         else stream = LZ4_createStreamHC();
     }
 
@@ -196,7 +200,11 @@ public:
     AOCL_Stream(int CREATE_USING_MALLOC)    /* creating stream by malloc if parameter is passed as 1, else creating by API. */
     {
         create_using_malloc = CREATE_USING_MALLOC;
-        if (create_using_malloc == 1) AOCL_stream = (AOCL_LZ4_streamHC_t*)malloc(sizeof(AOCL_LZ4_streamHC_t));
+        if (create_using_malloc == 1)
+        {
+            AOCL_stream = (AOCL_LZ4_streamHC_t*)malloc(sizeof(AOCL_LZ4_streamHC_t));
+            memset(AOCL_stream, 0, sizeof(AOCL_LZ4_streamHC_t));
+        }
         else AOCL_stream = AOCL_LZ4_createStreamHC();
     }
 
