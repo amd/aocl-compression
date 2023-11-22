@@ -1182,7 +1182,7 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
     setSrcSize(150);
     setDstSize(200);
     const int dictSize = 100;
-    char dict[200];
+    char dict[200] = {0};
     
     memcpy(dict, src, 100);
     for (int i = 150; i < 200; i++)
@@ -1202,7 +1202,7 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
     setSrcSize(150);
     setDstSize(200);
     const int dictSize = 65 * 1024;
-    char dict[150 + dictSize];
+    char dict[150 + dictSize] ={0};
     
     memcpy(dict, src, srcSize);
     for (int i = 150; i < dictSize; i++)

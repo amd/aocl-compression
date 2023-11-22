@@ -834,8 +834,10 @@ else
      * on 16 bit machines and because stored blocks are restricted to
      * 64K-1 bytes.
      */
+#ifdef AOCL_UNIT_TEST
     // initializing the dynamic array prev to 0
     memset(s->prev, 0x00, s->w_size * sizeof(Pos));
+#endif
     s->level = level;
     s->strategy = strategy;
     s->method = (Byte)method;
@@ -1151,8 +1153,10 @@ local void lm_init(deflate_state *s) {
     s->max_chain_length = config_table[s->level].max_chain;
 #endif /* !AOCL_ZLIB_OPT */
 
-    s->strstart = 0; /* ToDo: Fix GTest and remove this initialization */
+    s->strstart = 0;
+#ifdef AOCL_UNIT_TEST
     s->match_start = 0;
+#endif
     s->block_start = 0L;
     s->lookahead = 0;
     s->insert = 0;

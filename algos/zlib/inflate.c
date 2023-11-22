@@ -232,6 +232,9 @@ int ZEXPORT inflateInit2_(z_streamp strm, int windowBits,
             ZALLOC(strm, 1, sizeof(struct inflate_state));
     if (state == Z_NULL) return Z_MEM_ERROR;
     Tracev((stderr, "inflate: allocated\n"));
+#ifdef AOCL_UNIT_TEST
+    memset(state, 0, sizeof(struct inflate_state));
+#endif
     strm->state = (struct internal_state FAR *)state;
     state->strm = strm;
     state->window = Z_NULL;
