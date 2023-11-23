@@ -5,7 +5,7 @@ The following test program shows the sample usage and calling sequence of aocl -
 
 ```C
 #include <stdio.h> 
-#include <cstdlib>
+#include <stdlib.h>
 #include "aocl_compression.h"
 
 int main (int argc, char **argv)
@@ -31,6 +31,7 @@ int main (int argc, char **argv)
     aocl_compression_type method = LZ4;
     aocl_compression_handle->level = 0;
     aocl_compression_handle->optVar = 0;
+    aocl_compression_handle->optOff = 0;
     aocl_compression_handle->inSize = file_size;
     aocl_compression_handle->outSize = (file_size + (file_size / 6) + (16 * 1024));
     inPtr = (char *)calloc(1, aocl_compression_handle->inSize);
@@ -84,4 +85,4 @@ int main (int argc, char **argv)
 
 To build this example test program on a Linux system using GCC or AOCC, you must specify the aocl_compression.h header file and link the libaocl_compression.so file as follows:
 
-`gcc test.c -I<aocl_compression.h file path> -L <libaocl_compression.so file path> -laocl_compression`
+`gcc test.c -I <aocl_compression.h file path> -L <libaocl_compression.so file path> -laocl_compression`
