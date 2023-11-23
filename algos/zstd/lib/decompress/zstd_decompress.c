@@ -626,6 +626,9 @@ unsigned long long ZSTD_getFrameContentSize(const void *src, size_t srcSize)
     }
 #endif
     {   ZSTD_frameHeader zfh;
+#ifdef AOCL_UNIT_TEST
+        ZSTD_memset(&zfh, 0, sizeof(zfh));
+#endif
         if (ZSTD_getFrameHeader(&zfh, src, srcSize) != 0)
             return ZSTD_CONTENTSIZE_ERROR;
         if (zfh.frameType == ZSTD_skippableFrame) {

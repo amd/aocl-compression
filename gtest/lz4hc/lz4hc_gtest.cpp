@@ -1294,7 +1294,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     Stream statePtr(0);
 
     const int dictSize = 100;
-    char dict[200];
+    char dict[200] = {0};
     
     memcpy(dict, src, 100);
     for (int i = 150; i < 200; i++)
@@ -1315,7 +1315,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     setDst(200);
     Stream statePtr(0);
     const int dictSize = 65 * 1024;
-    char dict[150 + dictSize];
+    char dict[150 + dictSize] = {0};
     
     memcpy(dict, src, srcSize);
     for (int i = 150; i < dictSize; i++)
