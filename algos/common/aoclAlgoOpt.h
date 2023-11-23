@@ -56,7 +56,10 @@
 /* SNAPPY */
 #define AOCL_SNAPPY_OPT
 #ifdef AOCL_SNAPPY_OPT
-    #define AOCL_SNAPPY_AVX_OPT 
+    #define AOCL_SNAPPY_AVX_OPT
+    #ifdef AOCL_SNAPPY_AVX_OPT
+        #define AOCL_SNAPPY_AVX2_OPT
+    #endif /* AOCL_SNAPPY_AVX_OPT */
 #endif /* AOCL_SNAPPY_OPT */
 
 /* ZSTD */
