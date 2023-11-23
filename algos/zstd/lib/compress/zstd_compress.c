@@ -5391,6 +5391,7 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
                          const void* dict,size_t dictSize,
                                ZSTD_parameters params)
 {
+    AOCL_SETUP_NATIVE();
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if (cctx == NULL || src == NULL)
     {
@@ -5991,6 +5992,7 @@ size_t ZSTD_compress_usingCDict_advanced(ZSTD_CCtx* cctx,
                                 const void* src, size_t srcSize,
                                 const ZSTD_CDict* cdict, ZSTD_frameParameters fParams)
 {
+    AOCL_SETUP_NATIVE();
     return ZSTD_compress_usingCDict_internal(cctx, dst, dstCapacity, src, srcSize, cdict, fParams);
 }
 
@@ -7127,6 +7129,7 @@ size_t ZSTD_compressSequences(ZSTD_CCtx* cctx,
                               const ZSTD_Sequence* inSeqs, size_t inSeqsSize,
                               const void* src, size_t srcSize)
 {
+    AOCL_SETUP_NATIVE();
     BYTE* op = (BYTE*)dst;
     size_t cSize = 0;
     size_t compressedBlocksSize = 0;
