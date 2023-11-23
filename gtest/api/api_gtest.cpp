@@ -112,6 +112,14 @@ static const algo_level_t algo_levels[AOCL_COMPRESSOR_ALGOS_NUM] =
 const aocl_func_info aocl_simd_funcs[] {
     /* {"func_name", level } */
     {"FastMemcopy64Bytes", 2},
+    {"DecompressAllTags_bmi", 3},
+    {"ExtractLowBytes_bmi", 3},
+    {"DecompressAllTags_avx", 2},
+    {"InternalUncompress_avx", 2},
+    {"InternalUncompressDirect_avx", 2},
+    {"AOCL_SnappyArrayWriter_AVX", 2},
+    {"AOCL_SAW_RawUncompress_AVX", 2},
+    {"DecompressAllTags_avx", 2},
     {"AOCL_memcpy64", 2},
     {"adler32_x86_avx2", 3},
     {"compare256_avx2", 3},

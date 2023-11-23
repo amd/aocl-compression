@@ -140,8 +140,7 @@ AOCL_INT32 aocl_llc_setup(aocl_compression_desc *handle,
     LOG_FORMATTED(INFO, logCtx,
        "All optimizations are turned %s", (handle->optOff ? "off" : "on"));
 
-    if (!handle->optOff)
-        set_cpu_opt_flags((AOCL_VOID *)handle);
+    set_cpu_opt_flags((AOCL_VOID *)handle);
 
     LOG_FORMATTED(INFO, logCtx,
        "Calling setup method for: %s", aocl_codec[codec_type].codec_name);
