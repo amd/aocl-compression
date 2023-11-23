@@ -131,7 +131,7 @@ if (CODE_COVERAGE)
 endif()
 
 if (VALGRIND)
-    set(MEMORYCHECK_COMMAND_OPTIONS "--trace-children=yes --child-silent-after-fork=yes --leak-check=full --show-leak-kinds=all --track-origins=yes")
+    set(MEMORYCHECK_COMMAND_OPTIONS "-q --trace-children=yes --child-silent-after-fork=yes --leak-check=full --show-leak-kinds=all --track-origins=yes --default-suppressions=no --suppressions=${PROJECT_SOURCE_DIR}/test/.valgrind-suppressions")
 	# To run all registered tests with valgrind use "ctest -T memcheck"
 	include(CTest) # Default to using valgrind
 endif()
