@@ -47,12 +47,27 @@
 #ifndef _WINDOWS
 #include <unistd.h>
 #include <dirent.h>
+#include <errno.h>
 #endif
 
 #ifdef _WINDOWS
 #define CODEC_STRCAT(name) strcat(name, "\\")
 #else
 #define CODEC_STRCAT(name) strcat(name, "/")
+#endif
+
+#ifdef _WINDOWS
+#define LOG_SYSTEM_ERROR()\
+{\
+    LOG_FORMATTED(ERR, log_ctx,"System Error Code: %lu", GetLastError());\
+    printf("System Error Code: %lu\n", GetLastError());\
+} 
+#else
+#define LOG_SYSTEM_ERROR()\
+{\
+    LOG_FORMATTED(ERR, log_ctx,"Error Message: %s.", strerror(errno));\
+    printf("Error Message: %s.\n", strerror(errno));\
+}
 #endif
 
 //Input test file name
@@ -64,7 +79,7 @@ AOCL_CHAR valFile[MAX_FILENAME_LEN];
 AOCL_INTP valEnabled = 0;
 AOCL_INTP isFolder = 0;
 
-void print_user_options (void)
+AOCL_VOID print_user_options (AOCL_VOID)
 {
     printf("\nAOCL Compression Library version: %s\n", aocl_llc_version());
     printf("Internal Library version: %s\n", INTERNAL_LIBRARY_VERSION);
@@ -89,7 +104,7 @@ void print_user_options (void)
     printf("-n          Use Native APIs for compression/decompression.\n\n");
 }
 
-void print_supported_compressors (void)
+AOCL_VOID print_supported_compressors (AOCL_VOID)
 {
    printf("\nSupported compression/decompression methods along with their supported levels are:\n\n");
    printf("===========================================\n");
@@ -159,7 +174,8 @@ AOCL_INTP get_codec_method_level(AOCL_CHAR *str,
     return 0;
 }
 
-void read_file_name(AOCL_CHAR* dst, const AOCL_CHAR* src) {
+
+AOCL_VOID read_file_name(AOCL_CHAR* dst, const AOCL_CHAR* src) {
     AOCL_UINTP src_sz = strlen(src);
     if (src_sz > (MAX_FILENAME_LEN - 1)) { 
         memcpy(dst, src, MAX_FILENAME_LEN - 1); // truncate
@@ -170,7 +186,7 @@ void read_file_name(AOCL_CHAR* dst, const AOCL_CHAR* src) {
     }
 }
 
-void append_file_name_ext(AOCL_CHAR* dst, const AOCL_CHAR* ext) {
+AOCL_VOID append_file_name_ext(AOCL_CHAR* dst, const AOCL_CHAR* ext) {
     AOCL_UINTP cur_sz = strlen(dst);
     AOCL_UINTP ext_sz = strlen(ext);
     if ((cur_sz + ext_sz) > (MAX_FILENAME_LEN - 1)) {
@@ -200,31 +216,31 @@ AOCL_INTP is_dir(const AOCL_CHAR* filename)
 
 #ifdef _WINDOWS
     unsigned long file_attributes = GetFileAttributes(filename);
-	return (AOCL_INTP)(file_attributes & FILE_ATTRIBUTE_DIRECTORY);
+	return (AOCL_INTP)((file_attributes != INVALID_FILE_ATTRIBUTES) && (file_attributes & FILE_ATTRIBUTE_DIRECTORY));
 #else
     struct stat path;
-    stat(filename, &path);
-    return (S_ISREG(path.st_mode)==0);
+    AOCL_INTP ret = stat(filename, &path);
+    // The macro S_ISDIR returns a non-zero integer if given file is a directory, 
+    // else returns 0.
+    return (AOCL_INTP)((ret == 0) && (S_ISDIR(path.st_mode)!=0));
 #endif
 
 }
 
-AOCL_INTP dir_exists(const AOCL_CHAR* dirName)
+AOCL_INTP file_object_exists(const AOCL_CHAR* dirName)
 {
 
 #ifdef _WINDOWS
     unsigned long file_attributes = GetFileAttributes(dirName);
-	return (AOCL_INTP)((file_attributes != INVALID_FILE_ATTRIBUTES) && (file_attributes & FILE_ATTRIBUTE_DIRECTORY));
+	return (AOCL_INTP)(file_attributes != INVALID_FILE_ATTRIBUTES);
 
 #else
     struct stat path;
-    stat(dirName, &path);
-
-    // if path does not exists or is not directory
-    if (S_ISDIR(path.st_mode) == 0) {
-        return 0;
+    if (stat(dirName, &path) == 0){
+        // file object named `dirName` exists
+        return 1;
     }
-    return 1;
+    return 0;
 #endif
 
 }
@@ -687,11 +703,11 @@ AOCL_INTP create_dump_file(aocl_codec_bench_info* codec_bench_handle, FILE** dum
 
 AOCL_INTP create_dump_folder(aocl_codec_bench_info* codec_bench_handle)
 {
-    if(dir_exists(codec_bench_handle->dumpFile))
+    if(file_object_exists(codec_bench_handle->dumpFile))
     {
         LOG_FORMATTED(ERR, log_ctx,
-                "Error, folder named [%s] exists.", codec_bench_handle->dumpFile);
-        printf("Error, folder named [%s] exists.\n", codec_bench_handle->dumpFile);
+                "Error, file object named [%s] already exists. Please give a different name for dump folder.", codec_bench_handle->dumpFile);
+        printf("Error, file object named [%s] already exists. Please give a different name for dump folder.\n", codec_bench_handle->dumpFile);
         return ERR_CODEC_BENCH_FILE_IO;
     }
     // create dump folder with name codec_bench_handle->dumpFile
@@ -702,9 +718,10 @@ AOCL_INTP create_dump_folder(aocl_codec_bench_info* codec_bench_handle)
     if (mkdir(codec_bench_handle->dumpFile, 0777) == -1)
     {
 #endif
-   LOG_FORMATTED(ERR, log_ctx,
+        LOG_FORMATTED(ERR, log_ctx,
                 "Error in creating dump folder [%s].", codec_bench_handle->dumpFile);
         printf("Error in creating dump folder [%s].\n", codec_bench_handle->dumpFile);
+        LOG_SYSTEM_ERROR();
         return ERR_CODEC_BENCH_FILE_IO;
     } 
     return 0;
@@ -1170,7 +1187,7 @@ AOCL_INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
     return retStatus;
 }
 
-void destroy(aocl_codec_bench_info *codec_bench_handle)
+AOCL_VOID destroy(aocl_codec_bench_info *codec_bench_handle)
 {
     LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
@@ -1237,7 +1254,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
 
             codec_bench_handle.cfile_count = file_count;
 
-            // inFile holds the name of first file in the folder
+            // open the first file in the folder
             AOCL_CHAR filename[MAX_FILENAME_LEN];
             AOCL_CHAR filePath[MAX_FILENAME_LEN];
 
