@@ -164,8 +164,8 @@ typedef struct
 
 static const aocl_codec_t aocl_codec[AOCL_COMPRESSOR_ALGOS_NUM] =
 {
-    { "lz4",    "1.9.3",      aocl_lz4_compress,    aocl_lz4_decompress,    aocl_lz4_setup,    aocl_lz4_destroy },
-    { "lz4hc",  "1.9.3",      aocl_lz4hc_compress,  aocl_lz4_decompress,    aocl_lz4hc_setup,  aocl_lz4hc_destroy },
+    { "lz4",    "1.9.4",      aocl_lz4_compress,    aocl_lz4_decompress,    aocl_lz4_setup,    aocl_lz4_destroy },
+    { "lz4hc",  "1.9.4",      aocl_lz4hc_compress,  aocl_lz4_decompress,    aocl_lz4hc_setup,  aocl_lz4hc_destroy },
     { "lzma",   "22.01",      aocl_lzma_compress,   aocl_lzma_decompress,   aocl_lzma_setup,   aocl_lzma_destroy },
     { "bzip2",  "1.0.8",      aocl_bzip2_compress,  aocl_bzip2_decompress,  aocl_bzip2_setup,  aocl_bzip2_destroy },
     { "snappy", "2020-07-11", aocl_snappy_compress, aocl_snappy_decompress, aocl_snappy_setup, aocl_snappy_destroy },

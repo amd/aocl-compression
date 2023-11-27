@@ -1,7 +1,7 @@
 /*
    LZ4 HC - High Compression Mode of LZ4
    Header File
-   Copyright (C) 2011-2017, Yann Collet.
+   Copyright (C) 2011-2020, Yann Collet.
    Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
@@ -592,7 +592,9 @@ LZ4LIB_API int Test_AOCL_LZ4HC_countBack(const LZ4_byte* const ip, const LZ4_byt
 #define LZ4HC_HASHTABLESIZE (1 << LZ4HC_HASH_LOG)
 #define LZ4HC_HASH_MASK (LZ4HC_HASHTABLESIZE - 1)
 
-
+/* Never ever use these definitions directly !
+ * Declare or allocate an LZ4_streamHC_t instead.
+**/
 typedef struct LZ4HC_CCtx_internal LZ4HC_CCtx_internal;
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 struct LZ4HC_CCtx_internal
@@ -600,8 +602,8 @@ struct LZ4HC_CCtx_internal
     LZ4_u32   hashTable[LZ4HC_HASHTABLESIZE];
     LZ4_u16   chainTable[LZ4HC_MAXD];
     const LZ4_byte* end;       /**< Next block here to continue on current prefix */
-    const LZ4_byte* base;      /**< All index relative to this position */
-    const LZ4_byte* dictBase;  /**< Alternate base for extDict */
+    const LZ4_byte* prefixStart;    /**< All index relative to this position */
+    const LZ4_byte* dictStart;  /**< Alternate base for extDict */
     LZ4_u32   dictLimit;       /**< Below that point, need extDict */
     LZ4_u32   lowLimit;        /**< Below that point, no more dict */
     LZ4_u32   nextToUpdate;    /**< Index from which to continue dictionary update */
@@ -637,8 +639,8 @@ struct AOCL_LZ4HC_CCtx_internal
     /* DONOT REQUIRE HASHTABLE */  
     CHAIN_TYPE   chainTable[AOCL_LZ4HC_MAXD];
     const LZ4_byte* end;       /**< Next block here to continue on current prefix */
-    const LZ4_byte* base;      /**< All index relative to this position */
-    const LZ4_byte* dictBase;  /**< Alternate base for extDict */
+    const LZ4_byte* prefixStart;    /**< All index relative to this position */
+    const LZ4_byte* dictStart;  /**< Alternate base for extDict */
     LZ4_u32   dictLimit;       /**< Below that point, need extDict */
     LZ4_u32   lowLimit;        /**< Below that point, no more dict */
     LZ4_u32   nextToUpdate;    /**< Index from which to continue dictionary update */
@@ -650,30 +652,24 @@ struct AOCL_LZ4HC_CCtx_internal
 };
 #endif /* AOCL_LZ4HC_OPT */
 
-
 /* Do not use these definitions directly !
  * Declare or allocate an LZ4_streamHC_t instead.
  */
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
 
-#define LZ4_STREAMHCSIZE       262200  /* static size, for inter-version compatibility */
+#define LZ4_STREAMHC_MINSIZE       262200  /* static size, for inter-version compatibility */
 #ifdef AOCL_LZ4HC_OPT
-#define AOCL_LZ4_STREAMHCSIZE       (262200 - (LZ4HC_MAXD*2) + (CF_HC_CHAIN_TABLE_SZ*sizeof(CHAIN_TYPE)) + (CF_HC_HASH_TABLE_SZ*sizeof(LZ4_u32)) ) /* static size, for inter-version compatibility */
-#endif
-
-#define LZ4_STREAMHCSIZE_VOIDP (LZ4_STREAMHCSIZE / sizeof(void*))
-#ifdef AOCL_LZ4HC_OPT
-#define AOCL_LZ4_STREAMHCSIZE_VOIDP (AOCL_LZ4_STREAMHCSIZE / sizeof(void*))
+#define AOCL_LZ4_STREAMHC_MINSIZE       (262200 - (LZ4HC_MAXD*2) + (CF_HC_CHAIN_TABLE_SZ*sizeof(CHAIN_TYPE)) + (CF_HC_HASH_TABLE_SZ*sizeof(LZ4_u32)) ) /* static size, for inter-version compatibility */
 #endif
 
 union LZ4_streamHC_u {
-    void* table[LZ4_STREAMHCSIZE_VOIDP];
+    void* minStateSize[LZ4_STREAMHC_MINSIZE];
     LZ4HC_CCtx_internal internal_donotuse;
 }; /* previously typedef'd to LZ4_streamHC_t */
 
 #ifdef AOCL_LZ4HC_OPT
 union AOCL_LZ4_streamHC_u {
-    void* table[AOCL_LZ4_STREAMHCSIZE_VOIDP];
+    void* minStateSize[AOCL_LZ4_STREAMHC_MINSIZE];
     AOCL_LZ4HC_CCtx_internal internal_donotuse;
 }; /* previously typedef'd to AOCL_LZ4_streamHC_t */
 #endif
@@ -682,7 +678,7 @@ union AOCL_LZ4_streamHC_u {
 
 /* LZ4_streamHC_t :
  * This structure allows static allocation of LZ4 HC streaming state.
- * This can be used to allocate statically, on state, or as part of a larger structure.
+ * This can be used to allocate statically on stack, or as part of a larger structure.
  *
  * Such state **must** be initialized using LZ4_initStreamHC() before first use.
  *
@@ -774,16 +770,14 @@ typedef enum { favorCompressionRatio = 0, favorDecompressionSpeed } HCfavor_e;
 #ifdef AOCL_LZ4HC_OPT
 /* Test wrapper function of AOCL_LZ4HC_InsertAndGetWiderMatch for unit testing */
 LZ4LIB_API int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
-    AOCL_LZ4HC_CCtx_internal* hc4,
+    AOCL_LZ4HC_CCtx_internal* const hc4,
     const LZ4_byte* const ip,
-    const LZ4_byte* const iLowLimit,
-    const LZ4_byte* const iHighLimit,
+    const LZ4_byte* const iLowLimit, const LZ4_byte* const iHighLimit,
     int longest,
     const LZ4_byte** matchpos,
     const LZ4_byte** startpos,
     const int maxNbAttempts,
-    const int patternAnalysis,
-    const int chainSwap,
+    const int patternAnalysis, const int chainSwap,
     const dictCtx_directive dict,
     const HCfavor_e favorDecSpeed,
     int Hash_Chain_Max,
@@ -854,14 +848,16 @@ LZ4_DEPRECATED("use LZ4_compress_HC_continue() instead") LZ4LIB_API int LZ4_comp
  * @name Obsolete Streaming Functions
  * @{
 */
+#if !defined(LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION)
 /*! @brief Use LZ4_createStreamHC() instead. */
 LZ4_DEPRECATED("use LZ4_createStreamHC() instead") LZ4LIB_API void* LZ4_createHC (const char* inputBuffer);
 
-/*! @brief Use LZ4_saveDictHC() instead. */
-LZ4_DEPRECATED("use LZ4_saveDictHC() instead") LZ4LIB_API     char* LZ4_slideInputBufferHC (void* LZ4HC_Data);
-
 /*! @brief Use LZ4_freeStreamHC() instead. */
 LZ4_DEPRECATED("use LZ4_freeStreamHC() instead") LZ4LIB_API   int   LZ4_freeHC (void* LZ4HC_Data);
+#endif
+
+/*! @brief Use LZ4_saveDictHC() instead. */
+LZ4_DEPRECATED("use LZ4_saveDictHC() instead") LZ4LIB_API     char* LZ4_slideInputBufferHC (void* LZ4HC_Data);
 
 /*! @brief Use LZ4_compress_HC_continue() instead. */
 LZ4_DEPRECATED("use LZ4_compress_HC_continue() instead") LZ4LIB_API int LZ4_compressHC2_continue               (void* LZ4HC_Data, const char* source, char* dest, int inputSize, int compressionLevel);
@@ -909,7 +905,7 @@ LZ4LIB_API void LZ4_resetStreamHC (LZ4_streamHC_t* streamHCPtr, int compressionL
  * They should not be linked from DLL,
  * as there is no guarantee of API stability yet.
  * Prototypes will be promoted to "stable" status
- * after successfull usage in real-life scenarios.
+ * after successful usage in real-life scenarios.
  ***************************************************/
 #ifdef LZ4_HC_STATIC_LINKING_ONLY   /* protection macro */
 #ifndef LZ4_HC_SLO_098092834

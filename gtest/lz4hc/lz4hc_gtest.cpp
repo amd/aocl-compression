@@ -163,7 +163,7 @@ public:
 
     const LZ4_byte* get_stream_Internal_base()
     {
-        return stream->internal_donotuse.base;
+        return stream->internal_donotuse.prefixStart;
     }
 
     const LZ4HC_CCtx_internal* get_stream_Internal_dictCtx()
@@ -230,7 +230,7 @@ public:
 
     const LZ4_byte* get_stream_Internal_base()
     {
-        return AOCL_stream->internal_donotuse.base;
+        return AOCL_stream->internal_donotuse.prefixStart;
     }
 
     const AOCL_LZ4HC_CCtx_internal* get_stream_Internal_dictCtx()
@@ -333,7 +333,7 @@ TEST_F(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_6) /
 
 TEST(LZ4HC_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_LZ4_sizeofStateHC_common)
 {
-    EXPECT_EQ(LZ4_sizeofStateHC(), 262200);  
+    EXPECT_EQ(LZ4_sizeofStateHC(), (int)sizeof(LZ4_streamHC_t));
 }
 
 /*********************************************
@@ -347,7 +347,7 @@ TEST(LZ4HC_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_LZ4_sizeofStateHC_common)
 
 TEST(LZ4HC_AOCL_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_sizeofStateHC_common)
 {
-    EXPECT_EQ(AOCL_LZ4_sizeofStateHC(), 16908344);
+    EXPECT_EQ(AOCL_LZ4_sizeofStateHC(), (int)sizeof(AOCL_LZ4_streamHC_t));
 }
 
 /*********************************************
@@ -983,9 +983,14 @@ protected:
         ctxPtr = &stream->internal_donotuse;
     }
 
-    const LZ4_byte* get_ctx_dictBase(LZ4HC_CCtx_internal* ctxPtr)
+    const LZ4_byte* get_ctx_dictStart(LZ4HC_CCtx_internal* ctxPtr)
     {
-        return ctxPtr->dictBase;
+        return ctxPtr->dictStart;
+    }
+
+    const LZ4_byte* get_ctx_End(LZ4HC_CCtx_internal* ctxPtr)
+    {
+        return ctxPtr->end;
     }
 
     // Destructor function of `LLZ4_loadDictHC`.
@@ -1019,7 +1024,8 @@ TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_3) // 
     }
     
     EXPECT_EQ(LZ4_loadDictHC(stream, dict, dictSize), 6553);
-    EXPECT_NE(get_ctx_dictBase(ctxPtr), (unsigned char *)dict);
+    EXPECT_EQ(get_ctx_dictStart(ctxPtr), (unsigned char *)dict);
+    EXPECT_EQ(get_ctx_End(ctxPtr), (unsigned char*)dict + dictSize);
 
     free(dict);
 }
@@ -1089,7 +1095,7 @@ protected:
     void initialize_ctx_and_dictBase(LZ4_streamHC_t* state, const LZ4_byte* dict)
     {
         ctx = state->internal_donotuse;
-        ctx.dictBase = dict;
+        ctx.dictStart = dict;
     }
 };
 
@@ -1670,7 +1676,7 @@ protected:
 
     const LZ4_byte* get_ctx_base()
     {
-        return ctx->base;
+        return ctx->prefixStart;
     }
     
     

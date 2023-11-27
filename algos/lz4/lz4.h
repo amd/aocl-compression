@@ -1,7 +1,7 @@
 /*
  *  LZ4 - Fast LZ compression algorithm
  *  Header File
- *  Copyright (C) 2011-present, Yann Collet.
+ *  Copyright (C) 2011-2020, Yann Collet.
  *  Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
@@ -104,17 +104,47 @@ extern "C" {
 #  define LZ4LIB_API LZ4LIB_VISIBILITY
 #endif
 
+/*! LZ4_FREESTANDING :
+ *  When this macro is set to 1, it enables "freestanding mode" that is
+ *  suitable for typical freestanding environment which doesn't support
+ *  standard C library.
+ *
+ *  - LZ4_FREESTANDING is a compile-time switch.
+ *  - It requires the following macros to be defined:
+ *    LZ4_memcpy, LZ4_memmove, LZ4_memset.
+ *  - It only enables LZ4/HC functions which don't use heap.
+ *    All LZ4F_* functions are not supported.
+ *  - See tests/freestanding.c to check its basic setup.
+ */
+#if defined(LZ4_FREESTANDING) && (LZ4_FREESTANDING == 1)
+#  define LZ4_HEAPMODE 0
+#  define LZ4HC_HEAPMODE 0
+#  define LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION 1
+#  if !defined(LZ4_memcpy)
+#    error "LZ4_FREESTANDING requires macro 'LZ4_memcpy'."
+#  endif
+#  if !defined(LZ4_memset)
+#    error "LZ4_FREESTANDING requires macro 'LZ4_memset'."
+#  endif
+#  if !defined(LZ4_memmove)
+#    error "LZ4_FREESTANDING requires macro 'LZ4_memmove'."
+#  endif
+#elif ! defined(LZ4_FREESTANDING)
+#  define LZ4_FREESTANDING 0
+#endif
+
+
 /*------   Version   ------*/
 #define LZ4_VERSION_MAJOR    1    /* for breaking interface changes  */
 #define LZ4_VERSION_MINOR    9    /* for new (non-breaking) interface capabilities */
-#define LZ4_VERSION_RELEASE  3    /* for tweaks, bug-fixes, or development */
+#define LZ4_VERSION_RELEASE  4    /* for tweaks, bug-fixes, or development */
 
 #define LZ4_VERSION_NUMBER (LZ4_VERSION_MAJOR *100*100 + LZ4_VERSION_MINOR *100 + LZ4_VERSION_RELEASE)
 
 #define LZ4_LIB_VERSION LZ4_VERSION_MAJOR.LZ4_VERSION_MINOR.LZ4_VERSION_RELEASE
 #define LZ4_QUOTE(str) #str
 #define LZ4_EXPAND_AND_QUOTE(str) LZ4_QUOTE(str)
-#define LZ4_VERSION_STRING LZ4_EXPAND_AND_QUOTE(LZ4_LIB_VERSION)
+#define LZ4_VERSION_STRING LZ4_EXPAND_AND_QUOTE(LZ4_LIB_VERSION)  /* requires v1.7.3+ */
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
@@ -126,16 +156,16 @@ extern "C" {
 /*!
  *  @brief
  *  Library Version number.
- *  Useful to check Dynamic-link Library (DLL) version.
+ *  Useful to check Dynamic-link Library (DLL) version. Requires v1.3.0+
  *  @return Library Version in integer format.
  */
 
-LZ4LIB_API int LZ4_versionNumber (void);  
+LZ4LIB_API int LZ4_versionNumber (void);
 
 /*!
  * @brief 
  * Library version string.
- * Useful to check DLL version.
+ * Useful to check DLL version. Requires v1.7.5+
  * @return Version in const char* format.
  */
 
@@ -161,17 +191,28 @@ LZ4LIB_API const char* LZ4_versionString (void);
 /*-************************************
 *  Tuning parameter
 **************************************/
+#define LZ4_MEMORY_USAGE_MIN 10
+#define LZ4_MEMORY_USAGE_DEFAULT 14
+#define LZ4_MEMORY_USAGE_MAX 20
+
 /*!
  * LZ4_MEMORY_USAGE :
- * Memory usage formula : N->2^N Bytes (examples : 10 -> 1KB; 12 -> 4KB ; 16 -> 64KB; 20 -> 1MB; etc.).
- * Increasing memory usage improves compression ratio.
- * Reduced memory usage may improve speed, thanks to better cache locality.
+ * Memory usage formula : N->2^N Bytes (examples : 10 -> 1KB; 12 -> 4KB ; 16 -> 64KB; 20 -> 1MB; ).
+ * Increasing memory usage improves compression ratio, at the cost of speed.
+ * Reduced memory usage may improve speed at the cost of ratio, thanks to better cache locality.
  * Default value is 14, for 16KB, which nicely fits into Intel x86 L1 cache.
  */
 #ifndef LZ4_MEMORY_USAGE
-# define LZ4_MEMORY_USAGE 14
+# define LZ4_MEMORY_USAGE LZ4_MEMORY_USAGE_DEFAULT
 #endif
 
+#if (LZ4_MEMORY_USAGE < LZ4_MEMORY_USAGE_MIN)
+#  error "LZ4_MEMORY_USAGE is too small !"
+#endif
+
+#if (LZ4_MEMORY_USAGE > LZ4_MEMORY_USAGE_MAX)
+#  error "LZ4_MEMORY_USAGE is too large !"
+#endif
 /// @endcond  /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*-************************************
@@ -527,6 +568,21 @@ LZ4LIB_API unsigned int Test_AOCL_LZ4_hash5(unsigned long long sequence, int tab
 typedef union LZ4_stream_u LZ4_stream_t;  /* incomplete type (defined later) */
 
 /**
+ Note about RC_INVOKED
+
+ - RC_INVOKED is predefined symbol of rc.exe (the resource compiler which is part of MSVC/Visual Studio).
+   https://docs.microsoft.com/en-us/windows/win32/menurc/predefined-macros
+
+ - Since rc.exe is a legacy compiler, it truncates long symbol (> 30 chars)
+   and reports warning "RC4011: identifier truncated".
+
+ - To eliminate the warning, we surround long preprocessor symbol with
+   "#if !defined(RC_INVOKED) ... #endif" block that means
+   "skip this block when rc.exe is trying to read it".
+*/
+#if !defined(RC_INVOKED) /* https://docs.microsoft.com/en-us/windows/win32/menurc/predefined-macros */
+#if !defined(LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION)
+/**
  * @name Streaming Compression Functions
  * @{
  */
@@ -550,6 +606,8 @@ LZ4LIB_API LZ4_stream_t* LZ4_createStream(void);
  */
 
 LZ4LIB_API int           LZ4_freeStream (LZ4_stream_t* streamPtr);
+#endif /* !defined(LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION) */
+#endif
 
 /*!
 
@@ -691,6 +749,8 @@ typedef union LZ4_streamDecode_u LZ4_streamDecode_t;   /* tracking context */
  * @{
  */
 
+#if !defined(RC_INVOKED) /* https://docs.microsoft.com/en-us/windows/win32/menurc/predefined-macros */
+#if !defined(LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION)
 /*! LZ4_createStreamDecode() and LZ4_freeStreamDecode() :
  *  creation / destruction of streaming decompression tracking context.
  * @brief  Creation of streaming decompression tracking context.
@@ -713,6 +773,8 @@ LZ4LIB_API LZ4_streamDecode_t* LZ4_createStreamDecode(void);
  */
 
 LZ4LIB_API int                 LZ4_freeStreamDecode (LZ4_streamDecode_t* LZ4_stream);
+#endif /* !defined(LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION) */
+#endif
 
 /*! @brief
  *  Use this function to start decompression of a new stream of blocks.
@@ -805,8 +867,10 @@ LZ4LIB_API int LZ4_decoderRingBufferSize(int maxBlockSize);
  *  |Success| Returns the number of bytes decoded in `dst` which is positive (<= targetOutputSize)  |
  *  |Fail   | If source stream is detected malformed, function returns a negative result.                       |
 */
-LZ4LIB_API int LZ4_decompress_safe_continue (LZ4_streamDecode_t* LZ4_streamDecode, const char* src, char* dst, int srcSize, int dstCapacity);
-
+LZ4LIB_API int
+LZ4_decompress_safe_continue (LZ4_streamDecode_t* LZ4_streamDecode,
+                        const char* src, char* dst,
+                        int srcSize, int dstCapacity);
 
 /*! @brief
  *  These decoding functions work the same as a combination of LZ4_setStreamDecode() followed by LZ4_decompress_*_continue()
@@ -832,7 +896,16 @@ LZ4LIB_API int LZ4_decompress_safe_continue (LZ4_streamDecode_t* LZ4_streamDecod
  *  |Success|The number of bytes decoded in `dst` (<= targetOutputSize)     |
  *  |Fail   |If source stream is detected malformed, function returns a negative result.|
  */
-LZ4LIB_API int LZ4_decompress_safe_usingDict (const char* src, char* dst, int srcSize, int dstCapcity, const char* dictStart, int dictSize);
+LZ4LIB_API int
+LZ4_decompress_safe_usingDict(const char* src, char* dst,
+                              int srcSize, int dstCapacity,
+                              const char* dictStart, int dictSize);
+
+LZ4LIB_API int
+LZ4_decompress_safe_partial_usingDict(const char* src, char* dst,
+                                      int compressedSize,
+                                      int targetOutputSize, int maxOutputSize,
+                                      const char* dictStart, int dictSize);
 
 /**
  * @}
@@ -915,13 +988,15 @@ LZ4LIB_STATIC_API int LZ4_compress_fast_extState_fastReset (void* state, const c
  *  stream (and source buffer) must remain in-place / accessible / unchanged
  *  through the completion of the first compression call on the stream.
  */
-LZ4LIB_STATIC_API void LZ4_attach_dictionary(LZ4_stream_t* workingStream, const LZ4_stream_t* dictionaryStream);
+LZ4LIB_STATIC_API void
+LZ4_attach_dictionary(LZ4_stream_t* workingStream,
+                const LZ4_stream_t* dictionaryStream);
 
 
 /*! In-place compression and decompression
  *
  * It's possible to have input and output sharing the same buffer,
- * for highly contrained memory environments.
+ * for highly constrained memory environments.
  * In both cases, it requires input to lay at the end of the buffer,
  * and decompression to start at beginning of the buffer.
  * Buffer size must feature some margin, hence be larger than final size.
@@ -1011,6 +1086,12 @@ LZ4LIB_STATIC_API void LZ4_attach_dictionary(LZ4_stream_t* workingStream, const 
   typedef unsigned int   LZ4_u32;
 #endif
 
+
+/*! LZ4_stream_t :
+ *  Never ever use below internal definitions directly !
+ *  These definitions are not API/ABI safe, and may change in future versions.
+ *  If you need static allocation, declare or allocate an LZ4_stream_t object.
+**/
 /**
  * @brief This acts as handle for defining the structure of internal stream_t (this structure is for internal library use, should not be handled manually)
 */
@@ -1022,22 +1103,13 @@ typedef struct LZ4_stream_t_internal LZ4_stream_t_internal;
 
 struct LZ4_stream_t_internal {
     LZ4_u32 hashTable[LZ4_HASH_SIZE_U32];   ///<hash table to match values and keys
-    LZ4_u32 currentOffset;                  ///<the last committed offset of the hashtable
-    LZ4_u32 tableType;                      ///<to prepare a table with structure and attributes, the values could be clearedTable = 0, byPtr = 1, byU32 = 2, byU16 = 3, this is used by internal functions
     const LZ4_byte* dictionary;             ///<Dictionary buffer
     const LZ4_stream_t_internal* dictCtx;   ///<current context of dictionary
+    LZ4_u32 currentOffset;                  ///<the last committed offset of the hashtable
+    LZ4_u32 tableType;                      ///<to prepare a table with structure and attributes, the values could be clearedTable = 0, byPtr = 1, byU32 = 2, byU16 = 3, this is used by internal functions
     LZ4_u32 dictSize;                       ///<size of dictionary
+    /* Implicit padding to ensure structure is aligned */
 };
-
-/**
- * @brief  It acts as streaming decompressor for internal functions.
- */
-typedef struct {
-    const LZ4_byte* externalDict;   ///< External content of dictionary.
-    size_t extDictSize;             ///< Size of  external dictionary.
-    const LZ4_byte* prefixEnd;      ///< Prefix of last committed value in dictionary.
-    size_t prefixSize;              ///< Size of prefix.
-} LZ4_streamDecode_t_internal;
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
@@ -1054,11 +1126,9 @@ typedef struct {
 
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
 
-#define LZ4_STREAMSIZE       16416  /* static size, for inter-version compatibility */
-#define LZ4_STREAMSIZE_VOIDP (LZ4_STREAMSIZE / sizeof(void*))
-
+#define LZ4_STREAM_MINSIZE  ((1UL << LZ4_MEMORY_USAGE) + 32)  /* static size, for inter-version compatibility */
 union LZ4_stream_u {
-    void* table[LZ4_STREAMSIZE_VOIDP];          //<It defines the (LZ4_STREAMSIZE / sizeof(void*))
+    char minStateSize[LZ4_STREAM_MINSIZE];      //<It defines the (LZ4_STREAMSIZE / sizeof(void*))
     LZ4_stream_t_internal internal_donotuse;    //<It states not to use internal definitions directly
 }; /* previously typedef'd to LZ4_stream_t */
 
@@ -1108,6 +1178,17 @@ LZ4LIB_API LZ4_stream_t* LZ4_initStream (void* buffer, size_t size);
 
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
 
+/**
+ * @brief  It acts as streaming decompressor for internal functions.
+ */
+typedef struct {
+    const LZ4_byte* externalDict;   ///< External content of dictionary.
+    const LZ4_byte* prefixEnd;      ///< Prefix of last committed value in dictionary.
+    size_t extDictSize;             ///< Size of  external dictionary.
+    size_t prefixSize;              ///< Size of prefix.
+} LZ4_streamDecode_t_internal;
+
+
 /*! LZ4_streamDecode_t :
  *  information structure to track an LZ4 stream during decompression.
  *  init this structure  using LZ4_setStreamDecode() before first use.
@@ -1115,15 +1196,14 @@ LZ4LIB_API LZ4_stream_t* LZ4_initStream (void* buffer, size_t size);
  *         this definition is not API/ABI safe,
  *         and may change in a future version !
  */
-#define LZ4_STREAMDECODESIZE_U64 (4 + ((sizeof(void*)==16) ? 2 : 0) /*AS-400*/ )
-#define LZ4_STREAMDECODESIZE     (LZ4_STREAMDECODESIZE_U64 * sizeof(unsigned long long))
-
+#define LZ4_STREAMDECODE_MINSIZE 32
 union LZ4_streamDecode_u {
-    unsigned long long table[LZ4_STREAMDECODESIZE_U64];
+    char minStateSize[LZ4_STREAMDECODE_MINSIZE];
     LZ4_streamDecode_t_internal internal_donotuse;
 } ;   /* previously typedef'd to LZ4_streamDecode_t */
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
+
 
 /*-************************************
 *  Obsolete Functions
