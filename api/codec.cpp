@@ -234,7 +234,9 @@ AOCL_INT64 aocl_lzma_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
     res = LzmaDecode((AOCL_UINT8 *)outbuf, &outLen, (AOCL_UINT8 *)inbuf+LZMA_PROPS_SIZE, 
                      &srcLen, (AOCL_UINT8 *)inbuf, LZMA_PROPS_SIZE, LZMA_FINISH_END,
                      &status, &g_Alloc);
-    if (res == SZ_OK)
+    if (res == SZ_OK ||
+        (res == SZ_ERROR_INPUT_EOF && status == LZMA_STATUS_NEEDS_MORE_INPUT 
+            && outLen > 0) /* decompression successful, but outsize is > expected output length */)
         return outLen;
 
     return CODEC_ERROR;
