@@ -36,19 +36,22 @@
  *  @author S. Biplab Raut
  */
 
-#include "threads/threads.h"
+#include <stdlib.h>
+#include <assert.h>
+#include "api/types.h"
+#include "api/aocl_compression.h"
+#include "api/aocl_threads.h"
+#include "threads.h"
 
-//Call from a single master thread : Allocates thread context and determines
-//how many threads are suitable to compress the input.
-//The master thread shall allocate and hold thread_grp before calling this function
-//Writes the RAP Frame header to the dest buffer.
-//window_len and window_factor passed to this function shall be positive values.
-//Returns number of bytes for the RAP frame (RAP header + RAP metadata) on success
 AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp, 
                                       AOCL_CHAR *src, AOCL_CHAR *dst, AOCL_INT32 in_size,
                                       AOCL_INT32 out_size, AOCL_INT32 window_len,
                                       AOCL_INT32 window_factor)
 {
+    assert(thread_grp != NULL);
+    if (dst == NULL || window_len <= 0 || window_factor <= 0)
+        return ERR_INVALID_INPUT;
+
     AOCL_UINT32 max_threads = omp_get_max_threads();
     AOCL_INT32 rap_frame_len = 0;
     AOCL_INT32 chunk_size = window_len * window_factor;
@@ -58,6 +61,7 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
     thread_grp->src_size = in_size;
     thread_grp->dst_size = out_size;
     thread_grp->search_window_length = window_len;
+    thread_grp->threads_info_list = NULL;
 
     if (thread_grp->src_size < chunk_size)
     {
@@ -114,15 +118,12 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
     return rap_frame_len;
 }
 
-//Call for each thread from a multi-threaded parallel regions.
-//Partitions the problem and allocates thread working buffer.
-//Each thread holds its own local cur_thread_info that is allocated here.
-//At end of the compression, references from cur_thread_info should be copied 
-//into thread_grp->threads_info_list[thread_id].
 AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t *thread_grp,
                                    aocl_thread_info_t *cur_thread_info,
                                    AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id)
 {
+    assert(thread_grp != NULL);
+    assert(cur_thread_info != NULL);
     cur_thread_info->partition_src = thread_grp->src + 
                                 (thread_grp->common_part_src_size * thread_id);
     cur_thread_info->thread_id = thread_id;
@@ -151,38 +152,33 @@ AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t *thread_grp,
     return 0;
 }
 
-//Call from the master thread : Frees the thread related buffers and context
 void aocl_destroy_parallel_compress_mt(aocl_thread_group_t *thread_grp)
 {
-    AOCL_UINT32 thread_cnt;
-    for (thread_cnt = 0; thread_cnt < thread_grp->num_threads; thread_cnt++)
-    {
-        if (thread_grp->threads_info_list[thread_cnt].dst_trap)
-        {
-            free(thread_grp->threads_info_list[thread_cnt].dst_trap);
-            thread_grp->threads_info_list[thread_cnt].dst_trap = NULL;
-        }
-    }
-
+    assert(thread_grp != NULL);
     if (thread_grp->threads_info_list)
     {
+        AOCL_UINT32 thread_cnt;
+        for (thread_cnt = 0; thread_cnt < thread_grp->num_threads; thread_cnt++)
+        {
+            if (thread_grp->threads_info_list[thread_cnt].dst_trap)
+            {
+                free(thread_grp->threads_info_list[thread_cnt].dst_trap);
+                thread_grp->threads_info_list[thread_cnt].dst_trap = NULL;
+            }
+        }
         free(thread_grp->threads_info_list);
         thread_grp->threads_info_list = NULL;
     }
 }
 
-//Call from a single master thread.
-//Reads the RAP Frame header from the src buffer to setup the thread group
-//Allocates thread context and determines no. of threads suitable to decompress
-//the input.
-//When use_ST_decompressor is set to 1, this function just returns the RAP frame
-//length without setting up the thread group for multi-threaded execution.
-//The master thread shall allocate and hold thread_grp before calling this function.
-//Returns number of bytes for the RAP frame (RAP header + RAP metadata) on success
 AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
                                         AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_INT32 in_size,
                                         AOCL_INT32 out_size, AOCL_INT32 use_ST_decompressor)
 {
+    assert(thread_grp != NULL);
+    if (src == NULL)
+        return ERR_INVALID_INPUT;
+
     AOCL_CHAR *src_base;
     AOCL_UINT32 rap_metadata_len;
     AOCL_UINT32 max_threads = omp_get_max_threads();
@@ -191,6 +187,7 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
     thread_grp->dst = dst;
     thread_grp->src_size = in_size;
     thread_grp->dst_size = out_size;
+    thread_grp->threads_info_list = NULL;
 
     src_base = thread_grp->src;
 
@@ -210,6 +207,9 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
         rap_metadata_len = *(AOCL_UINT32 *)(src_ptr);
         src_ptr += RAP_METADATA_LEN_BYTES;
         num_main_threads = *(AOCL_UINT32*)(src_ptr);
+
+        if (num_main_threads == 0)
+            return -1; // invalid main thread count in stream. Must be >= 1.
 
         if (use_ST_decompressor == 1)
             return rap_metadata_len;
@@ -248,15 +248,13 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
     return rap_metadata_len;
 }
 
-//Call for each thread from a multi-threaded parallel regions.
-//Partitions the problem and allocates thread working buffer.
-//Each thread holds its own local cur_thread_info that is allocated here.
-//At end of the decompression, references from cur_thread_info should be copied
-//into thread_grp->threads_info_list[thread_id].
 AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
                                       aocl_thread_info_t* cur_thread_info,
                                       AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id)
 {
+    assert(thread_grp != NULL);
+    assert(cur_thread_info != NULL);
+
     AOCL_UINT32 cur_rap_pos = RAP_START_OF_PARTITIONS + 
                             (thread_id * (RAP_DATA_BYTES_WITH_DECOMP_LEN));
     cur_thread_info->partition_src = thread_grp->src +
@@ -294,22 +292,45 @@ AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
     return 0;
 }
 
-//Call from a single master thread : Frees the thread related buffers and context
 void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp)
 {
-    AOCL_UINT32 thread_cnt;
-    for (thread_cnt = 0; thread_cnt < thread_grp->num_threads; thread_cnt++)
-    {
-        if (thread_grp->threads_info_list[thread_cnt].dst_trap)
-        {
-            free(thread_grp->threads_info_list[thread_cnt].dst_trap);
-            thread_grp->threads_info_list[thread_cnt].dst_trap = NULL;
-        }
-    }
+    assert(thread_grp != NULL);
 
     if (thread_grp->threads_info_list)
     {
+        AOCL_UINT32 thread_cnt;
+        for (thread_cnt = 0; thread_cnt < thread_grp->num_threads; thread_cnt++)
+        {
+            if (thread_grp->threads_info_list[thread_cnt].dst_trap)
+            {
+                free(thread_grp->threads_info_list[thread_cnt].dst_trap);
+                thread_grp->threads_info_list[thread_cnt].dst_trap = NULL;
+            }
+        }
         free(thread_grp->threads_info_list);
         thread_grp->threads_info_list = NULL;
+    }
+}
+
+AOCL_INT32 aocl_get_rap_frame_bound_mt(void) {
+    AOCL_UINT32 max_threads = omp_get_max_threads();
+    return RAP_FRAME_LEN_WITH_DECOMP_LENGTH(max_threads, 0); // upper bound of rap frame length in bytes based on max threads possible
+}
+
+AOCL_INT32 aocl_skip_rap_frame_mt(AOCL_CHAR* src, AOCL_INT32 src_size)
+{
+    if (src == NULL)
+        return ERR_INVALID_INPUT;
+
+    if ((src_size < RAP_MAGIC_WORD_BYTES) ||
+        (RAP_MAGIC_WORD != *(AOCL_INT64*)src))
+    {
+        return 0; //Stream is very small or not in multi-threaded RAP format
+    }
+    else
+    {
+        AOCL_CHAR* src_ptr = src + RAP_MAGIC_WORD_BYTES;
+        AOCL_UINT32 rap_metadata_len = *(AOCL_UINT32*)(src_ptr);
+        return rap_metadata_len;
     }
 }

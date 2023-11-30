@@ -96,6 +96,10 @@ set (API_SRC_FILES  api/code_alignment.cpp
                     api/aocl_compression.h
                     api/codec.h
                     api/types.h)
+if (AOCL_ENABLE_THREADS)
+set (API_SRC_FILES  ${API_SRC_FILES}
+                    api/aocl_threads.h)
+endif()
 
 set (BENCH_PATH test)
 set (TESTBENCH_SRC_FILES 
@@ -240,7 +244,9 @@ set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.h)
 
 if (AOCL_ENABLE_THREADS)
-    set (THREADS_SRC_FILES threads/threads.c threads/threads.h)
+    set (THREADS_SRC_FILES threads/code_alignment.c
+                           threads/threads.c
+                           threads/threads.h)
 endif ()
 
 #set the expected path variables
@@ -254,6 +260,9 @@ set(DEST_BIN_PATH aocl_compression/bin)
 
 set(INC_FILES api/aocl_compression.h
               ${ALGOS_PATH}/common/aoclAlgoOpt.h)
+if (AOCL_ENABLE_THREADS)
+    set(INC_FILES ${INC_FILES} api/aocl_threads.h)
+endif ()
 if (NOT AOCL_EXCLUDE_BZIP2)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/bzip2/bzlib.h)
 endif ()
@@ -446,7 +455,7 @@ else()
 endif()
 
 if (AOCL_ENABLE_THREADS)
-    set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
+    set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
 endif()
 
 # setup to get source code coverage(GCOV)

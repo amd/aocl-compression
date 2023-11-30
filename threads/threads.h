@@ -140,27 +140,161 @@ typedef struct thread_group
     AOCL_UINT32 search_window_length;            //Search window (dictionary) size used by the partitioning scheme
 } aocl_thread_group_t;
 
-//Setup the multi-threaded compressor
+/**
+ * Function to setup the multi-threaded compressor.
+ *
+ * Sets thread_grp data structure.
+ * Writes the RAP frame header to the dst.
+ *
+ * Call from a single master thread.
+ * The master thread shall allocate and hold thread_grp before calling this function
+ *
+ * This function allocates thread context and determines how many threads are suitable to compress the input.
+ * Each thread processes a part of the src (partition). partition size = win_len * window_factor.
+ *
+ * | Parameters             | Direction   | Description |
+ * |:-----------------------|:-----------:|:------------|
+ * | \b thread_grp          | out         | Holds list of thread info, pointers to input and output streams and other information needed for multi-threaded compression. |
+ * | \b src                 | in          | Input stream buffer pointer. |
+ * | \b dst                 | in          | Output stream buffer pointer. |
+ * | \b in_size             | in          | Input stream buffer size. |
+ * | \b out_size            | in          | Output stream buffer pointer. |
+ * | \b win_len             | in          | Search window length. |
+ * | \b window_factor       | in          | Multiplication factor used to determine partition size. |
+ *
+ * return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    | RAP frame length (RAP header + RAP metadata) |
+ * | Fail       | `ERR_INVALID_INPUT`                          |
+ * | ^          | -1                                           |
+ *
+ */
 AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t* thread_grp, 
                                       AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_INT32 in_size,
                                       AOCL_INT32 out_size, AOCL_INT32 win_len,
                                       AOCL_INT32 window_factor);
-//Perform partitioning for the multi-threaded compressor
+
+/**
+ * Function to perform partitioning for the multi-threaded compressor.
+ *
+ * Sets cur_thread_info with info about the partition said thread is expected to process.
+ * If an algorithm has a compress bound of D bytes for a source of S bytes, cmpr_bound_pad must be set to (D-S) bytes.
+ *
+ * Call for each thread from a multi-threaded parallel region.
+ *
+ * This function partitions the problem and allocates thread working buffer.
+ * Each thread holds its own local cur_thread_info that is allocated here.
+ * Upon completion of compression, references from cur_thread_info should be copied into thread_grp->threads_info_list[thread_id].
+ *
+ * | Parameters             | Direction   | Description |
+ * |:-----------------------|:-----------:|:------------|
+ * | \b thread_grp          | in          | Holds list of thread info, pointers to input and output streams and other information needed for multi-threaded compression. |
+ * | \b cur_thread_info     | out         | Current thread info. |
+ * | \b cmpr_bound_pad      | in          | Numbers of bytes in addition to source partition size that compressed stream can produce. |
+ * | \b thread_id           | in          | Current thread id. |
+ *
+ * return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    | 0           |
+ * | Fail       | -1          |
+ *
+ */
 AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t* thread_grp, 
                                    aocl_thread_info_t* cur_thread_info,
                                    AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id);
-//Destroy the memory associated with the multi-threaded compressor
+
+/**
+ * Function to free memory associated with the multi-threaded compressor.
+ *
+ * Call from the master thread.
+ * Frees the thread related buffers and context.
+ *
+ * | Parameters             | Direction   | Description |
+ * |:-----------------------|:-----------:|:------------|
+ * | \b thread_grp          | in/out      | Holds list of thread info, pointers to input and output streams and other information needed for multi-threaded compression. |
+ *
+ * return void
+ *
+ */
 void aocl_destroy_parallel_compress_mt(aocl_thread_group_t* thread_grp);
-//Setup the multi-threaded decompressor
+
+/**
+ * Function to setup the multi-threaded decompressor.
+ *
+ * Sets thread_grp data structure.
+ *
+ * Call from a single master thread.
+ * Reads the RAP Frame header from the src buffer to setup the thread group.
+ * Allocates thread context and determines no. of threads suitable to decompress the input.
+ * The master thread shall allocate and hold thread_grp before calling this function.
+ *
+ *
+ * | Parameters             | Direction   | Description |
+ * |:-----------------------|:-----------:|:------------|
+ * | \b thread_grp          | out         | Holds list of thread info, pointers to input and output streams and other information needed for multi-threaded decompression. |
+ * | \b src                 | in          | Input stream buffer pointer. |
+ * | \b dst                 | in          | Output stream buffer pointer. |
+ * | \b in_size             | in          | Input stream buffer size. |
+ * | \b out_size            | in          | Output stream buffer pointer. |
+ * | \b use_ST_decompressor| in          | If set to 1, just returns the RAP frame length without setting up the thread group for multi-threaded execution. |
+ *
+ * return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    | RAP frame length (RAP header + RAP metadata) |
+ * | Fail       | `ERR_INVALID_INPUT`                          |
+ * | ^          | -1                                           |
+ *
+ */
 AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
                                         AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_INT32 in_size,
                                         AOCL_INT32 out_size, 
                                         AOCL_INT32 use_ST_decoompressor);
-//Perform partitioning for the multi-threaded decompressor
+/**
+ * Function to perform partitioning for the multi-threaded decompressor.
+ *
+ * Sets cur_thread_info with info about the partition said thread is expected to process.
+ *
+ * Call for each thread from a multi-threaded parallel region.
+ *
+ * This function partitions the problem and allocates thread working buffer.
+ * Each thread holds its own local cur_thread_info that is allocated here.
+ * Upon completion of decompression, references from cur_thread_info should be copied into thread_grp->threads_info_list[thread_id].
+ *
+ * | Parameters             | Direction   | Description |
+ * |:-----------------------|:-----------:|:------------|
+ * | \b thread_grp          | in          | Holds list of thread info, pointers to input and output streams and other information needed for multi-threaded decompression. |
+ * | \b cur_thread_info     | out         | Current thread info. |
+ * | \b cmpr_bound_pad      | in          | Number of additional padding bytes if needed for the allocated destination buffer. |
+ * | \b thread_id           | in          | Current thread id. |
+ *
+ * return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    | 0           |
+ * | Success    | 1 when partition source size for this thread_id is 0 |
+ * | Fail       | -1                                                   |
+ *
+ */
 AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
                                      aocl_thread_info_t* cur_thread_info,
                                      AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id);
-//Destroy the memory associated with the multi-threaded decompressor
+
+/**
+ * Function to free memory associated with the multi-threaded decompressor.
+ *
+ * Call from the master thread.
+ * Frees the thread related buffers and context.
+ *
+ * | Parameters             | Direction   | Description |
+ * |:-----------------------|:-----------:|:------------|
+ * | \b thread_grp          | in/out      | Holds list of thread info, pointers to input and output streams and other information needed for multi-threaded decompression. |
+ *
+ * return void
+ *
+ */
 void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp);
 
 #ifdef __cplusplus
