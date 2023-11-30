@@ -66,6 +66,7 @@ extern "C" {
  */
 
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
+#ifndef EXPORT_SYM_DYN
 #ifdef _WINDOWS
 /**
  * You can export data, functions, classes, or class member functions from a DLL
@@ -80,6 +81,7 @@ extern "C" {
  */
 #define EXPORT_SYM_DYN
 #endif
+#endif
 
 #define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 4.1.1"
 #define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 2.0"
@@ -92,10 +94,11 @@ extern "C" {
   */
 typedef enum
 {
-    ERR_UNSUPPORTED_METHOD = -4,     ///<Compression method not supported by the library
-    ERR_EXCLUDED_METHOD,             ///<Compression method excluded from this library build
-    ERR_COMPRESSION_FAILED,          ///<Failure during compression/decompression
-    ERR_COMPRESSION_INVALID_OUTPUT   ///<Invalid compression/decompression output
+    ERR_INVALID_INPUT = -5,        ///<Invalid input parameter provided
+    ERR_UNSUPPORTED_METHOD,        ///<Compression method not supported by the library
+    ERR_EXCLUDED_METHOD,           ///<Compression method excluded from this library build
+    ERR_COMPRESSION_FAILED,        ///<Failure during compression/decompression
+    ERR_COMPRESSION_INVALID_OUTPUT ///<Invalid compression/decompression output
 } aocl_error_type;
 
 /**

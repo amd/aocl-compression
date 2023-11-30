@@ -39,8 +39,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "api/types.h"
 #include "api/aocl_compression.h"
+#include "api/aocl_threads.h"
 #include "codec_bench.h"
 #include <sys/stat.h>
 
@@ -499,6 +499,9 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
 AOCL_UINTP compression_bound(AOCL_UINTP inSize)
 {
     AOCL_UINTP outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
+#ifdef AOCL_ENABLE_THREADS
+    outSize += aocl_get_rap_frame_bound_mt();
+#endif
     return outSize;
 }
 

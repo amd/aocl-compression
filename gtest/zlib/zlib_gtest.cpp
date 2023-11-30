@@ -317,7 +317,11 @@ TEST_F(ZLIB_compress, fail_cases)
   char c[11] = "helloWorld";
   Bytef *dest = (Bytef *)malloc(destLen);
 
-  EXPECT_EQ(compress(NULL, &destLen, (Bytef *)c, 11), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress_common_1
+#ifdef AOCL_ENABLE_THREADS
+  EXPECT_EQ(compress(NULL, &destLen, (Bytef *)c, 11), Z_MEM_ERROR);  // AOCL_Compression_zlib_compress_common_1
+#else
+  EXPECT_EQ(compress(NULL, &destLen, (Bytef*)c, 11), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress_common_1
+#endif
   EXPECT_EQ(compress(dest,NULL,(Bytef*)c,10),Z_BUF_ERROR); // AOCL_Compression_zlib_compress_common_2
   EXPECT_EQ(compress(dest, &destLen, NULL, 10), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress_common_3
   EXPECT_EQ(compress(dest, &destLen, (Bytef *)c, 0), Z_BUF_ERROR);  // AOCL_Compression_zlib_compress_common_4
@@ -379,7 +383,11 @@ TEST_F(ZLIB_compress2, fail_cases)
   unsigned long destLen = compressBound(srcLen);
   Bytef* dest = (Bytef*)malloc(destLen * sizeof(destLen));
 
+#ifdef AOCL_ENABLE_THREADS
+  EXPECT_EQ(compress2(NULL, &destLen, src, srcLen, 6), Z_MEM_ERROR); // AOCL_Compression_zlib_compress2_common_1
+#else
   EXPECT_EQ(compress2(NULL, &destLen, src, srcLen, 6), Z_STREAM_ERROR); // AOCL_Compression_zlib_compress2_common_1
+#endif
   EXPECT_EQ(compress2(dest,NULL,src,srcLen,6),Z_BUF_ERROR); // AOCL_Compression_zlib_compress2_common_2
   EXPECT_EQ(compress2(dest, &destLen, NULL, srcLen, 6), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_3
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, -2), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_4
