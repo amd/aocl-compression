@@ -84,10 +84,20 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
     LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
     AOCL_CHAR ippDir[MAX_FILENAME_LEN] = {0};
     AOCL_UINT32 ippDirLen = strlen(codec_bench_handle->ippDir);
+    if (ippDirLen > (MAX_FILENAME_LEN - 1)) { // cant fit name + '\0' in ippDir[]
+        LOG_FORMATTED(ERR, log_ctx,
+            "ippDir name longer than %d characters", (int)(MAX_FILENAME_LEN));
+        return ERR_CODEC_BENCH_ARGS;
+    }
+    else if ((ippDirLen == (MAX_FILENAME_LEN - 1)) && ippDir[ippDirLen - 1] != '/') { // cant fit name + '/' + '\0' in ippDir[]
+        LOG_FORMATTED(ERR, log_ctx,
+            "ippDir name with trailing slash longer than %d characters", (int)(MAX_FILENAME_LEN));
+        return ERR_CODEC_BENCH_ARGS;
+    }
 
     strncpy(ippDir, codec_bench_handle->ippDir, MAX_FILENAME_LEN);
 
-    if(!(ippDirLen == 0 || (ippDirLen < (MAX_FILENAME_LEN-1) && ippDir[ippDirLen-1] == '/' )))
+    if(!(ippDirLen == 0 || (ippDirLen < (MAX_FILENAME_LEN-1) && ippDir[ippDirLen-1] == '/' ))) // add trailing '/' to dir name if missing
     {
         ippDir[ippDirLen] = '/';
         ippDir[ippDirLen+1] = '\0';
