@@ -283,7 +283,7 @@ TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_3) 
 {
     int decLen = LZ4_decompress_safe(src, output, srcLen, origLen);
     ASSERT_EQ(origLen, decLen);
-    EXPECT_EQ(0, memcmp(output, original, decLen));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
 }
 
 TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_4) // cmp_siz_inadeqate
@@ -485,7 +485,7 @@ TEST_F(LLZ4_decompress_safe_partial, AOCL_Compression_lz4_LZ4_decompress_safe_pa
 {
     int decLen = LZ4_decompress_safe_partial(src, output, srcLen, outLen, outLen);
     ASSERT_EQ(decLen, origLen);
-    EXPECT_EQ(0, memcmp(output, original, decLen));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
 }
 
 TEST_F(LLZ4_decompress_safe_partial, AOCL_Compression_lz4_LZ4_decompress_safe_partial_common_5) // srcLen_1
@@ -503,7 +503,7 @@ TEST_F(LLZ4_decompress_safe_partial, AOCL_Compression_lz4_LZ4_decompress_safe_pa
 {
     int decLen = LZ4_decompress_safe_partial(src, output, srcLen, srcLen / 2, srcLen);
     EXPECT_EQ(decLen, srcLen/2);
-    EXPECT_EQ(0, memcmp(output, original, decLen));
+    EXPECT_EQ(0, memcmp(output, original, srcLen/2));
 }
 /*********************************************
  * End of LZ4_decompress_safe_partial
@@ -1468,7 +1468,7 @@ TEST_F(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     int decompress = LZ4_decompress_safe_continue(decode, src, output, srcLen, outLen);
     EXPECT_EQ(decompress, origLen);
     
-    EXPECT_EQ(0, memcmp(output, original, decompress));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
     
     LZ4_freeStreamDecode(decode);
 }
@@ -1483,11 +1483,11 @@ TEST_F(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     int decompress = LZ4_decompress_safe_continue(decode, src, output, srcLen, outLen);
     EXPECT_EQ(decompress, origLen);
     
-    EXPECT_EQ(0, memcmp(output, original, decompress));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
     
     decompress = LZ4_decompress_safe_continue(decode, src, output2, srcLen, outlen_2);
     EXPECT_EQ(decompress, origLen);
-    EXPECT_EQ(0, memcmp(output2, original, decompress));
+    EXPECT_EQ(0, memcmp(output2, original, origLen));
     
     LZ4_freeStreamDecode(decode);
     free(output2);
@@ -1525,13 +1525,13 @@ TEST_F(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     
     int decompress = LZ4_decompress_safe_continue(decode, src, output, srcLen, outLen);
     EXPECT_EQ(decompress, origLen);
-    EXPECT_EQ(0, memcmp(output, original, decompress));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
     
     // The condition (lz4sd->prefixEnd == (BYTE*)dest) is made by previous decompress call
     // covers: lz4sd->extDictSize == 0 
     decompress = LZ4_decompress_safe_continue(decode, src, output + decompress, srcLen, outLen);
     EXPECT_EQ(decompress, origLen);
-    EXPECT_EQ(0, memcmp(output + decompress, original, decompress));
+    EXPECT_EQ(0, memcmp(output + decompress, original, origLen));
     
     LZ4_freeStreamDecode(decode);
 }
@@ -1542,7 +1542,7 @@ TEST_F(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     
     int decompress = LZ4_decompress_safe_continue(decode, src, output, srcLen, outLen);
     EXPECT_EQ(decompress, origLen);
-    EXPECT_EQ(0, memcmp(output, original, decompress));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
     
     // The condition (lz4sd->prefixEnd == (BYTE*)dest) is made by previous decompress call
     // covers: lz4sd->extDictSize == 0 , and we expect return value to be less than zero.

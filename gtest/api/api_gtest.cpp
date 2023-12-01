@@ -573,7 +573,7 @@ public:
     void decompress_and_validate(TestLoadBase* src) {
         int64_t dSize = aocl_llc_decompress(&desc, atp.algo);
         EXPECT_EQ(dSize, src->getInpSize()); //is decompressed data size == src size?
-        EXPECT_EQ(memcmp(src->getInpData(), desc.outBuf, dSize), 0);
+        EXPECT_EQ(memcmp(src->getInpData(), desc.outBuf, src->getInpSize()), 0);
 
         EXPECT_EQ(validate_simd_func_access(aocl_simd_funcs, GET_ARR_CNT(aocl_simd_funcs),
             get_max_opt_level(atp.optLevel)), 1);
@@ -822,7 +822,7 @@ public:
 
         //validate
         EXPECT_EQ(dSize, cpr->getInpSize()); //is decompressed data size == src size?
-        EXPECT_EQ(memcmp(cpr->getInpData(), desc.outBuf, dSize), 0);
+        EXPECT_EQ(memcmp(cpr->getInpData(), desc.outBuf, cpr->getInpSize()), 0);
 
         EXPECT_EQ(validate_simd_func_access(aocl_simd_funcs, GET_ARR_CNT(aocl_simd_funcs),
             get_max_opt_level(atp.optLevel)), 1);

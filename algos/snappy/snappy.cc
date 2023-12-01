@@ -2295,7 +2295,7 @@ bool RawUncompress(const char* compressed, size_t compressed_length, char* uncom
     ret_status = 0;
   }
 
-  if (thread_group_handle.num_threads == 1 || ret_status == 0 /* for when compressed is NULL*/) {
+  if (ret_status == 0 /* for when compressed is NULL*/ || thread_group_handle.num_threads == 1) {
     size_t ulength;
     const char *start_compressed = compressed + ret_status;
     size_t compressed_length_actual = compressed_length - ret_status;
