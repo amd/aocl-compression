@@ -70,9 +70,16 @@
 }
 #endif
 
+#define STRING_OVERFLOW(src_sz, append_sz, limit) ((src_sz + append_sz)  > (limit - 1))
+#define LOG_STRING_OVERFLOW(text_overflowed)\
+{\
+    LOG_FORMATTED(ERR, log_ctx,"String Overflow Error: [%s] is longer than [%d] characters.", text_overflowed, (int)(MAX_FILENAME_LEN-1));\
+    printf("String Overflow Error: [%s] is longer than [%d] characters.\n", text_overflowed, (int)(MAX_FILENAME_LEN-1));\
+}
+
 //Input test file name
 AOCL_CHAR inFile[MAX_FILENAME_LEN];
-AOCL_CHAR inFolder[MAX_FOLDER_LEN];
+AOCL_CHAR inFolder[MAX_FILENAME_LEN];
 AOCL_CHAR dumpFile[MAX_FILENAME_LEN];
 AOCL_INTP dumpEnabled = 0;
 AOCL_CHAR valFile[MAX_FILENAME_LEN];
@@ -175,15 +182,15 @@ AOCL_INTP get_codec_method_level(AOCL_CHAR *str,
 }
 
 
-AOCL_VOID read_file_name(AOCL_CHAR* dst, const AOCL_CHAR* src) {
+AOCL_INTP read_file_name(AOCL_CHAR* dst, const AOCL_CHAR* src) {
     AOCL_UINTP src_sz = strlen(src);
     if (src_sz > (MAX_FILENAME_LEN - 1)) { 
-        memcpy(dst, src, MAX_FILENAME_LEN - 1); // truncate
-        dst[MAX_FILENAME_LEN - 1] = '\0';
+        return ERR_CODEC_BENCH_ARGS;
     }
     else {
         strcpy(dst, src);
     }
+    return 0;
 }
 
 AOCL_VOID append_file_name_ext(AOCL_CHAR* dst, const AOCL_CHAR* ext) {
@@ -198,17 +205,25 @@ AOCL_VOID append_file_name_ext(AOCL_CHAR* dst, const AOCL_CHAR* ext) {
     }
 }
 
-AOCL_VOID get_file_name(aocl_codec_bench_info* codec_bench_handle, AOCL_CHAR* dmpFile, AOCL_INT32 file_cnt){
+AOCL_INTP get_file_name(aocl_codec_bench_info* codec_bench_handle, AOCL_CHAR* dmpFile, AOCL_INT32 file_cnt){
 
     strcpy(dmpFile, codec_bench_handle->fName);
     
-    //append count number
     AOCL_CHAR file_cnt_str[MAX_FILENAME_LEN];
     sprintf(file_cnt_str, "_%d", file_cnt);
+    
+    // check for string overflow
+    AOCL_UINTP append_len = strlen(file_cnt_str) + strlen(codec_list[codec_bench_handle->codec_method].extension);
+    if(STRING_OVERFLOW(strlen(dmpFile), append_len, MAX_FILENAME_LEN)) {
+        return ERR_CODEC_BENCH_ARGS;
+    }
+
+    //append count number
     append_file_name_ext(dmpFile, file_cnt_str);
 
     // append extension
     append_file_name_ext(dmpFile, codec_list[codec_bench_handle->codec_method].extension);
+    return 0;
 }
 
 AOCL_INTP is_dir(const AOCL_CHAR* filename)
@@ -250,7 +265,7 @@ AOCL_INTP get_file_count(const AOCL_CHAR* dirName)
     AOCL_INTP cnt = 0;
 
 #ifdef _WINDOWS
-	AOCL_CHAR dir [MAX_FOLDER_LEN];
+	AOCL_CHAR dir [MAX_FILENAME_LEN];
     memset(dir, '\0', sizeof(dir));
     sprintf(dir, "%s\\*", dirName);
 
@@ -419,7 +434,10 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                         ret = ERR_CODEC_BENCH_ARGS;
                         break;
                     }
-                    read_file_name(dumpFile, &argv[cnt][2]);
+                    if (read_file_name(dumpFile, &argv[cnt][2]) != 0){
+                        LOG_STRING_OVERFLOW(&argv[cnt][2]);
+                        ret = ERR_CODEC_BENCH_ARGS;
+                    }
                     dumpEnabled = 1;
                     break;
 
@@ -430,7 +448,10 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                         ret = ERR_CODEC_BENCH_ARGS;
                         break;
                     }
-                    read_file_name(valFile, &argv[cnt][2]);
+                    if (read_file_name(valFile, &argv[cnt][2]) != 0) {
+                        LOG_STRING_OVERFLOW(&argv[cnt][2]);
+                        ret = ERR_CODEC_BENCH_ARGS;
+                    }
                     valEnabled = 1;
                     break;
  
@@ -444,7 +465,10 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
             if (!fileIn)
             {
                 AOCL_CHAR *tmpStr;
-                read_file_name(inFile, argv[cnt]);
+                if (read_file_name(inFile, argv[cnt]) != 0) {
+                    LOG_STRING_OVERFLOW(argv[cnt]);
+                    ret = ERR_CODEC_BENCH_ARGS;
+                }
 #ifdef _WINDOWS
                 tmpStr = strrchr(inFile, '\\');
 #else
@@ -452,8 +476,8 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
 #endif
                 codec_bench_handle->fName = tmpStr ? tmpStr+1 : inFile;
 
-                if(is_dir(argv[cnt])) {
-                    strcpy(inFolder, argv[cnt]);
+                if(is_dir(inFile)) {
+                    strcpy(inFolder, inFile);
                     isFolder = 1;
                 }
                 fileIn = 1;
@@ -579,11 +603,22 @@ AOCL_INTP open_file_in_folder(aocl_codec_bench_info* codec_bench_handle,
     AOCL_CHAR filename[MAX_FILENAME_LEN];
     AOCL_CHAR filePath[MAX_FILENAME_LEN];
 
-    // Copy folder name
+    // Copy folder name to filePath
     strcpy(filePath, inFolder);
+    // Store file name in 'filename'
+    if (get_file_name(codec_bench_handle, filename, file_number) != 0){
+        LOG_STRING_OVERFLOW("Compressed input file path");
+        return ERR_CODEC_BENCH_ARGS;
+    }
+
+    // check for string overflow
+    AOCL_UINTP append_len = 1 + strlen(filename);
+    if (STRING_OVERFLOW(strlen(filePath), append_len, MAX_FILENAME_LEN)){
+        LOG_STRING_OVERFLOW("Compressed input file path");
+        return ERR_CODEC_BENCH_ARGS;
+    }
+
     CODEC_STRCAT(filePath);
-    
-    get_file_name(codec_bench_handle, filename, file_number);
     strcat(filePath, filename);
 
     if (!open_file(codec_bench_handle, filePath, filename))
@@ -635,20 +670,24 @@ AOCL_INTP dump_to_file(aocl_codec_bench_info* codec_bench_handle,
     strcpy(dmpFile, codec_bench_handle->dumpFile);
     strcpy(dmpFolder, codec_bench_handle->dumpFile);
 
-    //append count number
-    if (file_cnt > 0) {
-        AOCL_CHAR file_cnt_str[MAX_FILENAME_LEN];
-        sprintf(file_cnt_str, "_%d", file_cnt);
-        append_file_name_ext(dmpFile, file_cnt_str);
+    AOCL_CHAR file_cnt_str[MAX_FILENAME_LEN];
+    sprintf(file_cnt_str, "_%d", file_cnt);
+
+    // check for string overflow
+    AOCL_UINTP append_len = strlen(file_cnt_str) + strlen(codec_list[codec_bench_handle->codec_method].extension) + 1 + strlen(dmpFile);
+    if (STRING_OVERFLOW(strlen(dmpFolder), append_len, MAX_FILENAME_LEN)){
+        LOG_STRING_OVERFLOW("Dump file path");
+        return ERR_CODEC_BENCH_ARGS;
     }
 
+    //append count number
+    append_file_name_ext(dmpFile, file_cnt_str);
     // append extension
     append_file_name_ext(dmpFile, codec_list[codec_bench_handle->codec_method].extension);
 
-    // open file to dump compressed data
     CODEC_STRCAT(dmpFolder);
     strcat(dmpFolder, dmpFile);
-
+    // open file to dump compressed data
     if (!(dumpFp = fopen(dmpFolder, "wb")))
     {
         LOG_FORMATTED(ERR, log_ctx,
@@ -1259,9 +1298,19 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
             AOCL_CHAR filePath[MAX_FILENAME_LEN];
 
             strcpy(filePath, inFolder);
-            CODEC_STRCAT(filePath);
+            if(get_file_name(&codec_bench_handle, filename, 1) != 0) {
+                LOG_STRING_OVERFLOW("Compressed input file path");
+                ret = ERR_CODEC_BENCH_ARGS;
+                goto exit;
+            }
 
-            get_file_name(&codec_bench_handle, filename, 1);
+            AOCL_UINTP append_len = 1 + strlen(filename);
+            if (STRING_OVERFLOW(strlen(filePath), append_len, MAX_FILENAME_LEN)){
+                LOG_STRING_OVERFLOW("Compressed input file path");
+                ret = ERR_CODEC_BENCH_ARGS;
+                goto exit;
+            }
+            CODEC_STRCAT(filePath);
             strcat(filePath, filename);
 
             if (!open_file(&codec_bench_handle, filePath, filename))
