@@ -48,7 +48,6 @@
 #include "utils/utils.h"
 
 #define MAX_FILENAME_LEN 256
-#define MAX_FOLDER_LEN 256
 
 //Number of iterations of compression/decompression operations
 #define BENCH_NUM_ITERS 10
