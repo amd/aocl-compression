@@ -548,7 +548,7 @@ typedef uLong FAR uLongf;
 #endif
 
 /* AOCL optimization flags */
-#include "algos/common/aoclAlgoOpt.h"
+#include "aoclAlgoOpt.h"
 #ifdef AOCL_ZLIB_OPT
      #include <stdint.h>
 #endif /* AOCL_ZLIB_OPT */

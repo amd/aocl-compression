@@ -42,7 +42,7 @@ extern "C" {
 
 /* --- Dependency --- */
 #include <stddef.h>   /* size_t */
-#include "algos/common/aoclAlgoOpt.h"
+#include "aoclAlgoOpt.h"
 
 
 /*!

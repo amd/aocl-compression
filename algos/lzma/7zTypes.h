@@ -8,7 +8,7 @@
 #ifndef __7Z_TYPES_H
 #define __7Z_TYPES_H
 
-#include "algos/common/aoclAlgoOpt.h" /* AOCL Optimization flags */
+#include "aoclAlgoOpt.h" /* AOCL Optimization flags */
 
 #ifdef AOCL_UNIT_TEST
 // Enabling this will allow code paths to reach some of the hard to reach sections in the code

@@ -245,6 +245,7 @@ endif ()
 
 #set the expected path variables
 include_directories(.)
+include_directories(${ALGOS_PATH}/common/)
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 link_directories(${ROOT_DIR}/build/)
 set(DEST_LIB_PATH aocl_compression/lib)

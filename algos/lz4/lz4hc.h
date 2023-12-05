@@ -59,7 +59,7 @@ extern "C" {
 /* --- Dependency --- */
 /* note : lz4hc requires lz4.h/lz4.c for compilation */
 #include "lz4.h"   /* stddef, LZ4LIB_API, LZ4_DEPRECATED */
-#include "algos/common/aoclAlgoOpt.h" /* AOCL Optimization flags */
+#include "aoclAlgoOpt.h" /* AOCL Optimization flags */
 
 /// @cond DOXYGEN_SHOULD_SKIP_THIS 
 
