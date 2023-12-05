@@ -37,7 +37,7 @@
 #endif
 
 #include <stdint.h>
-#include "algos/common/aoclAlgoOpt.h" /* AOCL Optimization flags */
+#include "aoclAlgoOpt.h" /* AOCL Optimization flags */
 
 #include <cassert>
 #include <cstdlib>

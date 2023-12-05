@@ -24,7 +24,7 @@
 #define _BZLIB_PRIVATE_H
 
 #include <stdlib.h>
-#include "algos/common/aoclAlgoOpt.h"
+#include "aoclAlgoOpt.h"
 
 #ifndef BZ_NO_STDIO
 #include <stdio.h>

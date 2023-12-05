@@ -46,7 +46,7 @@ extern "C" {
 #include <limits.h>   /* INT_MAX */
 #include <stddef.h>   /* size_t */
 
-#include "algos/common/aoclAlgoOpt.h" /* AOCL Optimization flags */
+#include "aoclAlgoOpt.h" /* AOCL Optimization flags */
 
 /* =====   ZSTDLIB_API : control library symbols visibility   ===== */
 #ifndef ZSTDLIB_VISIBLE
