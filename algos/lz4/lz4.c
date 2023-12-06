@@ -1,7 +1,7 @@
 /*
    LZ4 - Fast LZ compression algorithm
    Copyright (C) 2011-present, Yann Collet.
-   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+   Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -1415,6 +1415,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
     U32 offset = 0;
     U32 forwardH;
 
+    LOG_FORMATTED(INFO, logCtx, "srcSize=%i, maxOutputSize=%i tableType=%u", inputSize, maxOutputSize, tableType);
     DEBUGLOG(5, "AOCL_LZ4_compress_generic_validated: srcSize=%i, tableType=%u", inputSize, tableType);
     assert(ip != NULL);
     /* If init conditions are not met, we don't have to mark stream
@@ -1563,6 +1564,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                         continue;
                     } /* too far */
                     assert((current - matchIndex) <= LZ4_DISTANCE_MAX);  /* match now expected within distance */
+                    LOG_FORMATTED(DEBUG, logCtx, "candidate at pos=%u  (offset=%u", matchIndex, current - matchIndex);
 
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
                     ipPrevData.u = *(reg_t*)(ip - prevOffset);
@@ -1645,6 +1647,8 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
             /* Copy Literals */
             LZ4_wildCopy8(op, anchor, op+litLength);
             op+=litLength;
+            LOG_FORMATTED(DEBUG, logCtx, "seq.start:%i, literals=%u, match.start:%i",
+                        (int)(anchor-(const BYTE*)source), litLength, (int)(ip-(const BYTE*)source));
             DEBUGLOG(6, "seq.start:%i, literals=%u, match.start:%i",
                         (int)(anchor-(const BYTE*)source), litLength, (int)(ip-(const BYTE*)source));
         }
@@ -1671,6 +1675,7 @@ _next_match:
             assert(offset <= LZ4_DISTANCE_MAX && offset > 0);
             LZ4_writeLE16(op, (U16)offset); op+=2;
         } else  {
+            LOG_FORMATTED(DEBUG, logCtx, "             with offset=%u  (same segment)", (U32)(ip - match));
             DEBUGLOG(6, "             with offset=%u  (same segment)", (U32)(ip - match));
             assert(ip-match <= LZ4_DISTANCE_MAX);
             LZ4_writeLE16(op, (U16)(ip - match)); op+=2;
@@ -1695,6 +1700,7 @@ _next_match:
             } else {
                 matchCode = LZ4_count(ip+MINMATCH, match+MINMATCH, matchlimit);
                 ip += (size_t)matchCode + MINMATCH;
+                LOG_FORMATTED(DEBUG, logCtx, "             with matchLength=%u", matchCode+MINMATCH);
                 DEBUGLOG(6, "             with matchLength=%u", matchCode+MINMATCH);
             }
 
@@ -1794,6 +1800,8 @@ _next_match:
                 token=op++;
                 *token=0;
                 if (maybe_extMem) offset = current - matchIndex;
+                LOG_FORMATTED(DEBUG, logCtx, "seq.start:%i, literals=%u, match.start:%i",
+                            (int)(anchor-(const BYTE*)source), 0, (int)(ip-(const BYTE*)source));
                 DEBUGLOG(6, "seq.start:%i, literals=%u, match.start:%i",
                             (int)(anchor-(const BYTE*)source), 0, (int)(ip-(const BYTE*)source));
                 goto _next_match;
@@ -1820,6 +1828,7 @@ _last_literals:
                 return 0;   /* cannot compress within `dst` budget. Stored indexes in hash table are nonetheless fine */
             }
         }
+        LOG_FORMATTED(DEBUG, logCtx, "Final literal run : %i literals", (int)lastRun);
         DEBUGLOG(6, "Final literal run : %i literals", (int)lastRun);
         if (lastRun >= RUN_MASK) {
             size_t accumulator = lastRun - RUN_MASK;
@@ -1839,6 +1848,7 @@ _last_literals:
     }
     result = (int)(((char*)op) - dest);
     assert(result > 0);
+    LOG_FORMATTED(INFO, logCtx, "Compressed %i bytes into %i bytes", inputSize, result);
     DEBUGLOG(5, "LZ4_compress_generic: compressed %i bytes into %i bytes", inputSize, result);
     return result;
 }
@@ -1899,6 +1909,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated_mt(
     U32 offset = 0;
     U32 forwardH;
 
+    LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : srcSize=%i, maxOutputSize=%i, tableType=%u", omp_get_thread_num(), inputSize, maxOutputSize, tableType);
     DEBUGLOG(5, "AOCL_LZ4_compress_generic_validated_mt: srcSize=%i, tableType=%u", inputSize, tableType);
     assert(ip != NULL);
     /* If init conditions are not met, we don't have to mark stream
@@ -1978,7 +1989,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated_mt(
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
             U32 ipData;
 #endif
-            //printf("Thread [id: %d] : Starting a new match finding loop with ip [%x]\n", omp_get_thread_num(), ip);
+            // LOG_FORMATTED(DEBUG, logCtx, "Thread [id: %d] : Starting a new match finding loop with ip [%p]", omp_get_thread_num(), ip);
             do {
                 U32 const h = forwardH;
                 U32 const current = (U32)(forwardIp - base);
@@ -1996,7 +2007,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated_mt(
 #else
                 step = (searchMatchNb++ >> LZ4_skipTrigger);
 #endif
-                //printf("Thread [id: %d] : finding match in the loop with ip [%x], step [%d]\n", omp_get_thread_num(), ip, step);
+                // LOG_FORMATTED(DEBUG, logCtx, "Thread [id: %d] : finding match in the loop with ip [%p], step [%d]", omp_get_thread_num(), ip, step);
 
                 if (unlikely(forwardIp > mflimitPlusOne)) goto _last_literals;
                 assert(ip < mflimitPlusOne);
@@ -2335,12 +2346,14 @@ _last_literals:
         result = (int)(((char*)dst_without_lastLiterals) - dest);
         *last_anchor_ptr = (BYTE*)anchor;//src pointer until which compressed output is written : To support ST decompression on parallel compressed stream
         *last_bytes_len = (size_t)(iend - anchor);//length of src bytes pending for compression : To support ST decompression on parallel compressed stream
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : result=%i, last_bytes_len=%i", omp_get_thread_num(), result, (int)(*last_bytes_len));
     }
     else
     {
         result = (int)(((char*)op) - dest);
         *last_anchor_ptr = (BYTE*)op;//Write the complete commpressed chunk
         //*last_bytes_len = 0;//Last thread needs no joining with the next chunk
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : result=%i", omp_get_thread_num(), result);
     }
 
     // result=0 when no match found, (all literals).
@@ -2414,9 +2427,13 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic(
     DEBUGLOG(5, "AOCL_LZ4_compress_generic: srcSize=%i, dstCapacity=%i",
         srcSize, dstCapacity);
 
-    if ((U32)srcSize > (U32)LZ4_MAX_INPUT_SIZE) { return 0; }  /* Unsupported srcSize, too large (or negative) */
+    if ((U32)srcSize > (U32)LZ4_MAX_INPUT_SIZE) {
+        LOG_UNFORMATTED(INFO, logCtx, "Unsupported srcSize, too large or negative"); 
+        return 0; 
+    }  /* Unsupported srcSize, too large (or negative) */
     if (srcSize == 0) {   /* src == NULL supported if srcSize == 0 */
         if (outputDirective != notLimited && dstCapacity <= 0) return 0;  /* no output, can't write anything */
+        LOG_UNFORMATTED(INFO, logCtx, "Generating an empty block");
         DEBUGLOG(5, "Generating an empty block");
         assert(outputDirective == notLimited || dstCapacity >= 1);
         assert(dst != NULL);
@@ -2457,9 +2474,13 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_mt(
     DEBUGLOG(5, "AOCL_LZ4_compress_generic_mt: srcSize=%i, dstCapacity=%i",
         srcSize, dstCapacity);
 
-    if ((U32)srcSize > (U32)LZ4_MAX_INPUT_SIZE) { return 0; }  /* Unsupported srcSize, too large (or negative) */
+    if ((U32)srcSize > (U32)LZ4_MAX_INPUT_SIZE) {
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : Unsupported srcSize, too large or negative", omp_get_thread_num()); 
+        return 0; 
+    }  /* Unsupported srcSize, too large (or negative) */
     if (srcSize == 0) {   /* src == NULL supported if srcSize == 0 */
         if (outputDirective != notLimited && dstCapacity <= 0) return 0;  /* no output, can't write anything */
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : Generating an empty block", omp_get_thread_num());
         DEBUGLOG(5, "Generating an empty block");
         assert(outputDirective == notLimited || dstCapacity >= 1);
         assert(dst != NULL);
@@ -2514,7 +2535,10 @@ int AOCL_LZ4_compress_fast_extState(void* state, const char* source, char* dest,
 {
     AOCL_SETUP_NATIVE();
     if(state==NULL || (source==NULL && inputSize!=0) || dest==NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return 0;
+    }
     
     LZ4_stream_t_internal* const ctx = &LZ4_initStream(state, sizeof(LZ4_stream_t))->internal_donotuse;
     assert(ctx != NULL);
@@ -2547,7 +2571,10 @@ int AOCL_LZ4_compress_fast_extState(void* state, const char* source, char* dest,
 int AOCL_LZ4_compress_fast_extState_mt(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration, unsigned char** last_anchor_ptr, unsigned int* last_bytes_len)
 {
     if (state == NULL || (source == NULL && inputSize != 0) || dest == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return 0;
+    }
 
     LZ4_stream_t_internal* const ctx = &LZ4_initStream(state, sizeof(LZ4_stream_t))->internal_donotuse;
     assert(ctx != NULL);
@@ -2653,8 +2680,12 @@ int LZ4_compress_fast_ST(const char* source, char* dest, int inputSize, int maxO
 * AOCL_LZ4_AVX_OPT and made to pair with AOCL_LZ4_decompress_safe_mt().
 */
 int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration){
-    if ((source == NULL && inputSize != 0) || dest == NULL)
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    if ((source == NULL && inputSize != 0) || dest == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return 0;
+    }
     
     int result;
     aocl_thread_group_t thread_group_handle;
@@ -2669,18 +2700,22 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
                                                  LZ4_COMPRESS_INPLACE_MARGIN,
                                                  WINDOW_FACTOR);
     if (rap_metadata_len < 0)
+    {
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return 0;
+    }
  
     if (thread_group_handle.num_threads == 1)
     {
-        return LZ4_compress_fast_ST(source, dest, inputSize, maxOutputSize, acceleration);
+        LOG_UNFORMATTED(INFO, logCtx, "Running single threaded compress");
+        result = LZ4_compress_fast_ST(source, dest, inputSize, maxOutputSize, acceleration);
     }
     else
     {
 #ifdef AOCL_THREADS_LOG
         printf("Compress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
 #endif
-
+        LOG_FORMATTED(INFO, logCtx, "Running multi threaded compress on %u threads", thread_group_handle.num_threads);
 #pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
         {
 #ifdef AOCL_THREADS_LOG
@@ -2756,6 +2791,8 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
 #ifdef AOCL_THREADS_LOG
             printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt-1);
 #endif
+            LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt-1);
+            LOG_UNFORMATTED(TRACE, logCtx, "Exit");
             return result;
         }
         //Copy first chunk as it is to the output final buffer
@@ -2774,6 +2811,8 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
 #endif
             result = 0;
             aocl_destroy_parallel_compress_mt(&thread_group_handle);
+            LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Error in last bytes position", thread_cnt);
+            LOG_UNFORMATTED(TRACE, logCtx, "Exit");
             return result;
         }
         *(AOCL_INT32*)dst_ptr = decomp_len;
@@ -2796,6 +2835,8 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
 #ifdef AOCL_THREADS_LOG
                 printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
 #endif
+            LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt);
+            LOG_UNFORMATTED(TRACE, logCtx, "Exit");
                 return result;
             }
             dst_offset = 0;
@@ -2890,6 +2931,8 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
 #endif
                     result = 0;
                     aocl_destroy_parallel_compress_mt(&thread_group_handle);
+                    LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Error in last bytes position", thread_cnt);
+                    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
                     return result;
                 }
                 *(AOCL_INT32*)dst_ptr = decomp_len + prev_thread_info.last_bytes_len;
@@ -2905,6 +2948,7 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
         result = thread_group_handle.dst - dest;
         aocl_destroy_parallel_compress_mt(&thread_group_handle);
     }//thread_group_handle.num_threads > 1
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return result;
 }
 #endif /* AOCL_LZ4_AVX_OPT */
@@ -2970,7 +3014,7 @@ int LZ4_compress_default(const char* src, char* dst, int srcSize, int maxOutputS
 
     int ret = LZ4_compress_fast(src, dst, srcSize, maxOutputSize, 1);
 
-    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return ret;
 }
 
@@ -3379,7 +3423,10 @@ AOCL_LZ4_decompress_generic(
                  )
 {
     if (src == NULL || dst == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return -1;
+    }
 
     {   const BYTE* ip = (const BYTE*) src;
         const BYTE* const iend = ip + srcSize;
@@ -3403,7 +3450,7 @@ AOCL_LZ4_decompress_generic(
         unsigned token;
         size_t length;
 
-
+        LOG_FORMATTED(INFO, logCtx, "srcSize:%i, dstSize:%i", srcSize, outputSize);
         DEBUGLOG(5, "AOCL_LZ4_decompress_generic (srcSize:%i, dstSize:%i)", srcSize, outputSize);
 
         /* Special cases */
@@ -3419,6 +3466,7 @@ AOCL_LZ4_decompress_generic(
         /* Currently the fast loop shows a regression on qualcomm arm chips. */
 #if LZ4_FAST_DEC_LOOP
         if ((oend - op) < FASTLOOP_SAFE_DISTANCE) {
+            LOG_UNFORMATTED(INFO, logCtx, "skip fast decode loop");
             DEBUGLOG(6, "skip fast decode loop");
             goto safe_decode;
         }
@@ -3437,7 +3485,10 @@ AOCL_LZ4_decompress_generic(
             if (length == RUN_MASK) {
                 variable_length_error error = ok;
                 length += read_variable_length(&ip, iend-RUN_MASK, (int)endOnInput, (int)endOnInput, &error);
-                if (error == initial_error) { goto _output_error; }
+                if (error == initial_error) { 
+                    LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional literal length.");
+                    goto _output_error; 
+                }
                 if ((safeDecode) && unlikely((uptrval)(op)+length<(uptrval)(op))) { goto _output_error; } /* overflow detection */
                 if ((safeDecode) && unlikely((uptrval)(ip)+length<(uptrval)(ip))) { goto _output_error; } /* overflow detection */
 
@@ -3480,9 +3531,15 @@ AOCL_LZ4_decompress_generic(
 
             if (length == ML_MASK) {
                 variable_length_error error = ok;
-                if ((checkOffset) && (unlikely(match + dictSize < lowPrefix))) { goto _output_error; } /* Error : offset outside buffers */
+                if ((checkOffset) && (unlikely(match + dictSize < lowPrefix))) { 
+                    LOG_UNFORMATTED(ERR, logCtx, "Offset outside buffers.");
+                    goto _output_error; 
+                } /* Error : offset outside buffers */
                 length += read_variable_length(&ip, iend - LASTLITERALS + 1, (int)endOnInput, 0, &error);
-                if (error != ok) { goto _output_error; }
+                if (error != ok) { 
+                    LOG_FORMATTED(ERR, logCtx, "Encountered variable_length_error (%d) while decoding additional match length.", (int)(error));
+                    goto _output_error; 
+                }
                 if ((safeDecode) && unlikely((uptrval)(op)+length<(uptrval)op)) { goto _output_error; } /* overflow detection */
                 length += MINMATCH;
                 if (op + length >= oend - FASTLOOP_SAFE_DISTANCE) {
@@ -3508,7 +3565,10 @@ AOCL_LZ4_decompress_generic(
                         continue;
             }   }   }
 
-            if (checkOffset && (unlikely(match + dictSize < lowPrefix))) { goto _output_error; } /* Error : offset outside buffers */
+            if (checkOffset && (unlikely(match + dictSize < lowPrefix))) { 
+                LOG_UNFORMATTED(ERR, logCtx, "Offset outside buffers.");
+                goto _output_error; 
+            } /* Error : offset outside buffers */
             /* match starting within external dictionary */
             if ((dict==usingExtDict) && (match < lowPrefix)) {
                 if (unlikely(op+length > oend-LASTLITERALS)) {
@@ -3614,7 +3674,10 @@ AOCL_LZ4_decompress_generic(
             if (length == RUN_MASK) {
                 variable_length_error error = ok;
                 length += read_variable_length(&ip, iend-RUN_MASK, (int)endOnInput, (int)endOnInput, &error);
-                if (error == initial_error) { goto _output_error; }
+                if (error == initial_error) { 
+                    LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional literal length.");
+                    goto _output_error; 
+                }
                 if ((safeDecode) && unlikely((uptrval)(op)+length<(uptrval)(op))) { goto _output_error; } /* overflow detection */
                 if ((safeDecode) && unlikely((uptrval)(ip)+length<(uptrval)(ip))) { goto _output_error; } /* overflow detection */
             }
@@ -3666,6 +3729,8 @@ AOCL_LZ4_decompress_generic(
                       * so check that we exactly consume the input and don't overrun the output buffer.
                       */
                     if ((endOnInput) && ((ip+length != iend) || (cpy > oend))) {
+                        LOG_FORMATTED(ERR, logCtx, "Must be the last (or invalid) sequence because of the parsing limitations. Error, %s.",
+                                (ip+length != iend) ? "exact input not consumed" : "output buffer overflow" );
                         DEBUGLOG(6, "should have been last run of literals")
                         DEBUGLOG(6, "ip(%p) + length(%i) = %p != iend (%p)", ip, (int)length, ip+length, iend);
                         DEBUGLOG(6, "or cpy(%p) > oend(%p)", cpy, oend);
@@ -3699,7 +3764,10 @@ AOCL_LZ4_decompress_generic(
             if (length == ML_MASK) {
               variable_length_error error = ok;
               length += read_variable_length(&ip, iend - LASTLITERALS + 1, (int)endOnInput, 0, &error);
-              if (error != ok) goto _output_error;
+              if (error != ok) { 
+                LOG_FORMATTED(ERR, logCtx, "Encountered variable_length_error (%d) while decoding additional match length.", (int)(error));
+                goto _output_error;
+              }
                 if ((safeDecode) && unlikely((uptrval)(op)+length<(uptrval)op)) goto _output_error;   /* overflow detection */
             }
             length += MINMATCH;
@@ -3707,7 +3775,10 @@ AOCL_LZ4_decompress_generic(
 #if LZ4_FAST_DEC_LOOP
         safe_match_copy:
 #endif
-            if ((checkOffset) && (unlikely(match + dictSize < lowPrefix))) goto _output_error;   /* Error : offset outside buffers */
+            if ((checkOffset) && (unlikely(match + dictSize < lowPrefix))) {
+                LOG_UNFORMATTED(ERR, logCtx, "Offset outside buffers.");
+                goto _output_error;
+            }   /* Error : offset outside buffers */
             /* match starting within external dictionary */
             if ((dict==usingExtDict) && (match < lowPrefix)) {
                 if (unlikely(op+length > oend-LASTLITERALS)) {
@@ -3773,7 +3844,10 @@ AOCL_LZ4_decompress_generic(
 
             if (unlikely(cpy > oend-MATCH_SAFEGUARD_DISTANCE)) {
                 BYTE* const oCopyLimit = oend - (WILDCOPYLENGTH-1);
-                if (cpy > oend-LASTLITERALS) { goto _output_error; } /* Error : last LASTLITERALS bytes must be literals (uncompressed) */
+                if (cpy > oend-LASTLITERALS) { 
+                    LOG_UNFORMATTED(ERR, logCtx, "Last LASTLITERALS bytes must be uncompressed literals.");
+                    goto _output_error; 
+                } /* Error : last LASTLITERALS bytes must be literals (uncompressed) */
                 if (op < oCopyLimit) {
                     LZ4_wildCopy8(op, match, oCopyLimit);
                     match += oCopyLimit - op;
@@ -3789,6 +3863,7 @@ AOCL_LZ4_decompress_generic(
 
         /* end of decoding */
         if (endOnInput) {
+            LOG_FORMATTED(INFO, logCtx, "Decoded %i bytes", (int) (((char*)op)-dst));
             DEBUGLOG(5, "decoded %i bytes", (int) (((char*)op)-dst));
            return (int) (((char*)op)-dst);     /* Nb of output bytes decoded */
        } else {
@@ -3819,7 +3894,10 @@ AOCL_LZ4_decompress_generic_mt(
     int is_last_thread)
 {
     if (src == NULL || dst == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return -1;
+    }
 
     {   const BYTE* ip = (const BYTE*)src;
     const BYTE* const iend = ip + srcSize;
@@ -3843,7 +3921,7 @@ AOCL_LZ4_decompress_generic_mt(
     unsigned token;
     size_t length;
 
-
+    LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : srcSize:%i, dstSize:%i", omp_get_thread_num(), srcSize, outputSize);
     DEBUGLOG(5, "AOCL_LZ4_decompress_generic_mt (srcSize:%i, dstSize:%i)", srcSize, outputSize);
 
     /* Special cases */
@@ -3859,6 +3937,7 @@ AOCL_LZ4_decompress_generic_mt(
     /* Currently the fast loop shows a regression on qualcomm arm chips. */
 #if LZ4_FAST_DEC_LOOP
     if ((oend - op) < FASTLOOP_SAFE_DISTANCE) {
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : skip fast decode loop", omp_get_thread_num());
         DEBUGLOG(6, "skip fast decode loop");
         goto safe_decode;
     }
@@ -3878,6 +3957,7 @@ AOCL_LZ4_decompress_generic_mt(
             variable_length_error error = ok;
             length += read_variable_length(&ip, iend - RUN_MASK, (int)endOnInput, (int)endOnInput, &error);
             if (error == initial_error) {
+                LOG_FORMATTED(ERR, logCtx, "Thread [id: %d] : Encountered variable_length_error while decoding additional literal length.", omp_get_thread_num());
                 goto _output_error;
             }
             if ((safeDecode) && unlikely((uptrval)(op)+length < (uptrval)(op))) {
@@ -3930,6 +4010,7 @@ AOCL_LZ4_decompress_generic_mt(
         if (length == ML_MASK) {
             variable_length_error error = ok;
             if ((checkOffset) && (unlikely(match + dictSize < lowPrefix))) {
+                LOG_FORMATTED(ERR, logCtx, "Thread [id: %d] : Offset outside buffers.",omp_get_thread_num());
                 goto _output_error;
             } /* Error : offset outside buffers */
             if (is_last_thread) {
@@ -3938,6 +4019,7 @@ AOCL_LZ4_decompress_generic_mt(
                 length += read_variable_length(&ip, iend + 1, (int)endOnInput, 0, &error);
             }
             if (error != ok) {
+                LOG_FORMATTED(ERR, logCtx, "Thread [id: %d] : Encountered variable_length_error (%d) while decoding additional match length.", omp_get_thread_num(), (int)(error));
                 goto _output_error;
             }
             if ((safeDecode) && unlikely((uptrval)(op)+length < (uptrval)op)) {
@@ -3971,6 +4053,7 @@ AOCL_LZ4_decompress_generic_mt(
         }
 
         if (checkOffset && (unlikely(match + dictSize < lowPrefix))) {
+            LOG_FORMATTED(ERR, logCtx, "Thread [id: %d] : Offset outside buffers.", omp_get_thread_num());
             goto _output_error;
         } /* Error : offset outside buffers */
         /* match starting within external dictionary */
@@ -4085,6 +4168,7 @@ safe_decode:
             variable_length_error error = ok;
             length += read_variable_length(&ip, iend - RUN_MASK, (int)endOnInput, (int)endOnInput, &error);
             if (error == initial_error) {
+                LOG_FORMATTED(ERR, logCtx, "Thread [id: %d] : Encountered variable_length_error while decoding additional literal length.",omp_get_thread_num());
                 goto _output_error;
             }
             if ((safeDecode) && unlikely((uptrval)(op)+length < (uptrval)(op))) {
@@ -4145,6 +4229,8 @@ safe_decode:
                  * so check that we exactly consume the input and don't overrun the output buffer.
                  */
                 if ((endOnInput) && ((is_last_thread && (ip + length != iend)) || (cpy > oend))) {
+                    LOG_FORMATTED(ERR, logCtx, "Thread [id: %d] : Must be the last (or invalid) sequence because of the parsing limitations. Error, %s.",
+                                omp_get_thread_num(), (is_last_thread && (ip + length != iend)) ? "exact input not consumed" : "output buffer overflow" );
                     DEBUGLOG(6, "should have been last run of literals")
                         DEBUGLOG(6, "ip(%p) + length(%i) = %p != iend (%p)", ip, (int)length, ip + length, iend);
                     DEBUGLOG(6, "or cpy(%p) > oend(%p)", cpy, oend);
@@ -4183,8 +4269,10 @@ safe_decode:
             } else {
                 length += read_variable_length(&ip, iend + 1, (int)endOnInput, 0, &error);
             }
-            if (error != ok)
+            if (error != ok) {
+                LOG_FORMATTED(ERR, logCtx, "Thread [id: %d] : Encountered variable_length_error (%d) while decoding additional match length.",omp_get_thread_num(), (int)(error));
                 goto _output_error;
+            }
             if ((safeDecode) && unlikely((uptrval)(op)+length < (uptrval)op))
                 goto _output_error;   /* overflow detection */
         }
@@ -4193,8 +4281,10 @@ safe_decode:
 #if LZ4_FAST_DEC_LOOP
         safe_match_copy :
 #endif
-        if ((checkOffset) && (unlikely(match + dictSize < lowPrefix)))
-            goto _output_error;   /* Error : offset outside buffers */
+        if ((checkOffset) && (unlikely(match + dictSize < lowPrefix))) {
+            LOG_FORMATTED(ERR, logCtx, "Thread [id: %d] : Offset outside buffers.", omp_get_thread_num());
+            goto _output_error;
+        }   /* Error : offset outside buffers */
         /* match starting within external dictionary */
         if ((dict == usingExtDict) && (match < lowPrefix)) {
             if (unlikely(op + length > oend - LASTLITERALS)) {
@@ -4267,6 +4357,7 @@ safe_decode:
         if (unlikely(cpy > oend - MATCH_SAFEGUARD_DISTANCE)) {
             BYTE* const oCopyLimit = oend - (WILDCOPYLENGTH - 1);
             if (cpy > oend - LASTLITERALS) {
+                LOG_FORMATTED(ERR, logCtx, "Thread [id: %d] : Last LASTLITERALS bytes must be uncompressed literals.", omp_get_thread_num());
                 goto _output_error;
             } /* Error : last LASTLITERALS bytes must be literals (uncompressed) */
             if (op < oCopyLimit) {
@@ -4290,6 +4381,7 @@ safe_decode:
 
     /* end of decoding */
     if (endOnInput) {
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : Decoded %i bytes", omp_get_thread_num(), (int)(((char*)op) - dst));
         DEBUGLOG(5, "decoded %i bytes", (int)(((char*)op) - dst));
         return (int)(((char*)op) - dst);     /* Nb of output bytes decoded */
     }
@@ -4786,7 +4878,8 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if (source == NULL || dest == NULL)
     {
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return -1;
     }
     
@@ -4801,15 +4894,16 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
                                                    compressedSize, maxDecompressedSize, use_ST_decompressor);
     if (ret_status < 0)
     {
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return -1;
     }
     
 
     if (thread_group_handle.num_threads == 1 || use_ST_decompressor == 1)
     {
+        LOG_UNFORMATTED(INFO, logCtx, "Running single threaded decompress");
         result = LZ4_decompress_safe_ST(source + ret_status, dest, compressedSize - ret_status, maxDecompressedSize);
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return result;
     }
     else
@@ -4817,6 +4911,7 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
 #ifdef AOCL_THREADS_LOG
         printf("Decompress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
 #endif
+        LOG_FORMATTED(INFO, logCtx, "Running multi threaded decompress on %u threads", thread_group_handle.num_threads);
 #pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
         {
 #ifdef AOCL_THREADS_LOG
@@ -4871,7 +4966,8 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
 #ifdef AOCL_THREADS_LOG
                 printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
 #endif
-                LOG_UNFORMATTED(INFO, logCtx, "Exit");
+                LOG_FORMATTED(ERR, logCtx, "Decompress Thread [id: %d] : Encountered ERROR", thread_cnt);
+                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
                 return result;
             }
 
@@ -4884,7 +4980,7 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
 
         aocl_destroy_parallel_decompress_mt(&thread_group_handle);
 
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return result;
     }//thread_group_handle.num_threads > 1
 }
@@ -4918,7 +5014,7 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
 #endif /* AOCL_LZ4_OPT */
 #endif /* AOCL_ENABLE_THREADS */
 
-    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return result;
 }
 
