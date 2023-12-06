@@ -500,6 +500,7 @@ MEM_STATIC void* ZSTD_cwksp_reserve_object(ZSTD_cwksp* ws, size_t bytes)
     ZSTD_cwksp_assert_internal_consistency(ws);
     /* we must be in the first phase, no advance is possible */
     if (ws->phase != ZSTD_cwksp_alloc_objects || end > ws->workspaceEnd) {
+        LOG_UNFORMATTED(ERR, logCtx, "cwksp: object alloc failed!");
         DEBUGLOG(3, "cwksp: object alloc failed!");
         ws->allocFailed = 1;
         return NULL;

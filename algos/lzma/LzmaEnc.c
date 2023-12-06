@@ -2,7 +2,7 @@
 2022-07-15: Igor Pavlov : Public domain */
 
 /**
-* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+* Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -120,7 +120,7 @@ void LzmaEncProps_Init(CLzmaEncProps *p)
   p->srcLen = 0;
   p->cacheEfficientStrategy = -1;
 #endif
-  LOG_UNFORMATTED(INFO, logCtx, "Exit");
+  LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 }
 
 // Default settings as per LZMA SDK 22.01
@@ -264,6 +264,11 @@ void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
               p->dictSize = kHashGuarentee * HASH_CHAIN_SLOT_SZ_16;
       }
   }
+
+  LOG_FORMATTED(DEBUG, logCtx, "Parameters set : dictSize = %u, lc = %d, lp = %d, pb = %d,"
+  " algo = %d, fb = %d, btMode = %d, numHashBytes = %d, mc = %u, cacheEfficientStrategy = %d",
+      p->dictSize, p->lc, p->lp, p->pb, p->algo, p->fb, p->btMode, p->numHashBytes,
+      p->mc, p->cacheEfficientStrategy);
 
   if (p->numThreads < 0)
     p->numThreads =
@@ -843,8 +848,10 @@ SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* props2)
 
     if (props.lc > LZMA_LC_MAX
         || props.lp > LZMA_LP_MAX
-        || props.pb > LZMA_PB_MAX)
+        || props.pb > LZMA_PB_MAX) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid props");
         return SZ_ERROR_PARAM;
+    }
 
 
     if (props.dictSize > kLzmaMaxHistorySize)
@@ -853,8 +860,10 @@ SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* props2)
 #ifndef LZMA_LOG_BSR
     {
         const UInt64 dict64 = props.dictSize;
-        if (dict64 > ((UInt64)1 << kDicLogSizeMaxCompress))
+        if (dict64 > ((UInt64)1 << kDicLogSizeMaxCompress)) {
+            LOG_UNFORMATTED(ERR, logCtx, "Invalid dict size");
             return SZ_ERROR_PARAM;
+        }
     }
 #endif
 
@@ -4259,8 +4268,10 @@ SRes LzmaEnc_CodeOneMemBlock(CLzmaEncHandle pp, BoolInt reInit,
   
   *unpackSize = (UInt32)(p->nowPos64 - nowPos64);
   *destLen -= outStream.rem;
-  if (outStream.overflow)
-    return SZ_ERROR_OUTPUT_EOF;
+  if (outStream.overflow) {
+      LOG_UNFORMATTED(ERR, logCtx, "Out stream overflow");
+      return SZ_ERROR_OUTPUT_EOF;
+  }
 
   return res;
 }
@@ -4316,8 +4327,10 @@ SRes LzmaEnc_Encode(CLzmaEncHandle pp, ISeqOutStream *outStream, ISeqInStream *i
 
 SRes LzmaEnc_WriteProperties(CLzmaEncHandle pp, Byte *props, SizeT *size)
 {
-  if (pp == NULL || props == NULL || size == NULL || *size < LZMA_PROPS_SIZE)
-    return SZ_ERROR_PARAM;
+    if (pp == NULL || props == NULL || size == NULL || *size < LZMA_PROPS_SIZE) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        return SZ_ERROR_PARAM;
+    }
   *size = LZMA_PROPS_SIZE;
   {
     const CLzmaEnc *p = (const CLzmaEnc *)pp;
@@ -4360,8 +4373,10 @@ SRes LzmaEnc_MemEncode(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte
     int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
   AOCL_SETUP_NATIVE();
-  if (pp == NULL || src == NULL || srcLen == 0 || dest == NULL || destLen == NULL)
+  if (pp == NULL || src == NULL || srcLen == 0 || dest == NULL || destLen == NULL) {
+      LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
       return SZ_ERROR_PARAM;
+  }
 
   SRes res;
   CLzmaEnc *p = (CLzmaEnc *)pp;
@@ -4381,13 +4396,17 @@ SRes LzmaEnc_MemEncode(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte
   if (res == SZ_OK)
   {
     res = LzmaEnc_Encode2(p, progress);
-    if (res == SZ_OK && p->nowPos64 != srcLen)
-      res = SZ_ERROR_FAIL;
+    if (res == SZ_OK && p->nowPos64 != srcLen) {
+        LOG_UNFORMATTED(ERR, logCtx, "Not all src bytes processed");
+        res = SZ_ERROR_FAIL;
+    }
   }
 
   *destLen -= outStream.rem;
-  if (outStream.overflow)
-    return SZ_ERROR_OUTPUT_EOF;
+  if (outStream.overflow) {
+      LOG_UNFORMATTED(ERR, logCtx, "Out stream overflow");
+      return SZ_ERROR_OUTPUT_EOF;
+  }
   return res;
 }
 
@@ -4404,8 +4423,10 @@ SRes ValidateParams(const CLzmaEncProps* props) {
         props->btMode > 1 ||
         props->numHashBytes > 5 ||
         props->mc > ((UInt32)1 << 30) ||
-        props->writeEndMark > 1)
+        props->writeEndMark > 1) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid props");
         return SZ_ERROR_PARAM;
+    }
     else
         return SZ_OK;
 }
@@ -4420,13 +4441,14 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
       props == NULL || propsSize == NULL || destLen == NULL ||
       *destLen > (ULLONG_MAX - LZMA_PROPS_SIZE)) // handles case when dest size is < LZMA_PROPS_SIZE, resulting in destLen rolling over in calling APIs
   {
-    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return SZ_ERROR_PARAM;
   }
 
   if (ValidateParams(props) != SZ_OK)
   {
-    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return SZ_ERROR_PARAM;
   }
 
@@ -4434,7 +4456,8 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
   SRes res;
   if (!p)
   {
-    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    LOG_UNFORMATTED(ERR, logCtx, "Context creation failed");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return SZ_ERROR_MEM;
   }
 
@@ -4456,7 +4479,7 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
 
   LzmaEnc_Destroy(p, alloc, allocBig);
   
-  LOG_UNFORMATTED(INFO, logCtx, "Exit");
+  LOG_UNFORMATTED(TRACE, logCtx, "Exit");
   return res;
 }
 

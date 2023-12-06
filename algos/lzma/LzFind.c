@@ -2,7 +2,7 @@
 2021-11-29 : Igor Pavlov : Public domain */
 
 /**
-* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+* Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -53,6 +53,7 @@
 #include "LzFind.h"
 #include "LzHash.h"
 #include "algos/common/aoclHashChain.h"
+#include "utils/utils.h"
 
 #define kBlockMoveAlign       (1 << 7)    // alignment for memmove()
 #define kBlockSizeAlign       (1 << 16)   // alignment for block allocation
@@ -657,6 +658,9 @@ int AOCL_MatchFinder_Create(CMatchFinder* p, UInt32 historySize,
                 numSons <<= 1; //for bt, son is : <leftNode0> <rightNode0> <leftNode1> <rightNode1>... Hence 2x size.
             newSize = hs + numSons;
         }
+        LOG_FORMATTED(DEBUG, logCtx, "Match finder created with historySize = %u, "
+        "cyclicBufferSize = %u, fixedHashSize = %u", p->historySize,
+         p->cyclicBufferSize, p->fixedHashSize);
 
         {
             // aligned size is not required here, but it can be better for some loops
@@ -669,6 +673,7 @@ int AOCL_MatchFinder_Create(CMatchFinder* p, UInt32 historySize,
             MatchFinder_FreeThisClassMemory(p, alloc);
             p->numRefs = newSize;
             p->hash = AllocRefs(newSize, alloc);
+            LOG_FORMATTED(DEBUG, logCtx, "Total number of nodes in all hash tables = %zu", newSize);
 
             if (p->hash)
             {
@@ -792,6 +797,7 @@ void AOCL_MatchFinder_Init(CMatchFinder* p)
         size_t numSons;
         AOCL_SET_NUM_SONS(numSons)
         memset(p->son, 0, sizeof(CLzRef) * numSons); //kEmptySonValue
+        LOG_FORMATTED(DEBUG, logCtx, "Initialized cehc data structure of %zu nodes", numSons);
 
         MatchFinder_Init_LowHash(p); //Init fixed hash tables
         MatchFinder_Init_4(p);
@@ -940,20 +946,26 @@ for (size_t i = 0; i < numSons; i += HASH_CHAIN_SLOT_SZ, items += HASH_CHAIN_SLO
 MY_NO_INLINE
 void AOCL_MatchFinder_Normalize3(UInt32 subValue, CMatchFinder* p)
 {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if (USE_CACHE_EFFICIENT_HASH_CHAIN) { // normalize cache efficient data structures
         {
             // normalize fixed hash tables
             CLzRef* items = p->hash;
             MatchFinder_Normalize3(subValue, items, (size_t)p->fixedHashSize);
+            LOG_FORMATTED(DEBUG, logCtx, "Normalized fixed hash table of size = %zu", (size_t)p->fixedHashSize);
         }
 
         // normalize hash chain table
         if (p->level < HASH_CHAIN_16_LEVEL)
         {
             AOCL_NORMALIZE_HASH_CHAIN_TABLE(HASH_CHAIN_SLOT_SZ_8)
+            LOG_FORMATTED(DEBUG, logCtx, "Normalized chain table of size = %zu",
+             (size_t)(p->hashMask + 1) * HASH_CHAIN_SLOT_SZ_8);
         }
         else {
             AOCL_NORMALIZE_HASH_CHAIN_TABLE(HASH_CHAIN_SLOT_SZ_16)
+            LOG_FORMATTED(DEBUG, logCtx, "Normalized chain table of size = %zu",
+             (size_t)(p->hashMask + 1) * HASH_CHAIN_SLOT_SZ_16);
         }
     }
     else { // normalize reference data structures
@@ -961,7 +973,10 @@ void AOCL_MatchFinder_Normalize3(UInt32 subValue, CMatchFinder* p)
         if (p->btMode)
             numSonRefs <<= 1; //bt-mode, 2 values per node <l,r>
         MatchFinder_Normalize3(subValue, p->hash, (size_t)p->hashSizeSum + numSonRefs);
+        LOG_FORMATTED(DEBUG, logCtx, "Normalized all hash tables of size = %zu",
+             (size_t)p->hashSizeSum + numSonRefs);
     }
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 }
 
 /*
@@ -2934,10 +2949,12 @@ void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable) {
   {
       if (!p->cacheEfficientSearch) {
           if (p->numHashBytes <= 4) {
+              LOG_UNFORMATTED(DEBUG, logCtx, "Using AOCL_Hc4_MatchFinder without cehc");
               vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches;
               vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip;
           }
           else {
+            LOG_UNFORMATTED(DEBUG, logCtx, "Using AOCL_Hc5_MatchFinder without cehc");
               vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc5_MatchFinder_GetMatches;
               vTable->Skip = (Mf_Skip_Func)AOCL_Hc5_MatchFinder_Skip;
           }
@@ -2946,10 +2963,12 @@ void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable) {
           if (p->numHashBytes <= 4)
           {
               if (p->level < HASH_CHAIN_16_LEVEL) {
+                  LOG_UNFORMATTED(DEBUG, logCtx, "Using AOCL_Hc4_MatchFinder with cehc of block size 8");
                   vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches_Cehc8;
                   vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip_Cehc8;
               }
               else {
+                LOG_UNFORMATTED(DEBUG, logCtx, "Using AOCL_Hc4_MatchFinder with cehc of block size 16");
                   vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc4_MatchFinder_GetMatches_Cehc16;
                   vTable->Skip = (Mf_Skip_Func)AOCL_Hc4_MatchFinder_Skip_Cehc16;
               }
@@ -2957,10 +2976,12 @@ void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable) {
           else
           {
               if (p->level < HASH_CHAIN_16_LEVEL) {
+                LOG_UNFORMATTED(DEBUG, logCtx, "Using AOCL_Hc5_MatchFinder with cehc of block size 8");
                   vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc5_MatchFinder_GetMatches_Cehc8;
                   vTable->Skip = (Mf_Skip_Func)AOCL_Hc5_MatchFinder_Skip_Cehc8;
               }
               else {
+                LOG_UNFORMATTED(DEBUG, logCtx, "Using AOCL_Hc5_MatchFinder with cehc of block size 16");
                   vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Hc5_MatchFinder_GetMatches_Cehc16;
                   vTable->Skip = (Mf_Skip_Func)AOCL_Hc5_MatchFinder_Skip_Cehc16;
               }
@@ -2969,21 +2990,25 @@ void AOCL_MatchFinder_CreateVTable(CMatchFinder* p, IMatchFinder2* vTable) {
   }
   else if (p->numHashBytes == 2)
   {
+    LOG_UNFORMATTED(DEBUG, logCtx, "Using Bt2_MatchFinder");
     vTable->GetMatches = (Mf_GetMatches_Func)Bt2_MatchFinder_GetMatches;
     vTable->Skip = (Mf_Skip_Func)Bt2_MatchFinder_Skip;
   }
   else if (p->numHashBytes == 3)
   {
+    LOG_UNFORMATTED(DEBUG, logCtx, "Using Bt3_MatchFinder");
     vTable->GetMatches = (Mf_GetMatches_Func)Bt3_MatchFinder_GetMatches;
     vTable->Skip = (Mf_Skip_Func)Bt3_MatchFinder_Skip;
   }
   else if (p->numHashBytes == 4)  /* Default setting. */
   {
+    LOG_UNFORMATTED(DEBUG, logCtx, "Using AOCL_Bt4_MatchFinder");
     vTable->GetMatches = (Mf_GetMatches_Func)AOCL_Bt4_MatchFinder_GetMatches;
     vTable->Skip = (Mf_Skip_Func)AOCL_Bt4_MatchFinder_Skip;
   }
   else
   {
+    LOG_UNFORMATTED(DEBUG, logCtx, "Using Bt5_MatchFinder");
     vTable->GetMatches = (Mf_GetMatches_Func)Bt5_MatchFinder_GetMatches;
     vTable->Skip = (Mf_Skip_Func)Bt5_MatchFinder_Skip;
   }

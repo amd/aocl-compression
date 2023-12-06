@@ -1,5 +1,5 @@
 // Copyright 2005 Google Inc. All Rights Reserved.
-// Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+// Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -860,7 +860,9 @@ char* AOCL_CompressFragment(const char* input,
   const size_t kInputMarginBytes = 15;
   if (input_size >= kInputMarginBytes) {
     const char* ip_limit = input + input_size - kInputMarginBytes;
-
+    
+    LOG_FORMATTED(DEBUG, logCtx, "Input size = %zu, Input size until limit = %zu",
+     input_size, (size_t)(ip_limit - ip));
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
     uint32_t bbhl_prev = 0; //baseline bytes_between_hash_lookups to use
 #endif
@@ -943,6 +945,8 @@ char* AOCL_CompressFragment(const char* input,
         uint32_t bytes_between_hash_lookups = skip >> 5;
         skip += bytes_between_hash_lookups;
 #endif
+        LOG_FORMATTED(DEBUG, logCtx, "skip = %u", skip);
+
         const char* next_ip = ip + bytes_between_hash_lookups;
         if (next_ip > ip_limit) {
           ip = next_emit;
@@ -1038,6 +1042,7 @@ char* AOCL_CompressFragment(const char* input,
 
  emit_remainder:
   // Emit the remaining bytes as a literal
+  LOG_FORMATTED(DEBUG, logCtx, "Emit remaining %d bytes", (int)(ip_end - ip));
   if (ip < ip_end) {
     op = EmitLiteral</*allow_fast_path=*/false>(op, ip, ip_end - ip);
   }
@@ -2296,6 +2301,7 @@ bool RawUncompress(const char* compressed, size_t compressed_length, char* uncom
   }
 
   if (ret_status == 0 /* for when compressed is NULL*/ || thread_group_handle.num_threads == 1) {
+    LOG_UNFORMATTED(INFO, logCtx, "Running single threaded decompression");
     size_t ulength;
     const char *start_compressed = compressed + ret_status;
     size_t compressed_length_actual = compressed_length - ret_status;
@@ -2308,6 +2314,7 @@ bool RawUncompress(const char* compressed, size_t compressed_length, char* uncom
     return SNAPPY_SAW_raw_uncompress_fp(start_compressed, compressed_length_actual, uncompressed);
   }
   else {
+    LOG_FORMATTED(INFO, logCtx, "Running multi threaded decompress on %u threads", thread_group_handle.num_threads);
 #ifdef AOCL_THREADS_LOG
         printf("Decompress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
 #endif
@@ -2373,18 +2380,18 @@ bool RawUncompress(const char* compressed, size_t compressed_length, char* uncom
      size_t ulength;
      if (!GetUncompressedLength(compressed, compressed_length, &ulength))
      {
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return false;
      }
      if (ulength != 0 && uncompressed == NULL)
      {
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return false;
      }
   // sanity checks ------------------------------------------------------------
   bool ret = false;
   ret = SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
-  LOG_UNFORMATTED(INFO, logCtx, "Exit");
+  LOG_UNFORMATTED(TRACE, logCtx, "Exit");
   return ret;
 #endif
 }
@@ -2396,7 +2403,7 @@ bool RawUncompress(const char* compressed, size_t compressed_length,
 
   bool ret = RawUncompress(&reader, uncompressed);
 
-  LOG_UNFORMATTED(INFO, logCtx, "Exit");
+  LOG_UNFORMATTED(TRACE, logCtx, "Exit");
   return ret;
 }
 #endif
@@ -2498,7 +2505,8 @@ void RawCompress(const char* input,
   LOG_UNFORMATTED(TRACE, logCtx, "Enter");
   if (input == NULL || compressed == NULL || compressed_length == NULL)
   {
-    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return;
   }
   AOCL_SETUP_NATIVE();
@@ -2518,18 +2526,19 @@ void RawCompress(const char* input,
   if (thread_group_handle.num_threads == 1) {
     ByteArraySource reader(input, input_length);
     UncheckedByteArraySink writer(compressed);
+    LOG_UNFORMATTED(INFO, logCtx, "Running single threaded compress");
     Compress(&reader, &writer);
 
     // Compute how many bytes were added
     *compressed_length = (writer.CurrentDestination() - compressed);
-    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return;
   }
   else {
 #ifdef AOCL_THREADS_LOG
       printf("Compress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
 #endif
-
+      LOG_FORMATTED(INFO, logCtx, "Running multi threaded compress on %u threads", thread_group_handle.num_threads);
 #pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
     {
 #ifdef AOCL_THREADS_LOG
@@ -2585,6 +2594,7 @@ void RawCompress(const char* input,
 #ifdef AOCL_THREADS_LOG
         printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
 #endif
+        LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt);
         return;
       }
 
@@ -2601,10 +2611,12 @@ void RawCompress(const char* input,
 #ifdef AOCL_THREADS_LOG
         printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
 #endif
+        LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt);
         return;
       }
 
       // add the uncompressed length to a length accumulator
+      LOG_FORMATTED(DEBUG, logCtx, "Uncompressed length from Thread [id: %d] is %u", thread_cnt, uncompressed_length_from_stream);
       combined_uncompressed_length += uncompressed_length_from_stream;
 
       // store data start location (byte immediately after the varint) for later
@@ -2662,7 +2674,7 @@ void RawCompress(const char* input,
   *compressed_length = (writer.CurrentDestination() - compressed);
 #endif /* defined(AOCL_ENABLE_THREADS) && defined(AOCL_SNAPPY_OPT) */
 
-  LOG_UNFORMATTED(INFO, logCtx, "Exit");
+  LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 }
 
 size_t Compress(const char* input, size_t input_length,
@@ -2929,6 +2941,7 @@ bool InternalUncompress(Source* compressed, Sink* uncompressed) {
   SnappyDecompressor<with_c> decompressor(compressed);
   uint32_t uncompressed_len = 0;
   if (!decompressor.ReadUncompressedLength(&uncompressed_len)) {
+    LOG_UNFORMATTED(ERR, logCtx, "Failed to read uncompressed length");
     return false;
   }
 
@@ -2941,12 +2954,14 @@ bool InternalUncompress(Source* compressed, Sink* uncompressed) {
   // If we can get a flat buffer, then use it, otherwise do block by block
   // uncompression
   if (allocated_size >= uncompressed_len) {
+    LOG_UNFORMATTED(DEBUG, logCtx, "Allocated size sufficient to store entire decompressed stream");
     SnappyArrayWriter writer(buf);
     bool result = InternalUncompressAllTags(&decompressor, &writer,
                                             compressed_len, uncompressed_len);
     uncompressed->Append(buf, writer.Produced());
     return result;
   } else {
+    LOG_UNFORMATTED(DEBUG, logCtx, "Performing decompression block by block");
     SnappySinkAllocator allocator(uncompressed);
     SnappyScatteredWriter<SnappySinkAllocator> writer(allocator);
     return InternalUncompressAllTags(&decompressor, &writer, compressed_len,

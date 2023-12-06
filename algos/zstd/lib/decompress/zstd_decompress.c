@@ -8,33 +8,33 @@
  * You may select, at your option, one of the above-listed licenses.
  */
 
- /**
-    * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
-    *
-    * Redistribution and use in source and binary forms, with or without
-    * modification, are permitted provided that the following conditions are met:
-    *
-    * 1. Redistributions of source code must retain the above copyright notice,
-    * this list of conditions and the following disclaimer.
-    * 2. Redistributions in binary form must reproduce the above copyright notice,
-    * this list of conditions and the following disclaimer in the documentation
-    * and/or other materials provided with the distribution.
-    * 3. Neither the name of the copyright holder nor the names of its
-    * contributors may be used to endorse or promote products derived from this
-    * software without specific prior written permission.
-    *
-    * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-    * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-    * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-    * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-    * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-    * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-    * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-    * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-    * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-    * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    * POSSIBILITY OF SUCH DAMAGE.
-    */
+/**
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its
+ * contributors may be used to endorse or promote products derived from this
+ * software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /* ***************************************************************
 *  Tuning parameters
@@ -150,10 +150,12 @@ static size_t ZSTD_DDictHashSet_emplaceDDict(ZSTD_DDictHashSet* hashSet, const Z
     size_t idx = ZSTD_DDictHashSet_getIndex(hashSet, dictID);
     const size_t idxRangeMask = hashSet->ddictPtrTableSize - 1;
     RETURN_ERROR_IF(hashSet->ddictPtrCount == hashSet->ddictPtrTableSize, GENERIC, "Hash set is full!");
+    LOG_FORMATTED(DEBUG, logCtx, "Hashed index: for dictID: %u is %zu", dictID, idx);
     DEBUGLOG(4, "Hashed index: for dictID: %u is %zu", dictID, idx);
     while (hashSet->ddictPtrTable[idx] != NULL) {
         /* Replace existing ddict if inserting ddict with same dictID */
         if (ZSTD_getDictID_fromDDict(hashSet->ddictPtrTable[idx]) == dictID) {
+            LOG_UNFORMATTED(DEBUG, logCtx, "DictID already exists, replacing rather than adding");
             DEBUGLOG(4, "DictID already exists, replacing rather than adding");
             hashSet->ddictPtrTable[idx] = ddict;
             return 0;
@@ -161,6 +163,7 @@ static size_t ZSTD_DDictHashSet_emplaceDDict(ZSTD_DDictHashSet* hashSet, const Z
         idx &= idxRangeMask;
         idx++;
     }
+    LOG_FORMATTED(DEBUG, logCtx, "Final idx after probing for dictID %u is: %zu", dictID, idx);
     DEBUGLOG(4, "Final idx after probing for dictID %u is: %zu", dictID, idx);
     hashSet->ddictPtrTable[idx] = ddict;
     hashSet->ddictPtrCount++;
@@ -178,6 +181,7 @@ static size_t ZSTD_DDictHashSet_expand(ZSTD_DDictHashSet* hashSet, ZSTD_customMe
     size_t oldTableSize = hashSet->ddictPtrTableSize;
     size_t i;
 
+    LOG_FORMATTED(DEBUG, logCtx, "Expanding DDict hash table! Old size: %zu new size: %zu", oldTableSize, newTableSize);
     DEBUGLOG(4, "Expanding DDict hash table! Old size: %zu new size: %zu", oldTableSize, newTableSize);
     RETURN_ERROR_IF(!newTable, memory_allocation, "Expanded hashset allocation failed!");
     hashSet->ddictPtrTable = newTable;
@@ -189,6 +193,7 @@ static size_t ZSTD_DDictHashSet_expand(ZSTD_DDictHashSet* hashSet, ZSTD_customMe
         }
     }
     ZSTD_customFree((void*)oldTable, customMem);
+    LOG_UNFORMATTED(DEBUG, logCtx, "Finished re-hash");
     DEBUGLOG(4, "Finished re-hash");
     return 0;
 }
@@ -199,6 +204,7 @@ static size_t ZSTD_DDictHashSet_expand(ZSTD_DDictHashSet* hashSet, ZSTD_customMe
 static const ZSTD_DDict* ZSTD_DDictHashSet_getDDict(ZSTD_DDictHashSet* hashSet, U32 dictID) {
     size_t idx = ZSTD_DDictHashSet_getIndex(hashSet, dictID);
     const size_t idxRangeMask = hashSet->ddictPtrTableSize - 1;
+    LOG_FORMATTED(DEBUG, logCtx, "Hashed index: for dictID: %u is %zu", dictID, idx);
     DEBUGLOG(4, "Hashed index: for dictID: %u is %zu", dictID, idx);
     for (;;) {
         size_t currDictID = ZSTD_getDictID_fromDDict(hashSet->ddictPtrTable[idx]);
@@ -210,6 +216,7 @@ static const ZSTD_DDict* ZSTD_DDictHashSet_getDDict(ZSTD_DDictHashSet* hashSet, 
             idx++;
         }
     }
+    LOG_FORMATTED(DEBUG, logCtx, "Final idx after probing for dictID %u is: %zu", dictID, idx);
     DEBUGLOG(4, "Final idx after probing for dictID %u is: %zu", dictID, idx);
     return hashSet->ddictPtrTable[idx];
 }
@@ -220,6 +227,7 @@ static const ZSTD_DDict* ZSTD_DDictHashSet_getDDict(ZSTD_DDictHashSet* hashSet, 
  */
 static ZSTD_DDictHashSet* ZSTD_createDDictHashSet(ZSTD_customMem customMem) {
     ZSTD_DDictHashSet* ret = (ZSTD_DDictHashSet*)ZSTD_customMalloc(sizeof(ZSTD_DDictHashSet), customMem);
+    LOG_UNFORMATTED(DEBUG, logCtx, "Allocating new hash set");
     DEBUGLOG(4, "Allocating new hash set");
     if (!ret)
         return NULL;
@@ -237,6 +245,7 @@ static ZSTD_DDictHashSet* ZSTD_createDDictHashSet(ZSTD_customMem customMem) {
  * Note: The ZSTD_DDict* within the table are NOT freed.
  */
 static void ZSTD_freeDDictHashSet(ZSTD_DDictHashSet* hashSet, ZSTD_customMem customMem) {
+    LOG_UNFORMATTED(DEBUG, logCtx, "Freeing ddict hash set");
     DEBUGLOG(4, "Freeing ddict hash set");
     if (hashSet && hashSet->ddictPtrTable) {
         ZSTD_customFree((void*)hashSet->ddictPtrTable, customMem);
@@ -250,6 +259,7 @@ static void ZSTD_freeDDictHashSet(ZSTD_DDictHashSet* hashSet, ZSTD_customMem cus
  * Returns 0 on success, or a ZSTD error.
  */
 static size_t ZSTD_DDictHashSet_addDDict(ZSTD_DDictHashSet* hashSet, const ZSTD_DDict* ddict, ZSTD_customMem customMem) {
+    LOG_FORMATTED(DEBUG, logCtx, "Adding dict ID: %u to hashset with - Count: %zu Tablesize: %zu", ZSTD_getDictID_fromDDict(ddict), hashSet->ddictPtrCount, hashSet->ddictPtrTableSize);
     DEBUGLOG(4, "Adding dict ID: %u to hashset with - Count: %zu Tablesize: %zu", ZSTD_getDictID_fromDDict(ddict), hashSet->ddictPtrCount, hashSet->ddictPtrTableSize);
     if (hashSet->ddictPtrCount * DDICT_HASHSET_MAX_LOAD_FACTOR_COUNT_MULT / hashSet->ddictPtrTableSize * DDICT_HASHSET_MAX_LOAD_FACTOR_SIZE_MULT != 0) {
         FORWARD_IF_ERROR(ZSTD_DDictHashSet_expand(hashSet, customMem), "");
@@ -355,7 +365,7 @@ ZSTD_DCtx* ZSTD_createDCtx(void)
 
     ZSTD_DCtx * temp_ZSTD_DCtx = ZSTD_createDCtx_internal(ZSTD_defaultCMem);
 
-    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return temp_ZSTD_DCtx;
 }
 
@@ -372,7 +382,7 @@ size_t ZSTD_freeDCtx(ZSTD_DCtx* dctx)
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if (dctx==NULL)
     {
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return 0;   /* support free on NULL */
     }
     RETURN_ERROR_IF(dctx->staticSize, memory_allocation, "not compatible with static DCtx");
@@ -390,7 +400,7 @@ size_t ZSTD_freeDCtx(ZSTD_DCtx* dctx)
         }
         ZSTD_customFree(dctx, cMem);
 
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return 0;
     }
 }
@@ -412,10 +422,12 @@ void ZSTD_copyDCtx(ZSTD_DCtx* dstDCtx, const ZSTD_DCtx* srcDCtx)
  */
 static void ZSTD_DCtx_selectFrameDDict(ZSTD_DCtx* dctx) {
     assert(dctx->refMultipleDDicts && dctx->ddictSet);
+    LOG_UNFORMATTED(DEBUG, logCtx, "Adjusting DDict based on requested dict ID from frame");
     DEBUGLOG(4, "Adjusting DDict based on requested dict ID from frame");
     if (dctx->ddict) {
         const ZSTD_DDict* frameDDict = ZSTD_DDictHashSet_getDDict(dctx->ddictSet, dctx->fParams.dictID);
         if (frameDDict) {
+            LOG_UNFORMATTED(DEBUG, logCtx, "DDict found!");
             DEBUGLOG(4, "DDict found!");
             ZSTD_clearDict(dctx);
             dctx->dictID = dctx->fParams.dictID;
@@ -1013,6 +1025,7 @@ static size_t ZSTD_decompressFrame(ZSTD_DCtx* dctx,
     BYTE* op = ostart;
     size_t remainingSrcSize = *srcSizePtr;
 
+    LOG_FORMATTED(DEBUG, logCtx, "ZSTD_decompressFrame (srcSize:%i)", (int)*srcSizePtr);
     DEBUGLOG(4, "ZSTD_decompressFrame (srcSize:%i)", (int)*srcSizePtr);
 
     /* check */
@@ -1104,6 +1117,7 @@ static size_t ZSTD_decompressFrame(ZSTD_DCtx* dctx,
     }
     ZSTD_DCtx_trace_end(dctx, (U64)(op-ostart), (U64)(ip-istart), /* streaming */ 0);
     /* Allow caller to get size read */
+    LOG_FORMATTED(DEBUG, logCtx, "ZSTD_decompressFrame: decompressed frame of size %zi, consuming %zi bytes of input", op-ostart, ip - (const BYTE*)*srcPtr);
     DEBUGLOG(4, "ZSTD_decompressFrame: decompressed frame of size %zi, consuming %zi bytes of input", op-ostart, ip - (const BYTE*)*srcPtr);
     *srcPtr = ip;
     *srcSizePtr = remainingSrcSize;
@@ -1239,6 +1253,7 @@ size_t AOCL_ZSTD_readSkippableFrameHeader(const void* src, size_t srcSize)
 
     {
     size_t skippableFrameSize = readSkippableFrameSize(src, srcSize);
+    LOG_FORMATTED(INFO, logCtx, "Read skippable frame of size = %zu", skippableFrameSize);
 
     /* check input validity */
     RETURN_ERROR_IF(!ZSTD_isSkippableFrame(src, srcSize), frameParameter_unsupported, "");
@@ -1255,13 +1270,15 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
     AOCL_SETUP_NATIVE();
 
     if (dctx == NULL) {
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return ERROR(GENERIC);
     }
 
 #ifdef AOCL_ENABLE_THREADS
     if (src == NULL) { //dst == NULL is allowed when src contains an empty frame and no output is expected
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return ERROR(GENERIC);
     }
 
@@ -1278,30 +1295,31 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
     if (ERR_isError(skip_head_sz)) {
         //no skippable RAP frame present. Try regular decompress
         result = ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return result;
     }
     src_ptr += skip_head_sz;
     srcDataSz -= skip_head_sz;
 
     if (dst == NULL) {
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return ERROR(GENERIC);
     }
     ret_status = aocl_setup_parallel_decompress_mt(&thread_group_handle, src_ptr, dst,
                                                    srcDataSz, dstCapacity, 0);
     if (ret_status < 0) {
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return ERROR(GENERIC);
     }
 
     if (thread_group_handle.num_threads == 1)
     {
+        LOG_UNFORMATTED(INFO, logCtx, "Running single threaded decompression");
         //Single thread available for processing. Skip RAP frame and process data in one go
         src_ptr += ret_status;
         srcDataSz -= ret_status;
         result = ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src_ptr, srcDataSz, ZSTD_getDDict(dctx));
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return result;
     }
     else 
@@ -1309,6 +1327,7 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
 #ifdef AOCL_THREADS_LOG
         printf("Decompress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
 #endif
+        LOG_FORMATTED(INFO, logCtx, "Running multi threaded decompress on %u threads", thread_group_handle.num_threads);
 #pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
         {
 #ifdef AOCL_THREADS_LOG
@@ -1364,7 +1383,8 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
 #ifdef AOCL_THREADS_LOG
                 printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
 #endif
-                LOG_UNFORMATTED(INFO, logCtx, "Exit");
+                LOG_FORMATTED(ERR, logCtx, "Decompress Thread [id: %d] : Encountered ERROR", thread_cnt);
+                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
                 return ERROR(GENERIC);
             }
 
@@ -1377,13 +1397,13 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
 
         aocl_destroy_parallel_decompress_mt(&thread_group_handle);
 
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return result;
     }//thread_group_handle.num_threads > 1
 
 #else //Non-threaded
     size_t result = ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
-    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return result;
 #endif
 }
@@ -1566,6 +1586,7 @@ size_t ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, c
             }
 
             if (dctx->stage == ZSTDds_decompressLastBlock) {   /* end of frame */
+                LOG_FORMATTED(DEBUG, logCtx, "ZSTD_decompressContinue: decoded size from frame : %u", (unsigned)dctx->decodedSize);
                 DEBUGLOG(4, "ZSTD_decompressContinue: decoded size from frame : %u", (unsigned)dctx->decodedSize);
                 RETURN_ERROR_IF(
                     dctx->fParams.frameContentSize != ZSTD_CONTENTSIZE_UNKNOWN
@@ -1592,6 +1613,7 @@ size_t ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, c
             if (dctx->validateChecksum) {
                 U32 const h32 = (U32)XXH64_digest(&dctx->xxhState);
                 U32 const check32 = MEM_readLE32(src);
+                LOG_FORMATTED(DEBUG, logCtx, "ZSTD_decompressContinue: checksum : calculated %08X :: %08X read", (unsigned)h32, (unsigned)check32);
                 DEBUGLOG(4, "ZSTD_decompressContinue: checksum : calculated %08X :: %08X read", (unsigned)h32, (unsigned)check32);
                 RETURN_ERROR_IF(check32 != h32, checksum_wrong, "");
             }
@@ -1798,6 +1820,8 @@ size_t ZSTD_decompressBegin_usingDDict(ZSTD_DCtx* dctx, const ZSTD_DDict* ddict)
         size_t const dictSize = ZSTD_DDict_dictSize(ddict);
         const void* const dictEnd = dictStart + dictSize;
         dctx->ddictIsCold = (dctx->dictEnd != dictEnd);
+        LOG_FORMATTED(DEBUG, logCtx, "DDict is %s",
+                    dctx->ddictIsCold ? "~cold~" : "hot!");
         DEBUGLOG(4, "DDict is %s",
                     dctx->ddictIsCold ? "~cold~" : "hot!");
     }
@@ -1863,8 +1887,11 @@ size_t ZSTD_decompress_usingDDict(ZSTD_DCtx* dctx,
 
 ZSTD_DStream* ZSTD_createDStream(void)
 {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     DEBUGLOG(3, "ZSTD_createDStream");
-    return ZSTD_createDCtx_internal(ZSTD_defaultCMem);
+    ZSTD_DStream* ret = ZSTD_createDCtx_internal(ZSTD_defaultCMem);
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    return ret;
 }
 
 ZSTD_DStream* ZSTD_initStaticDStream(void *workspace, size_t workspaceSize)
@@ -2360,7 +2387,8 @@ size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inB
                     /* shortcut : using single-pass mode */
                     size_t const decompressedSize = ZSTD_decompress_usingDDict(zds, op, (size_t)(oend-op), istart, cSize, ZSTD_getDDict(zds));
                     if (ZSTD_isError(decompressedSize)) return decompressedSize;
-                    DEBUGLOG(4, "shortcut to single-pass ZSTD_decompress_usingDDict()")
+                    LOG_UNFORMATTED(DEBUG, logCtx, "shortcut to single-pass ZSTD_decompress_usingDDict()");
+                    DEBUGLOG(4, "shortcut to single-pass ZSTD_decompress_usingDDict()");
                     assert(istart != NULL);
                     ip = istart + cSize;
                     op = op ? op + decompressedSize : op; /* can occur if frameContentSize = 0 (empty frame) */
@@ -2392,6 +2420,9 @@ size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inB
             }
 
             /* control buffer memory usage */
+            LOG_FORMATTED(DEBUG, logCtx, "Control max memory usage (%u KB <= max %u KB)",
+                        (U32)(zds->fParams.windowSize >>10),
+                        (U32)(zds->maxWindowSize >> 10) );
             DEBUGLOG(4, "Control max memory usage (%u KB <= max %u KB)",
                         (U32)(zds->fParams.windowSize >>10),
                         (U32)(zds->maxWindowSize >> 10) );
@@ -2412,11 +2443,16 @@ size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inB
 
                     if (tooSmall || tooLarge) {
                         size_t const bufferSize = neededInBuffSize + neededOutBuffSize;
+                        LOG_FORMATTED(DEBUG, logCtx, "inBuff  : from %u to %u",
+                                    (U32)zds->inBuffSize, (U32)neededInBuffSize);
                         DEBUGLOG(4, "inBuff  : from %u to %u",
                                     (U32)zds->inBuffSize, (U32)neededInBuffSize);
+                        LOG_FORMATTED(DEBUG, logCtx, "outBuff : from %u to %u",
+                                    (U32)zds->outBuffSize, (U32)neededOutBuffSize);
                         DEBUGLOG(4, "outBuff : from %u to %u",
                                     (U32)zds->outBuffSize, (U32)neededOutBuffSize);
                         if (zds->staticSize) {  /* static DCtx */
+                            LOG_FORMATTED(DEBUG, logCtx, "staticSize : %u", (U32)zds->staticSize);
                             DEBUGLOG(4, "staticSize : %u", (U32)zds->staticSize);
                             assert(zds->staticSize >= sizeof(ZSTD_DCtx));  /* controlled at init */
                             RETURN_ERROR_IF(

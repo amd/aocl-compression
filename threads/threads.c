@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -42,6 +42,7 @@
 #include "api/aocl_compression.h"
 #include "api/aocl_threads.h"
 #include "threads.h"
+#include "utils/utils.h"
 
 AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp, 
                                       AOCL_CHAR *src, AOCL_CHAR *dst, AOCL_INT32 in_size,
@@ -49,8 +50,10 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
                                       AOCL_INT32 window_factor)
 {
     assert(thread_grp != NULL);
-    if (dst == NULL || window_len <= 0 || window_factor <= 0)
+    if (dst == NULL || window_len <= 0 || window_factor <= 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return ERR_INVALID_INPUT;
+    }
 
     AOCL_UINT32 max_threads = omp_get_max_threads();
     AOCL_INT32 rap_frame_len = 0;
@@ -65,6 +68,7 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
 
     if (thread_grp->src_size < chunk_size)
     {
+        LOG_UNFORMATTED(DEBUG, logCtx, "Src size is small. Running on single thread.");
         //Single threaded execution for very small stream (< window_len * window_factor)
         thread_grp->num_threads = 1;
     }
@@ -86,6 +90,7 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
         else
             //Use all the available threads
             thread_grp->num_threads = max_threads;
+        LOG_FORMATTED(INFO, logCtx, "Number of threads set to %u", thread_grp->num_threads);
 
         if (thread_grp->num_threads == 1)
             return rap_frame_len;
@@ -99,8 +104,10 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
         //Allocate threads list to hold references to threads_info
         thread_grp->threads_info_list = (aocl_thread_info_t*)malloc(
                         sizeof(aocl_thread_info_t) * thread_grp->num_threads);
-        if (thread_grp->threads_info_list == NULL)
+        if (thread_grp->threads_info_list == NULL) {
+            LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
             return -1;
+        }
 
         rap_frame_len = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(thread_grp->num_threads, 0);
         *(AOCL_INT64*)dst = RAP_MAGIC_WORD; //For storing the magic word
@@ -144,8 +151,10 @@ AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t *thread_grp,
         cur_thread_info->thread_id, cur_thread_info->dst_trap_size);
 #endif
 
-    if (cur_thread_info->dst_trap == NULL)
+    if (cur_thread_info->dst_trap == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
         return -1;
+    }
 
     cur_thread_info->next = NULL;//Unused as of now
 
@@ -176,8 +185,10 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
                                         AOCL_INT32 out_size, AOCL_INT32 use_ST_decompressor)
 {
     assert(thread_grp != NULL);
-    if (src == NULL)
+    if (src == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return ERR_INVALID_INPUT;
+    }
 
     AOCL_CHAR *src_base;
     AOCL_UINT32 rap_metadata_len;
@@ -208,8 +219,10 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
         src_ptr += RAP_METADATA_LEN_BYTES;
         num_main_threads = *(AOCL_UINT32*)(src_ptr);
 
-        if (num_main_threads == 0)
+        if (num_main_threads == 0) {
+            LOG_UNFORMATTED(ERR, logCtx, "Invalid main thread count value in RAP frame");
             return -1; // invalid main thread count in stream. Must be >= 1.
+        }
 
         if (use_ST_decompressor == 1)
             return rap_metadata_len;
@@ -228,6 +241,7 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
             //Currently, approach 2) is implemented.
             //thread_grp->num_threads = max_threads;
             thread_grp->num_threads = 1;
+        LOG_FORMATTED(INFO, logCtx, "Number of threads set to %u", thread_grp->num_threads);
 
         if (thread_grp->num_threads == 1)
             return rap_metadata_len;
@@ -242,8 +256,10 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
         thread_grp->threads_info_list = (aocl_thread_info_t*)malloc(
                         sizeof(aocl_thread_info_t) * thread_grp->num_threads);
 
-        if (thread_grp->threads_info_list == NULL)
+        if (thread_grp->threads_info_list == NULL) {
+            LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
             return -1;
+        }
     }
     return rap_metadata_len;
 }
@@ -265,6 +281,7 @@ AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
 
     if (cur_thread_info->partition_src_size == 0)
     {
+        LOG_FORMATTED(DEBUG, logCtx, "Partition size 0 for thread %u", thread_id);
         cur_thread_info->dst_trap = NULL;
         return 1;
     }
@@ -286,8 +303,10 @@ AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
         cur_thread_info->thread_id);
 #endif
 
-    if (cur_thread_info->dst_trap == NULL)
+    if (cur_thread_info->dst_trap == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
         return -1;
+    }
 
     return 0;
 }
