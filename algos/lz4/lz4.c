@@ -2343,7 +2343,8 @@ _last_literals:
         //*last_bytes_len = 0;//Last thread needs no joining with the next chunk
     }
 
-    assert(result > 0);
+    // result=0 when no match found, (all literals).
+    assert(result >= 0);
     DEBUGLOG(5, "LZ4_compress_generic: compressed %i bytes into %i bytes", inputSize, result);
     return result;
 }
@@ -4862,7 +4863,7 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
         for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
         {
             cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
-            //In case of any thread partitioning or alloc errors, exit the compression process with error
+            //In case of any thread partitioning or alloc errors, exit the decompression process with error
             if (cur_thread_info.is_error)
             {
                 result = -1;
