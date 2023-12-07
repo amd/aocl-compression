@@ -140,6 +140,27 @@ typedef struct thread_group
     AOCL_UINT32 search_window_length;            //Search window (dictionary) size used by the partitioning scheme
 } aocl_thread_group_t;
 
+#ifndef EXPORT_SYM_THREADS
+#ifdef AOCL_UNIT_TEST
+#ifdef _WINDOWS
+/**
+ * You can export data, functions, classes, or class member functions from a DLL
+ * using the __declspec(dllexport) keyword. __declspec(dllexport) adds the export
+ * directive to the object file so you do not need to use a .def file.
+ *
+ */
+#define EXPORT_SYM_THREADS __declspec(dllexport)
+#else
+/**
+ * For Linux EXPORT_SYM_THREADS is NULL, by default the symbols are publicly exposed.
+ */
+#define EXPORT_SYM_THREADS
+#endif
+#else
+#define EXPORT_SYM_THREADS
+#endif
+#endif
+
 /**
  * Function to setup the multi-threaded compressor.
  *
@@ -170,7 +191,7 @@ typedef struct thread_group
  * | ^          | -1                                           |
  *
  */
-AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t* thread_grp, 
+EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t* thread_grp,
                                       AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_INT32 in_size,
                                       AOCL_INT32 out_size, AOCL_INT32 win_len,
                                       AOCL_INT32 window_factor);
@@ -201,7 +222,7 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t* thread_grp,
  * | Fail       | -1          |
  *
  */
-AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t* thread_grp, 
+EXPORT_SYM_THREADS AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t* thread_grp,
                                    aocl_thread_info_t* cur_thread_info,
                                    AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id);
 
@@ -218,7 +239,7 @@ AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t* thread_grp,
  * return void
  *
  */
-void aocl_destroy_parallel_compress_mt(aocl_thread_group_t* thread_grp);
+EXPORT_SYM_THREADS void aocl_destroy_parallel_compress_mt(aocl_thread_group_t* thread_grp);
 
 /**
  * Function to setup the multi-threaded decompressor.
@@ -248,7 +269,7 @@ void aocl_destroy_parallel_compress_mt(aocl_thread_group_t* thread_grp);
  * | ^          | -1                                           |
  *
  */
-AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
+EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
                                         AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_INT32 in_size,
                                         AOCL_INT32 out_size, 
                                         AOCL_INT32 use_ST_decoompressor);
@@ -278,7 +299,7 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
  * | Fail       | -1                                                   |
  *
  */
-AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
+EXPORT_SYM_THREADS AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
                                      aocl_thread_info_t* cur_thread_info,
                                      AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id);
 
@@ -295,7 +316,7 @@ AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
  * return void
  *
  */
-void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp);
+EXPORT_SYM_THREADS void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp);
 
 #ifdef __cplusplus
 }
