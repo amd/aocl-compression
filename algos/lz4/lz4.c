@@ -939,7 +939,7 @@ LZ4_prepareTable(LZ4_stream_t_internal* const cctx,
           || tableType == byPtr
           || inputSize >= 4 KB)
         {
-            DEBUGLOG(4, "LZ4_prepareTable: Resetting table in %p", cctx);
+            DEBUGLOG(4, "LZ4_prepareTable: Resetting table in %p", (void *)cctx);
             MEM_INIT(cctx->hashTable, 0, LZ4_HASHTABLESIZE);
             cctx->currentOffset = 0;
             cctx->tableType = (U32)clearedTable;
@@ -3072,7 +3072,7 @@ LZ4_stream_t* LZ4_createStream(void)
 {
     LZ4_stream_t* const lz4s = (LZ4_stream_t*)ALLOC(sizeof(LZ4_stream_t));
     LZ4_STATIC_ASSERT(LZ4_STREAMSIZE >= sizeof(LZ4_stream_t_internal));    /* A compilation error here means LZ4_STREAMSIZE is not large enough */
-    DEBUGLOG(4, "LZ4_createStream %p", lz4s);
+    DEBUGLOG(4, "LZ4_createStream %p", (void *)lz4s);
     if (lz4s == NULL) return NULL;
     LZ4_initStream(lz4s, sizeof(*lz4s));
     return lz4s;
@@ -3102,7 +3102,7 @@ LZ4_stream_t* LZ4_initStream (void* buffer, size_t size)
  * prefer initStream() which is more general */
 void LZ4_resetStream (LZ4_stream_t* LZ4_stream)
 {
-    DEBUGLOG(5, "LZ4_resetStream (ctx:%p)", LZ4_stream);
+    DEBUGLOG(5, "LZ4_resetStream (ctx:%p)", (void *)LZ4_stream);
     MEM_INIT(LZ4_stream, 0, sizeof(LZ4_stream_t_internal));
 }
 
@@ -3117,7 +3117,7 @@ void LZ4_resetStream_fast(LZ4_stream_t* ctx)
 int LZ4_freeStream (LZ4_stream_t* LZ4_stream)
 {
     if (!LZ4_stream) return 0;   /* support free on NULL */
-    DEBUGLOG(5, "LZ4_freeStream %p", LZ4_stream);
+    DEBUGLOG(5, "LZ4_freeStream %p", (void *)LZ4_stream);
     FREEMEM(LZ4_stream);
     return (0);
 }
@@ -3135,7 +3135,7 @@ int LZ4_loadDict (LZ4_stream_t* LZ4_dict, const char* dictionary, int dictSize)
     const BYTE* const dictEnd = p + dictSize;
     const BYTE* base;
 
-    DEBUGLOG(4, "LZ4_loadDict (%i bytes from %p into %p)", dictSize, dictionary, LZ4_dict);
+    DEBUGLOG(4, "LZ4_loadDict (%i bytes from %p into %p)", dictSize, (void *)dictionary, (void *)LZ4_dict);
 
     /* It's necessary to reset the context,
      * and not just continue it with prepareTable()
@@ -3177,7 +3177,7 @@ void LZ4_attach_dictionary(LZ4_stream_t* workingStream, const LZ4_stream_t* dict
         &(dictionaryStream->internal_donotuse);
 
     DEBUGLOG(4, "LZ4_attach_dictionary (%p, %p, size %u)",
-             workingStream, dictionaryStream,
+             (void *)workingStream, (void *)dictionaryStream,
              dictCtx != NULL ? dictCtx->dictSize : 0);
 
     if (dictCtx != NULL) {
@@ -3242,7 +3242,7 @@ int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
     /* invalidate tiny dictionaries */
     if ( (streamPtr->dictSize-1 < 4-1)   /* intentional underflow */
       && (dictEnd != (const BYTE*)source) ) {
-        DEBUGLOG(5, "LZ4_compress_fast_continue: dictSize(%u) at addr:%p is too small", streamPtr->dictSize, streamPtr->dictionary);
+        DEBUGLOG(5, "LZ4_compress_fast_continue: dictSize(%u) at addr:%p is too small", streamPtr->dictSize, (void *)streamPtr->dictionary);
         streamPtr->dictSize = 0;
         streamPtr->dictionary = (const BYTE*)source;
         dictEnd = (const BYTE*)source;
@@ -3732,8 +3732,8 @@ AOCL_LZ4_decompress_generic(
                         LOG_FORMATTED(ERR, logCtx, "Must be the last (or invalid) sequence because of the parsing limitations. Error, %s.",
                                 (ip+length != iend) ? "exact input not consumed" : "output buffer overflow" );
                         DEBUGLOG(6, "should have been last run of literals")
-                        DEBUGLOG(6, "ip(%p) + length(%i) = %p != iend (%p)", ip, (int)length, ip+length, iend);
-                        DEBUGLOG(6, "or cpy(%p) > oend(%p)", cpy, oend);
+                        DEBUGLOG(6, "ip(%p) + length(%i) = %p != iend (%p)", (void *)ip, (int)length, (void *)(ip+length), (void *)iend);
+                        DEBUGLOG(6, "or cpy(%p) > oend(%p)", (void *)cpy, (void *)oend);
                         goto _output_error;
                     }
                 }
@@ -4199,7 +4199,7 @@ safe_decode:
                  */
                 assert(endOnInput);
                 DEBUGLOG(7, "partialDecoding: copying literals, close to input or output end")
-                    DEBUGLOG(7, "partialDecoding: literal length = %u", (unsigned)length);
+                DEBUGLOG(7, "partialDecoding: literal length = %u", (unsigned)length);
                 DEBUGLOG(7, "partialDecoding: remaining space in dstBuffer : %i", (int)(oend - op));
                 DEBUGLOG(7, "partialDecoding: remaining space in srcBuffer : %i", (int)(iend - ip));
                 /* Finishing in the middle of a literals segment,
@@ -4232,8 +4232,8 @@ safe_decode:
                     LOG_FORMATTED(ERR, logCtx, "Thread [id: %d] : Must be the last (or invalid) sequence because of the parsing limitations. Error, %s.",
                                 omp_get_thread_num(), (is_last_thread && (ip + length != iend)) ? "exact input not consumed" : "output buffer overflow" );
                     DEBUGLOG(6, "should have been last run of literals")
-                        DEBUGLOG(6, "ip(%p) + length(%i) = %p != iend (%p)", ip, (int)length, ip + length, iend);
-                    DEBUGLOG(6, "or cpy(%p) > oend(%p)", cpy, oend);
+                    DEBUGLOG(6, "ip(%p) + length(%i) = %p != iend (%p)", (void *)ip, (int)length, (void *)(ip + length), (void *)iend);
+                    DEBUGLOG(6, "or cpy(%p) > oend(%p)", (void *)cpy, (void *)oend);
                     goto _output_error;
                 }
             }
@@ -4700,8 +4700,8 @@ LZ4_decompress_generic(
                       */
                     if ((endOnInput) && ((ip+length != iend) || (cpy > oend))) {
                         DEBUGLOG(6, "should have been last run of literals")
-                        DEBUGLOG(6, "ip(%p) + length(%i) = %p != iend (%p)", ip, (int)length, ip+length, iend);
-                        DEBUGLOG(6, "or cpy(%p) > oend(%p)", cpy, oend);
+                        DEBUGLOG(6, "ip(%p) + length(%i) = %p != iend (%p)", (void *)ip, (int)length, (void *)(ip+length), (void *)iend);
+                        DEBUGLOG(6, "or cpy(%p) > oend(%p)", (void *)cpy, (void *)oend);
                         goto _output_error;
                     }
                 }

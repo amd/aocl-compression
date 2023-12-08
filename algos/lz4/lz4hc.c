@@ -1,7 +1,7 @@
 /*
     LZ4 HC - High Compression Mode of LZ4
     Copyright (C) 2011-2017, Yann Collet.
-    Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+    Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
 
     BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -766,6 +766,7 @@ AOCL_LZ4HC_InsertAndGetWiderMatch(
     int Hash_Chain_Max,
     int Hash_Chain_Slot_Sz)
 {
+    assert(Hash_Chain_Slot_Sz <= HASH_CHAIN_ALLOC);
     CHAIN_TYPE* const chainTable = hc4->chainTable;
     const AOCL_LZ4HC_CCtx_internal* const dictCtx = hc4->dictCtx;
     const BYTE* const base = hc4->base;
@@ -1079,6 +1080,10 @@ LZ4_FORCE_INLINE int LZ4HC_encodeSequence (
                 pos,
                 (U32)(ip - anchor), matchLength, (U32)(ip-match),
                 cost, totalCost);
+    LOG_FORMATTED(DEBUG, logCtx, "pos:%7u -- literals:%4u, match:%4i, offset:%5u, cost:%4u + %5u",
+                pos,
+                (U32)(ip - anchor), matchLength, (U32)(ip-match),
+                cost, totalCost);
     totalCost += cost;
 #endif
 
@@ -1088,6 +1093,8 @@ LZ4_FORCE_INLINE int LZ4HC_encodeSequence (
     /* Check output limit */
     if (limit && ((op + (length / 255) + length + (2 + 1 + LASTLITERALS)) > oend)) {
         DEBUGLOG(6, "Not enough room to write %i literals (%i bytes remaining)",
+                (int)length, (int)(oend - op));
+        LOG_FORMATTED(DEBUG, logCtx, "Not enough room to write %i literals (%i bytes remaining)",
                 (int)length, (int)(oend - op));
         return 1;
     }
@@ -1113,6 +1120,7 @@ LZ4_FORCE_INLINE int LZ4HC_encodeSequence (
     length = (size_t)matchLength - MINMATCH;
     if (limit && (op + (length / 255) + (1 + LASTLITERALS) > oend)) {
         DEBUGLOG(6, "Not enough room to write match length");
+        LOG_UNFORMATTED(DEBUG, logCtx, "Not enough room to write match length");
         return 1;   /* Check output limit */
     }
     if (length >= ML_MASK) {
@@ -1330,6 +1338,7 @@ _last_literals:
             lastRunSize -= llAdd;
         }
         DEBUGLOG(6, "Final literal run : %i literals", (int)lastRunSize);
+        LOG_FORMATTED(DEBUG, logCtx, "Final literal run : %i literals", (int)lastRunSize);
         ip = anchor + lastRunSize;  /* can be != iend if limit==fillOutput */
 
         if (lastRunSize >= RUN_MASK) {
@@ -1356,6 +1365,7 @@ _dest_overflow:
         size_t const ll_totalCost = 1 + ll_addbytes + ll;
         BYTE* const maxLitPos = oend - 3; /* 2 for offset, 1 for token */
         DEBUGLOG(6, "Last sequence overflowing");
+        LOG_UNFORMATTED(DEBUG, logCtx, "Last sequence overflowing");
         op = optr;  /* restore correct out pointer */
         if (op + ll_totalCost <= maxLitPos) {
             /* ll validated; now adjust match length */
@@ -1369,6 +1379,7 @@ _dest_overflow:
         goto _last_literals;
     }
     /* compression failed */
+    LOG_UNFORMATTED(ERR, logCtx, "Compression failed");
     return 0;
 }
 
@@ -1389,6 +1400,8 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
     int Hash_Chain_Slot_Sz
 )
 {
+    LOG_FORMATTED(INFO, logCtx, "maxNbAttempts: %i, Hash_chain_Max: %i, Hash_Chain_Slot_Sz: %i",
+                  maxNbAttempts, Hash_Chain_Max, Hash_Chain_Slot_Sz);
     const int inputSize = *srcSizePtr;
 #ifdef AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS
     const int patternAnalysis = 0;   /* Disabling for level 9 */
@@ -1581,6 +1594,7 @@ _last_literals:
         lastRunSize -= llAdd;
     }
     DEBUGLOG(6, "Final literal run : %i literals", (int)lastRunSize);
+    LOG_FORMATTED(DEBUG, logCtx, "Final literal run : %i literals", (int)lastRunSize);
     ip = anchor + lastRunSize;  /* can be != iend if limit==fillOutput */
 
     if (lastRunSize >= RUN_MASK) {
@@ -1608,6 +1622,7 @@ _dest_overflow:
         size_t const ll_totalCost = 1 + ll_addbytes + ll;
         BYTE* const maxLitPos = oend - 3; /* 2 for offset, 1 for token */
         DEBUGLOG(6, "Last sequence overflowing");
+        LOG_UNFORMATTED(DEBUG, logCtx, "Last sequence overflowing");
         op = optr;  /* restore correct out pointer */
         if (op + ll_totalCost <= maxLitPos) {
             /* ll validated; now adjust match length */
@@ -1622,6 +1637,7 @@ _dest_overflow:
         goto _last_literals;
     }
     /* compression failed */
+    LOG_UNFORMATTED(ERR, logCtx, "Compression failed");
     return 0;
 }
 #endif /* AOCL_LZ4HC_OPT */
@@ -1670,6 +1686,8 @@ LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal (
 
     DEBUGLOG(4, "LZ4HC_compress_generic(ctx=%p, src=%p, srcSize=%d, limit=%d)",
                 ctx, src, *srcSizePtr, limit);
+    LOG_FORMATTED(INFO, logCtx, "LZ4HC_compress_generic(ctx=%p, src=%p, srcSize=%i, limit=%i)",
+                 (void *)ctx, (void *)src, *srcSizePtr, limit);
 
     if (limit == fillOutput && dstCapacity < 1) return 0;   /* Impossible to store anything */
     if ((U32)*srcSizePtr > (U32)LZ4_MAX_INPUT_SIZE) return 0;    /* Unsupported input size (too large or negative) */
@@ -1717,6 +1735,8 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_generic_internal(
     assert(cLevel >=6 && cLevel <= 9);
     DEBUGLOG(4, "AOCL_LZ4HC_compress_generic(ctx=%p, src=%p, srcSize=%d, limit=%d)",
         ctx, src, *srcSizePtr, limit);
+    LOG_FORMATTED(INFO, logCtx, "AOCL_LZ4HC_compress_generic(ctx=%p, src=%p, srcSize=%i, limit=%i)",
+        (void *)ctx, (void *)src, *srcSizePtr, limit);
 
     if (limit == fillOutput && dstCapacity < 1) return 0;   /* Impossible to store anything */
     if ((U32)*srcSizePtr > (U32)LZ4_MAX_INPUT_SIZE) return 0;    /* Unsupported input size (too large or negative) */
@@ -1747,6 +1767,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_generic_internal(
                     256, limit, dict, 127, 128);
                 break;
             default:
+                LOG_FORMATTED(ERR, logCtx, "Compression Level %i is not supported", cLevel); 
                 result = 0;
                 break;
             }
@@ -1839,7 +1860,7 @@ AOCL_LZ4HC_compress_generic_dictCtx(
 )
 {
     const size_t position = (size_t)(ctx->end - ctx->base) - ctx->lowLimit;
-    if (cLevel < 6 || cLevel > 9) return 0;
+    if (cLevel < 6 || cLevel > 9) { LOG_FORMATTED(ERR, logCtx, "Compression level %i is not supported.", cLevel); return 0; }
     assert(ctx->dictCtx != NULL);
     if (position >= 64 KB) {
         ctx->dictCtx = NULL;
@@ -1910,6 +1931,7 @@ static size_t LZ4_streamHC_t_alignment(void)
     typedef struct { char c; LZ4_streamHC_t t; } t_a;
     return sizeof(t_a) - sizeof(LZ4_streamHC_t);
 #else
+    LOG_UNFORMATTED(ERR, logCtx, "LZ4 alignment disabled");
     return 1;  /* effectively disabled */
 #endif
 }
@@ -1924,6 +1946,7 @@ static size_t AOCL_LZ4_streamHC_t_alignment(void)
     typedef struct { char c; AOCL_LZ4_streamHC_t t; } t_a;
     return sizeof(t_a) - sizeof(AOCL_LZ4_streamHC_t);
 #else
+    LOG_UNFORMATTED(ERR, logCtx, "LZ4 alignment disabled");
     return 1;  /* effectively disabled */
 #endif
 }
@@ -1935,7 +1958,10 @@ int LZ4_compress_HC_extStateHC_fastReset (void* state, const char* src, char* ds
 {
     AOCL_SETUP_NATIVE_HC();
     if(state==NULL || (src==NULL && srcSize!=0) || dst==NULL)
-        return 0;
+    { 
+        LOG_FORMATTED(ERR, logCtx, "Invalid arguments passed. state=%p, src=%p, dst=%p, srcSize=%i", (void *)state, (void *)src, (void *)dst, srcSize); 
+        return 0; 
+    }
     LZ4HC_CCtx_internal* const ctx = &((LZ4_streamHC_t*)state)->internal_donotuse;
     if (!LZ4_isAligned(state, LZ4_streamHC_t_alignment())) return 0;
     LZ4_resetStreamHC_fast((LZ4_streamHC_t*)state, compressionLevel);
@@ -1956,7 +1982,10 @@ int AOCL_LZ4_compress_HC_extStateHC_fastReset(void* state, const char* src, char
 {
     AOCL_SETUP_NATIVE_HC();
     if (state == NULL || (src == NULL && srcSize != 0) || dst == NULL)
-        return 0;
+    { 
+        LOG_FORMATTED(ERR, logCtx, "Invalid arguments passed. state=%p, src=%p, dst=%p, srcSize=%i", (void *)state, (void *)src, (void *)dst, srcSize); 
+        return 0; 
+    }
     AOCL_LZ4HC_CCtx_internal* const ctx = &((AOCL_LZ4_streamHC_t*)state)->internal_donotuse;
     if (!LZ4_isAligned(state, AOCL_LZ4_streamHC_t_alignment())) return 0;
     AOCL_LZ4_resetStreamHC_fast((AOCL_LZ4_streamHC_t*)state, compressionLevel);
@@ -1972,7 +2001,7 @@ int LZ4_compress_HC_extStateHC (void* state, const char* src, char* dst, int src
 {
     AOCL_SETUP_NATIVE_HC();
     LZ4_streamHC_t* const ctx = LZ4_initStreamHC(state, sizeof(*ctx));
-    if (ctx==NULL) return 0;   /* init failure */
+    if (ctx==NULL) { LOG_UNFORMATTED(ERR, logCtx, "init failure, ctx is NULL"); return 0; }   /* init failure */
     return LZ4_compress_HC_extStateHC_fastReset(state, src, dst, srcSize, dstCapacity, compressionLevel);
 }
 
@@ -1984,7 +2013,7 @@ int AOCL_LZ4_compress_HC_extStateHC(void* state, const char* src, char* dst, int
 {
     AOCL_SETUP_NATIVE_HC();
     AOCL_LZ4_streamHC_t* const ctx = AOCL_LZ4_initStreamHC(state, sizeof(*ctx));
-    if (ctx == NULL) return 0;   /* init failure */
+    if (ctx == NULL) { LOG_UNFORMATTED(ERR, logCtx, "init failure, ctx is NULL"); return 0; }   /* init failure */
     return AOCL_LZ4_compress_HC_extStateHC_fastReset(state, src, dst, srcSize, dstCapacity, compressionLevel);
 }
 #endif /* AOCL_LZ4HC_OPT */
@@ -2015,6 +2044,7 @@ int LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int dstCap
 int AOCL_LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
     AOCL_SETUP_NATIVE_HC();
+    LOG_FORMATTED(INFO, logCtx, "Compression Level %i, CEHC optimization", compressionLevel);
 #if defined(LZ4HC_HEAPMODE) && LZ4HC_HEAPMODE==1
     AOCL_LZ4_streamHC_t* const statePtr = (AOCL_LZ4_streamHC_t*)ALLOC(sizeof(AOCL_LZ4_streamHC_t));
 #else
@@ -2042,7 +2072,7 @@ else
 #else
     ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
 #endif /* AOCL_LZ4HC_OPT */
-    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return ret;
 }
 
@@ -2050,8 +2080,11 @@ else
 int LZ4_compress_HC_destSize(void* state, const char* source, char* dest, int* sourceSizePtr, int targetDestSize, int cLevel)
 {
     AOCL_SETUP_NATIVE_HC();
-    if(state==NULL || source==NULL || dest==NULL || sourceSizePtr==NULL)
+    if (state == NULL || source == NULL || dest == NULL || sourceSizePtr == NULL)
+    {
+        LOG_FORMATTED(ERR, logCtx, "Invalid arguements passed. state=%p, source=%p, dest=%p, sourceSizePtr=%p", (void *)state, (void *)source, (void *)dest, (void *)sourceSizePtr);
         return 0;
+    }
     LZ4_streamHC_t* const ctx = LZ4_initStreamHC(state, sizeof(*ctx));
     if (ctx==NULL) return 0;   /* init failure */
     LZ4HC_init_internal(&ctx->internal_donotuse, (const BYTE*) source);
@@ -2088,7 +2121,8 @@ AOCL_LZ4_streamHC_t* AOCL_LZ4_createStreamHC(void)
 
 int LZ4_freeStreamHC (LZ4_streamHC_t* LZ4_streamHCPtr)
 {
-    DEBUGLOG(4, "LZ4_freeStreamHC(%p)", LZ4_streamHCPtr);
+    DEBUGLOG(4, "LZ4_freeStreamHC(%p)", (void *)LZ4_streamHCPtr);
+    LOG_FORMATTED(INFO, logCtx, "LZ4_freeStreamHC(%p)", (void *)LZ4_streamHCPtr);
     if (!LZ4_streamHCPtr) return 0;  /* support free on NULL */
     FREEMEM(LZ4_streamHCPtr);
     return 0;
@@ -2098,7 +2132,8 @@ int LZ4_freeStreamHC (LZ4_streamHC_t* LZ4_streamHCPtr)
 /* This is AOCL variant of LZ4_freeStreamHC() used to free the stream of type AOCL_LZ4_StreamHC_t. */
 int AOCL_LZ4_freeStreamHC(AOCL_LZ4_streamHC_t* LZ4_streamHCPtr)
 {
-    DEBUGLOG(4, "AOCL_LZ4_freeStreamHC(%p)", LZ4_streamHCPtr);
+    DEBUGLOG(4, "AOCL_LZ4_freeStreamHC(%p)", (void *)LZ4_streamHCPtr);
+    LOG_FORMATTED(INFO, logCtx, "AOCL_LZ4_freeStreamHC(%p)", (void *)LZ4_streamHCPtr);
     if (!LZ4_streamHCPtr) return 0;  /* support free on NULL */
     FREEMEM(LZ4_streamHCPtr);
     return 0;
@@ -2110,7 +2145,8 @@ LZ4_streamHC_t* LZ4_initStreamHC (void* buffer, size_t size)
     LZ4_streamHC_t* const LZ4_streamHCPtr = (LZ4_streamHC_t*)buffer;
     /* if compilation fails here, LZ4_STREAMHCSIZE must be increased */
     LZ4_STATIC_ASSERT(sizeof(LZ4HC_CCtx_internal) <= LZ4_STREAMHCSIZE);
-    DEBUGLOG(4, "LZ4_initStreamHC(%p, %u)", buffer, (unsigned)size);
+    DEBUGLOG(4, "LZ4_initStreamHC(%p, %u)", (void *)buffer, (unsigned)size);
+    LOG_FORMATTED(INFO, logCtx, "LZ4_initStreamHC(%p, %u)", (void *)buffer, (unsigned)size);
     /* check conditions */
     if (buffer == NULL) return NULL;
     if (size < sizeof(LZ4_streamHC_t)) return NULL;
@@ -2129,7 +2165,8 @@ AOCL_LZ4_streamHC_t* AOCL_LZ4_initStreamHC(void* buffer, size_t size)
     AOCL_LZ4_streamHC_t* const AOCL_LZ4_streamHCPtr = (AOCL_LZ4_streamHC_t*)buffer;
     /* if compilation fails here, LZ4_STREAMHCSIZE must be increased */
     LZ4_STATIC_ASSERT(sizeof(AOCL_LZ4HC_CCtx_internal) <= AOCL_LZ4_STREAMHCSIZE);
-    DEBUGLOG(4, "AOCL_LZ4_initStreamHC(%p, %u)", buffer, (unsigned)size);
+    DEBUGLOG(4, "AOCL_LZ4_initStreamHC(%p, %u)", (void *)buffer, (unsigned)size);
+    LOG_FORMATTED(INFO, logCtx, "AOCL_LZ4_initStreamHC(%p, %u)", (void *)buffer, (unsigned)size);
     /* check conditions */
     if (buffer == NULL) return NULL;
     if (size < sizeof(AOCL_LZ4_streamHC_t)) return NULL;
@@ -2151,9 +2188,10 @@ void LZ4_resetStreamHC (LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLevel)
 
 void LZ4_resetStreamHC_fast (LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLevel)
 {
-    if(LZ4_streamHCPtr == NULL) return;
+    if(LZ4_streamHCPtr == NULL) { LOG_UNFORMATTED(ERR, logCtx, "LZ4_streamHCPtr is NULL"); return; }
     
-    DEBUGLOG(4, "LZ4_resetStreamHC_fast(%p, %d)", LZ4_streamHCPtr, compressionLevel);
+    DEBUGLOG(4, "LZ4_resetStreamHC_fast(%p, %d)", (void *)LZ4_streamHCPtr, compressionLevel);
+    LOG_FORMATTED(DEBUG, logCtx, "LZ4_resetStreamHC_fast(%p, %i)", (void *)LZ4_streamHCPtr, compressionLevel);
     if (LZ4_streamHCPtr->internal_donotuse.dirty) {
         LZ4_initStreamHC(LZ4_streamHCPtr, sizeof(*LZ4_streamHCPtr));
     } else {
@@ -2169,9 +2207,10 @@ void LZ4_resetStreamHC_fast (LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLev
 /* This is AOCL variant of LZ4_resetStreamHC() used to reset the stream of type AOCL_LZ4_StreamHC_t. */
 void AOCL_LZ4_resetStreamHC_fast(AOCL_LZ4_streamHC_t* AOCL_LZ4_streamHCPtr, int compressionLevel)
 {
-    if (AOCL_LZ4_streamHCPtr == NULL) return;
+    if (AOCL_LZ4_streamHCPtr == NULL) { LOG_UNFORMATTED(ERR, logCtx, "AOCL_LZ4_streamHCPtr is NULL"); return; }
 
-    DEBUGLOG(4, "AOCL_LZ4_resetStreamHC_fast(%p, %d)", AOCL_LZ4_streamHCPtr, compressionLevel);
+    DEBUGLOG(4, "AOCL_LZ4_resetStreamHC_fast(%p, %d)", (void *)AOCL_LZ4_streamHCPtr, compressionLevel);
+    LOG_FORMATTED(INFO, logCtx, "AOCL_LZ4_resetStreamHC_fast(%p, %i)", (void *)AOCL_LZ4_streamHCPtr, compressionLevel);
     if (AOCL_LZ4_streamHCPtr->internal_donotuse.dirty) {
         AOCL_LZ4_initStreamHC(AOCL_LZ4_streamHCPtr, sizeof(*AOCL_LZ4_streamHCPtr));
     }
@@ -2187,7 +2226,8 @@ void AOCL_LZ4_resetStreamHC_fast(AOCL_LZ4_streamHC_t* AOCL_LZ4_streamHCPtr, int 
 
 void LZ4_setCompressionLevel(LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLevel)
 {
-    DEBUGLOG(5, "LZ4_setCompressionLevel(%p, %d)", LZ4_streamHCPtr, compressionLevel);
+    DEBUGLOG(5, "LZ4_setCompressionLevel(%p, %d)", (void *)LZ4_streamHCPtr, compressionLevel);
+    LOG_FORMATTED(INFO, logCtx, "LZ4_setCompressionLevel(%p, %i)", (void *)LZ4_streamHCPtr, compressionLevel);
     if (compressionLevel < 1) compressionLevel = LZ4HC_CLEVEL_DEFAULT;
     if (compressionLevel > LZ4HC_CLEVEL_MAX) compressionLevel = LZ4HC_CLEVEL_MAX;
     LZ4_streamHCPtr->internal_donotuse.compressionLevel = (short)compressionLevel;
@@ -2197,7 +2237,8 @@ void LZ4_setCompressionLevel(LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLev
 /* This is AOCL variant of LZ4_setCompressionLevel() used to set compression level in the streamPtr of type AOCL_LZ4_StreamHC_t. */
 void AOCL_LZ4_setCompressionLevel(AOCL_LZ4_streamHC_t* AOCL_LZ4_streamHCPtr, int compressionLevel)
 {
-    DEBUGLOG(5, "AOCL_LZ4_setCompressionLevel(%p, %d)", AOCL_LZ4_streamHCPtr, compressionLevel);
+    DEBUGLOG(5, "AOCL_LZ4_setCompressionLevel(%p, %d)", (void *)AOCL_LZ4_streamHCPtr, compressionLevel);
+    LOG_FORMATTED(INFO, logCtx, "AOCL_LZ4_setCompressionLevel(%p, %i)", (void *)AOCL_LZ4_streamHCPtr, compressionLevel);
     if (compressionLevel < 1) compressionLevel = LZ4HC_CLEVEL_DEFAULT;
     if (compressionLevel > LZ4HC_CLEVEL_MAX) compressionLevel = LZ4HC_CLEVEL_MAX;
     AOCL_LZ4_streamHCPtr->internal_donotuse.compressionLevel = (short)compressionLevel;
@@ -2217,7 +2258,8 @@ int LZ4_loadDictHC (LZ4_streamHC_t* LZ4_streamHCPtr,
     if(LZ4_streamHCPtr==NULL || dictionary==NULL)
         return 0;
     LZ4HC_CCtx_internal* const ctxPtr = &LZ4_streamHCPtr->internal_donotuse;
-    DEBUGLOG(4, "LZ4_loadDictHC(ctx:%p, dict:%p, dictSize:%d)", LZ4_streamHCPtr, dictionary, dictSize);
+    DEBUGLOG(4, "LZ4_loadDictHC(ctx:%p, dict:%p, dictSize:%d)", (void *)LZ4_streamHCPtr, (void *)dictionary, dictSize);
+    LOG_FORMATTED(INFO, logCtx, "LZ4_loadDictHC(ctx:%p, dict:%p, dictSize:%i)", (void *)LZ4_streamHCPtr, (void *)dictionary, dictSize);
     assert(LZ4_streamHCPtr != NULL);
     if (dictSize > 64 KB) {
         dictionary += (size_t)dictSize - 64 KB;
@@ -2242,7 +2284,8 @@ void LZ4_attach_HC_dictionary(LZ4_streamHC_t *working_stream, const LZ4_streamHC
 
 static void LZ4HC_setExternalDict(LZ4HC_CCtx_internal* ctxPtr, const BYTE* newBlock)
 {
-    DEBUGLOG(4, "LZ4HC_setExternalDict(%p, %p)", ctxPtr, newBlock);
+    DEBUGLOG(4, "LZ4HC_setExternalDict(%p, %p)", (void *)ctxPtr, (void *)newBlock);
+    LOG_FORMATTED(INFO, logCtx, "LZ4HC_setExternalDict(%p, %p)", (void *)ctxPtr, (void *)newBlock);
     if (ctxPtr->end >= ctxPtr->base + ctxPtr->dictLimit + 4)
         LZ4HC_Insert (ctxPtr, ctxPtr->end-3);   /* Referencing remaining dictionary content */
 
@@ -2262,7 +2305,8 @@ static void LZ4HC_setExternalDict(LZ4HC_CCtx_internal* ctxPtr, const BYTE* newBl
 /* This is AOCL variant of LZ4HC_setExternalDict() used in Cache Efficient Hash chain strategy similar to LZ4HC_setExternalDict(). */
 static void AOCL_LZ4HC_setExternalDict(AOCL_LZ4HC_CCtx_internal* ctxPtr, const BYTE* newBlock, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz)
 {
-    DEBUGLOG(4, "AOCL_LZ4HC_setExternalDict(%p, %p)", ctxPtr, newBlock);
+    DEBUGLOG(4, "AOCL_LZ4HC_setExternalDict(%p, %p)", (void *)ctxPtr, (void *)newBlock);
+    LOG_FORMATTED(INFO, logCtx, "AOCL_LZ4HC_setExternalDict(%p, %p)", (void *)ctxPtr, (void *)newBlock);
     if (ctxPtr->end >= ctxPtr->base + ctxPtr->dictLimit + 4)
         AOCL_LZ4HC_Insert(ctxPtr, ctxPtr->end - 3, Hash_Chain_Max, Hash_Chain_Slot_Sz);   /* Referencing remaining dictionary content */
 
@@ -2285,11 +2329,16 @@ LZ4_compressHC_continue_generic (LZ4_streamHC_t* LZ4_streamHCPtr,
                                  int* srcSizePtr, int dstCapacity,
                                  limitedOutput_directive limit)
 {
-    if(LZ4_streamHCPtr==NULL || src==NULL || dst==NULL)
+    if (LZ4_streamHCPtr == NULL || src == NULL || dst == NULL)
+    {
+        LOG_FORMATTED(ERR, logCtx, "Invalid arguments passed. LZ4_streamHCPtr=%p, src=%p, dst=%p", (void *)LZ4_streamHCPtr, (void *)src, (void *)dst);
         return 0;
+    }
     LZ4HC_CCtx_internal* const ctxPtr = &LZ4_streamHCPtr->internal_donotuse;
     DEBUGLOG(5, "LZ4_compressHC_continue_generic(ctx=%p, src=%p, srcSize=%d, limit=%d)",
-                LZ4_streamHCPtr, src, *srcSizePtr, limit);
+                (void *)LZ4_streamHCPtr, (void *)src, *srcSizePtr, limit);
+    LOG_FORMATTED(INFO, logCtx, "LZ4_compressHC_continue_generic(ctx=%p, src=%p, srcSize=%i, limit=%i)",
+                (void *)LZ4_streamHCPtr, (void *)src, *srcSizePtr, limit);
     assert(ctxPtr != NULL);
     /* auto-init if forgotten */
     if (ctxPtr->base == NULL) LZ4HC_init_internal (ctxPtr, (const BYTE*) src);
@@ -2346,7 +2395,8 @@ int LZ4_saveDictHC (LZ4_streamHC_t* LZ4_streamHCPtr, char* safeBuffer, int dictS
         return 0;
     LZ4HC_CCtx_internal* const streamPtr = &LZ4_streamHCPtr->internal_donotuse;
     int const prefixSize = (int)(streamPtr->end - (streamPtr->base + streamPtr->dictLimit));
-    DEBUGLOG(5, "LZ4_saveDictHC(%p, %p, %d)", LZ4_streamHCPtr, safeBuffer, dictSize);
+    DEBUGLOG(5, "LZ4_saveDictHC(%p, %p, %d)", (void *)LZ4_streamHCPtr, (void *)safeBuffer, dictSize);
+    LOG_FORMATTED(INFO, logCtx, "LZ4_saveDictHC(%p, %p, %i)", (void *)LZ4_streamHCPtr, (void *)safeBuffer, dictSize);
     assert(prefixSize >= 0);
     if (dictSize > 64 KB) dictSize = 64 KB;
     if (dictSize < 4) dictSize = 0;
@@ -2534,7 +2584,8 @@ static int LZ4HC_compress_optimal ( LZ4HC_CCtx_internal* ctx,
 #ifdef LZ4HC_HEAPMODE
     if (opt == NULL) goto _return_label;
 #endif
-    DEBUGLOG(5, "LZ4HC_compress_optimal(dst=%p, dstCapa=%u)", dst, (unsigned)dstCapacity);
+    DEBUGLOG(5, "LZ4HC_compress_optimal(dst=%p, dstCapa=%u)", (void *)dst, (unsigned)dstCapacity);
+    LOG_FORMATTED(INFO, logCtx, "LZ4HC_compress_optimal(dst=%p, dstCapa=%u)", (void *)dst, (unsigned)dstCapacity);
     *srcSizePtr = 0;
     if (limit == fillOutput) oend -= LASTLITERALS;   /* Hack for support LZ4 format restriction */
     if (sufficient_len >= LZ4_OPT_NUM) sufficient_len = LZ4_OPT_NUM-1;
@@ -2753,6 +2804,7 @@ _last_literals:
              lastRunSize -= llAdd;
          }
          DEBUGLOG(6, "Final literal run : %i literals", (int)lastRunSize);
+         LOG_FORMATTED(DEBUG, logCtx, "Final literal run : %i literals", (int)lastRunSize);
          ip = anchor + lastRunSize; /* can be != iend if limit==fillOutput */
 
          if (lastRunSize >= RUN_MASK) {
@@ -2780,6 +2832,7 @@ if (limit == fillOutput) {
      size_t const ll_totalCost = 1 + ll_addbytes + ll;
      BYTE* const maxLitPos = oend - 3; /* 2 for offset, 1 for token */
      DEBUGLOG(6, "Last sequence overflowing (only %i bytes remaining)", (int)(oend-1-opSaved));
+     LOG_FORMATTED(DEBUG, logCtx, "Last sequence overflowing (only %i bytes remaining)", (int)(oend-1-opSaved));
      op = opSaved;  /* restore correct out pointer */
      if (op + ll_totalCost <= maxLitPos) {
          /* ll validated; now adjust match length */
@@ -2789,9 +2842,12 @@ if (limit == fillOutput) {
          if ((size_t)ovml > maxMlSize) ovml = (int)maxMlSize;
          if ((oend + LASTLITERALS) - (op + ll_totalCost + 2) - 1 + ovml >= MFLIMIT) {
              DEBUGLOG(6, "Space to end : %i + ml (%i)", (int)((oend + LASTLITERALS) - (op + ll_totalCost + 2) - 1), ovml);
-             DEBUGLOG(6, "Before : ip = %p, anchor = %p", ip, anchor);
+             LOG_FORMATTED(DEBUG, logCtx, "Space to end : %i + ml (%i)", (int)((oend + LASTLITERALS) - (op + ll_totalCost + 2) - 1), ovml);
+             DEBUGLOG(6, "Before : ip = %p, anchor = %p", (void *)ip, (void *)anchor);
+             LOG_FORMATTED(DEBUG, logCtx, "Before : ip = %p, anchor = %p", (void *)ip, (void *)anchor);
              LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ovml, ovref, notLimited, oend);
-             DEBUGLOG(6, "After : ip = %p, anchor = %p", ip, anchor);
+             DEBUGLOG(6, "After : ip = %p, anchor = %p", (void *)ip, (void *)anchor);
+             LOG_FORMATTED(DEBUG, logCtx, "After : ip = %p, anchor = %p", (void *)ip, (void *)anchor);
      }   }
      goto _last_literals;
 }
