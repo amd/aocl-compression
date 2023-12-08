@@ -8,7 +8,7 @@
  * You may select, at your option, one of the above-listed licenses.
  */
 
-/**
+/*
  * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -117,6 +117,7 @@ extern "C" {
  * typically with -Wno-deprecated-declarations for gcc or _CRT_SECURE_NO_WARNINGS in Visual.
  * Otherwise, it's also possible to define ZSTD_DISABLE_DEPRECATE_WARNINGS.
  */
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 #ifdef ZSTD_DISABLE_DEPRECATE_WARNINGS
 #  define ZSTD_DEPRECATED(message) /* disable deprecation warnings */
 #else
@@ -133,7 +134,7 @@ extern "C" {
 #    define ZSTD_DEPRECATED(message)
 #  endif
 #endif /* ZSTD_DISABLE_DEPRECATE_WARNINGS */
-
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*******************************************************************************
   Introduction
@@ -176,6 +177,11 @@ extern "C" {
 #define ZSTD_VERSION_NUMBER  (ZSTD_VERSION_MAJOR *100*100 + ZSTD_VERSION_MINOR *100 + ZSTD_VERSION_RELEASE)
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
+/**
+ * @name Helper functions
+ * 
+ */
+
 /*! 
  * @brief
  *  Library Version number.
@@ -200,6 +206,10 @@ ZSTDLIB_API unsigned ZSTD_versionNumber(void);
  */
 
 ZSTDLIB_API const char* ZSTD_versionString(void);
+
+/**
+ * @}
+ */
 
 /* *************************************
  *  Default constant
@@ -406,51 +416,75 @@ ZSTDLIB_API size_t ZSTD_findFrameCompressedSize(const void* src, size_t srcSize)
  * @}
  */
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
 /**
- * @brief AOCL-Compression defined setup functions that configures ZSTD
- * compression with the right AMD optimized ZSTD routines depending upon the
- * detected CPU features.
- *
- * | Parameters | Description |
- * |:-----------|:------------|
- * | \b optOff    |Turn off all optimizations .                                                                   |
- * | \b optLevel  |Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .              |
- * | \b insize    |Input data length.                                                                             |
- * | \b level     |Requested compression level.                                                                   |
- * | \b windowLog | Largest match distance : larger == more compression, more memory needed during decompression. |
- *
- * @return \b NULL
+ * @name AOCL Functions
+ * @brief These functions are not part of open source code, these are introduced by AOCL-Compression
+ * library to control AOCL introduced optimization levels dynamically.
+ * 
+ * @note These functions are for internal purposes only, not recommended for external use.
+ * 
+ * @{
+ */
+
+/**
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized zstd routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_zstd_encode() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in zstd following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * 
+ * @return \b NULL .
  */
 ZSTDLIB_API char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 
 /**
- * @brief AOCL-Compression defined setup functions that configures ZSTD
- * decompression with the right AMD optimized ZSTD routines depending upon the
- * detected CPU features.
- *
- * | Parameters | Description |
- * |:-----------|:------------|
- * | \b optOff    |Turn off all optimizations .                                                                  |
- * | \b optLevel  |Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .             |
- * | \b insize    |Input data length.                                                                            |
- * | \b level     |Requested compression level.                                                                  |
- * | \b windowLog |Largest match distance : larger == more compression, more memory needed during decompression. |
- *
- * @return \b NULL
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized zstd routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_zstd_decode() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in zstd following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * 
+ * @return \b NULL .
  */
 ZSTDLIB_API char* aocl_setup_zstd_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 
 /**
- * @brief AOCL-Compression defined destroy function for zstd encode.
+ * @brief It is necessary to execute this destroy function after the initial invocation of
+ * the aocl_setup_zstd_encode() function, prior to initiating the setup function again.
  */
 ZSTDLIB_API void aocl_destroy_zstd_encode(void);
 
 /**
- * @brief AOCL-Compression defined destroy function for zstd decode.
+ * @brief It is necessary to execute this destroy function after the initial invocation of
+ * the aocl_setup_zstd_decode() function, prior to initiating the setup function again.
  */
 ZSTDLIB_API void aocl_destroy_zstd_decode(void);
+
+/**
+ * @}
+ */
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*======  Helper functions  ======*/
 /* ZSTD_compressBound() :
@@ -506,6 +540,11 @@ typedef struct ZSTD_CCtx_s ZSTD_CCtx;
  *  @note 2 : In multi-threaded environments,
  *         use one different context per thread for parallel execution.
  */
+
+/**
+ * @name Explicit context
+ * @{
+ */
 ZSTDLIB_API ZSTD_CCtx* ZSTD_createCCtx(void); /**< @brief Creates compression context. */
 ZSTDLIB_API size_t     ZSTD_freeCCtx(ZSTD_CCtx* cctx);  /**< @brief Releases compression context. Accept NULL pointer */
 
@@ -545,6 +584,9 @@ ZSTDLIB_API size_t ZSTD_compressCCtx(ZSTD_CCtx* cctx,
                                const void* src, size_t srcSize,
                                      int compressionLevel);
 
+/**
+ * @}
+ */
 typedef struct ZSTD_DCtx_s ZSTD_DCtx;
 /**< Decompression context : 
  *  When decompressing many times,
@@ -553,6 +595,10 @@ typedef struct ZSTD_DCtx_s ZSTD_DCtx;
  *  This will make workload friendlier for system's memory.
  *  @note Use one context per thread for parallel execution. */
 
+/**
+ * @name Explicit context
+ * @{
+ */
 ZSTDLIB_API ZSTD_DCtx* ZSTD_createDCtx(void); /**< @brief Creates decompression context. */
 ZSTDLIB_API size_t     ZSTD_freeDCtx(ZSTD_DCtx* dctx);  /**< @brief Releases decompression context. Accept NULL pointer */
 
@@ -583,6 +629,9 @@ ZSTDLIB_API size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx,
                                        void* dst, size_t dstCapacity,
                                  const void* src, size_t srcSize);
 
+/**
+ * @}
+ */
 
 /*********************************************
 *  Advanced compression API (Requires v1.4.0+)
@@ -1295,10 +1344,18 @@ typedef ZSTD_CCtx ZSTD_CStream;  /**<
                                 Continue to distinguish them for compatibility with older versions <= v1.2.0
                                 */
 /*===== ZSTD_CStream management functions =====*/
+/**
+ * @name ZSTD_CStream management functions
+ * @{
+ */
 /*! @brief Used to create resource.*/
 ZSTDLIB_API ZSTD_CStream* ZSTD_createCStream(void);
 /*! @brief Used to release resource. Accept NULL pointer */
 ZSTDLIB_API size_t ZSTD_freeCStream(ZSTD_CStream* zcs);  
+
+/**
+ * @}
+ */
 
 /*===== Streaming compression functions =====*/
 typedef enum {
@@ -1532,9 +1589,18 @@ typedef ZSTD_DCtx ZSTD_DStream;  /**<  @brief A ZSTD_DStream object is required 
                                  For compatibility with versions <= v1.2.0, prefer differentiating them.
                                  */
 /*===== ZSTD_DStream management functions =====*/
+/**
+ * @name ZSTD_DStream management functions
+ * @{
+ */
+/*! @brief This is used to create ZSTD_DStream to track streaming operations which can be re-used multiple times.*/
 ZSTDLIB_API ZSTD_DStream* ZSTD_createDStream(void);
 /*! @brief Used to release resources. Accept NULL pointer */
 ZSTDLIB_API size_t ZSTD_freeDStream(ZSTD_DStream* zds);  
+
+/**
+ * @}
+ */
 
 /*===== Streaming decompression functions =====*/
 
@@ -2273,11 +2339,17 @@ ZSTDLIB_API size_t ZSTD_DCtx_refPrefix(ZSTD_DCtx* dctx,
  * \n \b Note Requires v1.4.0+
  * @{
  */
+/** @brief Returs the size of `ZSTD_CCtx` */
 ZSTDLIB_API size_t ZSTD_sizeof_CCtx(const ZSTD_CCtx* cctx);
+/** @brief Returs the size of `ZSTD_DCtx` */
 ZSTDLIB_API size_t ZSTD_sizeof_DCtx(const ZSTD_DCtx* dctx);
+/** @brief Returs the size of `ZSTD_CStream` */
 ZSTDLIB_API size_t ZSTD_sizeof_CStream(const ZSTD_CStream* zcs);
+/** @brief Returs the size of `ZSTD_DStream` */
 ZSTDLIB_API size_t ZSTD_sizeof_DStream(const ZSTD_DStream* zds);
+/** @brief Returs the size of `ZSTD_CDict` */
 ZSTDLIB_API size_t ZSTD_sizeof_CDict(const ZSTD_CDict* cdict);
+/** @brief Returs the size of `ZSTD_DDict` */
 ZSTDLIB_API size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 
 /**
@@ -4259,9 +4331,6 @@ ZSTDLIB_STATIC_API ZSTD_nextInputType_e ZSTD_nextInputType(ZSTD_DCtx* dctx);
 
 
 
-/** 
- * @} 
- */
 
 /* ========================================= */
 /**       Block level API (DEPRECATED)       */
@@ -4316,6 +4385,11 @@ ZSTD_DEPRECATED("The block API is deprecated in favor of the normal compression 
 ZSTDLIB_STATIC_API size_t ZSTD_insertBlock    (ZSTD_DCtx* dctx, const void* blockStart, size_t blockSize);  /**< insert uncompressed block into `dctx` history. Useful for multi-blocks decompression. */
 
 #endif   /* ZSTD_H_ZSTD_STATIC_LINKING_ONLY */
+
+/** 
+ * @} 
+ */
+
 
 #if defined (__cplusplus)
 }

@@ -1,38 +1,14 @@
-AOCL-Compression
-================
-
-AOCL-Compression is a software framework of various lossless compression and
-decompression methods tuned and optimized for AMD Zen based CPUs.
-This framework offers a single set of unified APIs for all the supported
-compression and decompression methods which facilitate the applications to
-easily integrate and use them.
-AOCL-Compression supports lz4, zlib/deflate, lzma, zstd, bzip2, snappy, and lz4hc
-based compression and decompression methods along with their native APIs.
-The library offers openMP based multi-threaded implementation of lz4, zlib, 
-zstd and snappy compression methods.
-It supports the dynamic dispatcher feature that executes the most optimal
-function variant implemented using Function Multi-versioning thereby offering
-a single optimized library portable across different x86 CPU architectures.
-AOCL-Compression framework is developed in C for UNIX® and Windows® based systems.
-A test suite is provided for the validation and performance benchmarking
-of the supported compression and decompression methods. This suite also
-supports the benchmarking of IPP compression methods, such as, lz4, lz4hc, zlib and bzip2.
-The library build framework offers CTest based testing of the test cases
-implemented using GTest and the library test suite.
-
-
 Installation
 ------------
 
 1. Download the latest stable release from the Github repository:<br>
-https://github.com/amd/aocl-compression
+[https://github.amd.com/AOCL/aocl-compression](https://github.amd.com/AOCL/aocl-compression)
 2. Install CMake on the machine where the sources are to be compiled.
 3. Make any one of the compilers GCC or Clang available on the machine.
 4. Then, use the cmake based build system to compile and generate AOCL-Compression <br>
 library and testsuite binary as explained below for Linux® and Windows® platforms.
 
-Building on Linux
------------------
+#### Building on Linux
 
 1. To create a build directory and configure the build system in it, run the following:
    ```
@@ -74,13 +50,13 @@ So the build folder must be created manually. <br>
 The option `-v` is also not supported in cmake version older than 3.15.
 
 
-Building on Windows
--------------------
+#### Building on Windows
+
 As a prerequisite, make Microsoft Visual Studio® available along with <br>
 __Desktop development with C++__ toolset that includes the Clang compiler.
 
-Building with Visual Studio IDE (GUI)
--------------------------------------
+#### Building with Visual Studio IDE (GUI)
+
 1. Launch CMake GUI and set the locations for source package and build output.
 2.  Click __Configure__ option and select:
       - __Generator__ as the Installed Microsoft Visual Studio Version
@@ -98,8 +74,8 @@ Building with Visual Studio IDE (GUI)
    compilation option.
 8. Build the entire solution or the required projects.
 
-Building with Visual Studio IDE (command line)
-----------------------------------------------
+#### Building with Visual Studio IDE (command line)
+
 1. Go to AOCL-Compression source package and create a folder named build.
 2. Go to the build folder.
 3. Use the following command to configure and build the library to test bench executable.
@@ -108,8 +84,8 @@ cmake .. -T ClangCl -G <installed Visual Studio version> && cmake --build . --co
 ```
 You can pass additional library configuration and build options in the command.
 
-Additional Library Build Options
---------------------------------
+#### Additional Library Build Options
+
 Use the following additional options to configure your build:
 
 Option                              |  Description
@@ -120,7 +96,7 @@ LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
 AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST|  Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Disabled by default)
 AOCL_ZSTD_WILDCOPY_LONG             |  Faster wildcopy when match lengths are long in ZSTD decompression (Disabled by default)
-AOCL_TEST_COVERAGE                  |  Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)
+AOCL_TEST_COVERAGE                  |  Enable GTest and AOCL test bench based CTest suite (Disabled by default)
 AOCL_ENABLE_LOG_FEATURE             |  Enables logging through environment variable `AOCL_ENABLE_LOG` (Disabled by default)
 CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
 ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
@@ -141,10 +117,8 @@ AOCL_EXCLUDE_ZLIB                   |  Exclude ZLIB compression method from the 
 AOCL_EXCLUDE_ZSTD                   |  Exclude ZSTD compression method from the library build (Disabled by default)
 AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL |  Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)
 AOCL_ENABLE_THREADS                 |  Enable multi-threaded compression and decompression using SMP based openMP threads (Disabled by default)
-TEST_COVERAGE_THIRD_PARTY           |  Enable third party test bench based CTest suite (Disabled by default)
 
-Running AOCL-Compression Test Bench On Linux
---------------------------------------------
+#### Running AOCL-Compression Test Bench On Linux
 
 Test bench supports several options to validate, benchmark or debug the supported
 compression methods.
@@ -185,8 +159,7 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
    * `AOCL_ENABLE_LOG=ERR`   for Error logs.
    * `AOCL_ENABLE_LOG=INFO`  for Error, Info logs.
    * `AOCL_ENABLE_LOG=DEBUG` for Error, Info, Debug logs.
-   * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.<br>
-  Note: When building the library for highest performance, do not enable `DAOCL_ENABLE_LOG_FEATURE`.
+   * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.
 
 
 * To run the test bench but only compression or decompression <br>
@@ -205,13 +178,8 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
    Here, when -rcompress operation is selected, compressed file gets dumped <br>
    and when -rdecompress operation is selected, decompressed file gets dumped. <br>
    Method name and level must be specified using -e for default and -rcompress modes. <br>
-   Method name must be specified using -e for -rdecompress mode. <br>
+   Method name must be specified using -e for -rdecompress mode.
 
-* NOTE: <br>
-   1. Compression and decompression of large files (>1GB) are supported in the test bench. <br>
-   2. Decompression of compressed files (> 1GB) that are not generated by aocl-compression <br> 
-      is not guaranteed by the test bench. <br>
- 
 ---
   
 To test and benchmark the performance of IPP's compression methods, use the
@@ -240,8 +208,7 @@ Check the following details for the exact steps:
     aocl_compression_bench -ebzip2 -p -c/path/to/ipp_patch <input filename>
 ```
 
-Running AOCL-Compression Test Bench On Windows
-----------------------------------------------
+#### Running AOCL-Compression Test Bench On Windows
 
 Test bench on Windows supports all the user options as Linux,
 except for the `-c` option to link and test IPP compression methods.
@@ -250,9 +217,7 @@ To set and launch the test bench with a specific user option,
 go to project aocl_compression_bench -> Properties -> Debugging;
 specify the user options and the input test file.
 
-
-Running tests with CTest
-------------------------
+#### Running tests with CTest
 
 CTest is configured in CMake build system to run the test cases implemented with GTest and AOCL Test Bench for Silesia, Calgary, and Canterbury datasets.
 To enable testing with CTest, use AOCL_TEST_COVERAGE option while configuring the CMake build.
@@ -268,29 +233,7 @@ Following are a few sample commands that can be executed in the build directory 
  To run GTest test cases for a specific method<br>
  `ctest -R <METHOD_NAME_IN_CAPITALS>`
 
-Running source code coverage using GCOV
----------------------------------------
-
-To measure source code coverage, use CODE_COVERAGE option while configuring the CMake build. Run CMake with the custom target option 'code-coverage' to execute tests and generate code coverage data. The code coverage reports are generated in the build directory under subdirectory called 'coverage/html_report'. Open the HTML files in browser to view the coverage information.
-
-Following is the sample command usage to run code coverage:
-`cmake --build <build directory> --target install code-coverage`
-
-Running Valgrind and ASAN memory checks using CTest
----------------------------------------------------
-
-Use VALGRIND option for Valgrind memory check and ASAN option for ASAN memory check while configuring the CMake build. VALGRIND and ASAN options can not be enabled together.
-
-Following are the commands to execute in the 'build' directory to run memory checks.
-
- To run Valgrind memory check<br>
- `ctest -T memcheck` 
- 
- To run ASAN memory check<br>
- `ctest`
-
-Running Performance Benchmarking
---------------------------------
+#### Running Performance Benchmarking
 
 Use test_speed.py script to benchmark performance and compare AOCL-Compression library with other 
 compression libraries such as open-source reference or IPP. It generates summary reports describing compression/decompression speeds and compression ratio.
@@ -304,11 +247,11 @@ Following are a few sample commands to use the script available in the 'scripts'
  `python3 test_speed.py --dataset $PATH_DATASETS_DIR -m lz4 snappy zlib:1 zlib:2 -cw vanilla`
  
  To run AOCL optimized vs IPP for lz4 method:<br>
- `python3 test_speed.py --dataset $PATH_DATASETS_DIR -m lz4 -cw ipp --ipp $IPP_PATCHED_LZ4_LIBS_PATH` 
+ `python3 test_speed.py --dataset $PATH_DATASETS_DIR -m lz4 -cw ipp --ipp $IPP_PATCHED_LZ4_LIBS_PATH`
  
 
-Generating Documentation
-------------------------
+#### Generating Documentation
+
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
 - Documents will be generated in HTML format in the folder __docs/html__ as doxygen output &  __docs/sphinx/html__ as sphinx output. Open the index.html file from respective folders in any browser to view the documentation.
 - The following packages are expected before running CMake with `-DBUILD_DOC=ON` option:
@@ -320,8 +263,8 @@ Generating Documentation
       - myst_parser
 - CMake halts if required packages are missing by providing directives for installing the absent packages.
 
-Enabling/disabling optimizations
---------------------------------
+#### Enabling/disabling optimizations
+
 - AOCL optimizations can be disabled by setting the environment variable AOCL_DISABLE_OPT to ON.
 - Reference code paths are taken in such a scenario.
 - This needs to be set before launching the application for it to take effect.
@@ -329,8 +272,8 @@ Enabling/disabling optimizations
 - If optimization is turned on  via aocl_compression_desc::optOff (= 0) passed to aocl_llc_setup(), then AOCL_DISABLE_OPT is checked 
   additionally to override aocl_compression_desc::optOff value.
 
-Enabling specific instructions (ISA)
-------------------------------------
+#### Enabling specific instructions (ISA)
+
 - AOCL optimizations can be restricted to certain ISAs by setting the environment variable 
   AOCL_ENABLE_INSTRUCTIONS. Supported values are SSE2, AVX, AVX2 and AVX512.
 - This ensures optimized code paths with ISAs above the set value are not taken. E.g. If 
@@ -339,21 +282,3 @@ Enabling specific instructions (ISA)
 - It takes precedence over aocl_compression_desc::optLevel setting passed to aocl_llc_setup().
 - Note: When calling aocl_llc_setup() API from multiple threads, changing aocl_compression_desc::optOff
   and aocl_compression_desc::optLevel values between threads can lead to undefined behaviour.
-
-Multi-threaded Compression and Decompression
---------------------------------------------
-- Parallel compression and decompression of lz4, zlib, zstd and snappy is implemented using
-  openMP multi-threading. A RAP (random access point) frame is introduced in AOCL-Compression
-  to support parallel decompression of the compressed streams/files. Use AOCL_ENABLE_THREADS
-  config option to enable the multi-threading.
-- A stream compressed with multi-threaded AOCL-Compression library can be decompressed using any
-  single-threaded standard decompressor by simply skipping the initial block of bytes containing
-  the RAP frame present at the start of the stream.
-- The multi-threaded compression support is optimally tuned for AMD CPUs on Linux® OS whereas
-  this support is experimental for Windows® platforms.
-
-
-CONTACTS
---------
-AOCL-Compression is developed and maintained by AMD.<br>
-For support, send an email to toolchainsupport@amd.com.

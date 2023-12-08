@@ -249,17 +249,32 @@ LZ4LIB_API int LZ4_compress_HC_destSize(void* stateHC,
  * @}
 */
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
 /**
- * @brief AOCL-Compression defined setup function that configures with the right
- * AMD optimized lz4hc routines depending upon the detected CPU features.
+ * @name AOCL Functions
+ * @brief These functions are not part of open source code, these are introduced by AOCL-Compression
+ * library to control AOCL introduced optimization dynamically.
  * 
- * | Parameters | Description |
- * |:-----------|:------------|
- * | \b optOff    | Turn off all optimizations . |
- * | \b optLevel  | Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 . |
- * | \b insize    | Input data length. |
- * | \b level     | Requested compression level. |
- * | \b windowLog | Largest match distance : larger == more compression, more memory needed during decompression. |
+ * @note These functions are for internal purposes only, not recommended for external use.
+ * 
+ * @{
+ */
+
+/**
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized lz4hc routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_lz4hc() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in lz4hc following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
  * 
  * @return \b NULL .
  */
@@ -267,9 +282,16 @@ LZ4LIB_API char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 
 /**
- * @brief AOCL-Compression defined destroy function for lz4hc.
+ * @brief It is necessary to execute this destroy function after the initial invocation of the
+ * aocl_setup_lz4hc() function, prior to initiating the setup function again.
  */
 LZ4LIB_API void aocl_destroy_lz4hc(void);
+
+/**
+ * @}
+ */
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*-************************************
  *  Streaming Compression

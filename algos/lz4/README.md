@@ -134,17 +134,6 @@ The following build macro can be selected to adjust the source code behavior dur
   This test can be disabled if it proves flaky, by setting this value to 0.
 
 
-### Merging
-
-LZ4 source code can be merged into a single file.
-One can combine all source code into `lz4_all.c` by using following command:
-```
-cat lz4.c lz4hc.c lz4frame.c > lz4_all.c
-```
-(__Note:__ The `cat` file order is important). Compile `lz4_all.c`.
-All the `*.h` files present in `/lib` are mandatory to compile `lz4_all.c`.
-
-
 ### License
 
 All the source material in __lib__ directory is BSD 2-Clause licensed.

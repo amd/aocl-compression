@@ -2,7 +2,7 @@
  *  LZ4 - Fast LZ compression algorithm
  *  Header File
  *  Copyright (C) 2011-present, Yann Collet.
- *  Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ *  Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -118,6 +118,11 @@ extern "C" {
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
+/**
+ * @name Helper Functions 
+ * @{
+ */
+
 /*!
  *  @brief
  *  Library Version number.
@@ -135,6 +140,10 @@ LZ4LIB_API int LZ4_versionNumber (void);
  */
 
 LZ4LIB_API const char* LZ4_versionString (void);
+
+/**
+ * @}
+ */
 
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
 
@@ -170,7 +179,7 @@ LZ4LIB_API const char* LZ4_versionString (void);
 **************************************/
 
 /*!
- * @name Simple_Functions
+ * @name Simple Functions
  * @{
  */
 
@@ -450,10 +459,31 @@ LZ4LIB_API int LZ4_compress_destSize (const char* src, char* dst, int* srcSizePt
 LZ4LIB_API int LZ4_decompress_safe_partial (const char* src, char* dst, int srcSize, int targetOutputSize, int dstCapacity);
 
 /**
- * @brief AOCL-Compression defined setup function that configures with the right
- * AMD optimized lz4 routines depending upon the detected CPU features.
+ * @}
+ */
+
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
+/**
+ * @name AOCL Functions
+ * @brief These functions are not part of open source code, these are introduced by AOCL-Compression
+ * library to control AOCL introduced optimization levels dynamically.
  * 
- * @param optOff Turn off all optimizations .
+ * @note These functions are for internal purposes only, not recommended for external use.
+ * 
+ * @{
+ */
+
+/**
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized lz4 routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_lz4() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in lz4 following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
  * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
  * @param insize Input data length.
  * @param level Requested compression level.
@@ -465,9 +495,16 @@ LZ4LIB_API char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 
 /**
- * @brief AOCL-Compression defined destroy function for lz4.
+ * @brief It is necessary to execute this destroy function after the initial invocation of the
+ * aocl_setup_lz4() function, prior to initiating the setup function again.
  */
 LZ4LIB_API void aocl_destroy_lz4(void);
+
+/**
+ * @}
+ */
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 #ifdef AOCL_LZ4_OPT
 #ifdef AOCL_UNIT_TEST
@@ -479,9 +516,7 @@ LZ4LIB_API unsigned int Test_AOCL_LZ4_hash5(unsigned long long sequence, int tab
 #endif /* defined(__cplusplus) || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)) */
 #endif /* AOCL_UNIT_TEST */
 #endif /* AOCL_LZ4_OPT */
-/**
- * @}
- */
+
 
 /*-*********************************************
 *  Streaming Compression Functions
@@ -644,10 +679,17 @@ LZ4LIB_API int LZ4_saveDict (LZ4_stream_t* streamPtr, char* safeBuffer, int maxD
 *  Streaming Decompression Functions
 *  Bufferless synchronous API
 ************************************************/
+
+
 /**
  * @brief It is used to track the LZ4 stream during decompression
 */
 typedef union LZ4_streamDecode_u LZ4_streamDecode_t;   /* tracking context */
+
+/**
+ * @name Streaming Decompression Functions
+ * @{
+ */
 
 /*! LZ4_createStreamDecode() and LZ4_freeStreamDecode() :
  *  creation / destruction of streaming decompression tracking context.
@@ -791,6 +833,10 @@ LZ4LIB_API int LZ4_decompress_safe_continue (LZ4_streamDecode_t* LZ4_streamDecod
  *  |Fail   |If source stream is detected malformed, function returns a negative result.|
  */
 LZ4LIB_API int LZ4_decompress_safe_usingDict (const char* src, char* dst, int srcSize, int dstCapcity, const char* dictStart, int dictSize);
+
+/**
+ * @}
+ */
 
 #endif /* LZ4_H_2983827168210 */
 
@@ -995,7 +1041,7 @@ typedef struct {
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
-/*! __LZ4_stream_t__ :
+/*  __LZ4_stream_t__ :
  *  Do not use below internal definitions directly.
  *  Declare or allocate an LZ4_stream_t instead.
  *  It is recommended to create LZ4_stream_t using LZ4_createStream().
@@ -1233,6 +1279,11 @@ LZ4LIB_API int LZ4_decompress_fast_usingDict (const char* src, char* dst, int or
 LZ4LIB_API void LZ4_resetStream (LZ4_stream_t* streamPtr);
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
+
+/**
+ * @}
+ * 
+ */
 
 #endif /* LZ4_H_98237428734687 */
 

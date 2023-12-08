@@ -1,8 +1,8 @@
 /*  LzmaEnc.h -- LZMA Encoder
 2019-10-30 : Igor Pavlov : Public domain */
 
-/**
-* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+/*
+* Copyright (C) 2022-24, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -45,6 +45,10 @@ EXTERN_C_BEGIN
 #define LZMA_PROPS_SIZE 5
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
+/**
+ * @brief Structure to hold configurable parameters that can be used by LZMA encoder.
+ * 
+ */
 typedef struct _CLzmaEncProps
 {
   int level;        /**< Control degree of compression. Lower level gives less compression at higher speed. \n 0 <= level <= 9 */
@@ -135,6 +139,7 @@ SRes:
   SZ_ERROR_THREAD - error in multithreading functions (only for Mt version)
 */
 
+/** @brief Pointer to context object that maintains state of LZMA encoder. */
 typedef void * CLzmaEncHandle;
 
 /*!
@@ -301,26 +306,49 @@ LZMALIB_API SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT s
  * @}
 */
 
-/*! @brief AOCL-Compression defined setup function that configures with the right
- * AMD optimized lzma routines depending upon the detected CPU features.
- *
-* | Parameters    | Description |
- * |:-------------|:------------|
- * | \b optOff    | Turn off all optimizations .                                                                  |
- * | \b optLevel  | Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .             |
- * | \b insize    | Input data length.                                                                            |
- * | \b level     | Requested compression level.                                                                  |
- * | \b windowLog | Largest match distance : larger == more compression, more memory needed during decompression. |
- *
- * @return \b NULL 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
+/**
+ * @name AOCL Functions
+ * @brief These functions are not part of open source code, these are introduced by AOCL-Compression
+ * library to control AOCL introduced optimization levels dynamically.
+ * 
+ * @note These functions are for internal purposes only, not recommended for external use.
+ * 
+ * @{
+ */
+
+/*!
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized lzma routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_lzma_encode() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in lzma following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * 
+ * @return \b NULL .
  */
 LZMALIB_API void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
   size_t level, size_t windowLog);
 
-/**
- * @brief AOCL-Compression defined destroy function for lzma encode.
+/*!
+ * @brief It is necessary to execute this destroy function after the initial invocation of the
+ * aocl_setup_lzma_encode() function, prior to initiating the setup function again.
  */
 LZMALIB_API void aocl_destroy_lzma_encode(void);
+
+/**
+ * @}
+ */
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*!
  * @name Encode Functions

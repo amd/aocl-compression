@@ -1,8 +1,8 @@
 /* LzmaDec.h -- LZMA Decoder
 2020-03-19 : Igor Pavlov : Public domain */
 
-/**
-* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+/*
+* Copyright (C) 2022-24, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -48,12 +48,11 @@ EXTERN_C_BEGIN
  * 
  * The LZMA compression library provides in-memory compression and decompression functions.
  * Typical usage is as follows :
- * 1. Call aocl_setup_lzma_encode() and aocl_setup_lzma_decode() to choose optimization options.
- * 2. Call LzmaEncProps_Init() to initialize CLzmaEncProps object.
- * 3. Update _CLzmaEncProps, if any specific user settings are desired, such as compression level.
- * 4. To compress a file, load file to a source buffer and pass this and a destination buffer to LzmaEncode().
+ * 1. Call LzmaEncProps_Init() to initialize CLzmaEncProps object.
+ * 2. Update _CLzmaEncProps, if any specific user settings are desired, such as compression level.
+ * 3. To compress a file, load file to a source buffer and pass this and a destination buffer to LzmaEncode().
  * LzmaEncode() performs in-memory compression and writes the compressed data to the destination buffer.
- * 5. To decompress, call LzmaDecode() by passing compressed data as source and a destination buffer
+ * 4. To decompress, call LzmaDecode() by passing compressed data as source and a destination buffer
  * to hold uncompressed bytes.
  *
  * @{
@@ -79,6 +78,10 @@ EXTERN_C_BEGIN
 #define LZMA_PROPS_SIZE 5
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
+/**
+ * @brief Structure to hold header parameters that are stored in LZMA compressed streams.
+ * 
+ */
 typedef struct _CLzmaProps
 {
     Byte lc; /**< number of high bits of the previous byte to use as a context for literal encoding (default 3). */
@@ -495,26 +498,49 @@ LZMALIB_API SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* 
  * @}
 */
 
-/*! @brief AOCL-Compression defined setup function that configures with the right
- * AMD optimized lzma routines depending upon the detected CPU features.
- *
-* | Parameters    | Description |
- * |:-------------|:------------|
- * | \b optOff    | Turn off all optimizations .                                                                  |
- * | \b optLevel  | Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .             |
- * | \b insize    | Input data length.                                                                            |
- * | \b level     | Requested compression level.                                                                  |
- * | \b windowLog | Largest match distance : larger == more compression, more memory needed during decompression. |
- *
- * @return \b NULL 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
+/**
+ * @name AOCL Functions
+ * @brief These functions are not part of open source code, these are introduced by AOCL-Compression
+ * library to control AOCL introduced optimization levels dynamically.
+ * 
+ * @note These functions are for internal purposes only, not recommended for external use.
+ * 
+ * @{
+ */
+
+/*!
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized lzma routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_lzma_decode() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in lzma following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * 
+ * @return \b NULL .
  */
 LZMALIB_API void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 
 /**
- * @brief AOCL-Compression defined destroy function for lzma decode.
+ * @brief It is necessary to execute this destroy function after the initial invocation of the
+ * aocl_setup_lzma_decode() function, prior to initiating the setup function again.
  */
 LZMALIB_API void aocl_destroy_lzma_decode(void);
+
+/**
+ * @}
+ */
+
+/// @endcond DOXYGEN_SHOULD_SKIP_THIS
 
 /**
  * @}

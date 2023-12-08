@@ -2,7 +2,7 @@
   version 1.3, August 18th, 2023
 
   Copyright (C) 1995-2023 Jean-loup Gailly and Mark Adler
-  Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+  Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -113,7 +113,9 @@ extern "C" {
  * @{
 */
 
+/** @brief Function pointer for memory allocation function. */
 typedef voidpf (*alloc_func)(voidpf opaque, uInt items, uInt size);
+/** @brief Function pointer for memory deallocation function. */
 typedef void   (*free_func)(voidpf opaque, voidpf address);
 
 struct internal_state;
@@ -122,30 +124,29 @@ struct internal_state;
  * @brief It works as a handle for compression and decompression.
 */
 typedef struct z_stream_s {
-    z_const Bytef *next_in;     /**< @brief next input byte */
-    uInt     avail_in;  /**< @brief number of bytes available at next_in */
-    uLong    total_in;  /**< @brief total number of input bytes read so far */
+    z_const Bytef *next_in;     /**< next input byte */
+    uInt     avail_in;  /**< number of bytes available at next_in */
+    uLong    total_in;  /**< total number of input bytes read so far */
 
-    Bytef    *next_out; /**< @brief next output byte will go here */
-    uInt     avail_out; /**< @brief remaining free space at next_out */
-    uLong    total_out; /**< @brief total number of bytes output so far */
+    Bytef    *next_out; /**< next output byte will go here */
+    uInt     avail_out; /**< remaining free space at next_out */
+    uLong    total_out; /**< total number of bytes output so far */
 
-    z_const char *msg;  /**< @brief last error message, \b NULL if no error */
-    struct internal_state FAR *state; /**< @brief not visible by applications */
+    z_const char *msg;  /**< last error message, \b NULL if no error */
+    struct internal_state FAR *state; /**< not visible by applications */
 
-    alloc_func zalloc;  /**< @brief used to allocate the internal state */
-    free_func  zfree;   /**< @brief used to free the internal state */
-    voidpf     opaque;  /**< @brief private data object passed to zalloc and zfree */
+    alloc_func zalloc;  /**< used to allocate the internal state */
+    free_func  zfree;   /**< used to free the internal state */
+    voidpf     opaque;  /**< private data object passed to zalloc and zfree */
 
-    int     data_type;  /**< @brief best guess about the data type: binary or text
+    int     data_type;  /**< best guess about the data type: binary or text
                            for deflate, or the decoding state for inflate */
-    uLong   adler;      /**< @brief Adler-32 or CRC-32 value of the uncompressed data */
-    uLong   reserved;   /**< @brief reserved for future use */
+    uLong   adler;      /**< Adler-32 or CRC-32 value of the uncompressed data */
+    uLong   reserved;   /**< reserved for future use */
 } z_stream;
 
 
-
-// @brief the internal stream state for decompression/compression.
+/** @brief the internal stream state for decompression/compression. */
 typedef z_stream FAR *z_streamp;
 
 /**
@@ -153,23 +154,23 @@ typedef z_stream FAR *z_streamp;
   for more details on the meanings of these fields.
 */
 typedef struct gz_header_s {
-    int     text;       /**< @brief \b true if compressed data believed to be text */
-    uLong   time;       /**< @brief modification time */
-    int     xflags;     /**< @brief extra flags (not used when writing a gzip file) */
-    int     os;         /**< @brief operating system */
-    Bytef   *extra;     /**< @brief pointer to extra field or Z_NULL if none */
-    uInt    extra_len;  /**< @brief extra field length (valid if extra != Z_NULL) */
-    uInt    extra_max;  /**< @brief space at extra (only when reading header) */
-    Bytef   *name;      /**< @brief pointer to zero-terminated file name or Z_NULL */
-    uInt    name_max;   /**< @brief space at name (only when reading header) */
-    Bytef   *comment;   /**< @brief pointer to zero-terminated comment or Z_NULL */
-    uInt    comm_max;   /**< @brief space at comment (only when reading header) */
-    int     hcrc;       /**< @brief \b true if there was or will be a header crc */
-    int     done;       /**< @brief \b true when done reading gzip header (not used
+    int     text;       /**< \b true if compressed data believed to be text */
+    uLong   time;       /**< modification time */
+    int     xflags;     /**< extra flags (not used when writing a gzip file) */
+    int     os;         /**< operating system */
+    Bytef   *extra;     /**< pointer to extra field or Z_NULL if none */
+    uInt    extra_len;  /**< extra field length (valid if extra != Z_NULL) */
+    uInt    extra_max;  /**< space at extra (only when reading header) */
+    Bytef   *name;      /**< pointer to zero-terminated file name or Z_NULL */
+    uInt    name_max;   /**< space at name (only when reading header) */
+    Bytef   *comment;   /**< pointer to zero-terminated comment or Z_NULL */
+    uInt    comm_max;   /**< space at comment (only when reading header) */
+    int     hcrc;       /**< \b true if there was or will be a header crc */
+    int     done;       /**< \b true when done reading gzip header (not used
                            when writing a gzip file) */
 } gz_header;
 
-// @brief This stores the gzip header information provided in the gz_header structure.
+/** @brief This stores the gzip header information provided in the gz_header structure. */
 typedef gz_header FAR *gz_headerp;
 
 /**
@@ -1533,6 +1534,10 @@ ZEXTERN int ZEXPORT inflateBackEnd(z_streamp strm);
  */
 ZEXTERN uLong ZEXPORT zlibCompileFlags(void);
 
+/**
+ * @}
+ */
+
 #ifndef Z_SOLO
 
                         /* utility functions */
@@ -1544,6 +1549,7 @@ ZEXTERN uLong ZEXPORT zlibCompileFlags(void);
   are assumed (compression level and memory usage, standard memory allocation
   functions).  The source code of these utility functions can be modified if
   you need special options.
+  @{
 */
 
 /**
@@ -1691,7 +1697,7 @@ ZEXTERN int ZEXPORT uncompress2(Bytef *dest,   uLongf *destLen,
    @{
 */
 
-typedef struct gzFile_s *gzFile;    /** semi-opaque gzip file descriptor */
+typedef struct gzFile_s *gzFile;    /**< @brief semi-opaque gzip file descriptor */
 
 /*
 ZEXTERN gzFile ZEXPORT gzopen(const char *path, const char *mode);
@@ -2330,6 +2336,12 @@ ZEXTERN void ZEXPORT gzclearerr(gzFile file);
 ZEXTERN uLong ZEXPORT adler32(uLong adler, const Bytef *buf, uInt len);
 
 /**
+ * @brief AOCL-Compression optimized adler32 checksum for zlib.
+ */
+
+ZEXTERN uint32_t ZEXPORT adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
+
+/**
   @brief Same as adler32(), but with a size_t length.
 
 
@@ -2424,9 +2436,6 @@ ZEXTERN uLong ZEXPORT crc32_combine(uLong crc1, uLong crc2, z_off_t len2);
    check value of seq1 and seq2 concatenated, requiring only crc1, crc2, and
    len2.
 */
-/**
- * @}
-*/
 /*
 ZEXTERN uLong ZEXPORT crc32_combine_gen(z_off_t len2);
 
@@ -2434,13 +2443,28 @@ ZEXTERN uLong ZEXPORT crc32_combine_gen(z_off_t len2);
    crc32_combine_op().
 */
 
-ZEXTERN uLong ZEXPORT crc32_combine_op(uLong crc1, uLong crc2, uLong op);
-/*
-     Give the same result as crc32_combine(), using op in place of len2. op is
-   is generated from len2 by crc32_combine_gen(). This will be faster than
-   crc32_combine() if the generated op is used more than once.
+/**
+  @brief Give the same result as crc32_combine(), using op in place of len2. op is
+  generated from len2 by crc32_combine_gen().
+  
+  This will be faster than crc32_combine() if the generated op is used more than once.
+
+  @return
+  |Result | Description  |
+  |:------|:-------------|
+  |Success| Give the same result as crc32_combine(), using op in place of len2. op is generated from len2 by crc32_combine_gen()|
 */
 
+ZEXTERN uLong ZEXPORT crc32_combine_op(uLong crc1, uLong crc2, uLong op);
+
+/**
+ * @}
+*/
+
+/**
+ * @name Additional Functions
+ * @{
+ */
 
                         /* various hacks, don't look :) */
 
@@ -2626,6 +2650,9 @@ ZEXTERN int ZEXPORT inflateBackInit_(z_streamp strm, int windowBits,
                                      const char *version,
                                      int stream_size);
 
+/**
+ * @}
+ */
 
 #ifdef Z_PREFIX_SET
 #  define z_deflateInit(strm, level) \
@@ -2841,15 +2868,28 @@ ZEXTERN int ZEXPORT inflateBackInit_(z_streamp strm, int windowBits,
  * only be used by the gzgetc() macro.  You have been warned.
  */
 struct gzFile_s {
-    unsigned have;          ///< number of bytes available at next  
-    unsigned char *next;    ///< next output data to deliver or write 
-    z_off64_t pos;          ///< current position in uncompressed data
+    unsigned have;          /**< number of bytes available at next */ 
+    unsigned char *next;    /**< next output data to deliver or write */
+    z_off64_t pos;          /**< current position in uncompressed data*/
 };
 
 /**
+ * @name gzip file access functions
+ * @{
+ */
+
+/**
  * @brief It returns the semi-opaque gzip file.
-*/
+ * 
+ * It is provided for backward compatibility.
+ */
 ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
+
+/**
+ * @}
+ */
+
+
 #ifdef Z_PREFIX_SET
 #  undef z_gzgetc
 #  define z_gzgetc(g) \
@@ -3022,6 +3062,15 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
    ZEXTERN z_off_t ZEXPORT gzoffset(gzFile);
 
 /**
+ * @}
+*/
+
+/**
+   @name Checksum functions
+   @{
+*/
+
+/**
   @brief This function combines two Adler-32 checksums into one.
   
   For two sequences of bytes, seq1 and seq2 with lengths len1 and len2, Adler-32 checksums were calculated for
@@ -3051,9 +3100,19 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
    ZEXTERN uLong ZEXPORT crc32_combine(uLong, uLong, z_off_t);
 
 /**
- * @}
+  @brief Return the operator corresponding to length len2, to be used with crc32_combine_op().
+
+  @return
+  |Result | Description |
+  |:------| :-----------|
+  |Success| The operator corresponding to length len2, to be used with crc32_combine_op(). |
 */
    ZEXTERN uLong ZEXPORT crc32_combine_gen(z_off_t);
+
+/**
+ * @}
+*/
+
 #endif
 
 #else /* Z_SOLO */
@@ -3065,6 +3124,11 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
 #endif /* !Z_SOLO */
 
 /* undocumented functions */
+
+/**
+ * @name Additional Functions
+ * @{
+ */
 
 /**
   @brief exported to allow conversion of error code to string for compress() and
@@ -3085,10 +3149,25 @@ ZEXTERN const char   * ZEXPORT zError(int);
 ZEXTERN int            ZEXPORT inflateSyncPoint(z_streamp);
 
 /**
+ * @}
+ */
+
+/**
+   @name Checksum functions
+   @{
+*/
+/**
   @brief This function can be used by asm versions of crc32().
 */
 ZEXTERN const z_crc_t FAR * ZEXPORT get_crc_table(void);
+/**
+ * @}
+*/
 
+/**
+ * @name Additional Functions
+ * @{
+ */
 
 /**
   @brief This fuction is used to check the distance INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR
@@ -3116,6 +3195,9 @@ ZEXTERN int            ZEXPORT inflateResetKeep(z_streamp);
 
 ZEXTERN int            ZEXPORT deflateResetKeep(z_streamp);
 
+/**
+ * @}
+ */
 
 #if defined(_WIN32) && !defined(Z_SOLO)
 ZEXTERN gzFile         ZEXPORT gzopen_w(const wchar_t *path,
@@ -3124,6 +3206,10 @@ ZEXTERN gzFile         ZEXPORT gzopen_w(const wchar_t *path,
 #if defined(STDC) || defined(Z_HAVE_STDARG_H)
 #  ifndef Z_SOLO
 
+/**
+ * @name gzip file access functions
+ * @{
+ */
 /**
   @brief It converts, formats, and writes the arguments to the compressed file under
   control of the format string, as in fprintf.
@@ -3137,43 +3223,66 @@ ZEXTERN gzFile         ZEXPORT gzopen_w(const wchar_t *path,
 ZEXTERN int            ZEXPORTVA gzvprintf(gzFile file,
                                            const char *format,
                                            va_list va);
+/**
+ * @}
+ */
+
 #  endif
 #endif
+
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
+/**
+ * @name AOCL Functions
+ * @brief These functions are not part of open source code, these are introduced by AOCL-Compression
+ * library to control AOCL introduced optimization levels dynamically.
+ * 
+ * @note These functions are for internal purposes only, not recommended for external use.
+ * 
+ * @{
+ */
 
 /* AOCL-Compression defined setup functions that configure ZLIB with the right 
 *  AMD optimized zlib routines depending upon the detected CPU features. */
 /**
- * @brief AOCL-Compression defined zlib setup function that configures with the right
- * AMD optimized ZLIB routines depending upon the detected CPU features.
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized zlib routines depending upon the detected CPU features if `optOff=0`.
  * 
- * @param optOff Turn off all optimizations
- * @param optLevel Optimization level:0-NA,1-SSE2,2-AVX,3-AVX2,4-AVX512
- * @param insize input data length
- * @param level requested compression level
- * @param windowLog largest match distance : larger == more compression, more memory needed during decompression
+ * Except for the initial call, it's necessary to execute aocl_destroy_zlib() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in zlib following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
  * 
- * @return \b NULL
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * 
+ * @return \b NULL .
  */
 ZEXTERN char * ZEXPORT aocl_setup_zlib (int optOff, int optLevel,
                                         int insize, int level, int windowLog);
 
 /**
- * @brief AOCL-Compression defined destroy function for zlib.
+ * @brief It is necessary to execute this destroy function after the initial invocation of
+ * the aocl_setup_zlib() function, prior to initiating the setup function again.
  */
 ZEXTERN void ZEXPORT aocl_destroy_zlib (void);
 
 /**
- * @brief AOCL-Compression optimized adler32 checksum for zlib.
+ * @}
  */
 
-ZEXTERN uint32_t ZEXPORT adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
-
-#ifdef __cplusplus
-}
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /**
  * @}
  */
+
+#ifdef __cplusplus
+}
+
 #endif
 
 #endif /* ZLIB_H */

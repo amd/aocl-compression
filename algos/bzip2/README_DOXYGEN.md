@@ -12,7 +12,3 @@ Please read the WARNING, DISCLAIMER and PATENTS sections in the file
 available at https://github.com/joachimmetz/bzip2/blob/main/README .
 
 This program is released under the terms of the license contained in the file LICENSE.
-
-Complete documentation is available in Postscript form (manual.ps),
-PDF (manual.pdf) or html (manual.html).  A plain-text version of the
-manual page is available as bzip2.txt.

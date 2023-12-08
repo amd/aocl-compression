@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -682,18 +682,5 @@ add_custom_command(
     )
 
 if (BUILD_DOC)
-    find_package(Doxygen 1.9.6)
-    set(W_DIR "${CMAKE_CURRENT_SOURCE_DIR}/docs")
-    if(NOT (DOXYGEN_FOUND))
-        message(STATUS "Doxygen not found please install doxygen and try again.")
-    else()
-        execute_process(COMMAND ${DOXYGEN_EXECUTABLE} Doxyfile
-                WORKING_DIRECTORY ${W_DIR}
-                COMMAND_ECHO STDOUT)
-    endif()
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/docs/html/index.html)
-        message(STATUS "Documentation generated successfully, to view documentation open docs/html/index.html .")
-    else()
-        message(STATUS "Document generation failed.")
-    endif()
+    add_subdirectory(docs)
 endif()
