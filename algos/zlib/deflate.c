@@ -3176,6 +3176,7 @@ void ZLIB_INTERNAL aocl_setup_deflate(int optOff, int optLevel)
     AOCL_ENTER_CRITICAL(setup_zlib_deflate)
     if (!setup_ok_zlib_deflate) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_setup_tree(optOff, optLevel);
         aocl_setup_deflate_fmv(optOff, optLevel);
         setup_ok_zlib_deflate = 1;
     }
@@ -3186,6 +3187,7 @@ void ZLIB_INTERNAL aocl_destroy_deflate(void) {
     AOCL_ENTER_CRITICAL(setup_zlib_deflate)
     setup_ok_zlib_deflate = 0;
     AOCL_EXIT_CRITICAL(setup_zlib_deflate)
+    aocl_destroy_tree();
     aocl_destroy_longest_match();
     aocl_destroy_slide_hash();
 }
@@ -3195,6 +3197,7 @@ static void aocl_setup_native(void) {
     if (!setup_ok_zlib_deflate) {
         int optLevel = get_cpu_opt_flags(0);
         int optOff = get_disable_opt_flags(0);
+        aocl_setup_tree(optOff, optLevel);
         aocl_setup_deflate_fmv(optOff, optLevel);
         setup_ok_zlib_deflate = 1;
     }

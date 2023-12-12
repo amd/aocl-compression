@@ -38,7 +38,6 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
         optOff = optOff ? 1 : get_disable_opt_flags(0);
         zlibOptOff = optOff;
         aocl_setup_deflate(optOff, optLevel);
-        aocl_setup_tree   (optOff, optLevel);
         aocl_setup_inflate(optOff, optLevel);
         aocl_setup_adler32(optOff, optLevel);
         setup_ok_zlib = 1;
@@ -56,7 +55,6 @@ static void aocl_setup_native(void) {
         int optOff = get_disable_opt_flags(0);
         zlibOptOff = optOff;
         aocl_setup_deflate(optOff, optLevel);
-        aocl_setup_tree   (optOff, optLevel);
         aocl_setup_inflate(optOff, optLevel);
         aocl_setup_adler32(optOff, optLevel);
         setup_ok_zlib = 1;
@@ -72,7 +70,6 @@ ZEXTERN void ZEXPORT aocl_destroy_zlib (void) {
     AOCL_EXIT_CRITICAL(setup_zlib)
     aocl_destroy_adler32();
     aocl_destroy_deflate();
-    aocl_destroy_tree();
     aocl_destroy_inflate();
 #endif /* AOCL_ZLIB_OPT */
 }

@@ -96,6 +96,16 @@ set (API_SRC_FILES  api/code_alignment.cpp
                     api/aocl_compression.h
                     api/codec.h
                     api/types.h)
+
+if (AOCL_ENABLE_THREADS AND WIN32)
+    #openmp support
+    find_package(OpenMP)
+    if (NOT OPENMP_FOUND)
+        set(AOCL_ENABLE_THREADS OFF)
+        message(WARNING "OpenMP not found. Library is not built with multi-threaded support.")
+    endif ()
+endif ()
+
 if (AOCL_ENABLE_THREADS)
 set (API_SRC_FILES  ${API_SRC_FILES}
                     api/aocl_threads.h)
@@ -541,13 +551,8 @@ set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
 
 if (AOCL_ENABLE_THREADS AND WIN32)
-    #openmp support
-    find_package(OpenMP)
     if (OPENMP_FOUND)
         target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
-    else ()
-        unset(AOCL_ENABLE_THREADS)
-        message(WARNING "OpenMP not found. Library is not built with multi-threaded support.")
     endif ()
 endif ()
 
