@@ -37,7 +37,7 @@
 
 #include <cstddef>
 
-#if 0  // HAVE_SYS_UIO_H
+#ifdef HAVE_SYS_UIO_H
 #include <sys/uio.h>
 #endif  // HAVE_SYS_UIO_H
 
@@ -49,7 +49,7 @@
 
 namespace snappy {
 
-#if !0  // !HAVE_SYS_UIO_H
+#if !defined(HAVE_SYS_UIO_H)
 // Windows does not have an iovec type, yet the concept is universally useful.
 // It is simple to define it ourselves, so we put it inside our own namespace.
 struct iovec {

@@ -380,6 +380,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -f
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
 endif()
 
+include(CheckIncludeFile)
+check_include_file("sys/uio.h" SNAPPY_HAVE_SYS_UIO_H) # Some of the snappy APIs change based on this.
+if (${SNAPPY_HAVE_SYS_UIO_H})
+    set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_SYS_UIO_H")
+endif()
+
 if (AOCL_LZ4_OPT_PREFETCH_BACKWARDS)
     set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS")
 endif()
