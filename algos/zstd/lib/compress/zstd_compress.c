@@ -5393,12 +5393,12 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
 {
     AOCL_SETUP_NATIVE();
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-    if (cctx == NULL || src == NULL)
+    if (cctx == NULL || (src == NULL && srcSize > 0)) // src == NULL is a valid input when srcSize == 0. Empty frame is returned in this case.
     {
         LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return ERROR(GENERIC);
     }
-    if (dst == NULL) 
+    if (dst == NULL)
     {
         LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return ERROR(dstBuffer_null);
@@ -5571,7 +5571,7 @@ size_t ZSTD_compressCCtx(ZSTD_CCtx* cctx,
 {
     AOCL_SETUP_NATIVE();
     DEBUGLOG(4, "ZSTD_compressCCtx (srcSize=%u)", (unsigned)srcSize);
-    if (src == NULL) return ERROR(GENERIC);
+    if (src == NULL && srcSize > 0) return ERROR(GENERIC); // src == NULL is a valid input when srcSize == 0. Empty frame is returned in this case.
     if (dst == NULL) return ERROR(dstBuffer_null);
 
     assert(cctx != NULL);
