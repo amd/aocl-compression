@@ -2653,7 +2653,7 @@ int LZ4_compress_fast_ST(const char* source, char* dest, int inputSize, int maxO
 * AOCL_LZ4_AVX_OPT and made to pair with AOCL_LZ4_decompress_safe_mt().
 */
 int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration){
-    if (source == NULL || dest == NULL)
+    if ((source == NULL && inputSize != 0) || dest == NULL)
         return 0;
     
     int result;
