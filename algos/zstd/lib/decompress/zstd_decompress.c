@@ -1116,8 +1116,7 @@ static size_t ZSTD_decompressMultiFrame(ZSTD_DCtx* dctx,
                                   const void* dict, size_t dictSize,
                                   const ZSTD_DDict* ddict)
 {   
-    if (src == NULL) return ERROR(GENERIC);
-    if (dst == NULL) return ERROR(dstBuffer_null);
+    if (src == NULL) return ERROR(GENERIC); //dst == NULL is allowed when src contains an empty frame and no output is expected
 
     void* const dststart = dst;
     int moreThan1Frame = 0;
@@ -1261,7 +1260,7 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
     }
 
 #ifdef AOCL_ENABLE_THREADS
-    if (src == NULL || dst == NULL) {
+    if (src == NULL) { //dst == NULL is allowed when src contains an empty frame and no output is expected
         LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return ERROR(GENERIC);
     }
@@ -1285,6 +1284,10 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
     src_ptr += skip_head_sz;
     srcDataSz -= skip_head_sz;
 
+    if (dst == NULL) {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return ERROR(GENERIC);
+    }
     ret_status = aocl_setup_parallel_decompress_mt(&thread_group_handle, src_ptr, dst,
                                                    srcDataSz, dstCapacity, 0);
     if (ret_status < 0) {
