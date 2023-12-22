@@ -570,8 +570,7 @@ int AOCL_MatchFinder_Create(CMatchFinder* p, UInt32 historySize,
             AOCL_HC_COMPUTE_HASH_MASK(hs)
             p->hashMask = hs;
 
-            assert(block_cnt >= kHashGuarentee);
-            assert((p->hashMask + 1) <= block_cnt);
+            assert((p->hashMask + 1) >= kHashGuarentee);
 
             /* Fixed tables to use based on p->numHashBytes
             * If numHashBytes = 3/4/5: 2-byte fixed table only */
