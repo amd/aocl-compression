@@ -383,7 +383,7 @@ endif()
 include(CheckIncludeFile)
 check_include_file("sys/uio.h" SNAPPY_HAVE_SYS_UIO_H) # Some of the snappy APIs change based on this.
 if (${SNAPPY_HAVE_SYS_UIO_H})
-    set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_SYS_UIO_H")
+    set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DHAVE_SYS_UIO_H")
 endif()
 
 if (AOCL_LZ4_OPT_PREFETCH_BACKWARDS)
