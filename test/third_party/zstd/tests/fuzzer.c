@@ -38,8 +38,8 @@
 
 /* AOCL changes:
  *  + renamed main() to zstd_fuzzer_main().
- *  + Test: in-place decompression : CHECK_LT(CNBuffSize, cSize) removed.
- *  + Test: flat-dictionary efficiency test : target dictionary sizes increased.
+ *  + In "test: in-place decompression" : CHECK_LT(CNBuffSize, cSize) removed.
+ *  + In "test: flat-dictionary efficiency test" : target dictionary sizes increased.
 */
 
 /*-************************************
@@ -4793,7 +4793,7 @@ static int longCommandWArg(const char** stringPtr, const char* longCommand)
 }
 
 // AOCL: main() renamed to zstd_fuzzer_main()
-int zstd_fuzzer_main(int argc, const char** argv)
+int zstd_fuzzer_main(int argc, char** argv)
 {
     U32 seed = 0;
     int seedset = 0;

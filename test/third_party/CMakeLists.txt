@@ -29,46 +29,99 @@
 cmake_minimum_required(VERSION 3.18.0)
 
 set (ALGOS_PATH ../../algos)
+if (BUILD_STATIC_LIBS)
+    # For test benches that test non-API functions in aocl_compression library, 
+    # visibility of these functions to the test bench is available only when the
+    # test bench is built with static linking to the library
+    # These test benches are added only when BUILD_STATIC_LIBS=ON
+    set(THIRD_PARTY_INTERNAL_TEST ON)
+endif ()
 
-#Add third party tests for each algo
+# Add third party tests for each algo
 if (NOT AOCL_EXCLUDE_ZSTD)
-    #zstd fuzzer 
+    # Add test benches for zstd
     set (ZSTD_TP_PATH zstd)
     set (ZSTD_TP_SRC_FILES 
+                        ${ZSTD_TP_PATH}/programs/benchfn.c
+                        ${ZSTD_TP_PATH}/programs/benchzstd.c
                         ${ZSTD_TP_PATH}/programs/datagen.c
                         ${ZSTD_TP_PATH}/programs/timefn.c
-                        ${ZSTD_TP_PATH}/tests/fuzzer.c)
+                        ${ZSTD_TP_PATH}/programs/util.c
+                        ${ZSTD_TP_PATH}/tests/bigdict.c
+                        ${ZSTD_TP_PATH}/tests/external_matchfinder.c
+                        ${ZSTD_TP_PATH}/tests/invalidDictionaries.c
+                        ${ZSTD_TP_PATH}/tests/longmatch.c
+                        ${ZSTD_TP_PATH}/tests/fuzzer.c
+                        ${ZSTD_TP_PATH}/tests/paramgrill.c
+                        ${ZSTD_TP_PATH}/tests/roundTripCrash.c
+                        ${ZSTD_TP_PATH}/tests/seqgen.c
+                        ${ZSTD_TP_PATH}/tests/zstreamtest.c)
+
+    if (THIRD_PARTY_INTERNAL_TEST)
+        set (ZSTD_TP_SRC_FILES
+                            ${ZSTD_TP_SRC_FILES} 
+                            ${ZSTD_TP_PATH}/tests/fullbench.c
+                            ${ZSTD_TP_PATH}/tests/decodecorpus.c)
+    endif ()
 endif ()
 
 set (TP_SRC_FILES 
         ${ZSTD_TP_SRC_FILES}
         third_party_bench.c
 )
+if (THIRD_PARTY_INTERNAL_TEST)
+    set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DTHIRD_PARTY_INTERNAL_TEST")
+endif ()
 
 if (AOCL_EXCLUDE_ZSTD)
     set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif()
 
+if (AOCL_ENABLE_THREADS)
+    set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
+endif()
+
 set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_NO_REL_INC_PATH")
 
-#create third party test bench
+# Create third party test bench
 set (tp_exe_name aocl_third_party_bench)
 add_executable(${tp_exe_name} ${TP_SRC_FILES})
 set_target_properties(${tp_exe_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 if (NOT AOCL_EXCLUDE_ZSTD)
+    # Add additional include directories needed by zstd test benches
     target_include_directories (${tp_exe_name} PRIVATE ${ALGOS_PATH}/zstd/lib 
-                                                       ${ALGOS_PATH}/zstd/lib/common
-                                                       ${ZSTD_TP_PATH}/programs
-                                                       ${CMAKE_SOURCE_DIR}/api
-                                                       ${CMAKE_SOURCE_DIR}/utils
-                                                       ${ALGOS_PATH}/common)
-endif()
+                                                      ${ALGOS_PATH}/zstd/lib/common
+                                                      ${ALGOS_PATH}/zstd/lib/compress
+                                                      ${ALGOS_PATH}/zstd/lib/decompress
+                                                      ${ZSTD_TP_PATH}/programs
+                                                      ${CMAKE_SOURCE_DIR}/api
+                                                      ${CMAKE_SOURCE_DIR}/utils
+                                                      ${ALGOS_PATH}/common)
+    include(CheckLibraryExists)
+    check_library_exists("m" "log" "" LIBM_EXISTS) # Some of the zstd tests need this.
+    if (${LIBM_EXISTS})
+        target_link_libraries(${tp_exe_name} m)
+    endif()
+endif ()
 
 target_link_libraries(${tp_exe_name} ${lib_name})
 target_link_libraries(${tp_exe_name} ${CMAKE_DL_LIBS})
 
-#Add tests
+# Add tests
+# Each test runs aocl_third_party_bench by passing a specific test bench target passed via -e option.
+# Subsequent options are specific to the selected test bench target and are forwarded to them.
 if (NOT AOCL_EXCLUDE_ZSTD)
-    add_test(ZSTD_FUZZER ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_FUZZER -i1 -v) #Add zstd fuzzer test
+    add_test(TP_ZSTD_BIGDICT              ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_BIGDICT)
+    add_test(TP_ZSTD_FUZZER               ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_FUZZER -i1 -v)
+    add_test(TP_ZSTD_INVALIDDICTIONARIES  ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_INVALIDDICTIONARIES)
+    add_test(TP_ZSTD_LONGMATCH            ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_LONGMATCH)
+    add_test(TP_ZSTD_PARAMGRILL           ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_PARAMGRILL -v -S)
+    add_test(TP_ZSTD_ROUNDTRIPCRASH       ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_ROUNDTRIPCRASH ${CMAKE_BINARY_DIR}/silesia/dickens)
+    add_test(TP_ZSTD_ZSTREAMTEST_1        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_ZSTREAMTEST -i1 -v)
+    add_test(TP_ZSTD_ZSTREAMTEST_2        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_ZSTREAMTEST --newapi -t1 -i1)
+if (THIRD_PARTY_INTERNAL_TEST)
+    add_test(TP_ZSTD_FULLBENCH            ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_FULLBENCH -i1)
+    add_test(TP_ZSTD_DECODECORPUS         ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_DECODECORPUS -t -T1mn)
+endif ()
 endif ()

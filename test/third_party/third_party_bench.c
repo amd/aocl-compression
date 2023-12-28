@@ -49,6 +49,14 @@
 #define strcasecmp _stricmp
 #endif
 
+#define LOG_UNSUPPORTED_INTERNAL_TEST(logCtx) \
+LOG_UNFORMATTED(ERR, logCtx, "Test not supported. Library needs to be built with BUILD_STATIC_LIBS to support this."); \
+printf("Test not supported. Library needs to be built with BUILD_STATIC_LIBS to support this.\n");
+
+#define LOG_UNSUPPORTED_METHOD_TEST(logCtx) \
+LOG_UNFORMATTED(ERR, logCtx, "Test not supported. Library is not built with support for this method."); \
+printf("Test not supported. Library is not built with support for this method.\n");
+
 AOCL_VOID print_user_options(AOCL_VOID)
 {
     printf("\nAOCL Compression Library version: %s\n", aocl_llc_version());
@@ -64,32 +72,41 @@ AOCL_VOID print_user_options(AOCL_VOID)
     printf("followed by <test_bench_options> options for the specific test bench\n");
 }
 
-AOCL_VOID print_supported_test_benches(AOCL_VOID)
+/* List all available third party test benches and their status */
+AOCL_VOID print_available_test_benches(AOCL_VOID)
 {
-    printf("\nSupported third party test benches are:\n\n");
-    printf("ZSTD_FUZZER\n");
+    printf("\nFollowing third party test benches are available:\n");
+    for (AOCL_INTP i = 0; i < TP_TEST_BENCH_COUNT; i++) {
+        const char* status = (tp_test_bench[i].fp == unsupported_internal_test
+            || tp_test_bench[i].fp == unsupported_method_test) ?
+            "unsupported" : ""; // indicate unsupported if test is not supported for the build configuration used
+        printf("%-30s\t%s\n", tp_test_bench[i].name, status);
+    }
 }
 
-AOCL_INT32 get_test_bench_id(AOCL_CHAR* str)
+/* Get corresponding test bench function from tp_test_bench[] */
+test_bench_main get_test_bench_fp(const AOCL_CHAR* str)
 {
     for (AOCL_INTP i = 0; i < TP_TEST_BENCH_COUNT; i++) {
-        if (strcasecmp(str, tp_test_bench[i]) == 0)
+        if (strcasecmp(str, tp_test_bench[i].name) == 0)
         {
-            return i;
+            return tp_test_bench[i].fp;
         }
     }
-    return ERR_TP_BENCH_ARGS;
+    return NULL;
 }
 
-#ifdef AOCL_EXCLUDE_ZSTD
-#define ZSTD_TP_TEST_UNSUPPORTED \
-    LOG_UNFORMATTED(INFO, log_ctx, "Skipped test. Library is not built with zstd support."); \
-    return 0;
-
-int zstd_fuzzer_main(int argc, const char** argv) {
-    ZSTD_TP_TEST_UNSUPPORTED
+/* Library is built without support for said method. Hence test target is not supported. */
+int unsupported_method_test(int argc, char** argv) {
+    LOG_UNSUPPORTED_METHOD_TEST(logCtx);
+    return ERR_TP_BENCH_METHOD;
 }
-#endif
+
+/* Library is not built with support to test non-API functions. Hence test target is not supported. */
+int unsupported_internal_test(int argc, char** argv) {
+    LOG_UNSUPPORTED_INTERNAL_TEST(logCtx);
+    return ERR_TP_BENCH_TEST;
+}
 
 AOCL_INT32 main(AOCL_INT32 argc, AOCL_CHAR** argv)
 {
@@ -97,12 +114,12 @@ AOCL_INT32 main(AOCL_INT32 argc, AOCL_CHAR** argv)
     AOCL_INTP ret = 1;
     AOCL_CHAR option;
 
-    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
     if (argc <= 1)
     {
         print_user_options();
-        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return 2;
     }
 
@@ -127,22 +144,23 @@ AOCL_INT32 main(AOCL_INT32 argc, AOCL_CHAR** argv)
                     ret = 2;
                 }
                 else {
-                    LOG_FORMATTED(ERR, log_ctx, "Invalid user option %s", &argv[cnt][2]);
+                    LOG_FORMATTED(ERR, logCtx, "Invalid user option %s", &argv[cnt][2]);
                     ret = ERR_TP_BENCH_ARGS;
                 }
                 break;
             }
             case 'l':  // list supported test benches
             {
-                print_supported_test_benches();
+                print_available_test_benches();
                 ret = 2;
                 break;
             }
             case 'e': // invoke respective test bench
             {
-                AOCL_INT32 id = get_test_bench_id(&argv[cnt][2]);
-                if (id < 0) {
-                    LOG_FORMATTED(ERR, log_ctx, "Test bench %s is not supported", &argv[cnt][2]);
+                const char* test_name = &argv[cnt][2];
+                test_bench_main fp = get_test_bench_fp(test_name);
+                if (fp == NULL) {
+                    LOG_UNSUPPORTED_METHOD_TEST(logCtx);
                     ret = ERR_TP_BENCH_ARGS;
                 }
                 else
@@ -151,26 +169,19 @@ AOCL_INT32 main(AOCL_INT32 argc, AOCL_CHAR** argv)
                     * As first argument needs to be program name, argv[cnt] i.e. -e<TEST_BENCH_NAME>
                     * itself is passed for this. */
                     AOCL_INT32 tp_argc = argc - cnt;
-                    const AOCL_CHAR** tp_argv = (const AOCL_CHAR**)(&argv[cnt]);
-                    switch (id) {
-                    case 0:
-                        ret = zstd_fuzzer_main(tp_argc, tp_argv);
-                        if (ret != 0) { // test failed
-                            LOG_UNFORMATTED(ERR, log_ctx, "Unit tests failed");
-                        }
-                        return ret;
-                    default:
-                        LOG_FORMATTED(ERR, log_ctx, "Test bench %s is not supported", &argv[cnt][2]);
-                        ret = ERR_TP_BENCH_ARGS;
-                        break;
+                    AOCL_CHAR** tp_argv = &argv[cnt];
+                    ret = fp(tp_argc, tp_argv);
+                    if (ret != 0) {
+                        LOG_FORMATTED(ERR, logCtx, "%s test failed", test_name);
                     }
+                    return ret;
                 }
                 break;
             }
             }
         }
         else {
-            LOG_UNFORMATTED(ERR, log_ctx, "Invalid user option");
+            LOG_UNFORMATTED(ERR, logCtx, "Invalid user option");
             ret = ERR_TP_BENCH_ARGS;
         }
         cnt++;
@@ -180,6 +191,6 @@ AOCL_INT32 main(AOCL_INT32 argc, AOCL_CHAR** argv)
         }
     }
 
-    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return ret;
 }
