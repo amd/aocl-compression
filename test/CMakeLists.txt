@@ -74,6 +74,7 @@ if(NOT (EXISTS ${SILESIA}))
     file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/datasets/silesia.zip DESTINATION ${CMAKE_BINARY_DIR}/silesia)
 endif()
 
+if (AOCL_TEST_COVERAGE)
 file(GLOB calgary_dataset ${CMAKE_BINARY_DIR}/calgary/*)
 foreach(filename ${calgary_dataset})
     file(RELATIVE_PATH TFILE ${CMAKE_BINARY_DIR}/calgary ${filename})
@@ -103,6 +104,7 @@ foreach(filename ${silesia_dataset})
         add_test(BENCH-${method}-silesia-${TFILE}-native ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -n ${filename})
     endforeach()
 endforeach()
+endif()
 
 # only run if code coverage is enabled
 if (CODE_COVERAGE)

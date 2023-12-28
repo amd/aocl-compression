@@ -65,7 +65,7 @@ option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API 
 option (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST "Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Disabled by default)" OFF)
 option (AOCL_ZSTD_WILDCOPY_LONG "Faster wildcopy when match lengths are long in ZSTD decompression (Disabled by default) " OFF)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
-option (AOCL_TEST_COVERAGE "Enable GTest and AOCL test bench based CTest suite (Disabled by default)" OFF)
+option (AOCL_TEST_COVERAGE "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" OFF)
 option (CODE_COVERAGE "Enable source code coverage (only on Linux with GCC compiler)" OFF)
 option (ASAN "Enable Address Sanitizer checks (only on Linux/Debug build)" OFF)
 option (VALGRIND "Enable Valgrind checks (only on Linux/Debug. Incompatible with ASAN=ON)" OFF)
@@ -79,7 +79,7 @@ option (AOCL_LZ4_HASH_BITS_USED "Control the number of bits used for LZ4 hashing
 option (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL "Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)" OFF)
 option (AOCL_ENABLE_LOG_FEATURE "Enable logging support in library, for which log level is determined by environement variable AOCL_ENABLE_LOG (go through README.md) (Disabled by default)" OFF)
 option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression using SMP openMP threads (Disabled by default)" OFF)
-
+option (TEST_COVERAGE_THIRD_PARTY "Enable third party test bench based CTest suite (Disabled by default)" OFF)
 
 option (AOCL_EXCLUDE_BZIP2 "Exclude BZIP2 compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_LZ4 "Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)" OFF)
@@ -88,6 +88,50 @@ option (AOCL_EXCLUDE_LZMA "Exclude LZMA compression method from the library buil
 option (AOCL_EXCLUDE_SNAPPY "Exclude SNAPPY compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_ZLIB "Exclude ZLIB compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_ZSTD "Exclude ZSTD compression method from the library build (Disabled by default)" OFF)
+
+# setup to get source code coverage(GCOV)
+if (CODE_COVERAGE)
+    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${CMAKE_C_COMPILER_ID} STREQUAL "GNU"))
+        # Switch off GCOV: target not supported
+        set(CODE_COVERAGE OFF)
+        message(WARNING "Target not supported. Code coverage is only supported on Linux OS with GCC compiler")
+    endif()
+endif()
+
+# setup to run memory check using AddressSanitizer 
+if (ASAN)
+    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug"))
+        # Switch off ASAN: target not supported
+        set(ASAN OFF)
+        message(WARNING "Target not supported. ASAN is only supported on Linux/Debug build")
+    endif()
+endif()
+
+# setup to run memory check using Valgrind
+if (VALGRIND)
+    if ((NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug")) OR ASAN)
+        set(VALGRIND OFF)
+        message(WARNING "Target not supported. VALGRIND is only supported with Linux/Debug build and incompatible with ASAN=ON")
+    endif()
+endif()
+
+# Enable CTest for any of these cases
+if(VALGRIND OR ASAN)
+    set(AOCL_TEST_COVERAGE ON)
+endif()
+
+#CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=ON                                 : run coverage for aocl + third_party ctests
+#CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=OFF, TEST_COVERAGE_THIRD_PARTY=OFF : run coverage for aocl + third_party ctests
+#CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=OFF, TEST_COVERAGE_THIRD_PARTY=ON  : run coverage for third_party ctests only
+if(CODE_COVERAGE)
+    if(NOT (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY))
+        set(AOCL_TEST_COVERAGE ON) # enable maximum coverage
+    endif()
+endif()
+
+if(AOCL_TEST_COVERAGE)
+    set(TEST_COVERAGE_THIRD_PARTY ON) # enable to maximize test coverage
+endif()
 
 #list source files to be compiled for the library
 set (API_SRC_FILES  api/code_alignment.cpp
@@ -335,15 +379,15 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
 else ()
     message(STATUS "Build type selected is Debug")
     add_compile_definitions(CFLAGS_SET1="${CMAKE_C_FLAGS_DEBUG}")
-	if (NOT (AOCL_TEST_COVERAGE OR VALGRIND OR ASAN OR CODE_COVERAGE))
-		set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DBZ_DEBUG")
-		set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DEBUG")
-		set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUGLEVEL=1")
-	else()
+	if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY) # disable asserts to allow execution of unit tests without intermediate exit
 		set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DNDEBUG")
 		set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DNDEBUG")
 		set_property(SOURCE ${LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DNDEBUG")
 		set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DNDEBUG")
+    else () # enable all debug flags
+		set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DBZ_DEBUG")
+		set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DEBUG")
+		set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUGLEVEL=1")
 	endif()
 endif()
 
@@ -372,6 +416,10 @@ if(NOT BUILD_STATIC_LIBS)
     set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_DLL_EXPORT=1")
     set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DBZIP2_DLL_EXPORT=1")
+    if (TEST_COVERAGE_THIRD_PARTY)
+        set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DFSE_DLL_EXPORT=1")
+        set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DXXH_EXPORT=1")
+    endif()
 endif()
 elseif (UNIX)
 set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_FLAGS "-msse4.1")
@@ -421,6 +469,9 @@ if (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST)
 endif()
 if (AOCL_ZSTD_WILDCOPY_LONG)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_WILDCOPY_LONG")
+endif()
+if(TEST_COVERAGE_THIRD_PARTY)
+    set_property(SOURCE ${ZSTD_SRC_FILES}  APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_MULTITHREAD")
 endif()
 
 include(CheckCSourceCompiles)
@@ -474,46 +525,22 @@ if (AOCL_ENABLE_THREADS)
     set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
 endif()
 
-# setup to get source code coverage(GCOV)
-if (CODE_COVERAGE)
-    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${CMAKE_C_COMPILER_ID} STREQUAL "GNU"))
-        # Switch off GCOV: target not supported
-        set(CODE_COVERAGE OFF)
-        message(WARNING "Target not supported. Code coverage is only supported on Linux OS with GCC compiler")
-    endif()
-endif()
-
-# setup to run memory check using AddressSanitizer 
-if (ASAN)
-    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug"))
-        # Switch off ASAN: target not supported
-        set(ASAN OFF)
-        message(WARNING "Target not supported. ASAN is only supported on Linux/Debug build")
-    endif()
-endif()
-
-# setup to run memory check using Valgrind
-if (VALGRIND)
-    if ((NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug")) OR ASAN)
-        set(VALGRIND OFF)
-        message(WARNING "Target not supported. VALGRIND is only supported with Linux/Debug build and incompatible with ASAN=ON")
-    endif()
-endif()
-
-# Enable CTest for any of the cases
-if(VALGRIND OR ASAN OR CODE_COVERAGE)
-    set(AOCL_TEST_COVERAGE ON)
-endif()
-
 #setup CTest for GoogleTest and aocl_compression_bench test
-if (AOCL_TEST_COVERAGE)
+if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
     # enabling ctest
     enable_testing()
 
 	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_UNIT_TEST")
+    
+    if (AOCL_TEST_COVERAGE)
+        add_subdirectory(gtest)
+    endif()
 
-    add_subdirectory(gtest)
     add_subdirectory(test)
+
+    if (TEST_COVERAGE_THIRD_PARTY)
+        add_subdirectory(test/third_party)
+    endif()
 endif()
 
 #Enabling strict warnings
