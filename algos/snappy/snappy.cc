@@ -1131,7 +1131,7 @@ static inline uint32_t ExtractLowBytes_no_bmi(uint32_t v, int n) {
 
 #ifdef AOCL_SNAPPY_AVX2_OPT
 //#if SNAPPY_HAVE_BMI2
-__attribute__((__target__("bmi2")))
+__attribute__((__target__("bmi2,avx2")))
 static inline uint32_t ExtractLowBytes_bmi(uint32_t v, int n) {
     AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     assert(n >= 0);
@@ -1231,7 +1231,7 @@ class SnappyDecompressor {
 #if defined(__GNUC__) && defined(__x86_64__)
   __attribute__((aligned(32)))
 #endif
-__attribute__((__target__("bmi2")))
+__attribute__((__target__("bmi2,avx2")))
 AOCL_SNAPPY_TARGET_AVX
   void DecompressAllTags_bmi(Writer* writer) {
     AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
