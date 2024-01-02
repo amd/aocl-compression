@@ -33,7 +33,6 @@
 
 #include <string.h>
 
-#include "utils/utils.h"
 /* #include "CpuArch.h" */
 #include "LzmaDec.h"
 

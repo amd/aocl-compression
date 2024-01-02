@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -36,45 +36,45 @@
 #include <string.h>
 
 
-#include "api/types.h"
-#include "api/aocl_compression.h"
+#include "types.h"
+#include "aocl_compression.h"
 #include "codec_bench.h"
 
 //Include the LZ4 and LZ4HC headers
 #ifndef AOCL_EXCLUDE_LZ4
-#include "algos/lz4/lz4.h"
+#include "lz4.h"
 #endif
 
 #if !defined(AOCL_EXCLUDE_LZ4HC) && !defined(AOCL_EXCLUDE_LZ4)
-#include "algos/lz4/lz4hc.h"
+#include "lz4hc.h"
 #endif
 
 //Include the Snappy headers 
 #ifndef AOCL_EXCLUDE_SNAPPY
-#include "algos/snappy/snappy-c.h"
+#include "snappy-c.h"
 #endif
 
 //Include the ZLIB header
 #ifndef AOCL_EXCLUDE_ZLIB
-#include "algos/zlib/zlib.h"
+#include "zlib.h"
 #endif
 
 //Include the BZIP2 headerz
 #ifndef AOCL_EXCLUDE_BZIP2
-#include "algos/bzip2/bzlib.h"
+#include "bzlib.h"
 #endif
 
 //Include the LZMA headers
 #ifndef AOCL_EXCLUDE_LZMA
-#include "algos/lzma/Alloc.h"
-#include "algos/lzma/LzmaDec.h"
-#include "algos/lzma/LzmaEnc.h"
+#include "Alloc.h"
+#include "LzmaDec.h"
+#include "LzmaEnc.h"
 #endif
 
 //Include the ZSTD headers
 #ifndef AOCL_EXCLUDE_ZSTD
 #define ZSTD_STATIC_LINKING_ONLY
-#include "algos/zstd/lib/zstd.h"
+#include "zstd.h"
 #endif
 
 /* Wrapper functions defination for Compression and Decompression.  */

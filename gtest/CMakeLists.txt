@@ -1,4 +1,4 @@
-# Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -118,6 +118,10 @@ endif()
 foreach(FILE ${GTEST_SRC_FILES})
     string(REGEX MATCH "[A-Za-z0-9]*_gtest" TNAME ${FILE})
     add_executable(${TNAME} ${FILE})
+    set_target_properties(${TNAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+    target_include_directories(${TNAME} PRIVATE ${CMAKE_SOURCE_DIR}
+                                        PRIVATE ${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/common
+                                        PRIVATE ${CMAKE_SOURCE_DIR}/api)
     target_link_libraries(${TNAME} ${lib_name} GTest::gtest_main)
 endforeach()
 

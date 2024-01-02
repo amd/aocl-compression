@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -39,8 +39,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "api/aocl_compression.h"
-#include "api/aocl_threads.h"
+#include "aocl_compression.h"
+#ifdef AOCL_ENABLE_THREADS
+#include "aocl_threads.h"
+#endif
 #include "codec_bench.h"
 #include <sys/stat.h>
 

@@ -82,7 +82,6 @@
 /*-*******************************************************
 *  Dependencies
 *********************************************************/
-#include "utils/utils.h"
 #include "../common/allocations.h"  /* ZSTD_customMalloc, ZSTD_customCalloc, ZSTD_customFree */
 #include "../common/zstd_deps.h"   /* ZSTD_memcpy, ZSTD_memmove, ZSTD_memset */
 #include "../common/mem.h"         /* low level memory routines */

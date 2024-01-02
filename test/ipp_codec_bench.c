@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -43,10 +43,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "api/types.h"
-#include "api/aocl_compression.h"
+#include "types.h"
+#include "aocl_compression.h"
 #include "codec_bench.h"
-#include "algos/zlib/zlib.h"
+#include "zlib.h"
 
 #ifdef AOCL_ENABLE_LOG_FEATURE
 #define LOG_LIBRARY_OPENED(algo, log_ctx, fn_name, lib_name)\

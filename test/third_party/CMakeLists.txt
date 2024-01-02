@@ -49,15 +49,20 @@ if (AOCL_EXCLUDE_ZSTD)
     set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif()
 
+set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_NO_REL_INC_PATH")
+
 #create third party test bench
 set (tp_exe_name aocl_third_party_bench)
 add_executable(${tp_exe_name} ${TP_SRC_FILES})
 set_target_properties(${tp_exe_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 if (NOT AOCL_EXCLUDE_ZSTD)
-    target_include_directories (${tp_exe_name} PUBLIC ${ALGOS_PATH}/zstd/lib 
-                                                      ${ALGOS_PATH}/zstd/lib/common
-                                                      ${ZSTD_TP_PATH}/programs)
+    target_include_directories (${tp_exe_name} PRIVATE ${ALGOS_PATH}/zstd/lib 
+                                                       ${ALGOS_PATH}/zstd/lib/common
+                                                       ${ZSTD_TP_PATH}/programs
+                                                       ${CMAKE_SOURCE_DIR}/api
+                                                       ${CMAKE_SOURCE_DIR}/utils
+                                                       ${ALGOS_PATH}/common)
 endif()
 
 target_link_libraries(${tp_exe_name} ${lib_name})

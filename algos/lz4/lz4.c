@@ -185,8 +185,6 @@
 # define LZ4_ALIGN_TEST 1
 #endif
 
-#include "utils/utils.h"
-
 #ifdef AOCL_LZ4_OPT
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,

@@ -39,9 +39,9 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "api/types.h"
-#include "api/aocl_compression.h"
-#include "utils/utils.h"
+#include "types.h"
+#include "aocl_compression.h"
+#include "utils.h"
 #include "third_party_bench.h"
 
 #ifdef _WINDOWS

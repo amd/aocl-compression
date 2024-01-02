@@ -155,12 +155,6 @@ set (API_SRC_FILES  ${API_SRC_FILES}
                     api/aocl_threads.h)
 endif()
 
-set (BENCH_PATH test)
-set (TESTBENCH_SRC_FILES 
-                    ${BENCH_PATH}/codec_bench.c 
-                    ${BENCH_PATH}/codec_native_api_bench.c 
-                    ${BENCH_PATH}/codec_bench.h)
-
 set (ALGOS_PATH algos)
 if (NOT AOCL_EXCLUDE_BZIP2)
 set (BZIP2_SRC_FILES    ${ALGOS_PATH}/bzip2/code_alignment.c
@@ -174,7 +168,6 @@ set (BZIP2_SRC_FILES    ${ALGOS_PATH}/bzip2/code_alignment.c
                         ${ALGOS_PATH}/bzip2/bzlib.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
 set (LZ4_SRC_FILES  ${ALGOS_PATH}/lz4/code_alignment_lz4.c
@@ -183,7 +176,6 @@ set (LZ4_SRC_FILES  ${ALGOS_PATH}/lz4/code_alignment_lz4.c
                     ${ALGOS_PATH}/lz4/xxhash.c)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4HC AND NOT AOCL_EXCLUDE_LZ4)
 set (LZ4HC_SRC_FILES    ${ALGOS_PATH}/lz4/code_alignment_lz4hc.c
@@ -191,7 +183,6 @@ set (LZ4HC_SRC_FILES    ${ALGOS_PATH}/lz4/code_alignment_lz4hc.c
                         ${ALGOS_PATH}/lz4/lz4hc.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
 endif ()
 if (NOT AOCL_EXCLUDE_LZMA)
 set (LZMA_SRC_FILES ${ALGOS_PATH}/lzma/code_alignment.c
@@ -213,7 +204,6 @@ set (LZMA_SRC_FILES ${LZMA_SRC_FILES}
 endif()
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
 endif ()
 if (NOT AOCL_EXCLUDE_SNAPPY)
 set (SNAPPY_SRC_FILES   ${ALGOS_PATH}/snappy/code_alignment.cc
@@ -224,7 +214,6 @@ set (SNAPPY_SRC_FILES   ${ALGOS_PATH}/snappy/code_alignment.cc
                         ${ALGOS_PATH}/snappy/snappy.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
 endif ()
 if (NOT AOCL_EXCLUDE_ZLIB)
 set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
@@ -252,7 +241,6 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/zlib.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()
 if (NOT AOCL_EXCLUDE_ZSTD)
 set (ZSTD_SRC_FILES ${ALGOS_PATH}/zstd/lib/common/code_alignment.c
@@ -289,7 +277,6 @@ set (ZSTD_SRC_FILES ${ALGOS_PATH}/zstd/lib/common/code_alignment.c
                     ${ALGOS_PATH}/zstd/lib/zstd.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
 set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h
                       ${ALGOS_PATH}/common/aoclAlgoOpt.h)
@@ -303,11 +290,7 @@ if (AOCL_ENABLE_THREADS)
                            threads/threads.h)
 endif ()
 
-#set the expected path variables
-include_directories(.)
-include_directories(${ALGOS_PATH}/common/)
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-link_directories(${ROOT_DIR}/build/)
 set(DEST_LIB_PATH aocl_compression/lib)
 set(DEST_INC_PATH aocl_compression/include)
 set(DEST_BIN_PATH aocl_compression/bin)
@@ -494,8 +477,6 @@ add_compile_definitions(CXXCompiler="${CMAKE_CXX_COMPILER}")
 add_compile_definitions(CFLAGS_SET2="${CMAKE_C_FLAGS}")
 
 #set library and sources
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
 set(lib_name aocl_compression)
 set(SRC_FILES 
         ${UTILS_SRC_FILES}
@@ -515,14 +496,14 @@ set(SRC_FILES
 #common flag for aocl_compression_bench and gtest_combined_test
 set(AOCL_DYNAMIC_DISPATCHER ON)
 if (AOCL_DYNAMIC_DISPATCHER)
-    set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
+    set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
     option(ENABLE_STRICT_WARNINGS "Enable compiler flags to treat all warnings as errors (Enabled by default)" ON)
 else()
     set(ENABLE_STRICT_WARNINGS OFF)
 endif()
 
 if (AOCL_ENABLE_THREADS)
-    set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
+    set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
 endif()
 
 #setup CTest for GoogleTest and aocl_compression_bench test
@@ -536,8 +517,6 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
         add_subdirectory(gtest)
     endif()
 
-    add_subdirectory(test)
-
     if (TEST_COVERAGE_THIRD_PARTY)
         add_subdirectory(test/third_party)
     endif()
@@ -547,7 +526,7 @@ endif()
 if(ENABLE_STRICT_WARNINGS)
     if (WIN32)
         #suppress warnings suggesting to use fopen_s, ... in place of fopen, ...
-        set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-D_CRT_SECURE_NO_WARNINGS")
+        set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-D_CRT_SECURE_NO_WARNINGS")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
         set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DENABLE_STRICT_WARNINGS")
@@ -566,8 +545,18 @@ else ()
     add_library(${lib_name} SHARED ${SRC_FILES})
     message(STATUS "Library type being built is: Shared")
 endif()
+set_target_properties(${lib_name}   PROPERTIES 
+                                    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+                                    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+                                    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
 
-
+add_custom_command(
+        TARGET ${lib_name}
+        POST_BUILD
+        COMMENT "Copy library to ${ROOT_DIR}/lib"
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${lib_name}> ${ROOT_DIR}/lib
+        )
 # add the compiler and linker flags for code coverage
 if (CODE_COVERAGE)
     target_compile_options(${lib_name} PUBLIC --coverage -fprofile-abs-path)
@@ -580,8 +569,12 @@ if (ASAN)
     target_link_options(${lib_name} PUBLIC -fsanitize=address)
 endif()
 
-set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
+set_target_properties(${lib_name} PROPERTIES PUBLIC_HEADER "${INC_FILES}")
+
+target_include_directories(${lib_name}
+                            PRIVATE ${CMAKE_SOURCE_DIR}
+                            PRIVATE ${ALGOS_PATH}/common
+                            PRIVATE api)
 
 if (AOCL_ENABLE_THREADS AND WIN32)
     if (OPENMP_FOUND)
@@ -589,32 +582,18 @@ if (AOCL_ENABLE_THREADS AND WIN32)
     endif ()
 endif ()
 
-#add executable
-set (exe_name aocl_compression_bench)
-
-if (WIN32)
-message(STATUS "C Compiler flags used for this windows build are: ${CMAKE_C_FLAGS}")
-message(STATUS "C++ Compiler flags used for this windows build are: ${CMAKE_CXX_FLAGS}")
-add_executable(${exe_name} ${TESTBENCH_SRC_FILES})
-else ()
-message(STATUS "C Compiler flags used for this Unix build are: ${CMAKE_C_FLAGS}")
-message(STATUS "C++ Compiler flags used for this Unix build are: ${CMAKE_CXX_FLAGS}")
-list(APPEND TESTBENCH_SRC_FILES ${BENCH_PATH}/ipp_codec_bench.c)
-add_executable(${exe_name} ${TESTBENCH_SRC_FILES})
-endif()
+#add benchmarking application and tests
+add_subdirectory(test)
 
 if (AOCL_ENABLE_LOG_FEATURE)
-	set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_LOG_FEATURE")
+	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_LOG_FEATURE")
 endif()
 
-target_link_libraries(${exe_name} ${lib_name})
-target_link_libraries(${exe_name} ${CMAKE_DL_LIBS})
-
 #Install into destination path by using -DCMAKE_INSTALL_PREFIX=<path> while configuring cmake
-message(STATUS "AOCL COMPRESSION Library, Interface header files and Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")
-install(TARGETS ${exe_name} DESTINATION ${DEST_BIN_PATH})
-install(TARGETS ${lib_name} DESTINATION ${DEST_LIB_PATH})
-install(FILES ${INC_FILES} DESTINATION ${DEST_INC_PATH})
+message(STATUS "AOCL COMPRESSION Library, Interface header files will be installed at ${CMAKE_INSTALL_PREFIX}")
+install(TARGETS ${lib_name} 
+        DESTINATION ${DEST_LIB_PATH}
+        PUBLIC_HEADER DESTINATION ${DEST_INC_PATH})
 if (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL)
     install(DIRECTORY ${INC_XZ_UTILS_LZMA} DESTINATION ${DEST_INC_PATH} FILES_MATCHING PATTERN "*.h")
 endif()
@@ -659,15 +638,6 @@ if(NOT BUILD_STATIC_LIBS)
     if (NOT AOCL_EXCLUDE_ZSTD)
         create_sym_link_to_lib(libzstd)
     endif()
-endif()
-
-if((NOT BUILD_STATIC_LIBS) AND WIN32 AND AOCL_TEST_COVERAGE)
-    add_custom_command(
-        TARGET ${lib_name}
-        POST_BUILD
-        COMMENT "Copy DLL to GTest executables path"
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${lib_name}> ${CMAKE_BINARY_DIR}/gtest
-        )
 endif()
 
 #Uninstall the binary. library and header files using custom command
