@@ -94,6 +94,34 @@ size_t Test_ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZST
     return ZSTD_decompressStream(zds, output, input);
 }
 
+// Insert a valid zstd frame via streaming mode
+size_t insert_frame_via_stream(void* dst, size_t dstCapacity, const void* src, size_t srcSize) {
+    //create stream object
+    ZSTD_parameters p;
+    memset(&p, 0, sizeof(ZSTD_parameters));    
+    ZSTD_CStream* g_cstream = Test_ZSTD_createCStream();
+    Test_ZSTD_initCStream_advanced(g_cstream, NULL, 0, p, ZSTD_CONTENTSIZE_UNKNOWN);
+
+    //compress
+    ZSTD_outBuffer buffOut;
+    ZSTD_inBuffer buffIn;
+    buffOut.dst = dst;
+    buffOut.size = dstCapacity;
+    buffOut.pos = 0;
+    buffIn.src = src;
+    buffIn.size = srcSize;
+    buffIn.pos = 0;
+    size_t ret = Test_ZSTD_compressStream(g_cstream, &buffOut, &buffIn);
+    CHECK_PASS_ZSTD(ret);
+    if (buffIn.pos > 0) { //compress ok
+        ret = Test_ZSTD_endStream(g_cstream, &buffOut);
+        CHECK_PASS_ZSTD(ret);
+    }
+
+    Test_ZSTD_freeCStream(g_cstream); g_cstream = NULL;
+    return buffOut.pos;
+}
+
 class ZSTD_stream_base : public AOCL_setup_zstd {
 public:
     ZSTD_stream_base()
@@ -140,7 +168,7 @@ protected:
 };
 
 /***********************************************
- * "Begin" of ZSTD_ZSTD_compressStream
+ * Begin of ZSTD_ZSTD_compressStream
  ***********************************************/
 class ZSTD_ZSTD_compressStream : public ZSTD_stream_base {
 public:
@@ -223,9 +251,9 @@ TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_zstd_ZSTD_compressStream_pass_
  * End of ZSTD_ZSTD_compressStream
  *********************************************/
 
- /***********************************************
-  * "Begin" of ZSTD_ZSTD_compressStream2
-  ***********************************************/
+/***********************************************
+* Begin of ZSTD_ZSTD_compressStream2
+***********************************************/
 class ZSTD_ZSTD_compressStream2 : public ZSTD_stream_base {
 public:
     ZSTD_ZSTD_compressStream2() : ZSTD_stream_base()
@@ -353,9 +381,9 @@ TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_com
  * End of ZSTD_ZSTD_compressStream2
  *********************************************/
 
- /***********************************************
- * "Begin" of ZSTD_ZSTD_decompressStream
- ***********************************************/
+/***********************************************
+* Begin of ZSTD_ZSTD_decompressStream
+***********************************************/
 class ZSTD_ZSTD_decompressStream : public ZSTD_stream_base {
 public:
     ZSTD_ZSTD_decompressStream() : ZSTD_stream_base() {}

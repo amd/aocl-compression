@@ -3001,6 +3001,8 @@ ZSTDLIB_API size_t Test_ZSTD_decompressDCtxRef(ZSTD_DCtx* dctx, void* dst, size_
 ZSTDLIB_API ZSTD_compressionParameters Test_Get_ZSTD_defaultCParameters(size_t srcSize, int level, int opt_on);
 #ifdef AOCL_ENABLE_THREADS
 ZSTDLIB_API int Test_ZSTD_getWindowFactor(size_t srcSize);
+ZSTDLIB_API size_t Test_AOCL_ZSTD_readSkippableRAPFrameHeader(const void* src, size_t srcSize);
+ZSTDLIB_API size_t Test_AOCL_ZSTD_writeSkippableFrameHeader(void* dst, size_t dstCapacity, size_t srcSize, unsigned magicVariant);
 #endif
 #endif
 

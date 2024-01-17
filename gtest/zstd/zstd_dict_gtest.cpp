@@ -49,12 +49,17 @@
  */
 #include "zstd_gtest.h"
 
- /***********************************************
-  * "Begin" of ZSTD_ZSTD_compress_extDict
-  ***********************************************/
+/***********************************************
+* Begin of ZSTD_ZSTD_compress_extDict
+***********************************************/
 #define FIRST_BLOCK_SIZE 8
 class ZSTD_ZSTD_compress_extDict : public AOCL_setup_zstd {
 public:
+    ~ZSTD_ZSTD_compress_extDict() {
+        if (g_zcc)
+            ZSTD_freeCCtx(g_zcc);
+    }
+
     ZSTD_parameters setup(int level, int opt_on) {
         ZSTD_compressionParameters cparams = Test_Get_ZSTD_defaultCParameters(512 KB, level, opt_on);
         if (g_zcc == NULL) g_zcc = ZSTD_createCCtx();

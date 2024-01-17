@@ -180,16 +180,55 @@ typedef size_t(*ZSTD_decompress_fp)(ZSTD_DCtx* dctx,
     void* dst, size_t dstCapacity,
     const void* src, size_t srcSize);
 
+enum class ZSTD_Compress_API {
+    compress, compress_advanced, compress2
+};
+
+class ZSTD_ZSTD_compress_base : public AOCL_setup_zstd {
+public:
+    virtual ~ZSTD_ZSTD_compress_base() {}
+
+    void validate_compress_format(char* compressed, unsigned compressedLen, unsigned dstCapacity);
+    void validate_compress(char* src, unsigned srcSize, char* compressed, unsigned compressedLen, unsigned dstCapacity);
+    
+    void compress_all_levels(ZSTD_Compress_API api, ZSTD_CCtx* cctx);
+    void compress_src_null(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel);
+    void compress_dst_null(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel);
+    void compress_insufficient_dstCapacity(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel);
+    void compress_srcsize_0(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel);
+    void compress_src_null_srcsize_0(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel);
+    void compress_level_lt_min(ZSTD_Compress_API api, ZSTD_CCtx* cctx);
+    void compress_level_gt_max(ZSTD_Compress_API api, ZSTD_CCtx* cctx);
+
+private:
+    size_t run_compress(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+};
+
+
 /* Helper functions */
 bool zstd_check_uncompressed_equal_to_original(char* src, unsigned srcSize,
     char* compressed, unsigned compressedLen, ZSTD_decompress_fp decomp_fp);
+size_t insert_frame(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+size_t insert_skippable_frame(void* dst, size_t dstCapacity, const void* src, size_t srcSize, unsigned magicVarint);
+size_t insert_frame_overwrite(char* dst, size_t dstCapacity, char* src, size_t srcSize);
+size_t insert_N_frames(char* dst, size_t dstCapacity, char* src, size_t srcSize, size_t N, size_t& srcWritten);
+size_t insert_frame_via_stream(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+bool has_valid_frame_content_size(char* compressed, unsigned compressedLen);
+int get_cparam_below_lower(ZSTD_cParameter param);
+int get_cparam_above_upper(ZSTD_cParameter param);
 
 /* Commonly used wrapper functions */
 bool Test_ZSTD_isError(size_t len);
+ZSTD_parameters Test_ZSTD_getParams(int compressionLevel, unsigned long long srcSizeHint, size_t dictSize);
 unsigned long long Test_ZSTD_decompressBound(const void* src, size_t srcLen);
 size_t Test_ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
 size_t Test_ZSTD_frameHeaderSize(const void* src, size_t srcSize);
 size_t Test_ZSTD_CCtx_setParameter(ZSTD_CCtx* cctx, ZSTD_cParameter param, int value);
+unsigned long long Test_ZSTD_getFrameContentSize(const void* src, size_t srcSize);
+size_t Test_ZSTD_CCtx_setParams(ZSTD_CCtx* cctx, ZSTD_parameters params);
+size_t Test_ZSTD_compress2(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+size_t Test_ZSTD_compress_advanced(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity,
+    const void* src, size_t srcSize, const void* dict, size_t dictSize, ZSTD_parameters params);
 
 #define CHECK_PASS_ZSTD(foo) EXPECT_FALSE(Test_ZSTD_isError(foo));
 #define CHECK_FAIL_ZSTD(foo) EXPECT_TRUE(Test_ZSTD_isError(foo));

@@ -465,7 +465,10 @@ unsigned ZSTD_isFrame(const void* buffer, size_t size)
  */
 unsigned ZSTD_isSkippableFrame(const void* buffer, size_t size)
 {
-    if (size < ZSTD_FRAMEIDSIZE) return 0;
+    if (size < ZSTD_FRAMEIDSIZE || buffer == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid args");
+        return 0;
+    }
     {   U32 const magic = MEM_readLE32(buffer);
         if ((magic & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START) return 1;
     }
@@ -498,6 +501,10 @@ static size_t ZSTD_frameHeaderSize_internal(const void* src, size_t srcSize, ZST
  *           or an error code (if srcSize is too small) */
 size_t ZSTD_frameHeaderSize(const void* src, size_t srcSize)
 {
+    if (src == NULL && srcSize > 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
+        return ERROR(srcSize_wrong);
+    }
     return ZSTD_frameHeaderSize_internal(src, srcSize, ZSTD_f_zstd1);
 }
 
@@ -681,6 +688,7 @@ size_t ZSTD_readSkippableFrame(void* dst, size_t dstCapacity,
                          const void* src, size_t srcSize)
 {
     RETURN_ERROR_IF(srcSize < ZSTD_SKIPPABLEHEADERSIZE, srcSize_wrong, "");
+    RETURN_ERROR_IF(src == NULL && srcSize > 0, srcSize_wrong, "");
 
     {   U32 const magicNumber = MEM_readLE32(src);
         size_t skippableFrameSize = readSkippableFrameSize(src, srcSize);
@@ -707,6 +715,10 @@ size_t ZSTD_readSkippableFrame(void* dst, size_t dstCapacity,
  * @return : decompressed size of the frames contained */
 unsigned long long ZSTD_findDecompressedSize(const void* src, size_t srcSize)
 {
+    if (src == NULL && srcSize > 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
+        return ZSTD_CONTENTSIZE_ERROR;
+    }
     unsigned long long totalDstSize = 0;
 
     while (srcSize >= ZSTD_startingInputLength(ZSTD_f_zstd1)) {
@@ -798,6 +810,10 @@ static ZSTD_frameSizeInfo ZSTD_errorFrameSizeInfo(size_t ret)
 
 static ZSTD_frameSizeInfo ZSTD_findFrameSizeInfo(const void* src, size_t srcSize)
 {
+    if (src == NULL && srcSize > 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
+        return ZSTD_errorFrameSizeInfo(ERROR(srcSize_wrong));
+    }
     ZSTD_frameSizeInfo frameSizeInfo;
     ZSTD_memset(&frameSizeInfo, 0, sizeof(ZSTD_frameSizeInfo));
 
@@ -911,8 +927,10 @@ size_t ZSTD_decompressionMargin(void const* src, size_t srcSize)
         ZSTD_frameHeader zfh;
 
         FORWARD_IF_ERROR(ZSTD_getFrameHeader(&zfh, src, srcSize), "");
-        if (ZSTD_isError(compressedSize) || decompressedBound == ZSTD_CONTENTSIZE_ERROR)
+        if (ZSTD_isError(compressedSize) || decompressedBound == ZSTD_CONTENTSIZE_ERROR) {
+            LOG_UNFORMATTED(ERR, logCtx, "Corruption detected");
             return ERROR(corruption_detected);
+        }
 
         if (zfh.frameType == ZSTD_frame) {
             /* Add the frame header to our margin */
@@ -1129,7 +1147,10 @@ static size_t ZSTD_decompressMultiFrame(ZSTD_DCtx* dctx,
                                   const void* dict, size_t dictSize,
                                   const ZSTD_DDict* ddict)
 {   
-    if (src == NULL) return ERROR(GENERIC); //dst == NULL is allowed when src contains an empty frame and no output is expected
+    if (src == NULL && srcSize > 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
+        return ERROR(srcSize_wrong); //dst == NULL is allowed when src contains an empty frame and no output is expected
+    }
 
     void* const dststart = dst;
     int moreThan1Frame = 0;
@@ -1245,12 +1266,13 @@ static ZSTD_DDict const* ZSTD_getDDict(ZSTD_DCtx* dctx)
 }
 
 #ifdef AOCL_ENABLE_THREADS
-/* Verifies and reads skippable frame */
-size_t AOCL_ZSTD_readSkippableFrameHeader(const void* src, size_t srcSize)
+/* Verifies and reads skippable RAP frame.
+* Return ZSTD_SKIPPABLEHEADERSIZE if valid "skippable RAP frame" exists at src.
+* Else return error code. */
+size_t AOCL_ZSTD_readSkippableRAPFrameHeader(const void* src, size_t srcSize)
 {
-    RETURN_ERROR_IF(srcSize < ZSTD_SKIPPABLEHEADERSIZE, srcSize_wrong, "");
+    RETURN_ERROR_IF(srcSize < (ZSTD_SKIPPABLEHEADERSIZE + RAP_MAGIC_WORD_BYTES), srcSize_wrong, "");
 
-    {
     size_t skippableFrameSize = readSkippableFrameSize(src, srcSize);
     LOG_FORMATTED(INFO, logCtx, "Read skippable frame of size = %zu", skippableFrameSize);
 
@@ -1258,8 +1280,11 @@ size_t AOCL_ZSTD_readSkippableFrameHeader(const void* src, size_t srcSize)
     RETURN_ERROR_IF(!ZSTD_isSkippableFrame(src, srcSize), frameParameter_unsupported, "");
     RETURN_ERROR_IF(skippableFrameSize < ZSTD_SKIPPABLEHEADERSIZE || skippableFrameSize > srcSize, srcSize_wrong, "");
 
+    /* check if skippable frame is a RAP frame */
+    const void* rap = (const void*)((const char*)src + ZSTD_SKIPPABLEHEADERSIZE);
+    RETURN_ERROR_IF(RAP_MAGIC_WORD != *(AOCL_INT64*)rap, GENERIC, "");
+
     return ZSTD_SKIPPABLEHEADERSIZE;
-    }
 }
 #endif
 
@@ -1269,16 +1294,16 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
     AOCL_SETUP_NATIVE();
 
     if (dctx == NULL) {
-        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dctx");
         LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return ERROR(GENERIC);
     }
 
 #ifdef AOCL_ENABLE_THREADS
-    if (src == NULL) { //dst == NULL is allowed when src contains an empty frame and no output is expected
-        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+    if (src == NULL && srcSize > 0) { //dst == NULL is allowed when src contains an empty frame and no output is expected
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
         LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-        return ERROR(GENERIC);
+        return ERROR(srcSize_wrong);
     }
 
     size_t result = 0;
@@ -1290,7 +1315,7 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
     size_t srcDataSz = srcSize;
 
     //Read and skip skippable RAP frame header
-    size_t skip_head_sz = AOCL_ZSTD_readSkippableFrameHeader(src_ptr, srcSize);
+    size_t skip_head_sz = AOCL_ZSTD_readSkippableRAPFrameHeader(src_ptr, srcSize);
     if (ERR_isError(skip_head_sz)) {
         //no skippable RAP frame present. Try regular decompress
         result = ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
@@ -1301,12 +1326,14 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
     srcDataSz -= skip_head_sz;
 
     if (dst == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dst");
         LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return ERROR(GENERIC);
     }
     ret_status = aocl_setup_parallel_decompress_mt(&thread_group_handle, src_ptr, dst,
                                                    srcDataSz, dstCapacity, 0);
     if (ret_status < 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Setup for multithreaded decompression failed");
         LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return ERROR(GENERIC);
     }
@@ -1483,8 +1510,14 @@ static int ZSTD_isSkipFrame(ZSTD_DCtx* dctx) { return dctx->stage == ZSTDds_skip
  *            or an error code, which can be tested using ZSTD_isError() */
 size_t ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
-    if (src == NULL) return ERROR(GENERIC);
-    if (dst == NULL) return ERROR(dstBuffer_null);
+    if (src == NULL && srcSize > 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
+        return ERROR(srcSize_wrong);
+    }
+    if (dst == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dst");
+        return ERROR(dstBuffer_null);
+    }
 
     AOCL_SETUP_NATIVE();
     DEBUGLOG(5, "ZSTD_decompressContinue (srcSize:%u)", (unsigned)srcSize);
@@ -2283,7 +2316,10 @@ static size_t ZSTD_decompressContinueStream(
 
 size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input)
 {
-    if (input->src == NULL) return ERROR(GENERIC);
+    if (input->src == NULL && input->size > 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input->src");
+        return ERROR(srcSize_wrong);
+    }
 
     AOCL_SETUP_NATIVE();
     const char* const src = (const char*)input->src;
@@ -2641,7 +2677,17 @@ void aocl_destroy_zstd_decode(void)
 /* Test wrapper to call reference decompress function irresptive of user/env/thread settings */
 size_t Test_ZSTD_decompressDCtxRef(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
-    if (dctx == NULL) return ERROR(GENERIC);
+    if (dctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dctx");
+        return ERROR(GENERIC);
+    }
     return ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ZSTD_getDDict(dctx));
 }
+
+#ifdef AOCL_ENABLE_THREADS
+size_t Test_AOCL_ZSTD_readSkippableRAPFrameHeader(const void* src, size_t srcSize)
+{
+    return AOCL_ZSTD_readSkippableRAPFrameHeader(src, srcSize);
+}
+#endif
 #endif

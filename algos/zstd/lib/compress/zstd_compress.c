@@ -122,7 +122,10 @@ static int setup_ok_zstd_encode = 0; // flag to indicate status of dynamic dispa
  */
 size_t ZSTD_compressBound(size_t srcSize) {
     size_t const r = ZSTD_COMPRESSBOUND(srcSize);
-    if (r==0) return ERROR(srcSize_wrong);
+    if (r == 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid srcSize");
+        return ERROR(srcSize_wrong);
+    }
     return r;
 }
 
@@ -1289,6 +1292,10 @@ size_t ZSTD_CCtx_setFParams(ZSTD_CCtx* cctx, ZSTD_frameParameters fparams)
 
 size_t ZSTD_CCtx_setParams(ZSTD_CCtx* cctx, ZSTD_parameters params)
 {
+    if (cctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     DEBUGLOG(4, "ZSTD_CCtx_setParams");
     /* First check cParams, because we want to update all or none. */
     FORWARD_IF_ERROR(ZSTD_checkCParams(params.cParams), "");
@@ -5416,6 +5423,7 @@ size_t AOCL_write_skippable_rap_frame(aocl_thread_group_t* thread_group_handle, 
         //In case of any thread partitioning or alloc errors, exit the compression process with error
         if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
         {
+            LOG_UNFORMATTED(ERR, logCtx, "Setup for one or more of the threads failed");
             return ERROR(GENERIC);
         }
 
@@ -5445,17 +5453,23 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
 {
     AOCL_SETUP_NATIVE();
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-    if (cctx == NULL || (src == NULL && srcSize > 0)) // src == NULL is a valid input when srcSize == 0. Empty frame is returned in this case.
+    if (cctx == NULL)
     {
-        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
         LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return ERROR(GENERIC);
     }
+    if (src == NULL && srcSize > 0) // src == NULL is a valid input when srcSize == 0. Empty frame is returned in this case.
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return ERROR(srcSize_wrong);
+    }
     if (dst == NULL)
     {
-        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dst");
         LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-        return ERROR(dstBuffer_null);
+        return ERROR(dstSize_tooSmall);
     }
 
     DEBUGLOG(4, "ZSTD_compress_advanced");
@@ -5475,6 +5489,7 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
         dst, srcSize, dstCapacity, 1U << params.cParams.windowLog, window_factor);
 
     if (rap_frame_len < 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Setup for multithreaded compression failed");
         LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return ERROR(GENERIC);
     }
@@ -5632,9 +5647,18 @@ size_t ZSTD_compressCCtx(ZSTD_CCtx* cctx,
     AOCL_SETUP_NATIVE();
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_compressCCtx (srcSize=%u)", (unsigned)srcSize);
     DEBUGLOG(4, "ZSTD_compressCCtx (srcSize=%u)", (unsigned)srcSize);
-    if (cctx == NULL) return ERROR(GENERIC);
-    if (src == NULL && srcSize > 0) return ERROR(srcSize_wrong);
-    if (dst == NULL) return ERROR(dstSize_tooSmall);
+    if (cctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
+    if (src == NULL && srcSize > 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
+        return ERROR(srcSize_wrong);
+    }
+    if (dst == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dst");
+        return ERROR(dstSize_tooSmall);
+    }
 
     assert(cctx != NULL);
     return ZSTD_compress_usingDict(cctx, dst, dstCapacity, src, srcSize, NULL, 0, compressionLevel);
@@ -6733,7 +6757,10 @@ size_t ZSTD_compress2(ZSTD_CCtx* cctx,
                       const void* src, size_t srcSize)
 {
     AOCL_SETUP_NATIVE();
-    if (cctx == NULL) return ERROR(GENERIC); 
+    if (cctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     ZSTD_bufferMode_e const originalInBufferMode = cctx->requestedParams.inBufferMode;
     ZSTD_bufferMode_e const originalOutBufferMode = cctx->requestedParams.outBufferMode;
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_compress2 (srcSize=%u)", (unsigned)srcSize);
@@ -7549,14 +7576,18 @@ void aocl_destroy_zstd_encode(void) {
 
 #ifdef AOCL_UNIT_TEST
 #ifdef AOCL_ENABLE_THREADS
-ZSTDLIB_API int Test_ZSTD_getWindowFactor(size_t srcSize) {
+int Test_ZSTD_getWindowFactor(size_t srcSize) {
     return ZSTD_GET_WINDOW_FACTOR(srcSize);
+}
+
+size_t Test_AOCL_ZSTD_writeSkippableFrameHeader(void* dst, size_t dstCapacity, size_t srcSize, unsigned magicVariant) {
+    return AOCL_ZSTD_writeSkippableFrameHeader(dst, dstCapacity, srcSize, magicVariant);
 }
 #endif
 
 /* Unit test function for block compressor selection.
 * Returns 0 if expected compressor is selected, else -1. */
-ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag) {
+int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag) {
     static const ZSTD_blockCompressor expectedRefCompressor[4][ZSTD_STRATEGY_MAX + 1] = { //mimic reference
         { ZSTD_compressBlock_fast  /* default for 0 */,
           ZSTD_compressBlock_fast,
@@ -7685,7 +7716,7 @@ ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder
     return 0; //bc matched expected
 }
 
-ZSTDLIB_API ZSTD_compressionParameters Test_Get_ZSTD_defaultCParameters(size_t srcSize, int level, int opt_on) {
+ZSTD_compressionParameters Test_Get_ZSTD_defaultCParameters(size_t srcSize, int level, int opt_on) {
     assert(level < ZSTD_MAX_CLEVEL);
 
     int tableId = 0;

@@ -50,9 +50,9 @@
 #include "zstd_gtest.h"
 
 #ifdef AOCL_ZSTD_OPT
- /*********************************************
-  * Begin of ZSTD_AOCL_ZSTD_row_getMatchMask
-  *********************************************/
+/*********************************************
+* Begin of ZSTD_AOCL_ZSTD_row_getMatchMask
+*********************************************/
 class ZSTD_AOCL_ZSTD_row_getMatchMask : public ::testing::TestWithParam<int> {
 public:
     typedef unsigned char BYTE;
@@ -179,9 +179,9 @@ INSTANTIATE_TEST_SUITE_P(
  *********************************************/
 #endif
 
- /*********************************************
-  * Begin of ZSTD_ZSTD_selectBlockCompressor
-  *********************************************/
+/*********************************************
+* Begin of ZSTD_ZSTD_selectBlockCompressor
+*********************************************/
 
   // Test valid compressors are set on optOff
 TEST(ZSTD_ZSTD_selectBlockCompressor, AOCL_Compression_zstd_ZSTD_selectBlockCompressor_optOff_common_1)
@@ -361,7 +361,7 @@ TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildco
 
 #ifdef AOCL_ENABLE_THREADS
 /*********************************************
-* Begin of ZSTD_GET_WINDOW_FACTOR
+* Begin of ZSTD_ZSTD_GET_WINDOW_FACTOR
 *********************************************/
 TEST(ZSTD_ZSTD_GET_WINDOW_FACTOR, AOCL_Compression_zstd_ZSTD_GET_WINDOW_FACTOR_common_1)
 {
@@ -390,6 +390,108 @@ TEST(ZSTD_ZSTD_GET_WINDOW_FACTOR, AOCL_Compression_zstd_ZSTD_GET_WINDOW_FACTOR_c
     EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 4);
 }
 /*********************************************
-* End of ZSTD_GET_WINDOW_FACTOR
+* End of ZSTD_ZSTD_GET_WINDOW_FACTOR
+*********************************************/
+
+/*********************************************
+* Begin of ZSTD_AOCL_ZSTD_readSkippableFrameHeader
+*********************************************/
+class ZSTD_AOCL_ZSTD_readSkippableFrameHeader : public AOCL_setup_zstd {
+public:
+    ZSTD_AOCL_ZSTD_readSkippableFrameHeader() {
+        src = malloc(32);
+        srcSize = 32;
+        memset(src, 0, 32);
+        dst = NULL;
+        dstCapacity = 0;
+    }
+
+    ~ZSTD_AOCL_ZSTD_readSkippableFrameHeader() {
+        if (src)
+            free(src);
+        if (dst)
+            free(dst);
+    }
+
+    bool write_RAP_frame_header(AOCL_CHAR* dst, size_t dstCapacity, int mainThreads) { // dst must have allocated sufficient size
+        size_t rap_frame_len = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0);
+        if (dstCapacity < rap_frame_len)
+            return false;
+
+        *(AOCL_INT64*)dst = RAP_MAGIC_WORD; //For storing the magic word
+        dst += RAP_MAGIC_WORD_BYTES;
+        *(AOCL_UINT32*)dst = rap_frame_len; //For storing the total RAP frame length
+        dst += RAP_METADATA_LEN_BYTES;
+        *(AOCL_UINT32*)dst = mainThreads; //For storing the no. of threads
+        return true;
+    }
+
+    bool write_skippable_RAP_frame(AOCL_CHAR* dst, size_t dstCapacity, size_t srcSize, int mainThreads) { // dst must have allocated sufficient size
+        size_t skip_frame_len = Test_AOCL_ZSTD_writeSkippableFrameHeader(dst, dstCapacity, srcSize, rand() % 15);
+        if (Test_ZSTD_isError(skip_frame_len)) return false;
+        return write_RAP_frame_header(dst + skip_frame_len, dstCapacity - skip_frame_len, mainThreads);
+    }
+
+    void* src, * dst;
+    size_t srcSize, dstCapacity;
+};
+
+TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_readSkippableFrameHeader_pass_common_1) // valid RAP frame present
+{
+    const int mainThreads = 5;
+    size_t dstCapacity = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0) + ZSTD_SKIPPABLEHEADERSIZE;
+    dst = malloc(dstCapacity);
+    EXPECT_TRUE(write_skippable_RAP_frame((AOCL_CHAR*)dst, dstCapacity, srcSize, mainThreads));
+
+    CHECK_PASS_ZSTD(Test_AOCL_ZSTD_readSkippableRAPFrameHeader(dst, dstCapacity));
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_readSkippableFrameHeader_fail_common_2) // no skippable frame
+{
+    const int mainThreads = 5;
+    size_t dstCapacity = 128;
+    dst = malloc(dstCapacity);
+
+    size_t ret = Test_AOCL_ZSTD_readSkippableRAPFrameHeader(dst, dstCapacity);
+    EXPECT_EQ(ret, ERROR(frameParameter_unsupported));
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_readSkippableFrameHeader_fail_common_3) // skippable frame with no RAP frame in it
+{
+    const int mainThreads = 5;
+    size_t dstCapacity = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0) + ZSTD_SKIPPABLEHEADERSIZE;
+    dst = malloc(dstCapacity);
+    CHECK_PASS_ZSTD(Test_AOCL_ZSTD_writeSkippableFrameHeader(dst, dstCapacity, srcSize, rand() % 15)); // write skippable header
+
+    size_t ret = Test_AOCL_ZSTD_readSkippableRAPFrameHeader(dst, dstCapacity);
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_readSkippableFrameHeader_fail_common_4) // srcSize too small
+{
+    const int mainThreads = 5;
+    size_t dstCapacity = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0) + ZSTD_SKIPPABLEHEADERSIZE;
+    dst = malloc(dstCapacity);
+    EXPECT_TRUE(write_skippable_RAP_frame((AOCL_CHAR*)dst, dstCapacity, srcSize, mainThreads));
+
+    dstCapacity = ZSTD_SKIPPABLEHEADERSIZE + RAP_MAGIC_WORD_BYTES - 1;
+    size_t ret = Test_AOCL_ZSTD_readSkippableRAPFrameHeader(dst, dstCapacity);
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_readSkippableFrameHeader_fail_common_5) // skippableFrameSize > srcSize
+{
+    const int mainThreads = 5;
+    size_t dstCapacity = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0) + ZSTD_SKIPPABLEHEADERSIZE;
+    dst = malloc(dstCapacity);
+    MEM_writeLE32((char*)dst, (U32)(ZSTD_MAGIC_SKIPPABLE_START + 0)); // write skippable header
+    MEM_writeLE32((char*)dst + 4, (U32)(dstCapacity + 1)); // write invalid skip frame size
+
+    size_t ret = Test_AOCL_ZSTD_readSkippableRAPFrameHeader(dst, dstCapacity);
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
+}
+
+/*********************************************
+* End of ZSTD_AOCL_ZSTD_readSkippableFrameHeader
 *********************************************/
 #endif /* AOCL_ENABLE_THREADS */

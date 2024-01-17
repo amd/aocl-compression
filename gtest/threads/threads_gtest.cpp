@@ -602,6 +602,8 @@ TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_
 TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_compress_mt_common_6) { // src = NULL, valid
     AOCL_INT32 window_len = in_size / 16;
     AOCL_INT32 window_factor = 2;
+    if (src) 
+        free(src); 
     src = NULL;
     AOCL_INT32 res = Test_aocl_setup_parallel_compress_mt(&thread_grp, src, dst, in_size,
         out_size, window_len, window_factor);
@@ -613,6 +615,8 @@ TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_
 TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_compress_mt_common_7) { // dst = NULL, invalid
     AOCL_INT32 window_len = in_size / 16;
     AOCL_INT32 window_factor = 2;
+    if (dst) 
+        free(dst); 
     dst = NULL;
     AOCL_INT32 res = Test_aocl_setup_parallel_compress_mt(&thread_grp, src, dst, in_size,
         out_size, window_len, window_factor);
