@@ -555,6 +555,8 @@ add_custom_command(
         TARGET ${lib_name}
         POST_BUILD
         COMMENT "Copy library to ${ROOT_DIR}/lib"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${ROOT_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ROOT_DIR}/lib
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${lib_name}> ${ROOT_DIR}/lib
         )
 # add the compiler and linker flags for code coverage

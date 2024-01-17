@@ -88,16 +88,17 @@ set (tp_exe_name aocl_third_party_bench)
 add_executable(${tp_exe_name} ${TP_SRC_FILES})
 set_target_properties(${tp_exe_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
+# Add additional include directories needed by zstd test benches
+target_include_directories (${tp_exe_name} PRIVATE  ${CMAKE_SOURCE_DIR}/api
+                                                    ${CMAKE_SOURCE_DIR}/utils
+                                                    ${ALGOS_PATH}/common)
 if (NOT AOCL_EXCLUDE_ZSTD)
     # Add additional include directories needed by zstd test benches
     target_include_directories (${tp_exe_name} PRIVATE ${ALGOS_PATH}/zstd/lib 
                                                       ${ALGOS_PATH}/zstd/lib/common
                                                       ${ALGOS_PATH}/zstd/lib/compress
                                                       ${ALGOS_PATH}/zstd/lib/decompress
-                                                      ${ZSTD_TP_PATH}/programs
-                                                      ${CMAKE_SOURCE_DIR}/api
-                                                      ${CMAKE_SOURCE_DIR}/utils
-                                                      ${ALGOS_PATH}/common)
+                                                      ${ZSTD_TP_PATH}/programs)
     include(CheckLibraryExists)
     check_library_exists("m" "log" "" LIBM_EXISTS) # Some of the zstd tests need this.
     if (${LIBM_EXISTS})
