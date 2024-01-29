@@ -3092,7 +3092,7 @@ int LZ4_compress_default(const char* src, char* dst, int srcSize, int maxOutputS
 static int LZ4_compress_destSize_extState (LZ4_stream_t* state, const char* src, char* dst, int* srcSizePtr, int targetDstSize)
 {
     AOCL_SETUP_NATIVE();
-    if(state==NULL || src==NULL || dst==NULL || srcSizePtr==NULL)
+    if(state==NULL || (src==NULL && *srcSizePtr!=0) || dst==NULL || srcSizePtr==NULL)
         return 0;
     
     void* const s = LZ4_initStream(state, sizeof (*state));
@@ -3298,7 +3298,7 @@ int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
                                 int acceleration)
 {
     AOCL_SETUP_NATIVE();
-    if(LZ4_stream==NULL || source==NULL || dest==NULL)
+    if(LZ4_stream==NULL || (source==NULL && inputSize!=0) || dest==NULL)
         return 0;
         
     const tableType_t tableType = byU32;
@@ -5256,6 +5256,10 @@ void Test_AOCL_LZ4_wildCopy64_AVX(void*dstPtr, const void* srcPtr, void*dstEnd)
     AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstEnd);
 }
 #endif /* AOCL_LZ4_AVX_OPT */
+void LZ4_writeLE16_wrapper(void* memPtr, unsigned short value)
+{
+    LZ4_writeLE16(memPtr, value);
+}
 #endif /* AOCL_UNIT_TEST */
 
 LZ4_FORCE_O2
