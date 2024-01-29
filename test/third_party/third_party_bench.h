@@ -65,6 +65,12 @@ int zstd_decodecorpus_main(int argc, char** argv);
 #endif
 #endif
 
+#ifndef AOCL_EXCLUDE_ZLIB
+int zlib_example_main(int argc, char** argv);
+int zlib_infcover_main(int argc, char** argv);
+int zlib_minigzip_main(int argc, char** argv);
+#endif
+
 /* List of all test bench targets. 
  * To run a specific test bench, target can be passed via -e option to 
  * aocl_third_party_bench */
@@ -94,6 +100,15 @@ static const test_bench_t tp_test_bench[] = {
     { "ZSTD_ROUNDTRIPCRASH",      unsupported_method_test },
     { "ZSTD_FULLBENCH",           unsupported_method_test },
     { "ZSTD_DECODECORPUS",        unsupported_method_test },
+#endif
+#ifndef AOCL_EXCLUDE_ZLIB
+    { "ZLIB_EXAMPLE",             zlib_example_main },
+    { "ZLIB_INFCOVER",            zlib_infcover_main },
+    { "ZLIB_MINIGZIP",            zlib_minigzip_main },
+#else
+    { "ZLIB_EXAMPLE",             unsupported_method_test },
+    { "ZLIB_INFCOVER",            unsupported_method_test },
+    { "ZLIB_MINIGZIP",            unsupported_method_test },
 #endif
 };
 

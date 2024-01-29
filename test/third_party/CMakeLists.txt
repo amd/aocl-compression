@@ -64,9 +64,15 @@ if (NOT AOCL_EXCLUDE_ZSTD)
                             ${ZSTD_TP_PATH}/tests/decodecorpus.c)
     endif ()
 endif ()
+if (NOT AOCL_EXCLUDE_ZLIB)
+    set (ZLIB_TP_PATH zlib)
+    file (GLOB ZLIB_TP_SRC_FILES 
+                        ${ZLIB_TP_PATH}/test/*.c)
+endif ()
 
 set (TP_SRC_FILES 
         ${ZSTD_TP_SRC_FILES}
+        ${ZLIB_TP_SRC_FILES}
         third_party_bench.c
 )
 if (THIRD_PARTY_INTERNAL_TEST)
@@ -75,13 +81,17 @@ endif ()
 
 if (AOCL_EXCLUDE_ZSTD)
     set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
-endif()
+endif ()
+if (AOCL_EXCLUDE_ZLIB)
+    set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
+endif ()
 
 if (AOCL_ENABLE_THREADS)
     set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
-endif()
+endif ()
 
 set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_NO_REL_INC_PATH")
+set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_THIRD_PARTY_TEST")
 
 # Create third party test bench
 set (tp_exe_name aocl_third_party_bench)
@@ -103,7 +113,10 @@ if (NOT AOCL_EXCLUDE_ZSTD)
     check_library_exists("m" "log" "" LIBM_EXISTS) # Some of the zstd tests need this.
     if (${LIBM_EXISTS})
         target_link_libraries(${tp_exe_name} m)
-    endif()
+    endif ()
+endif ()
+if (NOT AOCL_EXCLUDE_ZLIB)
+    target_include_directories (${tp_exe_name} PRIVATE ${ALGOS_PATH}/zlib)
 endif ()
 
 target_link_libraries(${tp_exe_name} ${lib_name})
@@ -125,4 +138,24 @@ if (THIRD_PARTY_INTERNAL_TEST)
     add_test(TP_ZSTD_FULLBENCH            ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_FULLBENCH -i1)
     add_test(TP_ZSTD_DECODECORPUS         ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_DECODECORPUS -t -T1mn)
 endif ()
+endif ()
+
+if (NOT AOCL_EXCLUDE_ZLIB)
+    add_test(TP_ZLIB_EXAMPLE              ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_EXAMPLE)
+    add_test(TP_ZLIB_INFCOVER             ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_INFCOVER)
+
+    add_test(TP_ZLIB_MINIGZIP_C_L1        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -1 ${CMAKE_BINARY_DIR}/silesia/dickens)
+    add_test(TP_ZLIB_MINIGZIP_D_L1        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -d ${CMAKE_BINARY_DIR}/silesia/dickens.gz)
+    set_tests_properties(TP_ZLIB_MINIGZIP_C_L1 PROPERTIES FIXTURES_SETUP FIXTURE_CL1)
+    set_tests_properties(TP_ZLIB_MINIGZIP_D_L1 PROPERTIES FIXTURES_REQUIRED FIXTURE_CL1)
+
+    add_test(TP_ZLIB_MINIGZIP_C_L6        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -6 ${CMAKE_BINARY_DIR}/silesia/xml)
+    add_test(TP_ZLIB_MINIGZIP_D_L6        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -d ${CMAKE_BINARY_DIR}/silesia/xml.gz)
+    set_tests_properties(TP_ZLIB_MINIGZIP_C_L6 PROPERTIES FIXTURES_SETUP FIXTURE_CL6)
+    set_tests_properties(TP_ZLIB_MINIGZIP_D_L6 PROPERTIES FIXTURES_REQUIRED FIXTURE_CL6)
+
+    add_test(TP_ZLIB_MINIGZIP_C_L9        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -9 ${CMAKE_BINARY_DIR}/silesia/webster)
+    add_test(TP_ZLIB_MINIGZIP_D_L9        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -d ${CMAKE_BINARY_DIR}/silesia/webster.gz)
+    set_tests_properties(TP_ZLIB_MINIGZIP_C_L9 PROPERTIES FIXTURES_SETUP FIXTURE_CL9)
+    set_tests_properties(TP_ZLIB_MINIGZIP_D_L9 PROPERTIES FIXTURES_REQUIRED FIXTURE_CL9)
 endif ()
