@@ -36,7 +36,7 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
 FetchContent_GetProperties(googletest)
-if(NOT googletest_POPULATED)
+if (NOT googletest_POPULATED)
   FetchContent_Populate(googletest)
   # Avoid installing gtest libs/headers by default
   add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
@@ -51,83 +51,41 @@ if (AOCL_ENABLE_THREADS)
 endif()
 if (NOT AOCL_EXCLUDE_BZIP2)
     set (GTEST_BZIP2_SRC_FILES ${GTEST_SRC_PATH}/bzip2/bzip2_gtest.cpp)
-else ()
-    set_property(SOURCE ${GTEST_API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
     set (GTEST_LZ4_SRC_FILES ${GTEST_SRC_PATH}/lz4/lz4_gtest.cpp)
     if (AOCL_LZ4_HASH_BITS_USED)
         if (AOCL_LZ4_HASH_BITS_USED  STREQUAL "LOW")
             set_property(SOURCE ${GTEST_LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_HASH_BITS_USED=41")
-        elseif(AOCL_LZ4_HASH_BITS_USED  STREQUAL "HIGH")
+        elseif (AOCL_LZ4_HASH_BITS_USED  STREQUAL "HIGH")
             set_property(SOURCE ${GTEST_LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_HASH_BITS_USED=44")
         endif()
     endif()
-else ()
-    set_property(SOURCE ${GTEST_API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4HC AND NOT AOCL_EXCLUDE_LZ4)
     set (GTEST_LZ4HC_SRC_FILES ${GTEST_SRC_PATH}/lz4hc/lz4hc_gtest.cpp)
-else ()
-    set_property(SOURCE ${GTEST_API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
 endif ()
 if (NOT AOCL_EXCLUDE_LZMA)
     set (GTEST_LZMA_SRC_FILES ${GTEST_SRC_PATH}/lzma/lzma_gtest.cpp)
     if (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL)
         set_property(SOURCE ${GTEST_LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL")
     endif()
-else ()
-    set_property(SOURCE ${GTEST_API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
 endif ()
 if (NOT AOCL_EXCLUDE_SNAPPY)
     set (GTEST_SNAPPY_SRC_FILES ${GTEST_SRC_PATH}/snappy/snappy_gtest.cpp)
     if (${SNAPPY_HAVE_SYS_UIO_H})
         set_property(SOURCE ${GTEST_SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DHAVE_SYS_UIO_H")
     endif()
-else ()
-    set_property(SOURCE ${GTEST_API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
 endif ()
 if (NOT AOCL_EXCLUDE_ZLIB)
     set (GTEST_ZLIB_SRC_FILES ${GTEST_SRC_PATH}/zlib/zlib_gtest.cpp)
-    if(ZLIB_DEFLATE_FAST_MODE)
+    if (ZLIB_DEFLATE_FAST_MODE)
         set_property(SOURCE ${GTEST_ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZLIB_DEFLATE_FAST_MODE=1")
     endif()
-else ()
-    set_property(SOURCE ${GTEST_API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()
 if (NOT AOCL_EXCLUDE_ZSTD)
     file (GLOB GTEST_ZSTD_SRC_FILES "${GTEST_SRC_PATH}/zstd/*.cpp")
-else ()
-    set_property(SOURCE ${GTEST_API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
-
-set(GTEST_SRC_FILES 
-        ${GTEST_UTILS_SRC_FILES}
-        ${GTEST_API_SRC_FILES}
-        ${GTEST_COMMON_SRC_FILES}
-        ${GTEST_THREADS_SRC_FILES}
-        ${GTEST_BZIP2_SRC_FILES}
-        ${GTEST_LZ4_SRC_FILES}
-        ${GTEST_LZ4HC_SRC_FILES} 
-        ${GTEST_LZMA_SRC_FILES}
-        ${GTEST_SNAPPY_SRC_FILES}
-        ${GTEST_ZLIB_SRC_FILES}
-        ${GTEST_ZSTD_SRC_FILES}
-)
-
-set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_UNIT_TEST")
-
-if (AOCL_DYNAMIC_DISPATCHER)
-    set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
-endif()
-
-if (AOCL_ENABLE_THREADS)
-	set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
-endif()
-
-if (AOCL_ENABLE_LOG_FEATURE)
-    set_property(SOURCE ${GTEST_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_LOG_FEATURE")
-endif()
 
 include(GoogleTest)
 #create executable for each of the directories (module) in gtest/
@@ -140,6 +98,41 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
         string(TOUPPER ${GTEST_NAME} GTEST_NAME)
         set(GTEST_CUR_SRC_FILES ${GTEST_${GTEST_NAME}_SRC_FILES})
         if (NOT ("${GTEST_CUR_SRC_FILES}" STREQUAL "")) # ignore skipped tests. src files are selectively set based on cmake options.
+            
+            # set properties for current source files
+            set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_UNIT_TEST")
+            if (AOCL_DYNAMIC_DISPATCHER)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
+            endif()
+            if (AOCL_ENABLE_THREADS)
+	            set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
+            endif()
+            if (AOCL_ENABLE_LOG_FEATURE)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_LOG_FEATURE")
+            endif()
+            if (AOCL_EXCLUDE_BZIP2)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
+            endif()
+            if (AOCL_EXCLUDE_LZ4)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
+            endif()
+            if (AOCL_EXCLUDE_LZ4HC)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
+            endif()
+            if (AOCL_EXCLUDE_LZMA)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
+            endif()
+            if (AOCL_EXCLUDE_SNAPPY)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
+            endif()
+            if (AOCL_EXCLUDE_ZLIB)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
+            endif()
+            if (AOCL_EXCLUDE_ZSTD)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
+            endif()
+            
+            # add target
             add_executable(${GTEST_CUR_EXE_NAME} ${GTEST_CUR_SRC_FILES})
             set_target_properties(${GTEST_CUR_EXE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
             target_include_directories(${GTEST_CUR_EXE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}
