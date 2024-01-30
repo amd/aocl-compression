@@ -34,7 +34,7 @@
 # @author S. Biplab Raut
 
 
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.12.0)
 
 #set the project name
 project(AOCL-COMPRESSION-LIBRARY CXX C ASM)
@@ -66,9 +66,11 @@ option (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST "Enable ZSTD match skipping optimiz
 option (AOCL_ZSTD_WILDCOPY_LONG "Faster wildcopy when match lengths are long in ZSTD decompression (Disabled by default) " OFF)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option (AOCL_TEST_COVERAGE "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" OFF)
-option (CODE_COVERAGE "Enable source code coverage (only on Linux with GCC compiler)" OFF)
-option (ASAN "Enable Address Sanitizer checks (only on Linux/Debug build)" OFF)
-option (VALGRIND "Enable Valgrind checks (only on Linux/Debug. Incompatible with ASAN=ON)" OFF)
+if(UNIX)
+    option (CODE_COVERAGE "Enable source code coverage (only on Linux with GCC compiler)" OFF)
+    option (ASAN "Enable Address Sanitizer checks (only on Linux/Debug build)" OFF)
+    option (VALGRIND "Enable Valgrind checks (only on Linux/Debug. Incompatible with ASAN=ON)" OFF)
+endif()
 option (BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)  
 option (ZLIB_DEFLATE_FAST_MODE "Enable ZLIB deflate quick strategy (Disabled by default)" OFF)
 option (AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 "Enable LZ4 match skipping optimization strategy-1 based on a larger base step size (Disabled by default)" OFF)
@@ -439,6 +441,8 @@ if (AOCL_LZ4_HASH_BITS_USED)
         set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_HASH_BITS_USED=41")
     elseif(AOCL_LZ4_HASH_BITS_USED  STREQUAL "HIGH")
         set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_HASH_BITS_USED=44")
+    else()
+        message(FATAL_ERROR "AOCL_LZ4_HASH_BITS_USED can only be LOW or HIGH, the provided value is:${AOCL_LZ4_HASH_BITS_USED}")
     endif()
 endif()
 if (SNAPPY_MATCH_SKIP_OPT)

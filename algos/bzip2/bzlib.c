@@ -803,10 +803,10 @@ int BZ_API(BZ2_bzDecompressInit)
    if (strm->bzfree == NULL) strm->bzfree = default_bzfree;
 
    s = BZALLOC( sizeof(DState) );
+   if (s == NULL) return BZ_MEM_ERROR;
 #ifdef AOCL_UNIT_TEST
    memset(s,0,sizeof(DState));
 #endif
-   if (s == NULL) return BZ_MEM_ERROR;
    s->strm                  = strm;
    strm->state              = s;
    s->state                 = BZ_X_MAGIC_1;
