@@ -102,6 +102,8 @@ AOCL_VOID print_user_options (AOCL_VOID)
     printf("-a          Use all the available compression/decompression methods\n");
     printf("-m<>        Maximum size in MBs of the input for compression and decompression. Default=MIN(filesize, 1024 MB)\n");
     printf("-e<>:<>:<>  Compression/decompression method. Optional level and additional param may be specified using : separator\n");
+    printf("            If not using -n option, additional param is passed through aocl_compression_desc to unified APIs. For ZSTD, this sets windowLog.\n");
+    printf("            If using -n option, for ZSTD, additional param can be set to > 1 to run multithreaded reference code. It sets number of workers.\n");
     printf("-i<>        Number of iterations of compression/decompression\n");
     printf("-t          Verification and functional tests of the compression/decompression methods\n");
     printf("-p          Print stats like compression/decompression time, speed, ratio\n");

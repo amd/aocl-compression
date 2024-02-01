@@ -310,10 +310,17 @@ AOCL_INT64 native_lzma_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
 }
 
 //ZSTD
+static int ZSTD_native_c_nbWorkers = 0;
+#define CHECK_RET_ZSTD(x) if (ZSTD_isError(x)) { \
+    fprintf(stderr, "ZSTD compression error: %s\n", ZSTD_getErrorName(x)); \
+    if (cctx) \
+        ZSTD_freeCCtx(cctx); \
+    return -1; \
+}
+
 AOCL_INT64 native_zstd_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize, AOCL_UINTP level)
 {
     #ifndef AOCL_EXCLUDE_ZSTD
-    #define ZSTD_STATIC_LINKING_ONLY
     AOCL_INT64 res;
     ZSTD_CCtx*  cctx = ZSTD_createCCtx();
     if (!cctx)
@@ -328,11 +335,7 @@ AOCL_INT64 native_zstd_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
     //Perform the compression
     res = ZSTD_compress_advanced(cctx, outbuf, outsize, inbuf, insize, NULL, 0, zparams);
     #pragma GCC diagnostic pop
-
-    if (ZSTD_isError(res)) {
-        fprintf(stderr, "ZSTD compression error: %s", ZSTD_getErrorName(res));
-        res = -1;
-    }
+    CHECK_RET_ZSTD(res);
 
     if (cctx)
         ZSTD_freeCCtx(cctx);
@@ -342,10 +345,36 @@ AOCL_INT64 native_zstd_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
         return -2;
     #endif 
 }
+
+AOCL_INT64 native_zstd_mt_compress(AOCL_CHAR* inbuf, AOCL_UINTP insize, AOCL_CHAR* outbuf, AOCL_UINTP outsize, AOCL_UINTP level)
+{
+#if defined(AOCL_EXCLUDE_ZSTD)
+    return -2;
+#elif !defined(NATIVE_ENABLE_THREADS)
+    fprintf(stderr, "Unable to run ZSTD multithreaded reference with %d threads as library is not built with NATIVE_ENABLE_THREADS.\n", ZSTD_native_c_nbWorkers);
+    return -3;
+#else
+    AOCL_INT64 res;
+    ZSTD_CCtx* cctx = ZSTD_createCCtx();
+    if (!cctx)
+    {
+        fprintf(stderr, "ZSTD compression context creation failed. \n");
+        return -1;
+    }
+    res = ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, ZSTD_native_c_nbWorkers); CHECK_RET_ZSTD(res);
+    res = ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, level); CHECK_RET_ZSTD(res);
+    res = ZSTD_compress2(cctx, outbuf, outsize, inbuf, insize); CHECK_RET_ZSTD(res);
+
+    if (cctx)
+        ZSTD_freeCCtx(cctx);
+
+    return res;
+#endif 
+}
+
 AOCL_INT64 native_zstd_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize)
 {
     #ifndef AOCL_EXCLUDE_ZSTD
-    #define ZSTD_STATIC_LINKING_ONLY
     AOCL_INT64 res;
     ZSTD_DCtx* dctx = ZSTD_createDCtx();
     if(!dctx)
@@ -471,6 +500,11 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                         resultComp = native_run_compress(aocl_codec_handle, native_lzma_compress);
                         break;
                      case ZSTD:
+                         if (aocl_codec_handle->optVar != 0) {
+                             ZSTD_native_c_nbWorkers = aocl_codec_handle->optVar; // number of worker threads to use for mt compression
+                             resultComp = native_run_compress(aocl_codec_handle, native_zstd_mt_compress);
+                         }
+                         else
                         resultComp = native_run_compress(aocl_codec_handle, native_zstd_compress);
                         break;
                     default:

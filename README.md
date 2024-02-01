@@ -142,6 +142,7 @@ AOCL_EXCLUDE_ZSTD                   |  Exclude ZSTD compression method from the 
 AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL |  Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)
 AOCL_ENABLE_THREADS                 |  Enable multi-threaded compression and decompression using SMP based openMP threads (Disabled by default)
 TEST_COVERAGE_THIRD_PARTY           |  Enable third party test bench based CTest suite (Disabled by default)
+NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression for supported methods (Disabled by default)
 
 Running AOCL-Compression Test Bench On Linux
 --------------------------------------------

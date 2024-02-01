@@ -342,7 +342,6 @@ AOCL_VOID aocl_zlib_destroy(AOCL_CHAR* workmem) {
 
 
 #ifndef AOCL_EXCLUDE_ZSTD
-#define ZSTD_STATIC_LINKING_ONLY
 typedef struct {
     ZSTD_CCtx *cctx;
     ZSTD_DCtx *dctx;

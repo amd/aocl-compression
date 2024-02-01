@@ -82,6 +82,7 @@ option (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL "Build with xz utils lzma APIs. Expe
 option (AOCL_ENABLE_LOG_FEATURE "Enable logging support in library, for which log level is determined by environement variable AOCL_ENABLE_LOG (go through README.md) (Disabled by default)" OFF)
 option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression using SMP openMP threads (Disabled by default)" OFF)
 option (TEST_COVERAGE_THIRD_PARTY "Enable third party test bench based CTest suite (Disabled by default)" OFF)
+option (NATIVE_ENABLE_THREADS "Enable native multi-threaded compression for supported methods (Disabled by default)" OFF)
 
 option (AOCL_EXCLUDE_BZIP2 "Exclude BZIP2 compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_LZ4 "Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)" OFF)
@@ -457,7 +458,7 @@ endif()
 if (AOCL_ZSTD_WILDCOPY_LONG)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_WILDCOPY_LONG")
 endif()
-if(TEST_COVERAGE_THIRD_PARTY)
+if (TEST_COVERAGE_THIRD_PARTY OR NATIVE_ENABLE_THREADS)
     set_property(SOURCE ${ZSTD_SRC_FILES}  APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_MULTITHREAD")
 endif()
 

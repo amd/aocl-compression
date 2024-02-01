@@ -5480,7 +5480,6 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
     aocl_thread_group_t thread_group_handle;
     aocl_thread_info_t cur_thread_info;
     AOCL_INT32 rap_frame_len = -1;
-    AOCL_UINT32 thread_cnt = 0;
     AOCL_UINT32 dst_offset = 0;
 
     AOCL_UINT32 window_factor = ZSTD_GET_WINDOW_FACTOR(srcSize);
@@ -5563,36 +5562,43 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
         printf("Compress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
 #endif
 
-        /* Post processing in single - threaded mode :
+        /* Post processing:
             * Move RAP frame header within a skippable frame
             * Add RAP frame metadata
-            * Add compressed data from threads to dst
-        */
+            * Add compressed data from threads to dst */
         dst_offset = AOCL_write_skippable_rap_frame(&thread_group_handle, dstCapacity, rap_frame_len);
         if (ERR_isError(dst_offset)) {
             aocl_destroy_parallel_compress_mt(&thread_group_handle);
-#ifdef AOCL_THREADS_LOG
-            printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
-#endif
-            LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt);
             LOG_UNFORMATTED(TRACE, logCtx, "Exit");
             return dst_offset;
         }
-        thread_group_handle.dst += dst_offset; //move by skippable frame
-
-        for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+        
+        /* compute cumulative dst_trap_size and save in unsued member partition_src_size
+         * This is used as offset to indicate starting points of compressed data blocks in dst */
+        thread_group_handle.threads_info_list[0].partition_src_size = dst_offset; //move by skippable frame
+        for (AOCL_UINT32 thread_id = 1; thread_id < thread_group_handle.num_threads; thread_id++) 
         {
-            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
-            memcpy(thread_group_handle.dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
-            thread_group_handle.dst += cur_thread_info.dst_trap_size;
+            thread_group_handle.threads_info_list[thread_id].partition_src_size =
+                thread_group_handle.threads_info_list[thread_id - 1].partition_src_size +
+                thread_group_handle.threads_info_list[thread_id - 1].dst_trap_size; //cur_offset i.e. cumulative dst_trap_size
         }
 
-        aocl_destroy_parallel_compress_mt(&thread_group_handle);
-    }//thread_group_handle.num_threads > 1
+        /* copy compressed data from threads to dst multi-threaded */
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+        {
+            AOCL_UINT32 thread_id = omp_get_thread_num();
+            cur_thread_info = thread_group_handle.threads_info_list[thread_id];
+            memcpy(thread_group_handle.dst + cur_thread_info.partition_src_size, //cur_thread_info.partition_src_size contains cur_offset
+                cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+        }
+        result = thread_group_handle.threads_info_list[thread_group_handle.num_threads - 1].partition_src_size + /* offset to last partition */
+                 thread_group_handle.threads_info_list[thread_group_handle.num_threads - 1].dst_trap_size; /* last partition size */
+        /* Post processing end */
 
-    result = (size_t)(thread_group_handle.dst - (AOCL_CHAR*)dst);
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-    return result;
+        aocl_destroy_parallel_compress_mt(&thread_group_handle);
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return result;
+    }//thread_group_handle.num_threads > 1
 
 #else //Non-threaded
     ZSTD_CCtxParams_init_internal(&cctx->simpleApiParams, &params, ZSTD_NO_CLEVEL);
