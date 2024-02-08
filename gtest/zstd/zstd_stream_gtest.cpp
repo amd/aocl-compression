@@ -273,7 +273,10 @@ public:
         buffIn.pos = 0;
         /* Streaming APIs expect ctx, output and input buffers to be valid non-NULL objects. Hence, not testing for these. */
         size_t ret = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_end);
-        return buffOut.pos;
+        if (!Test_ZSTD_isError(ret))
+            return buffOut.pos;
+        else
+            return ret;
     }
 
     size_t compress_continue(const void* src, size_t srcSize, void* dst, size_t dstCapacity)
@@ -306,12 +309,11 @@ TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pas
     EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
 }
 
-TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pass_common_2) //end src NULL
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_fail_common_2) //end src NULL
 {
     TestLoad_2 d(1024);
-    size_t outLen = compress_end(NULL, d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
-    CHECK_PASS_ZSTD(outLen);
-    EXPECT_EQ(outLen, 0);  //no error, expects future calls to push src data
+    size_t ret = compress_end(NULL, d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
 }
 
 TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pass_common_3) //end dst NULL
@@ -414,7 +416,10 @@ public:
         buffIn.pos = 0;
         /* Streaming APIs expect ctx, output and input buffers to be valid non-NULL objects. Hence, not testing for these. */
         size_t ret = Test_ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
-        return buffOut.pos;
+        if (!Test_ZSTD_isError(ret))
+            return buffOut.pos;
+        else
+            return ret;
     }
 
     int validate(char* ref, size_t len)
@@ -453,25 +458,23 @@ TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_p
     EXPECT_EQ(0, validate(d.getOrigData(), decLen));
 }
 
-TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_pass_common_2) //decompressStream src NULL
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_fail_common_2) //decompressStream src NULL
 {
     TestLoad_2 d(1024);
     compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
-    size_t decLen = decompress(NULL, getCompressedSize(), getOutData(), getOutSize());
-    CHECK_PASS_ZSTD(decLen);
-    EXPECT_EQ(decLen, 0); //no error, expects future calls to push src data
+    size_t ret = decompress(NULL, getCompressedSize(), getOutData(), getOutSize());
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
 }
 
-TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_pass_common_4) //decompressStream dst NULL
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_fail_common_3) //decompressStream dst NULL
 {
     TestLoad_2 d(1024);
     compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
-    size_t decLen = decompress(d.getCompressedBuff(), getCompressedSize(), NULL, getOutSize());  //no error, expects future calls to flush dst data
-    CHECK_PASS_ZSTD(decLen);
-    EXPECT_EQ(decLen, 0); //no error, expects future calls to flush dst data
+    size_t ret = decompress(d.getCompressedBuff(), getCompressedSize(), NULL, getOutSize());
+    EXPECT_EQ(ret, ERROR(dstBuffer_null));
 }
 
-TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_pass_common_5) //decompressStream dst size 0
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_pass_common_4) //decompressStream dst size 0
 {
     TestLoad_2 d(1024);
     compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
@@ -480,7 +483,7 @@ TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_p
     EXPECT_EQ(decLen, 0); //no error, expects future calls to flush dst data
 }
 
-TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_pass_common_6) //decompressStream src size 0
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_pass_common_5) //decompressStream src size 0
 {
     TestLoad_2 d(1024);
     compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
@@ -489,7 +492,7 @@ TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_p
     EXPECT_EQ(decLen, 0); //no error, expects future calls to push src data
 }
 
-TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_pass_common_7) //decompressStream src null and src size 0
+TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_pass_common_6) //decompressStream src null and src size 0
 {
     TestLoad_2 d(1024);
     compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());

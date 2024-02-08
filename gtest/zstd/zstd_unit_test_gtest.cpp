@@ -448,7 +448,6 @@ TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_
 
 TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_readSkippableFrameHeader_fail_common_2) // no skippable frame
 {
-    const int mainThreads = 5;
     size_t dstCapacity = 128;
     dst = malloc(dstCapacity);
 

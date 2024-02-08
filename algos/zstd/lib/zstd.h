@@ -969,7 +969,7 @@ ZSTDLIB_API ZSTD_bounds ZSTD_cParam_getBounds(ZSTD_cParameter cParam);
   *  @return
   * | Result     | Description |
   * |:-----------|:------------|
-  * | Success    |0            |
+  * | Success    |Non error code non-negative integer. |
   * | Fail       |An error code (which can be tested using ZSTD_isError()). |
   *  @note When using multi-threading mode (nbWorkers >= 1),
   *              the following parameters can be updated _during_ compression (within same frame):

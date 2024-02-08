@@ -135,21 +135,17 @@ public:
     }
 };
 
+enum class ZSTD_Compress_API {
+    compress, compress_advanced, compress2, compress_cctx
+};
+
+enum class ZSTD_Decompress_API {
+    decompress, decompress_dctx
+};
+
 class ZSTD_ZSTD_decompress_base : public AOCL_setup_zstd
 {
 public:
-    // Compressed data is stored in the buffer `src`.
-    char* src = NULL;
-    size_t srcLen;
-
-    // Original data which we are about to compress is contained in the buffer `original`.
-    char* original = NULL;
-    size_t origLen;
-
-    // Decompressed data will be stored in the buffer `output`.
-    char* output = NULL;
-    size_t outLen;
-
     ZSTD_ZSTD_decompress_base()
     {
         d = new TestLoad_2(800);
@@ -172,17 +168,61 @@ public:
             free(output);
     }
 
+    // tests for different decompress use cases
+    void decompress_pass(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_src_null(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_dst_null(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_buffer_inadequate(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_srcsize_0(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_src_null_srcsize_0(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_src_null_srcsize_0_dstsize_0(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_corrupt_magic_number(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_corrupt_frame_header(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_corrupt_data_block(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_garbage_after_frame(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_N_frames(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_skippable_frame(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_checksumFlag_set(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_checksum_wrong(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_contentSizeFlag_set(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_noDictIDFlag_set(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_srcsize_less(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_srcsize_more(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+
+    // helper functions to create different types of frames
+    void create_frame();
+    void create_frame_overwrite();
+    size_t create_frames_multiple();
+    void create_frame_skippable(unsigned magicVarint);
+    void create_frame_and_skippable();
+    void create_frame_with_no_decomp_size();
+    void create_frame_with_params(ZSTD_frameParameters fparams);
+    void create_frame_prefix_unknown();
+    void create_frame_invalid_data_block();
+
 protected:
+    // Compressed data is stored in the buffer `src`.
+    char* src = NULL;
+    size_t srcLen;
+
+    // Original data which we are about to compress is contained in the buffer `original`.
+    char* original = NULL;
+    size_t origLen;
+
+    // Decompressed data will be stored in the buffer `output`.
+    char* output = NULL;
+    size_t outLen;
+
     TestLoad_2* d = NULL;
+
+    size_t run_decompress(ZSTD_Decompress_API api, ZSTD_DCtx* dctx,
+        void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+    void validate_decompress(const char* original, unsigned origLen, const char* output, unsigned outputLen);    
 };
 
 typedef size_t(*ZSTD_decompress_fp)(ZSTD_DCtx* dctx,
     void* dst, size_t dstCapacity,
     const void* src, size_t srcSize);
-
-enum class ZSTD_Compress_API {
-    compress, compress_advanced, compress2
-};
 
 class ZSTD_ZSTD_compress_base : public AOCL_setup_zstd {
 public:
@@ -197,6 +237,7 @@ public:
     void compress_insufficient_dstCapacity(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel);
     void compress_srcsize_0(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel);
     void compress_src_null_srcsize_0(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel);
+    void compress_src_null_srcsize_0_dstsize_0(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel);
     void compress_level_lt_min(ZSTD_Compress_API api, ZSTD_CCtx* cctx);
     void compress_level_gt_max(ZSTD_Compress_API api, ZSTD_CCtx* cctx);
 
@@ -216,6 +257,10 @@ size_t insert_frame_via_stream(void* dst, size_t dstCapacity, const void* src, s
 bool has_valid_frame_content_size(char* compressed, unsigned compressedLen);
 int get_cparam_below_lower(ZSTD_cParameter param);
 int get_cparam_above_upper(ZSTD_cParameter param);
+int get_cparam_within_bounds(ZSTD_cParameter param);
+int get_dparam_below_lower(ZSTD_dParameter param);
+int get_dparam_above_upper(ZSTD_dParameter param);
+int get_dparam_within_bounds(ZSTD_dParameter param);
 
 /* Commonly used wrapper functions */
 bool Test_ZSTD_isError(size_t len);
@@ -229,6 +274,20 @@ size_t Test_ZSTD_CCtx_setParams(ZSTD_CCtx* cctx, ZSTD_parameters params);
 size_t Test_ZSTD_compress2(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 size_t Test_ZSTD_compress_advanced(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity,
     const void* src, size_t srcSize, const void* dict, size_t dictSize, ZSTD_parameters params);
+ZSTD_CCtx* Test_ZSTD_createCCtx(void);
+size_t Test_ZSTD_freeCCtx(ZSTD_CCtx* cctx);
+ZSTD_bounds Test_ZSTD_cParam_getBounds(ZSTD_cParameter cParam);
+ZSTD_bounds Test_ZSTD_dParam_getBounds(ZSTD_dParameter dParam);
+size_t Test_ZSTD_compressCCtx(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity,
+    const void* src, size_t srcSize, int compressionLevel);
+size_t Test_ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity,
+    const void* src, size_t srcSize);
+size_t Test_ZSTD_compressStream2(ZSTD_CCtx* cctx, ZSTD_outBuffer* output,
+    ZSTD_inBuffer* input, ZSTD_EndDirective endOp);
+size_t Test_ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input);
+int Test_ZSTD_maxCLevel(void);
+int Test_ZSTD_minCLevel(void);
+ZSTD_compressionParameters Test_ZSTD_getCParams(int compressionLevel, unsigned long long estimatedSrcSize, size_t dictSize);
 
 #define CHECK_PASS_ZSTD(foo) EXPECT_FALSE(Test_ZSTD_isError(foo));
 #define CHECK_FAIL_ZSTD(foo) EXPECT_TRUE(Test_ZSTD_isError(foo));

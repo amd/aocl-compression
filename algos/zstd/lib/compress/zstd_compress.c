@@ -853,6 +853,11 @@ size_t ZSTD_CCtx_setParameter(ZSTD_CCtx* cctx, ZSTD_cParameter param, int value)
 size_t ZSTD_CCtxParams_setParameter(ZSTD_CCtx_params* CCtxParams,
                                     ZSTD_cParameter param, int value)
 {
+    if (CCtxParams == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid CCtxParams");
+        return ERROR(GENERIC);
+    }
+
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_CCtxParams_setParameter (%i, %i)", (int)param, value);
     DEBUGLOG(4, "ZSTD_CCtxParams_setParameter (%i, %i)", (int)param, value);
     switch(param)
@@ -1106,6 +1111,11 @@ size_t ZSTD_CCtx_getParameter(ZSTD_CCtx const* cctx, ZSTD_cParameter param, int*
 size_t ZSTD_CCtxParams_getParameter(
         ZSTD_CCtx_params const* CCtxParams, ZSTD_cParameter param, int* value)
 {
+    if (CCtxParams == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid CCtxParams");
+        return ERROR(GENERIC);
+    }
+
     switch(param)
     {
     case ZSTD_c_format :
@@ -1253,6 +1263,10 @@ size_t ZSTD_CCtxParams_getParameter(
 size_t ZSTD_CCtx_setParametersUsingCCtxParams(
         ZSTD_CCtx* cctx, const ZSTD_CCtx_params* params)
 {
+    if (cctx == NULL || params == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid inputs");
+        return ERROR(GENERIC);
+    }
     DEBUGLOG(4, "ZSTD_CCtx_setParametersUsingCCtxParams");
     RETURN_ERROR_IF(cctx->streamStage != zcss_init, stage_wrong,
                     "The context is in the wrong stage!");
@@ -1266,6 +1280,10 @@ size_t ZSTD_CCtx_setParametersUsingCCtxParams(
 
 size_t ZSTD_CCtx_setCParams(ZSTD_CCtx* cctx, ZSTD_compressionParameters cparams)
 {
+    if (cctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     ZSTD_STATIC_ASSERT(sizeof(cparams) == 7 * 4 /* all params are listed below */);
     DEBUGLOG(4, "ZSTD_CCtx_setCParams");
     /* only update if all parameters are valid */
@@ -1282,6 +1300,10 @@ size_t ZSTD_CCtx_setCParams(ZSTD_CCtx* cctx, ZSTD_compressionParameters cparams)
 
 size_t ZSTD_CCtx_setFParams(ZSTD_CCtx* cctx, ZSTD_frameParameters fparams)
 {
+    if (cctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     ZSTD_STATIC_ASSERT(sizeof(fparams) == 3 * 4 /* all params are listed below */);
     DEBUGLOG(4, "ZSTD_CCtx_setFParams");
     FORWARD_IF_ERROR(ZSTD_CCtx_setParameter(cctx, ZSTD_c_contentSizeFlag, fparams.contentSizeFlag != 0), "");
@@ -1447,6 +1469,11 @@ size_t ZSTD_CCtx_refPrefix_advanced(
  *  Also dumps dictionary */
 size_t ZSTD_CCtx_reset(ZSTD_CCtx* cctx, ZSTD_ResetDirective reset)
 {
+    if (cctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
+
     if ( (reset == ZSTD_reset_session_only)
       || (reset == ZSTD_reset_session_and_parameters) ) {
         cctx->streamStage = zcss_init;

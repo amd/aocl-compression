@@ -2202,6 +2202,10 @@ size_t ZSTD_DCtx_setParameter(ZSTD_DCtx* dctx, ZSTD_dParameter dParam, int value
 
 size_t ZSTD_DCtx_reset(ZSTD_DCtx* dctx, ZSTD_ResetDirective reset)
 {
+    if (dctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dctx");
+        return ERROR(GENERIC);
+    }
     if ( (reset == ZSTD_reset_session_only)
       || (reset == ZSTD_reset_session_and_parameters) ) {
         dctx->streamStage = zdss_init;
