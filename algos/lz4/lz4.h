@@ -392,39 +392,6 @@ LZ4LIB_API int LZ4_sizeofState(void);
  */
 LZ4LIB_API int LZ4_compress_fast_extState (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int acceleration);
 
-#ifdef AOCL_LZ4_OPT
-/** @brief AOCL optimized fast compress LZ4 function that gets selected by default.
- * 
- *  Same as LZ4_compress_fast(), using an externally allocated memory space for its state.
- *  Use LZ4_sizeofState() to know how much memory must be allocated,
- *  and allocate it on 8-bytes boundaries (using `malloc()` typically).
- *  Then, provide this buffer as `void* state` to compression function.
- * 
- *  |Parameters       |Direction|Description                                                                                             |
- *  |:----------------|:-------:|:-------------------------------------------------------------------------------------------------------|
- *  | \b state        |  in,out | It acts as a handle.                                                                                   |
- *  | \b src          |  in     | Source buffer, the data which you want to compress is copied/or pointed here.                          |
- *  | \b dst          |  out    | Destination buffer, compressed data is kept here, memory should be allocated already.                  |
- *  | \b srcSize      |  in     | Maximum supported value is LZ4_MAX_INPUT_SIZE.                                                         |
- *  | \b dstCapacity  |  in     | Size of buffer 'dst' (which must be already allocated).                                                |
- *  | \b acceleration |  in     | The larger the acceleration value, the faster the algorithm, but also the lesser the compression.      |
- *  |        ^        |   ^     | It's a trade-off. It can be fine-tuned, with each successive value providing roughly +~3% to speed.    |
- *  |        ^        |   ^     | An acceleration value of "1" is the same as regular LZ4_compress_default().                            |
- *  |        ^        |   ^     | Values <= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).                  |
- *  |        ^        |   ^     | Values > LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).|
- * 
- * 
- *  @return
- *  |Result | Description                                                                                            |
- *  |:------|:----------- -------------------------------------------------------------------------------------------|
- *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst. |
- *  |Fail   | Returns 0.                                                                                             |
- */
-LZ4LIB_API int AOCL_LZ4_compress_fast_extState(void* state, const char* source,
-    char* dest, int inputSize,
-    int maxOutputSize, int acceleration);
-#endif
-
 /*! @brief This function either compresses the entire 'src' content into 'dst' if it's large enough
  *  or fills 'dst' buffer completely with as much data as possible from 'src'.
  *  Reverse the logic : Compresses as much data as possible from the 'src' buffer
