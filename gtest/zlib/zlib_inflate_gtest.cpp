@@ -38,261 +38,240 @@
 
 #include "zlib_gtest.h"
 
-TEST(ZLIB_inflateInit, Z_OK_)
+TEST(AOCL_Compression_zlib, inflateInit_common)
 {
-  z_streamp zp = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
-  EXPECT_EQ(inflateInit(zp), Z_OK); // AOCL_Compression_zlib_inflateInit_common_1
-
-  release_inflate_stream(zp);
+  EXPECT_EQ(inflateInit(inflateObj.get_stream()), Z_OK); // AOCL_Compression_zlib_inflateInit_common_1
 }
 
-TEST(ZLIB_inflateInit, Z_STREAM_ERROR_)
+TEST(AOCL_Compression_zlib, inflateInit_negative)
 {
   EXPECT_EQ(inflateInit(NULL), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateInit_common_2
 }
 
-TEST(ZLIB_inflateInit_, fail_cases)
+TEST(AOCL_Compression_zlib, inflateInit__negative)
 {
-  z_streamp zp = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   char c[7] = "0.2.11";
 
   EXPECT_EQ(inflateInit_(NULL, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateInit__common_1
-  EXPECT_EQ(inflateInit_(zp, NULL, (int)sizeof(z_stream)), Z_VERSION_ERROR);  // AOCL_Compression_zlib_inflateInit__common_2
-  EXPECT_EQ(inflateInit_(zp, c, (int)sizeof(z_stream)), Z_VERSION_ERROR); // AOCL_Compression_zlib_inflateInit__common_3
-  EXPECT_EQ(inflateInit_(zp, ZLIB_VERSION, 3), Z_VERSION_ERROR);  // AOCL_Compression_zlib_inflateInit__common_4
-
-  release_inflate_stream(zp);
+  EXPECT_EQ(inflateInit_(inflateObj.get_stream(), NULL, (int)sizeof(z_stream)), Z_VERSION_ERROR);  // AOCL_Compression_zlib_inflateInit__common_2
+  EXPECT_EQ(inflateInit_(inflateObj.get_stream(), c, (int)sizeof(z_stream)), Z_VERSION_ERROR); // AOCL_Compression_zlib_inflateInit__common_3
+  EXPECT_EQ(inflateInit_(inflateObj.get_stream(), ZLIB_VERSION, 3), Z_VERSION_ERROR);  // AOCL_Compression_zlib_inflateInit__common_4
+  inflateObj.get_stream()->zalloc = alloc_null;
+  EXPECT_EQ(inflateInit_(inflateObj.get_stream(), ZLIB_VERSION, (int)sizeof(z_stream)), Z_MEM_ERROR);
 }
 
-TEST(ZLIB_inflateInit_, pass_cases)
+TEST(AOCL_Compression_zlib, inflateInit__common)
 {
-  z_streamp zp = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
-  EXPECT_EQ(inflateInit_(zp, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_inflateInit__common_5
-
-  release_inflate_stream(zp);
+  EXPECT_EQ(inflateInit_(inflateObj.get_stream(), ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_inflateInit__common_5
 }
 
-TEST(ZLIB_inflateEnd, Z_OK_)
+TEST(AOCL_Compression_zlib, inflateEnd_common)
 {
-  z_streamp zp = get_z_stream();
-  inflateInit(zp);
+  ZLIB_inflate_stream inflateObj;
+  inflateInit(inflateObj.get_stream());
 
-  EXPECT_EQ(inflateEnd(zp), Z_OK);  // AOCL_Compression_zlib_inflateEnd_common_1
-
-  release_z_stream(zp);
+  EXPECT_EQ(inflateEnd(inflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_inflateEnd_common_1
 }
 
-TEST(ZLIB_inflateEnd, Z_STREAM_ERROR_)
+TEST(AOCL_Compression_zlib, inflateEnd_negative)
 {
-  z_streamp zp = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
   EXPECT_EQ(inflateEnd(NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateEnd_common_2
-  EXPECT_EQ(inflateEnd(zp), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateEnd_common_3
-
-  release_z_stream(zp);
+  EXPECT_EQ(inflateEnd(inflateObj.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateEnd_common_3
 }
 
-TEST(ZLIB_inflateInit2, fail_cases)
+TEST(AOCL_Compression_zlib, inflateInit2_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
   EXPECT_EQ(inflateInit2(NULL, 9), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateInit2_common_1
-  EXPECT_EQ(inflateInit2(strm, 7), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateInit2_common_2
-  EXPECT_EQ(inflateInit2(strm, 17), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateInit2_common_3
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateInit2(inflateObj.get_stream(), 7), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateInit2_common_2
+  EXPECT_EQ(inflateInit2(inflateObj.get_stream(), 17), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateInit2_common_3
+  inflateObj.get_stream()->zalloc = alloc_null;
+  EXPECT_EQ(inflateInit2(inflateObj.get_stream(), 8), Z_MEM_ERROR);
 }
 
-TEST(ZLIB_inflateInit2, pass_cases)
+TEST(AOCL_Compression_zlib, inflateInit2_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
-  EXPECT_EQ(inflateInit2(strm, 9), Z_OK); //  AOCL_Compression_zlib_inflateInit2_common_4
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateInit2(inflateObj.get_stream(), 9), Z_OK); //  AOCL_Compression_zlib_inflateInit2_common_4
 }
 
-TEST(ZLIB_inflateInit2_, fail_cases)
+TEST(AOCL_Compression_zlib, inflateInit2__negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
   EXPECT_EQ(inflateInit2_(NULL, 9, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateInit2__common_1
-  EXPECT_EQ(inflateInit2_(strm, 9, NULL, (int)sizeof(z_stream)), Z_VERSION_ERROR);  //  AOCL_Compression_zlib_inflateInit2__common_2
+  EXPECT_EQ(inflateInit2_(inflateObj.get_stream(), 9, NULL, (int)sizeof(z_stream)), Z_VERSION_ERROR);  //  AOCL_Compression_zlib_inflateInit2__common_2
 
   char c[7] = "0.2.11";
 
-  EXPECT_EQ(inflateInit2_(strm, 9, c, (int)sizeof(z_stream)), Z_VERSION_ERROR); //  AOCL_Compression_zlib_inflateInit2__common_3
-  EXPECT_EQ(inflateInit2_(strm, 9, ZLIB_VERSION, 3), Z_VERSION_ERROR);  //  AOCL_Compression_zlib_inflateInit2__common_4
+  EXPECT_EQ(inflateInit2_(inflateObj.get_stream(), 9, c, (int)sizeof(z_stream)), Z_VERSION_ERROR); //  AOCL_Compression_zlib_inflateInit2__common_3
+  EXPECT_EQ(inflateInit2_(inflateObj.get_stream(), 9, ZLIB_VERSION, 3), Z_VERSION_ERROR);  //  AOCL_Compression_zlib_inflateInit2__common_4
 
-  EXPECT_EQ(inflateInit2_(strm, 7, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateInit2__common_5
-  EXPECT_EQ(inflateInit2_(strm, 17, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_inflateInit2__common_6
+  EXPECT_EQ(inflateInit2_(inflateObj.get_stream(), 7, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateInit2__common_5
+  EXPECT_EQ(inflateInit2_(inflateObj.get_stream(), 17, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_inflateInit2__common_6
 
-  release_inflate_stream(strm);
+  inflateObj.get_stream()->zalloc = alloc_null;
+
+  EXPECT_EQ(inflateInit2_(inflateObj.get_stream(), 9, ZLIB_VERSION, (int)sizeof(z_stream)), Z_MEM_ERROR);
 }
 
-TEST(ZLIB_inflateInit2_, pass_cases)
+TEST(AOCL_Compression_zlib, inflateInit2__common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
-  EXPECT_EQ(inflateInit2_(strm, 9, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); //  AOCL_Compression_zlib_inflateInit2__common_7
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateInit2_(inflateObj.get_stream(), 9, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); //  AOCL_Compression_zlib_inflateInit2__common_7
 }
 
-TEST(ZLIB_inflateSetDictionary, fail_cases)
+TEST_P(AOCL_Compression_zlib, inflateSetDictionary_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   const uInt dictLen = 10;
   Bytef dictionary[dictLen + 1] = "helloWorld";
 
   EXPECT_EQ(inflateSetDictionary(NULL, dictionary, dictLen), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateSetDictionary_common_1
 
-  inflateInit(strm);
-  inflate_state *s = (inflate_state *)strm->state;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *s = (inflate_state *)inflateObj.get_stream()->state;
   s->mode = HEAD;
-  strm->state->wrap = 2;
+  inflateObj.get_stream()->state->wrap = 2;
 
-  EXPECT_EQ(inflateSetDictionary(strm, dictionary, dictLen), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateSetDictionary_common_2
+  EXPECT_EQ(inflateSetDictionary(inflateObj.get_stream(), dictionary, dictLen), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateSetDictionary_common_2
 
-  inflateReset2(strm, -9);
+  inflateReset2(inflateObj.get_stream(), -9);
   s->mode = DICT;
   s->check = 0;
 
-  EXPECT_EQ(inflateSetDictionary(strm, dictionary, dictLen), Z_DATA_ERROR); //  AOCL_Compression_zlib_inflateSetDictionary_common_3
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateSetDictionary(inflateObj.get_stream(), dictionary, dictLen), Z_DATA_ERROR); //  AOCL_Compression_zlib_inflateSetDictionary_common_3
 }
 
-TEST(ZLIB_inflateSetDictionary, pass_cases)
+TEST_P(AOCL_Compression_zlib, inflateSetDictionary_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   const uInt dictLen = 10;
   Bytef dictionary[dictLen + 1] = "helloWorld";
-  inflateInit(strm);
-  inflate_state *s = (inflate_state *)strm->state;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *s = (inflate_state *)inflateObj.get_stream()->state;
   s->wrap = 0;
 
-  EXPECT_EQ(inflateSetDictionary(strm, dictionary, dictLen), Z_OK); //  AOCL_Compression_zlib_inflateSetDictionary_common_4
-  EXPECT_TRUE(memcmp( s->window, dictionary, dictLen)==0);
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateSetDictionary(inflateObj.get_stream(), dictionary, dictLen), Z_OK); //  AOCL_Compression_zlib_inflateSetDictionary_common_4
+  EXPECT_TRUE(memcmp(s->window, dictionary, dictLen)==0);
 }
 
-TEST(ZLIB_inflateGetDictionary, fail_cases)
+TEST(AOCL_Compression_zlib, inflateGetDictionary_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   const uInt dictAlloc = 10;
   uInt dictLen = dictAlloc;
   char dict[dictAlloc];
 
-  EXPECT_EQ(inflateGetDictionary(strm, (Bytef *)dict, &dictLen), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateGetDictionary_common_1
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateGetDictionary(inflateObj.get_stream(), (Bytef *)dict, &dictLen), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateGetDictionary_common_1
+  EXPECT_EQ(inflateGetDictionary(NULL, (Bytef *)dict, &dictLen), Z_STREAM_ERROR);
 }
 
-TEST(ZLIB_inflateGetDicitonary, pass_cases)
+TEST(AOCL_Compression_zlib, inflateGetDictionary_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   const uInt dictLen = 10;
   char dict[dictLen + 1] = "helloWorld";
   uInt destLen;
   char dest[dictLen];
-  inflateInit(strm);
+  inflateInit(inflateObj.get_stream());
 
-  EXPECT_EQ(inflateGetDictionary(strm, (Bytef *)dest, NULL), Z_OK); //  AOCL_Compression_zlib_inflateGetDictionary_common_2
-  EXPECT_EQ(inflateGetDictionary(strm, NULL, &destLen), Z_OK);      //  AOCL_Compression_zlib_inflateGetDictionary_common_3
+  EXPECT_EQ(inflateGetDictionary(inflateObj.get_stream(), (Bytef *)dest, NULL), Z_OK); //  AOCL_Compression_zlib_inflateGetDictionary_common_2
+  EXPECT_EQ(inflateGetDictionary(inflateObj.get_stream(), NULL, &destLen), Z_OK);      //  AOCL_Compression_zlib_inflateGetDictionary_common_3
 
-  EXPECT_EQ(inflateGetDictionary(strm, (Bytef *)dest, &destLen), Z_OK); //  AOCL_Compression_zlib_inflateGetDictionary_common_4
+  EXPECT_EQ(inflateGetDictionary(inflateObj.get_stream(), (Bytef *)dest, &destLen), Z_OK); //  AOCL_Compression_zlib_inflateGetDictionary_common_4
 
-  inflate_state *s = (inflate_state *)strm->state;
+  inflate_state *s = (inflate_state *)inflateObj.get_stream()->state;
   s->wrap = 0;
-  inflateSetDictionary(strm, (Bytef *)dict, dictLen);
+  inflateSetDictionary(inflateObj.get_stream(), (Bytef *)dict, dictLen);
 
-  EXPECT_EQ(inflateGetDictionary(strm, (Bytef *)dest, &destLen), Z_OK); //  AOCL_Compression_zlib_inflateGetDictionary_common_5
+  EXPECT_EQ(inflateGetDictionary(inflateObj.get_stream(), (Bytef *)dest, &destLen), Z_OK); //  AOCL_Compression_zlib_inflateGetDictionary_common_5
   EXPECT_EQ(dictLen, destLen);
   EXPECT_TRUE(cmpr(dict, dest, dictLen));
-
-  release_inflate_stream(strm);
 }
 
-TEST(ZLIB_inflateSync, failed_cases)
+TEST(AOCL_Compression_zlib, inflateSync_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
-  EXPECT_EQ(inflateSync(strm), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateSync_common_1
+  EXPECT_EQ(inflateSync(inflateObj.get_stream()), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateSync_common_1
   EXPECT_EQ(inflateSync(NULL), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateSync_common_2
 
-  inflateInit(strm);
+  inflateInit(inflateObj.get_stream());
 
-  EXPECT_EQ(inflateSync(strm), Z_BUF_ERROR);  // AOCL_Compression_zlib_inflateSync_common_3
+  EXPECT_EQ(inflateSync(inflateObj.get_stream()), Z_BUF_ERROR);  // AOCL_Compression_zlib_inflateSync_common_3
 
-  inflate_state *s = (inflate_state *)strm->state;
+  inflate_state *s = (inflate_state *)inflateObj.get_stream()->state;
   s->bits = 9;
 
-  EXPECT_EQ(inflateSync(strm), Z_DATA_ERROR); // AOCL_Compression_zlib_inflateSync_common_4
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateSync(inflateObj.get_stream()), Z_DATA_ERROR); // AOCL_Compression_zlib_inflateSync_common_4
 }
 
-TEST(ZLIB_inflateSync, pass_cases)
+TEST(AOCL_Compression_zlib, inflateSync_common)
 {
-  z_streamp strm = get_z_stream();
-  inflateInit(strm);
-  inflate_state *s = (inflate_state *)strm->state;
+  ZLIB_inflate_stream inflateObj;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *s = (inflate_state *)inflateObj.get_stream()->state;
   s->bits = 9;
-  char c[4];
+  char c[6];
   c[0] = c[1] = (char)0;
   c[2] = c[3] = (char)0xff;
-  strm->next_in = (Bytef *)c;
-  strm->avail_in = 4;
+  c[4] = c[5] = (char)0x2f;
+  inflateObj.get_stream()->next_in = (Bytef *)c;
+  inflateObj.get_stream()->avail_in = 6;
 
-  EXPECT_EQ(inflateSync(strm), Z_OK); // AOCL_Compression_zlib_inflateSync_common_5
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateSync(inflateObj.get_stream()), Z_OK); // AOCL_Compression_zlib_inflateSync_common_5
+  EXPECT_EQ(inflateObj.get_stream()->next_in, (Bytef *)&c[4]);
+  EXPECT_EQ(inflateObj.get_stream()->avail_in, 2);
 }
 
-TEST(ZLIB_inflateCopy, fail_cases)
+TEST(AOCL_Compression_zlib, inflateCopy_negative)
 {
-  z_streamp strm = get_z_stream();
-  z_streamp dest = new z_stream;
+  ZLIB_inflate_stream strm;
+  ZLIB_inflate_stream dest;
 
-  EXPECT_EQ(inflateCopy(dest, NULL), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateCopy_common_1
-  EXPECT_EQ(inflateCopy(dest, strm), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateCopy_common_2
+  EXPECT_EQ(inflateCopy(dest.get_stream(), NULL), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateCopy_common_1
+  EXPECT_EQ(inflateCopy(dest.get_stream(), strm.get_stream()), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateCopy_common_2
 
-  inflateInit(strm);
+  inflateInit(strm.get_stream());
 
-  EXPECT_EQ(inflateCopy(NULL, strm), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateCopy_common_3
-
-  delete dest;
-  dest = nullptr;
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateCopy(NULL, strm.get_stream()), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateCopy_common_3
+  strm.get_stream()->zalloc = alloc_null;
+  EXPECT_EQ(inflateCopy(dest.get_stream(), strm.get_stream()), Z_MEM_ERROR);
 }
 
-TEST(ZLIB_inflateCopy, pass_cases)
+TEST(AOCL_Compression_zlib, inflateCopy_common)
 {
-  z_streamp strm = get_z_stream();
-  z_streamp dest = get_z_stream();
-  inflateInit(strm);
-  EXPECT_EQ(inflateCopy(dest, strm), Z_OK); //  AOCL_Compression_zlib_inflateCopy_common_4
+  ZLIB_inflate_stream strm;
+  ZLIB_inflate_stream dest;
+  inflateInit(strm.get_stream());
+  EXPECT_EQ(inflateCopy(dest.get_stream(), strm.get_stream()), Z_OK); //  AOCL_Compression_zlib_inflateCopy_common_4
 
-  release_inflate_stream(dest);
-  dest = get_z_stream();
+  dest.reset_inflate_stream();
 
-  inflate_state *state = (inflate_state *)strm->state;
+  inflate_state *state = (inflate_state *)strm.get_stream()->state;
   state->wbits = 3;
   char c[9] = "abcdefgh";
   state->window = (Bytef *)malloc(sizeof(char) * 8);
   memcpy(state->window, c, 8);
-  EXPECT_EQ(inflateCopy(dest, strm), Z_OK); //  AOCL_Compression_zlib_inflateCopy_common_5
+  EXPECT_EQ(inflateCopy(dest.get_stream(), strm.get_stream()), Z_OK); //  AOCL_Compression_zlib_inflateCopy_common_5
 
-  inflate_state *dstate = (inflate_state *)dest->state;
+  inflate_state *dstate = (inflate_state *)dest.get_stream()->state;
   EXPECT_EQ(dstate->wbits, state->wbits);
   EXPECT_EQ(memcmp(dstate->window, state->window, 1U << state->wbits), 0);
-  dest->state = strm->state;
-  EXPECT_EQ(memcmp(strm, dest, sizeof(z_stream)), 0);
-  dest->state = (internal_state *)dstate;
+  dest.get_stream()->state = strm.get_stream()->state;
+  EXPECT_EQ(memcmp(strm.get_stream(), dest.get_stream(), sizeof(z_stream)), 0);
+  dest.get_stream()->state = (internal_state *)dstate;
 
   inflate_state *temp_dstate = new inflate_state;
   memcpy(temp_dstate, dstate, sizeof(inflate_state));
@@ -301,387 +280,360 @@ TEST(ZLIB_inflateCopy, pass_cases)
   dstate->window = state->window;
   dstate->lencode = state->lencode;
   dstate->distcode = state->distcode;
-  EXPECT_EQ(memcmp(strm->state, dest->state, sizeof(inflate_state)), 0);
+  EXPECT_EQ(memcmp(strm.get_stream()->state, dest.get_stream()->state, sizeof(inflate_state)), 0);
   memcpy(dstate, temp_dstate, sizeof(inflate_state));
 
   dstate = state = nullptr;
-  release_inflate_stream(dest);
-  release_inflate_stream(strm);
   delete temp_dstate;
   temp_dstate = nullptr;
 }
 
-TEST(ZLIB_inflateReset, fail_cases)
+TEST(AOCL_Compression_zlib, inflateReset_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
-  EXPECT_EQ(inflateReset(strm), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateReset_common_1
+  EXPECT_EQ(inflateReset(inflateObj.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateReset_common_1
   EXPECT_EQ(inflateReset(NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateReset_common_2
-
-  release_inflate_stream(strm);
 }
 
-TEST(ZLIB_inflateReset, pass_cases)
+TEST(AOCL_Compression_zlib, inflateReset_common)
 {
-  z_streamp strm = get_z_stream();
-  inflateInit(strm);
+  ZLIB_inflate_stream inflateObj;
+  inflateInit(inflateObj.get_stream());
 
-  EXPECT_EQ(inflateReset(strm), Z_OK);  // AOCL_Compression_zlib_inflateReset_common_3
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateReset(inflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_inflateReset_common_3
+  EXPECT_NE(inflateObj.get_stream()->zalloc, (alloc_func)Z_NULL);
+  EXPECT_NE(inflateObj.get_stream()->zfree, (free_func)Z_NULL);
+  EXPECT_NE(inflateObj.get_stream()->state, (internal_state *) Z_NULL);
+  EXPECT_EQ(inflateObj.get_stream()->total_in, 0);
+  EXPECT_EQ(inflateObj.get_stream()->total_out, 0);
+  EXPECT_EQ(inflateObj.get_stream()->msg, (char*) Z_NULL);
 }
 
-TEST(ZLIB_inflateReset2, fail_cases)
+TEST(AOCL_Compression_zlib, inflateReset2_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
-  EXPECT_EQ(inflateReset2(strm, 9), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_inflateReset2_common_1
+  EXPECT_EQ(inflateReset2(inflateObj.get_stream(), 9), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_inflateReset2_common_1
   EXPECT_EQ(inflateReset2(NULL, 9), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_inflateReset2_common_2
 
-  inflateInit(strm);
+  inflateInit(inflateObj.get_stream());
 
-  EXPECT_EQ(inflateReset2(strm, -7), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateReset2_common_3
-  EXPECT_EQ(inflateReset2(strm, -16), Z_STREAM_ERROR);//  AOCL_Compression_zlib_inflateReset2_common_4
-  EXPECT_EQ(inflateReset2(strm, 48), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateReset2_common_5
-  EXPECT_EQ(inflateReset2(strm, 7), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_inflateReset2_common_6
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateReset2(inflateObj.get_stream(), -7), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateReset2_common_3
+  EXPECT_EQ(inflateReset2(inflateObj.get_stream(), -16), Z_STREAM_ERROR);//  AOCL_Compression_zlib_inflateReset2_common_4
+  EXPECT_EQ(inflateReset2(inflateObj.get_stream(), 48), Z_STREAM_ERROR); //  AOCL_Compression_zlib_inflateReset2_common_5
+  EXPECT_EQ(inflateReset2(inflateObj.get_stream(), 7), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_inflateReset2_common_6
 }
 
-TEST(ZLIB_inflateReset2, pass_cases)
+TEST(AOCL_Compression_zlib, inflateReset2_common)
 {
-  z_streamp strm = get_z_stream();
-  inflateInit(strm);
-  inflate_state *s = (inflate_state *)strm->state;
+  ZLIB_inflate_stream inflateObj;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *s = (inflate_state *)inflateObj.get_stream()->state;
   s->wbits = 3;
   s->window = (unsigned char *)malloc(8);
-  EXPECT_EQ(inflateReset2(strm, 8), Z_OK);      //  AOCL_Compression_zlib_inflateReset2_common_7
+  EXPECT_EQ(inflateReset2(inflateObj.get_stream(), 8), Z_OK);      //  AOCL_Compression_zlib_inflateReset2_common_7
   EXPECT_EQ(s->window, (unsigned char *) NULL);
   EXPECT_EQ(s->wbits, 8);
-
-  release_inflate_stream(strm);
 }
 
-TEST(ZLIB_inflatePrime, fail_cases)
+TEST(AOCL_Compression_zlib, inflatePrime_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
   EXPECT_EQ(inflatePrime(NULL, 5, 5), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflatePrime_common_1
-  EXPECT_EQ(inflatePrime(strm, 5, 5), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflatePrime_common_2
+  EXPECT_EQ(inflatePrime(inflateObj.get_stream(), 5, 5), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflatePrime_common_2
   
-  inflateInit(strm);
-  EXPECT_EQ(inflatePrime(strm, 17, 4), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflatePrime_common_3
+  inflateInit(inflateObj.get_stream());
+  EXPECT_EQ(inflatePrime(inflateObj.get_stream(), 17, 4), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflatePrime_common_3
 
-  inflate_state *state = (inflate_state *)strm->state;
+  inflate_state *state = (inflate_state *)inflateObj.get_stream()->state;
   state->bits = 25;
 
-  EXPECT_EQ(inflatePrime(strm, 10, (1 << 10) - 1), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflatePrime_common_4
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflatePrime(inflateObj.get_stream(), 10, (1 << 10) - 1), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflatePrime_common_4
 }
 
-TEST(ZLIB_inflatePrime, pass_cases)
+TEST(AOCL_Compression_zlib, inflatePrime_common)
 {
-  z_streamp strm = get_z_stream();
-  inflateInit(strm);
-  inflate_state *state = (inflate_state *)strm->state;
+  ZLIB_inflate_stream inflateObj;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *state = (inflate_state *)inflateObj.get_stream()->state;
 
-  EXPECT_EQ(inflatePrime(strm, -1, 4), Z_OK); // AOCL_Compression_zlib_inflatePrime_common_5
+  EXPECT_EQ(inflatePrime(inflateObj.get_stream(), -1, 4), Z_OK); // AOCL_Compression_zlib_inflatePrime_common_5
   EXPECT_EQ(state->hold, 0);
   EXPECT_EQ(state->bits, 0);
 
   state->bits = 2;
 
-  EXPECT_EQ(inflatePrime(strm, 3, 3), Z_OK);  // AOCL_Compression_zlib_inflatePrime_common_6
+  EXPECT_EQ(inflatePrime(inflateObj.get_stream(), 3, 3), Z_OK);  // AOCL_Compression_zlib_inflatePrime_common_6
   EXPECT_EQ(state->hold, 12);
   EXPECT_EQ(state->bits, 5);
-
-  release_inflate_stream(strm);
 }
 
-TEST(ZLIB_inflateMark, all_cases)
+TEST(AOCL_Compression_zlib, inflateMark_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
-  EXPECT_EQ(inflateMark(strm), -(1L << 16));  // AOCL_Compression_zlib_inflateMark_common_1
+  EXPECT_EQ(inflateMark(inflateObj.get_stream()), -(1L << 16));  // AOCL_Compression_zlib_inflateMark_common_1
   EXPECT_EQ(inflateMark(NULL), -(1L << 16));  // AOCL_Compression_zlib_inflateMark_common_2
 
-  inflateInit(strm);
-  inflate_state *state = (inflate_state *)strm->state;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *state = (inflate_state *)inflateObj.get_stream()->state;
 
   state->back = 1;
   state->mode = TABLE;
-  EXPECT_EQ(inflateMark(strm), 1 << 16);  // AOCL_Compression_zlib_inflateMark_common_3
+  EXPECT_EQ(inflateMark(inflateObj.get_stream()), 1 << 16);  // AOCL_Compression_zlib_inflateMark_common_3
 
   state->back = 0;
   state->mode = COPY;
   state->length = 100;
-  EXPECT_EQ(inflateMark(strm), 100);  // AOCL_Compression_zlib_inflateMark_common_4
+  EXPECT_EQ(inflateMark(inflateObj.get_stream()), 100);  // AOCL_Compression_zlib_inflateMark_common_4
 
   state->mode = MATCH;
   state->length = 2;
   state->was = 100;
-  EXPECT_EQ(inflateMark(strm), 98); // AOCL_Compression_zlib_inflateMark_common_5
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateMark(inflateObj.get_stream()), 98); // AOCL_Compression_zlib_inflateMark_common_5
 }
 
-TEST(ZLIB_inflateGetHeader, fail_cases)
+TEST(AOCL_Compression_zlib, inflateGetHeader_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   gz_headerp gz = (gz_headerp)malloc(sizeof(gz_header));
 
   EXPECT_EQ(inflateGetHeader(NULL, gz), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateGetHeader_common_1
-  EXPECT_EQ(inflateGetHeader(strm, gz), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateGetHeader_common_2
+  EXPECT_EQ(inflateGetHeader(inflateObj.get_stream(), gz), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateGetHeader_common_2
 
-  inflateInit(strm);
-  inflate_state *state = (inflate_state *)strm->state;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *state = (inflate_state *)inflateObj.get_stream()->state;
   state->wrap = 0;
 
-  EXPECT_EQ(inflateGetHeader(strm, gz), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateGetHeader_common_3
+  EXPECT_EQ(inflateGetHeader(inflateObj.get_stream(), gz), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateGetHeader_common_3
 
   free(gz);
   gz = nullptr;
-  release_inflate_stream(strm);
 }
 
-TEST(ZLIB_inflateGetHeader, pass_cases)
+TEST(AOCL_Compression_zlib, inflateGetHeader_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   gz_headerp gz = (gz_headerp)malloc(sizeof(gz_header));
-  inflateInit(strm);
-  inflate_state *state = (inflate_state *)strm->state;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *state = (inflate_state *)inflateObj.get_stream()->state;
   state->wrap = 2;
   gz->done = 1;
 
-  EXPECT_EQ(inflateGetHeader(strm, gz), Z_OK);  // AOCL_Compression_zlib_inflateGetHeader_common_4
+  EXPECT_EQ(inflateGetHeader(inflateObj.get_stream(), gz), Z_OK);  // AOCL_Compression_zlib_inflateGetHeader_common_4
   EXPECT_EQ(state->head, gz);
   EXPECT_EQ(gz->done, 0);
 
   free(gz);
   gz = nullptr;
-  release_inflate_stream(strm);
 }
 
-TEST(ZLIB_inflateBackInit, fail_cases)
+TEST(AOCL_Compression_zlib, inflateBackInit_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   const int windowBits = 12;
   unsigned char window[1 << windowBits];
 
   EXPECT_EQ(inflateBackInit(NULL, windowBits, window), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateBackInit_common_1
-  EXPECT_EQ(inflateBackInit(strm, 7, window), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackInit_common_2
-  EXPECT_EQ(inflateBackInit(strm, 16, window), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateBackInit_common_3
-  EXPECT_EQ(inflateBackInit(strm, 9, NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackInit_common_4
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateBackInit(inflateObj.get_stream(), 7, window), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackInit_common_2
+  EXPECT_EQ(inflateBackInit(inflateObj.get_stream(), 16, window), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateBackInit_common_3
+  EXPECT_EQ(inflateBackInit(inflateObj.get_stream(), 9, NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackInit_common_4
 }
 
-TEST(ZLIB_inflateBackInit, pass_cases)
+TEST(AOCL_Compression_zlib, inflateBackInit_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   const int windowBits = 9;
   unsigned char window[1 << windowBits];
 
-  EXPECT_EQ(inflateBackInit(strm, windowBits, window), Z_OK); // AOCL_Compression_zlib_inflateBackInit_common_5
+  EXPECT_EQ(inflateBackInit(inflateObj.get_stream(), windowBits, window), Z_OK); // AOCL_Compression_zlib_inflateBackInit_common_5
 
-  inflateBackEnd(strm);
-  release_z_stream(strm);
+  inflateBackEnd(inflateObj.get_stream());
 }
 
-TEST(ZLIB_inflateBackInit_, fail_cases)
+TEST(AOCL_Compression_zlib, inflateBackInit__negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   const int windowBits = 9;
   unsigned char window[1 << windowBits];
 
   EXPECT_EQ(inflateBackInit_(NULL, windowBits, window, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateBackInit__common_1
-  EXPECT_EQ(inflateBackInit_(strm, 7, window, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackInit__common_2
-  EXPECT_EQ(inflateBackInit_(strm, 16, window, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateBackInit__common_3
-  EXPECT_EQ(inflateBackInit_(strm, 9, NULL, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackInit__common_4
+  EXPECT_EQ(inflateBackInit_(inflateObj.get_stream(), 7, window, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackInit__common_2
+  EXPECT_EQ(inflateBackInit_(inflateObj.get_stream(), 16, window, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateBackInit__common_3
+  EXPECT_EQ(inflateBackInit_(inflateObj.get_stream(), 9, NULL, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackInit__common_4
 
   char c[2] = "0";
 
-  EXPECT_EQ(inflateBackInit_(strm, windowBits, window, NULL, (int)sizeof(z_stream)), Z_VERSION_ERROR);  // AOCL_Compression_zlib_inflateBackInit__common_5
-  EXPECT_EQ(inflateBackInit_(strm, windowBits, window, c, (int)sizeof(z_stream)), Z_VERSION_ERROR); // AOCL_Compression_zlib_inflateBackInit__common_6
-  EXPECT_EQ(inflateBackInit_(strm, windowBits, window, ZLIB_VERSION, 2), Z_VERSION_ERROR);  // AOCL_Compression_zlib_inflateBackInit__common_7
+  EXPECT_EQ(inflateBackInit_(inflateObj.get_stream(), windowBits, window, NULL, (int)sizeof(z_stream)), Z_VERSION_ERROR);  // AOCL_Compression_zlib_inflateBackInit__common_5
+  EXPECT_EQ(inflateBackInit_(inflateObj.get_stream(), windowBits, window, c, (int)sizeof(z_stream)), Z_VERSION_ERROR); // AOCL_Compression_zlib_inflateBackInit__common_6
+  EXPECT_EQ(inflateBackInit_(inflateObj.get_stream(), windowBits, window, ZLIB_VERSION, 2), Z_VERSION_ERROR);  // AOCL_Compression_zlib_inflateBackInit__common_7
+  inflateObj.get_stream()->zalloc = alloc_null;
+  EXPECT_EQ(inflateBackInit_(inflateObj.get_stream(), windowBits, window, ZLIB_VERSION, (int)sizeof(z_stream)), Z_MEM_ERROR); 
 
-  inflateBackEnd(strm);
-  release_z_stream(strm);
+  inflateBackEnd(inflateObj.get_stream());
 }
 
-TEST(ZLIB_inflateBackInit_, pass_cases)
+TEST(AOCL_Compression_zlib, inflateBackInit__common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   const int windowBits = 9;
   unsigned char window[1 << windowBits];
 
-  EXPECT_EQ(inflateBackInit_(strm, windowBits, window, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_inflateBackInit__common_8
+  EXPECT_EQ(inflateBackInit_(inflateObj.get_stream(), windowBits, window, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_inflateBackInit__common_8
 
-  inflateBackEnd(strm);
-  release_z_stream(strm);
+  inflateBackEnd(inflateObj.get_stream());
 }
 
-TEST(ZLIB_inflateBackEnd, all_cases)
+TEST(AOCL_Compression_zlib, inflateBackEnd_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
   const int windowBits = 9;
   unsigned char window[1 << windowBits];
   void *v;
 
   // fail cases
-  EXPECT_EQ(inflateBackEnd(strm), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackEnd_common_1
+  EXPECT_EQ(inflateBackEnd(inflateObj.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackEnd_common_1
   EXPECT_EQ(inflateBackEnd(NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackEnd_common_2
 
-  inflateBackInit(strm, windowBits, window);
+  inflateBackInit(inflateObj.get_stream(), windowBits, window);
 
-  internal_state *st = strm->state;
-  strm->state = 0;
-  EXPECT_EQ(inflateBackEnd(strm), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackEnd_common_3
-  strm->state = st;
+  internal_state *st = inflateObj.get_stream()->state;
+  inflateObj.get_stream()->state = 0;
+  EXPECT_EQ(inflateBackEnd(inflateObj.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackEnd_common_3
+  inflateObj.get_stream()->state = st;
 
-  v = (void *)(strm->zfree);
-  strm->zfree = 0;
-  EXPECT_EQ(inflateBackEnd(strm), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackEnd_common_4
+  v = (void *)(inflateObj.get_stream()->zfree);
+  inflateObj.get_stream()->zfree = 0;
+  EXPECT_EQ(inflateBackEnd(inflateObj.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateBackEnd_common_4
 
-  strm->zfree = (void (*)(void *, void *))v;
+  inflateObj.get_stream()->zfree = (void (*)(void *, void *))v;
 
   // pass case
-  EXPECT_EQ(inflateBackEnd(strm), Z_OK);
-  EXPECT_EQ(strm->state, (internal_state *)NULL); // AOCL_Compression_zlib_inflateBackEnd_common_5
-
-  release_z_stream(strm);
+  EXPECT_EQ(inflateBackEnd(inflateObj.get_stream()), Z_OK);
+  EXPECT_EQ(inflateObj.get_stream()->state, (internal_state *)NULL); // AOCL_Compression_zlib_inflateBackEnd_common_5
 }
 
-TEST(ZLIB_inflateSyncPoint, fail_cases)
+TEST(AOCL_Compression_zlib, inflateSyncPoint_negative)
 {
-  z_streamp strm = get_z_stream();
-  EXPECT_EQ(inflateSyncPoint(strm), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateSyncPoint_common_1
+  ZLIB_inflate_stream inflateObj;
+  EXPECT_EQ(inflateSyncPoint(inflateObj.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateSyncPoint_common_1
   EXPECT_EQ(inflateSyncPoint(NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateSyncPoint_common_2
-  release_inflate_stream(strm);
 }
 
-TEST(ZLIB_inflateSyncPoint, pass_cases)
+TEST(AOCL_Compression_zlib, inflateSyncPoint_common)
 {
-  z_streamp strm = get_z_stream();
-  inflateInit(strm);
-  inflate_state *state = (inflate_state *)strm->state;
+  ZLIB_inflate_stream inflateObj;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *state = (inflate_state *)inflateObj.get_stream()->state;
 
   state->bits = 1;
   state->mode = SYNC;
-  EXPECT_EQ(inflateSyncPoint(strm), false); // AOCL_Compression_zlib_inflateSyncPoint_common_3
+  EXPECT_EQ(inflateSyncPoint(inflateObj.get_stream()), false); // AOCL_Compression_zlib_inflateSyncPoint_common_3
 
   state->bits = 0;
   state->mode = SYNC;
-  EXPECT_EQ(inflateSyncPoint(strm), false); // AOCL_Compression_zlib_inflateSyncPoint_common_4
+  EXPECT_EQ(inflateSyncPoint(inflateObj.get_stream()), false); // AOCL_Compression_zlib_inflateSyncPoint_common_4
 
   state->bits = 1;
   state->mode = STORED;
-  EXPECT_EQ(inflateSyncPoint(strm), false); // AOCL_Compression_zlib_inflateSyncPoint_common_5
+  EXPECT_EQ(inflateSyncPoint(inflateObj.get_stream()), false); // AOCL_Compression_zlib_inflateSyncPoint_common_5
 
   state->bits = 0;
   state->mode = STORED;
-  EXPECT_EQ(inflateSyncPoint(strm), true);  // AOCL_Compression_zlib_inflateSyncPoint_common_6
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateSyncPoint(inflateObj.get_stream()), true);  // AOCL_Compression_zlib_inflateSyncPoint_common_6
 }
 
-TEST(ZLIB_inflateResetKeep, fail_cases)
+TEST(AOCL_Compression_zlib, inflateResetKeep_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
-  EXPECT_EQ(inflateResetKeep(strm), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateResetKeep_common_1
+  EXPECT_EQ(inflateResetKeep(inflateObj.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateResetKeep_common_1
   EXPECT_EQ(inflateResetKeep(NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateResetKeep_common_2
-
-  release_inflate_stream(strm);
 }
 
-TEST(ZLIB_inflateResetKeep, pass_cases)
+TEST(AOCL_Compression_zlib, inflateResetKeep_common)
 {
-  z_streamp strm = get_z_stream();
-  inflateInit(strm);
-  inflate_state *state = (inflate_state *)strm->state;
+  ZLIB_inflate_stream inflateObj;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *state = (inflate_state *)inflateObj.get_stream()->state;
 
-  strm->adler = 3;
+  inflateObj.get_stream()->adler = 3;
   state->wrap = 0;
-  EXPECT_EQ(inflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_inflateResetKeep_common_3
-  EXPECT_EQ(strm->adler, 3);
+  EXPECT_EQ(inflateResetKeep(inflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_inflateResetKeep_common_3
+  EXPECT_EQ(inflateObj.get_stream()->adler, 3);
 
-  strm->adler = 0;
+  inflateObj.get_stream()->adler = 0;
   state->wrap = 1;
-  EXPECT_EQ(inflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_inflateResetKeep_common_4
-  EXPECT_EQ(strm->adler, 1);
+  EXPECT_EQ(inflateResetKeep(inflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_inflateResetKeep_common_4
+  EXPECT_EQ(inflateObj.get_stream()->adler, 1);
 
-  strm->adler = 2;
+  inflateObj.get_stream()->adler = 2;
   state->wrap = 2;
-  EXPECT_EQ(inflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_inflateResetKeep_common_5
-  EXPECT_EQ(strm->adler, 0);
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateResetKeep(inflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_inflateResetKeep_common_5
+  EXPECT_EQ(inflateObj.get_stream()->adler, 0);
 }
 
-TEST(ZLIB_inflateUndermine, all_cases)
+TEST(AOCL_Compression_zlib, inflateUndermine_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
   EXPECT_EQ(inflateUndermine(NULL, 1), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateUndermine_common_1
-  EXPECT_EQ(inflateUndermine(strm, 1), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateUndermine_common_2
+  EXPECT_EQ(inflateUndermine(inflateObj.get_stream(), 1), Z_STREAM_ERROR); // AOCL_Compression_zlib_inflateUndermine_common_2
 
-  inflateInit(strm);
+  inflateInit(inflateObj.get_stream());
 
-  EXPECT_EQ(inflateUndermine(strm, 1), Z_DATA_ERROR); // AOCL_Compression_zlib_inflateUndermine_common_3
-  EXPECT_EQ(inflateUndermine(strm, 0), Z_DATA_ERROR); // AOCL_Compression_zlib_inflateUndermine_common_4
-
-  release_inflate_stream(strm);
+  EXPECT_EQ(inflateUndermine(inflateObj.get_stream(), 1), Z_DATA_ERROR); // AOCL_Compression_zlib_inflateUndermine_common_3
+  EXPECT_EQ(inflateUndermine(inflateObj.get_stream(), 0), Z_DATA_ERROR); // AOCL_Compression_zlib_inflateUndermine_common_4
 }
 
-TEST(ZLIB_inflateValidate, all_cases)
+TEST(AOCL_Compression_zlib, inflateValidate_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
   EXPECT_EQ(inflateValidate(NULL, 1), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateValidate_common_1
-  EXPECT_EQ(inflateValidate(strm, 1), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateValidate_common_2
+  EXPECT_EQ(inflateValidate(inflateObj.get_stream(), 1), Z_STREAM_ERROR);  // AOCL_Compression_zlib_inflateValidate_common_2
 
-  inflateInit(strm);
+  inflateInit(inflateObj.get_stream());
 
-  inflate_state *state =(inflate_state *) strm->state;
+  inflate_state *state =(inflate_state *) inflateObj.get_stream()->state;
   state->wrap = 8;
-  EXPECT_EQ(inflateValidate(strm, 1), Z_OK);  // AOCL_Compression_zlib_inflateValidate_common_3
+  EXPECT_EQ(inflateValidate(inflateObj.get_stream(), 1), Z_OK);  // AOCL_Compression_zlib_inflateValidate_common_3
   EXPECT_EQ(state->wrap, 12);
 
   state->wrap = 15;
-  EXPECT_EQ(inflateValidate(strm, 0), Z_OK);  // AOCL_Compression_zlib_inflateValidate_common_4
+  EXPECT_EQ(inflateValidate(inflateObj.get_stream(), 0), Z_OK);  // AOCL_Compression_zlib_inflateValidate_common_4
   EXPECT_EQ(state->wrap, 11);
-
-  release_inflate_stream(strm);
 }
 
-TEST(ZLIB_inflateCodesUsed, fail_cases)
+TEST(AOCL_Compression_zlib, inflateCodesUsed_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_inflate_stream inflateObj;
 
-  EXPECT_EQ(inflateCodesUsed(strm), (unsigned long)-1); // AOCL_Compression_zlib_inflateCodesUsed_common_1
+  EXPECT_EQ(inflateCodesUsed(inflateObj.get_stream()), (unsigned long)-1); // AOCL_Compression_zlib_inflateCodesUsed_common_1
   EXPECT_EQ(inflateCodesUsed(NULL), (unsigned long)-1); // AOCL_Compression_zlib_inflateCodesUsed_common_2
-
-  release_inflate_stream(strm);
 }
 
-TEST(ZLIB_inflateCodesUsed, pass_cases)
+TEST(AOCL_Compression_zlib, inflateCodesUsed_common)
 {
-  z_streamp strm = get_z_stream();
-  inflateInit(strm);
-  inflate_state *state = (inflate_state *)strm->state;
+  ZLIB_inflate_stream inflateObj;
+  inflateInit(inflateObj.get_stream());
+  inflate_state *state = (inflate_state *)inflateObj.get_stream()->state;
 
   state->next = &(state->codes[500]);
-  EXPECT_EQ(inflateCodesUsed(strm), 500); // AOCL_Compression_zlib_inflateCodesUsed_common_3
+  EXPECT_EQ(inflateCodesUsed(inflateObj.get_stream()), 500); // AOCL_Compression_zlib_inflateCodesUsed_common_3
 
   state->next = &(state->codes[0]);
-  EXPECT_EQ(inflateCodesUsed(strm), 0); // AOCL_Compression_zlib_inflateCodesUsed_common_4
+  EXPECT_EQ(inflateCodesUsed(inflateObj.get_stream()), 0); // AOCL_Compression_zlib_inflateCodesUsed_common_4
 
   state->next = &(state->codes[ENOUGH - 1]);
-  EXPECT_EQ(inflateCodesUsed(strm), ENOUGH - 1);  // AOCL_Compression_zlib_inflateCodesUsed_common_5
+  EXPECT_EQ(inflateCodesUsed(inflateObj.get_stream()), ENOUGH - 1);  // AOCL_Compression_zlib_inflateCodesUsed_common_5
+}
 
-  release_inflate_stream(strm);
+TEST(AOCL_Compression_zlib, inflate_negative)
+{
+  EXPECT_EQ(inflate(NULL, Z_NO_FLUSH), Z_STREAM_ERROR);
 }
 
 /* inflate small amount of data and validate with adler32 checksum */
@@ -694,10 +646,7 @@ z_const unsigned char comp[] = {
     0x49, 0xac, 0xaa, 0x54, 0x48, 0xc9, 0x4f, 0x07, 0x00, 0x6b, 0x93, 0x10, 0x30
 };
 
-class ZLIB_inflate : public AOCL_setup_zlib {
-};
-
-TEST_F(ZLIB_inflate, AOCL_Compression_zlib_inflate_adler32_1)
+TEST_P(AOCL_Compression_zlib, inflate_adler32_1)
 {
     unsigned char uncomp[1024];
     z_stream strm;
@@ -722,3 +671,8 @@ TEST_F(ZLIB_inflate, AOCL_Compression_zlib_inflate_adler32_1)
 
     EXPECT_TRUE(memcmp(uncomp, orig, MIN(strm.total_out, strlen(orig))) == 0);
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    AOCL_Compression_zlib_Parameterized_Tests, AOCL_Compression_zlib,
+    ::testing::ValuesIn(get_supported_optlevels())
+);

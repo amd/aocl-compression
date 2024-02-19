@@ -38,416 +38,333 @@
 
 #include "zlib_gtest.h"
 
-TEST(ZLIB_deflateInit, Z_STREAM_ERROR_)
+// Helper function to verify API contract, after successful deflateInit call
+static inline void verify_deflateInit(z_streamp strm)
 {
-  z_streamp zp = get_z_stream();
-
-  EXPECT_EQ(deflateInit(zp, -2), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit_common_4
-  EXPECT_EQ(deflateInit(zp, 10), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit_common_5
-  EXPECT_EQ(deflateInit(NULL, 3), Z_STREAM_ERROR);// AOCL_Compression_zlib_deflateInit_common_6
-
-  release_deflate_stream(zp);
+  EXPECT_EQ(strm->msg, (char *)Z_NULL);
+  EXPECT_NE(strm->state, (internal_state *)NULL);
+  EXPECT_EQ(strm->total_in, 0);
+  EXPECT_EQ(strm->total_out, 0);
 }
 
-TEST(ZLIB_deflateInit_, fail_cases)
+TEST(AOCL_Compression_zlib, deflateInit__common)
 {
-  z_streamp zp = get_z_stream();
-  char incorrect_version[7] = "0.2.11";
-  int windowBits = 3;
-
-  EXPECT_EQ(deflateInit_(NULL, windowBits, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit__common_1
-  EXPECT_EQ(deflateInit_(zp, windowBits, NULL, (int)sizeof(z_stream)), Z_VERSION_ERROR);  // AOCL_Compression_zlib_deflateInit__common_2
-  EXPECT_EQ(deflateInit_(zp, windowBits, incorrect_version, (int)sizeof(z_stream)), Z_VERSION_ERROR); // AOCL_Compression_zlib_deflateInit__common_3
-  EXPECT_EQ(deflateInit_(zp, windowBits, ZLIB_VERSION, 2), Z_VERSION_ERROR);  // AOCL_Compression_zlib_deflateInit__common_4
-  EXPECT_EQ(deflateInit_(zp, -2, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit__common_5
-  EXPECT_EQ(deflateInit_(zp, 10, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit__common_6
-
-  release_deflate_stream(zp);
+  ZLIB_deflate_stream deflateObj;
+  EXPECT_EQ(deflateInit_(deflateObj.get_stream(), Z_DEFAULT_COMPRESSION, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_deflateInit__common_8
+  EXPECT_EQ(deflateObj.get_stream()->adler, 1);
+  verify_deflateInit(deflateObj.get_stream());
 }
 
-TEST(ZLIB_deflateInit_, pass_cases)
+TEST(AOCL_Compression_zlib, deflateInit__negative)
 {
-  z_streamp zp = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
+  char invalid_version[7] = "0.2.11";
+  int valid_level = 3;
+  int invalid_structure_size = -1;
+  const int invalid_levels[2] = {-2, 10};
 
-  EXPECT_EQ(deflateInit_(zp, 0, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK);  // AOCL_Compression_zlib_deflateInit__common_7
-  
-  release_deflate_stream(zp);
-  zp = get_z_stream();
-  EXPECT_EQ(deflateInit_(zp, -1, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_deflateInit__common_8
-  
-  release_deflate_stream(zp);
-  zp = get_z_stream();
-  EXPECT_EQ(deflateInit_(zp, 9, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK);  // AOCL_Compression_zlib_deflateInit__common_9
+  EXPECT_EQ(deflateInit_(NULL, valid_level, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit__common_1
+  EXPECT_EQ(deflateInit_(deflateObj.get_stream(), valid_level, NULL, (int)sizeof(z_stream)), Z_VERSION_ERROR); // AOCL_Compression_zlib_deflateInit__common_2
+  EXPECT_EQ(deflateInit_(deflateObj.get_stream(), valid_level, invalid_version, (int)sizeof(z_stream)), Z_VERSION_ERROR); // AOCL_Compression_zlib_deflateInit__common_3
+  EXPECT_EQ(deflateInit_(deflateObj.get_stream(), valid_level, ZLIB_VERSION, invalid_structure_size), Z_VERSION_ERROR); // AOCL_Compression_zlib_deflateInit__common_4
+  EXPECT_EQ(deflateInit_(deflateObj.get_stream(), invalid_levels[0], ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit__common_5
+  EXPECT_EQ(deflateInit_(deflateObj.get_stream(), invalid_levels[1], ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit__common_6
+  deflateObj.get_stream()->zalloc = alloc_null;
+  EXPECT_EQ(deflateInit_(deflateObj.get_stream(), valid_level, ZLIB_VERSION, (int)sizeof(z_stream)), Z_MEM_ERROR);
 
-  release_deflate_stream(zp);
 }
 
-TEST(ZLIB_deflateEnd, Z_OK_)
+TEST(AOCL_Compression_zlib, deflateInit__boundary)
 {
-  z_streamp zp = get_z_stream();
-  deflateInit(zp, 0);
+  ZLIB_deflate_stream deflateObj;
 
-  EXPECT_EQ(deflateEnd(zp), Z_OK);  // AOCL_Compression_zlib_deflateEnd_common_1
+  EXPECT_EQ(deflateInit_(deflateObj.get_stream(), 0, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_deflateInit__common_7
+  EXPECT_EQ(deflateObj.get_stream()->adler, 1);
+  verify_deflateInit(deflateObj.get_stream());
 
-  release_z_stream(zp);
+  deflateObj.reset_deflate_stream();
+  EXPECT_EQ(deflateInit_(deflateObj.get_stream(), 9, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_deflateInit__common_9
+  EXPECT_EQ(deflateObj.get_stream()->adler, 1);
+  verify_deflateInit(deflateObj.get_stream());
 }
 
-TEST(ZLIB_deflateEnd, Z_STREAM_ERROR_)
+TEST(AOCL_Compression_zlib, deflateInit2__common)
 {
-  z_streamp zp = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
+
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), 6, Z_DEFLATED, 8, 3, 3, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK);  // AOCL_Compression_zlib_deflateInit2__common_18
+  EXPECT_EQ(deflateObj.get_stream()->state->level, 6);
+  EXPECT_EQ(deflateObj.get_stream()->state->strategy, 3);
+  EXPECT_EQ(deflateObj.get_stream()->state->method, Z_DEFLATED);
+  EXPECT_EQ(deflateObj.get_stream()->adler, 1);
+  verify_deflateInit(deflateObj.get_stream());
+
+  deflateObj.reset_deflate_stream();
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), 7, Z_DEFLATED, 25, 3, 4, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_deflateInit2__common_19
+  EXPECT_EQ(deflateObj.get_stream()->state->level, 7);
+  EXPECT_EQ(deflateObj.get_stream()->state->strategy, 4);
+  verify_deflateInit(deflateObj.get_stream());
+}
+
+TEST(AOCL_Compression_zlib, deflateInit2__negative)
+{
+  ZLIB_deflate_stream deflateObj;
+  const int valid_memLevel = 5;
+  const int valid_strategy = 2;
+  const int valid_windowBits = 11;
+  const int valid_level = 6;
+  const int invalid_method = 0;
+  const int invalid_levels[2] = {-2, 23};
+  const int invalid_windowBits[6] = {-7, -16, 7, 16, 23, 32};
+  const int invalid_memLevels[2] = {0, 10};
+  const int invalid_strategy[2] = {-1, 5};
+  const int invalid_structure_size = -1;
+  char invalid_version[7] = "0.2.11";
+
+  EXPECT_EQ(deflateInit2_(NULL, valid_level, Z_DEFLATED, valid_windowBits, valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_1
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), invalid_levels[0], Z_DEFLATED, valid_windowBits, valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_2
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), invalid_levels[1], Z_DEFLATED, valid_windowBits, valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_3
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, invalid_method, valid_windowBits, valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_4
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, invalid_windowBits[0], valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_5
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, invalid_windowBits[1], valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_6
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, invalid_windowBits[2], valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_7
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, invalid_windowBits[3], valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_8
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, invalid_windowBits[4], valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_9
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, invalid_windowBits[5], valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_10
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, valid_windowBits, invalid_memLevels[0], valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_11
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, valid_windowBits, invalid_memLevels[1], valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_12
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, valid_windowBits, valid_memLevel, invalid_strategy[0], ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_13
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, valid_windowBits, valid_memLevel, invalid_strategy[1], ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_14
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, valid_windowBits, valid_memLevel, valid_strategy, NULL, (int)sizeof(z_stream)), Z_VERSION_ERROR); // AOCL_Compression_zlib_deflateInit2__common_15
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, valid_windowBits, valid_memLevel, valid_strategy, invalid_version, (int)sizeof(z_stream)), Z_VERSION_ERROR); // AOCL_Compression_zlib_deflateInit2__common_16
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, valid_windowBits, valid_memLevel, valid_strategy, ZLIB_VERSION, invalid_structure_size), Z_VERSION_ERROR); // AOCL_Compression_zlib_deflateInit2__common_17
+  deflateObj.get_stream()->zalloc = alloc_null;
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_level, Z_DEFLATED, valid_windowBits, valid_memLevel, valid_strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_MEM_ERROR);
+}
+
+TEST(AOCL_Compression_zlib, deflateInit2__boundary)
+{
+  ZLIB_deflate_stream deflateObj;
+  const int valid_levels[2] = {-1, 9};
+  const int valid_windowBits[6] = {8, 15, 25, 31, -9, -15};
+  const int valid_memLevels[2] = {1, 9};
+  const int valid_strategy[2] = {0, 4};
+
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_levels[0], Z_DEFLATED, valid_windowBits[0], valid_memLevels[0], valid_strategy[0], ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK);
+  EXPECT_EQ(deflateObj.get_stream()->adler, 1);
+  verify_deflateInit(deflateObj.get_stream());
+
+  deflateObj.reset_deflate_stream();
+  EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_levels[1], Z_DEFLATED, valid_windowBits[1], valid_memLevels[1], valid_strategy[1], ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK);
+  EXPECT_EQ(deflateObj.get_stream()->adler, 1);
+  verify_deflateInit(deflateObj.get_stream());
+
+  // valid_levels[0] and valid_levels[1] are already tested above
+  for(int i = 2; i < 6; i++) {
+    deflateObj.reset_deflate_stream();
+    EXPECT_EQ(deflateInit2_(deflateObj.get_stream(), valid_levels[1], Z_DEFLATED, valid_windowBits[i], valid_memLevels[0], valid_strategy[1], ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK);
+    verify_deflateInit(deflateObj.get_stream());
+  }
+}
+
+TEST(AOCL_Compression_zlib, deflateEnd_common)
+{
+  ZLIB_deflate_stream deflateObj;
+
+  deflateInit(deflateObj.get_stream(), 0);
+  EXPECT_EQ(deflateEnd(deflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_deflateEnd_common_1
+}
+
+TEST(AOCL_Compression_zlib, deflateEnd_negative)
+{
+  ZLIB_deflate_stream deflateObj;
 
   EXPECT_EQ(deflateEnd(NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateEnd_common_2
-  EXPECT_EQ(deflateEnd(zp), Z_STREAM_ERROR);    // AOCL_Compression_zlib_deflateEnd_common_3
-
-  release_z_stream(zp);
+  EXPECT_EQ(deflateEnd(deflateObj.get_stream()), Z_STREAM_ERROR);    // AOCL_Compression_zlib_deflateEnd_common_3
+  deflateInit(deflateObj.get_stream(), 4);
+  ((deflate_state*)deflateObj.get_stream()->state)->status = BUSY_STATE;
+  EXPECT_EQ(deflateEnd(deflateObj.get_stream()), Z_DATA_ERROR);
 }
 
-TEST(ZLIB_deflateInit2, fail_cases)
+TEST_P(AOCL_Compression_zlib, deflateSetDictionary_negative)
 {
-  z_streamp strm = get_z_stream();
-  int memLevel = 5;
-  int strategy = 2;
-
-  EXPECT_EQ(deflateInit2(NULL, 6, Z_DEFLATED, 11, memLevel, strategy), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2_common_1
-  EXPECT_EQ(deflateInit2(strm, -2, Z_DEFLATED, 11, memLevel, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2_common_2
-  EXPECT_EQ(deflateInit2(strm, 10, Z_DEFLATED, 11, memLevel, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2_common_3
-  EXPECT_EQ(deflateInit2(strm, 6, 0, 11, memLevel, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2_common_4
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, -8, memLevel, strategy), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2_common_5
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, -16, memLevel, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2_common_6
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, -7, memLevel, strategy), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2_common_7
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 16, memLevel, strategy), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2_common_8
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 23, memLevel, strategy), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2_common_9
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 24, memLevel, strategy), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2_common_10
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 8, 0, strategy), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2_common_11
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 8, 10, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2_common_12
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 8, memLevel, -1), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2_common_13
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 8, memLevel, 5), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2_common_14
-
-  release_deflate_stream(strm);
-}
-
-TEST(ZLIB_deflateInit2, pass_cases)
-{
-  z_streamp strm = get_z_stream();
-
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 8, 3, 3), Z_OK);  // AOCL_Compression_zlib_deflateInit2_common_15
-  
-  release_deflate_stream(strm);
-  strm = get_z_stream();
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 15, 3, 3), Z_OK); // AOCL_Compression_zlib_deflateInit2_common_16
-  
-  release_deflate_stream(strm);
-  strm = get_z_stream();
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 25, 3, 3), Z_OK); // AOCL_Compression_zlib_deflateInit2_common_17
-  
-  release_deflate_stream(strm);
-  strm = get_z_stream();
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, 31, 3, 3), Z_OK); // AOCL_Compression_zlib_deflateInit2_common_18
-  
-  release_deflate_stream(strm);
-  strm = get_z_stream();
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, -9, 3, 3), Z_OK); // AOCL_Compression_zlib_deflateInit2_common_19
-  
-  release_deflate_stream(strm);
-  strm = get_z_stream();
-  EXPECT_EQ(deflateInit2(strm, 6, Z_DEFLATED, -15, 3, 3), Z_OK);// AOCL_Compression_zlib_deflateInit2_common_20
-
-  release_deflate_stream(strm);
-}
-
-TEST(ZLIB_deflateInit2_, fail_cases)
-{
-  z_streamp strm = get_z_stream();
-  const int memLevel = 5;
-  const int strategy = 2;
-  const int windowBits = 11;
-
-  EXPECT_EQ(deflateInit2_(NULL, 6, Z_DEFLATED, windowBits, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_1
-  EXPECT_EQ(deflateInit2_(strm, -2, Z_DEFLATED, windowBits, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2__common_2
-  EXPECT_EQ(deflateInit2_(strm, 23, Z_DEFLATED, windowBits, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2__common_3
-  EXPECT_EQ(deflateInit2_(strm, 6, 0, windowBits, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2__common_4
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, -8, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_5
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, -16, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2__common_6
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, -7, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_7
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, 16, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_8
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, 23, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_9
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, 24, memLevel, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2__common_10
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, windowBits, 0, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2__common_11
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, windowBits, 10, strategy, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_12
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, windowBits, memLevel, -1, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateInit2__common_13
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, windowBits, memLevel, 5, ZLIB_VERSION, (int)sizeof(z_stream)), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateInit2__common_14
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, windowBits, memLevel, strategy, NULL, (int)sizeof(z_stream)), Z_VERSION_ERROR);  // AOCL_Compression_zlib_deflateInit2__common_15
-  char c[2] = "0";
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, windowBits, memLevel, strategy, c, (int)sizeof(z_stream)), Z_VERSION_ERROR); // AOCL_Compression_zlib_deflateInit2__common_16
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, windowBits, memLevel, strategy, ZLIB_VERSION, 3), Z_VERSION_ERROR);  // AOCL_Compression_zlib_deflateInit2__common_17
-
-  release_deflate_stream(strm);
-}
-
-TEST(ZLIB_deflateInit2_, pass_cases)
-{
-  z_streamp strm = get_z_stream();
-
-  EXPECT_EQ(deflateInit2_(strm, 6, Z_DEFLATED, 8, 3, 3, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK);  // AOCL_Compression_zlib_deflateInit2__common_18
-  EXPECT_EQ(strm->state->level, 6);
-  EXPECT_EQ(strm->state->strategy, 3);
-  EXPECT_EQ(strm->state->method, Z_DEFLATED);
-
-  release_deflate_stream(strm);
-  strm = get_z_stream();
-
-  EXPECT_EQ(deflateInit2_(strm, 7, Z_DEFLATED, 25, 3, 4, ZLIB_VERSION, (int)sizeof(z_stream)), Z_OK); // AOCL_Compression_zlib_deflateInit2__common_19
-  EXPECT_EQ(strm->state->level, 7);
-  EXPECT_EQ(strm->state->strategy, 4);
-
-  release_deflate_stream(strm);
-}
-
-/*
-TEST(ZLIB_deflate, fail_cases)
-{
-  z_streamp strm = get_z_stream();
-  const uLong srcLen = 10;
-  const char c[srcLen + 1] = "helloWorld";
-  Bytef *src = (Bytef *)c;
-  uLong dstLen = 20;
-  char cc[dstLen];
-  Bytef *dst = (Bytef *)cc;
-  prepare_deflate_stream(strm, dst, &dstLen, src, srcLen, 3);
-
-  EXPECT_EQ(deflate(NULL, Z_NO_FLUSH), Z_STREAM_ERROR);
-  EXPECT_EQ(deflate(strm, 6), Z_STREAM_ERROR);
-  EXPECT_EQ(deflate(strm, -1), Z_STREAM_ERROR);
-
-  Bytef *temp = strm->next_out;
-  strm->next_out = NULL;
-
-  EXPECT_EQ(deflate(strm, Z_NO_FLUSH), Z_STREAM_ERROR);
-
-  strm->next_out = temp;
-  temp = strm->next_in;
-  strm->next_in = NULL;
-
-  EXPECT_EQ(deflate(strm, Z_NO_FLUSH), Z_STREAM_ERROR);
-
-  strm->next_in = temp;
-  z_streamp z_stream_temp = new z_stream;
-  memcpy(z_stream_temp, strm, sizeof(z_stream));
-
-  // strm->avail
-  free(z_stream_temp);
-  release_deflate_stream(strm);
-}
-
-TEST(ZLIB_deflate, pass_cases)
-{
-  z_streamp strm = get_z_stream();
-  const uLong srcLen = 10;
-  char c[srcLen + 1] = "helloWorld";
-  Bytef *src = (Bytef *)c;
-  uLong dstLen = 20;
-  char cc[dstLen];
-  Bytef *dst = (Bytef *)cc;
-  prepare_deflate_stream(strm, dst, &dstLen, src, srcLen, 3);
-
-  EXPECT_EQ(deflate(strm, Z_NO_FLUSH), Z_OK);
-
-  deflateEnd(strm);
-  release_z_stream(strm);
-}
-*/
-
-TEST(ZLIB_deflateSetDictionary, fail_cases)
-{
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
   const int sDictLen = 10;
   char c[sDictLen + 1] = "abcdefghij";
   Bytef *sDict = (Bytef *)c;
 
   // AOCL_Compression_zlib_deflateSetDictionary_common_1
-  EXPECT_EQ(deflateSetDictionary(strm, sDict, sDictLen), Z_STREAM_ERROR); // stream uninitialized
+  EXPECT_EQ(deflateSetDictionary(deflateObj.get_stream(), sDict, sDictLen), Z_STREAM_ERROR); // stream uninitialized
 
-  deflateInit(strm, 4);
+  deflateInit(deflateObj.get_stream(), 4);
 
   // AOCL_Compression_zlib_deflateSetDictionary_common_2
-  EXPECT_EQ(deflateSetDictionary(strm, NULL, sDictLen), Z_STREAM_ERROR); // dictionary null
+  EXPECT_EQ(deflateSetDictionary(deflateObj.get_stream(), NULL, sDictLen), Z_STREAM_ERROR); // dictionary null
 
-  deflateEnd(strm);
-  memset(strm, 0, sizeof(z_stream));
-  deflateInit2(strm, 4, 8, 26, 4, 4);
+  deflateObj.reset_deflate_stream();
+  deflateInit2(deflateObj.get_stream(), 4, 8, 26, 4, 4);
 
   // AOCL_Compression_zlib_deflateSetDictionary_common_3
-  EXPECT_EQ(deflateSetDictionary(strm, sDict, sDictLen), Z_STREAM_ERROR); // wrap == 2 due to windowBits==26
-
-  release_deflate_stream(strm);
+  EXPECT_EQ(deflateSetDictionary(deflateObj.get_stream(), sDict, sDictLen), Z_STREAM_ERROR); // wrap == 2 due to windowBits==26
 }
 
-TEST(ZLIB_deflateSetDictionary, pass_case)
+TEST_P(AOCL_Compression_zlib, deflateSetDictionary_common)
 {
-  z_streamp strm = get_z_stream();
-  Bytef *sDict;
+  ZLIB_deflate_stream deflateObj;
+  Bytef *sDict, *gDict;
   const uLong sDictLen = 4000;
-  char cc[sDictLen];
+  uInt gDictLen = 0;
+  char cc[sDictLen], gc[sDictLen];
   for (uLong i = 0; i < sDictLen; i++)
   {
     cc[i] = rand() % 255;
   }
-  deflateInit(strm, 4);
+  deflateInit(deflateObj.get_stream(), 4);
   sDict = (Bytef *)cc;
+  gDict = (Bytef *)gc;
 
   // AOCL_Compression_zlib_deflateSetDictionary_common_4
-  EXPECT_EQ(deflateSetDictionary(strm, sDict, 10), Z_OK); // wrap==1
+  EXPECT_EQ(deflateSetDictionary(deflateObj.get_stream(), sDict, 10), Z_OK); // wrap==1
+  deflateGetDictionary(deflateObj.get_stream(), gDict, &gDictLen);
+  EXPECT_EQ(gDictLen , 10);
+  EXPECT_EQ(memcmp(sDict, gDict, 10), 0);
 
-  deflateEnd(strm);
-  deflateInit2(strm, 4, 8, -9, 4, 4);
+  deflateEnd(deflateObj.get_stream());
+  deflateInit2(deflateObj.get_stream(), 4, 8, -9, 4, 4);
 
   // AOCL_Compression_zlib_deflateSetDictionary_common_5
-  EXPECT_EQ(deflateSetDictionary(strm, sDict, sDictLen), Z_OK); // wrap==0
-
-  release_deflate_stream(strm);
+  EXPECT_EQ(deflateSetDictionary(deflateObj.get_stream(), sDict, sDictLen), Z_OK); // wrap==0
+  deflateGetDictionary(deflateObj.get_stream(), gDict, &gDictLen);
+  EXPECT_EQ(gDictLen , (deflateObj.get_stream()->state)->w_size);
+  EXPECT_EQ(memcmp(sDict + sDictLen - gDictLen, gDict, gDictLen), 0);
 }
 
-TEST(ZLIB_deflateGetDictionary, fail_cases)
+TEST_P(AOCL_Compression_zlib, deflateGetDictionary_negative)
 {
   Bytef *dict = nullptr;
   uInt dictLen;
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
 
-  EXPECT_EQ(deflateGetDictionary(strm, dict, &dictLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateGetDictionary_common_1
+  EXPECT_EQ(deflateGetDictionary(deflateObj.get_stream(), dict, &dictLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateGetDictionary_common_1
   EXPECT_EQ(deflateGetDictionary(NULL, dict, &dictLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateGetDictionary_common_2
-
-  release_deflate_stream(strm);
 }
 
-TEST(ZLIB_deflateGetDictionary, pass_cases)
+TEST_P(AOCL_Compression_zlib, deflateGetDictionary_common)
 {
   Bytef *dict = (Bytef *)malloc(sizeof(Bytef) * 40000);
   uInt dictLen;
-  z_streamp strm = get_z_stream();
-  deflateInit(strm, 4);
+  ZLIB_deflate_stream deflateObj;
+  deflateInit(deflateObj.get_stream(), 4);
   const int sDictLen = 10;
   char c[sDictLen + 1] = "abcdefghij";
   Bytef *sDict = (Bytef *)c;
 
-  deflateSetDictionary(strm, sDict, sDictLen);
+  deflateSetDictionary(deflateObj.get_stream(), sDict, sDictLen);
 
-  EXPECT_EQ(deflateGetDictionary(strm, dict, &dictLen), Z_OK);  // AOCL_Compression_zlib_deflateGetDictionary_common_3
+  EXPECT_EQ(deflateGetDictionary(deflateObj.get_stream(), dict, &dictLen), Z_OK);  // AOCL_Compression_zlib_deflateGetDictionary_common_3
   EXPECT_EQ(dictLen, sDictLen);
   EXPECT_TRUE(cmpr(c, (char *)dict, dictLen));
 
-  deflateEnd(strm);
-  release_z_stream(strm);
   free(dict);
   dict = nullptr;
 }
 
-TEST(ZLIB_deflateCopy, fail_cases)
+TEST(AOCL_Compression_zlib, deflateCopy_negative)
 {
-  z_streamp dest = get_z_stream();
-  z_streamp src = get_z_stream();
+  ZLIB_deflate_stream dest;
+  ZLIB_deflate_stream src;
 
-  EXPECT_EQ(deflateCopy(dest, NULL), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateCopy_common_1
-  EXPECT_EQ(deflateCopy(NULL, src), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateCopy_common_2
-  EXPECT_EQ(deflateCopy(dest, src), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateCopy_common_3
-
-  release_z_stream(dest);
-  release_z_stream(src);
-  // deflateCopy()
+  EXPECT_EQ(deflateCopy(dest.get_stream(), NULL), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateCopy_common_1
+  EXPECT_EQ(deflateCopy(NULL, src.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateCopy_common_2
+  EXPECT_EQ(deflateCopy(dest.get_stream(), src.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateCopy_common_3
+  
+  deflateInit(src.get_stream(), 4);
+  src.get_stream()->zalloc = alloc_null;
+  EXPECT_EQ(deflateCopy(dest.get_stream(), src.get_stream()), Z_MEM_ERROR);
+  dest.get_stream()->state = (internal_state *)0;
 }
 
-TEST(ZLIB_deflateCopy, pass_case)
+TEST(AOCL_Compression_zlib, deflateCopy_common)
 {
-  z_streamp dest = get_z_stream();
-  z_streamp src = get_z_stream();
-  deflateInit(src, 5);
+  ZLIB_deflate_stream dest;
+  ZLIB_deflate_stream src;
+  deflateInit(src.get_stream(), 5);
 
-  EXPECT_EQ(deflateCopy(dest, src), Z_OK);  // AOCL_Compression_zlib_deflateCopy_common_4
-
-  release_deflate_stream(dest);
-  release_deflate_stream(src);
+  EXPECT_EQ(deflateCopy(dest.get_stream(), src.get_stream()), Z_OK);  // AOCL_Compression_zlib_deflateCopy_common_4
 }
 
-TEST(ZLIB_deflateReset, fail_cases)
+TEST(AOCL_Compression_zlib, deflateReset_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
 
   EXPECT_EQ(deflateReset(NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateReset_common_1
-  EXPECT_EQ(deflateReset(strm), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateReset_common_2
-
-  release_deflate_stream(strm);
+  EXPECT_EQ(deflateReset(deflateObj.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateReset_common_2
 }
 
-TEST(ZLIB_deflateReset, pass_cases)
+TEST(AOCL_Compression_zlib, deflateReset_common)
 {
-  z_streamp strm = get_z_stream();
-  deflateInit(strm, 4);
+  ZLIB_deflate_stream deflateObj;
+  deflateInit(deflateObj.get_stream(), 4);
 
-  EXPECT_EQ(deflateReset(strm), Z_OK);  // AOCL_Compression_zlib_deflateReset_common_3
-  
-  EXPECT_EQ(strm->total_in, 0);
-  EXPECT_EQ(strm->total_out, 0);
-  EXPECT_EQ(strm->msg, (const char *)Z_NULL);
-  EXPECT_EQ(strm->data_type, Z_UNKNOWN);
-  EXPECT_EQ(strm->state->pending, 0);
-  EXPECT_EQ(strm->state->last_flush, -2);
-
-  release_deflate_stream(strm);
+  EXPECT_EQ(deflateReset(deflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_deflateReset_common_3
+  EXPECT_EQ(deflateObj.get_stream()->total_in, 0);
+  EXPECT_EQ(deflateObj.get_stream()->total_out, 0);
+  EXPECT_EQ(deflateObj.get_stream()->msg, (const char *)Z_NULL);
+  EXPECT_EQ(deflateObj.get_stream()->data_type, Z_UNKNOWN);
+  EXPECT_EQ(deflateObj.get_stream()->state->pending, 0);
+  EXPECT_EQ(deflateObj.get_stream()->state->last_flush, -2);
 }
 
-class ZLIB_deflateParams : public AOCL_setup_zlib {
-};
-
-TEST_F(ZLIB_deflateParams, fail_cases)
+TEST_P(AOCL_Compression_zlib, deflateParams_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
   int level = -1;
   int strategy = 3;
-  EXPECT_EQ(deflateParams(strm, level, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateParams_common_1
+  EXPECT_EQ(deflateParams(deflateObj.get_stream(), level, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateParams_common_1
 
   EXPECT_EQ(deflateParams(NULL, level, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateParams_common_2
-  deflateInit(strm, 6);
+  deflateInit(deflateObj.get_stream(), 6);
   level = -2;
-  EXPECT_EQ(deflateParams(strm, level, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateParams_common_3
+  EXPECT_EQ(deflateParams(deflateObj.get_stream(), level, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateParams_common_3
   level = 10;
-  EXPECT_EQ(deflateParams(strm, level, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateParams_common_4
+  EXPECT_EQ(deflateParams(deflateObj.get_stream(), level, strategy), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateParams_common_4
   level = 0;
-  EXPECT_EQ(deflateParams(strm, level, -1), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateParams_common_5
-  EXPECT_EQ(deflateParams(strm, level, 5), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateParams_common_6
+  EXPECT_EQ(deflateParams(deflateObj.get_stream(), level, -1), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateParams_common_5
+  EXPECT_EQ(deflateParams(deflateObj.get_stream(), level, 5), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateParams_common_6
 
-  deflate_state *state = (deflate_state *)strm->state;
+  deflate_state *state = (deflate_state *)deflateObj.get_stream()->state;
   state->last_flush = 1;
-  EXPECT_EQ(deflateParams(strm, level, 2), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateParams_common_7
-  deflateEnd(strm);
+  EXPECT_EQ(deflateParams(deflateObj.get_stream(), level, 2), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateParams_common_7
+  deflateEnd(deflateObj.get_stream());
   uLongf dstLen = 50;
   uLongf srcLen = 10;
   Bytef *dest = (Bytef *)malloc(dstLen);
   Bytef *src = (Bytef *)malloc(srcLen);
-  prepare_deflate_stream(strm, dest, &dstLen, src, srcLen, 0);
-  state = (deflate_state *)strm->state;
+  prepare_deflate_stream(deflateObj.get_stream(), dest, &dstLen, src, srcLen, 0);
+  state = (deflate_state *)deflateObj.get_stream()->state;
   state->last_flush = 1;
-  strm->avail_out = 0;
+  deflateObj.get_stream()->avail_out = 0;
 
-  EXPECT_EQ(deflateParams(strm, level, 3), Z_BUF_ERROR);  // AOCL_Compression_zlib_deflateParams_common_8
+  EXPECT_EQ(deflateParams(deflateObj.get_stream(), level, 3), Z_BUF_ERROR);  // AOCL_Compression_zlib_deflateParams_common_8
 
   free(dest);
   free(src);
   dest = src = nullptr;
-  release_deflate_stream(strm);
 }
 
-TEST_F(ZLIB_deflateParams, pass_cases)
+TEST_P(AOCL_Compression_zlib, deflateParams_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
   int level;
   int strategy;
   int cnt = 0;
-  deflateInit(strm, 0);
-  deflate_state *state = (deflate_state *)strm->state;
+  deflateInit(deflateObj.get_stream(), 0);
+  deflate_state *state = (deflate_state *)deflateObj.get_stream()->state;
 
   level = 3;
   strategy = 3;
   state->matches = 1;
-  EXPECT_EQ(deflateParams(strm, level, strategy), Z_OK);  // AOCL_Compression_zlib_deflateParams_common_9
+  EXPECT_EQ(deflateParams(deflateObj.get_stream(), level, strategy), Z_OK);  // AOCL_Compression_zlib_deflateParams_common_9
   EXPECT_EQ(state->level, level);
   EXPECT_EQ(state->strategy, strategy);
 
@@ -459,7 +376,7 @@ TEST_F(ZLIB_deflateParams, pass_cases)
   {
     state->head[i] = 1;
   }
-  EXPECT_EQ(deflateParams(strm, level, strategy), Z_OK);  // AOCL_Compression_zlib_deflateParams_common_10
+  EXPECT_EQ(deflateParams(deflateObj.get_stream(), level, strategy), Z_OK);  // AOCL_Compression_zlib_deflateParams_common_10
   EXPECT_EQ(state->level, level);
   EXPECT_EQ(state->strategy, strategy);
 
@@ -468,61 +385,58 @@ TEST_F(ZLIB_deflateParams, pass_cases)
     cnt += state->head[i] == 0;
   }
   EXPECT_EQ(state->hash_size, cnt);
-
-  release_deflate_stream(strm);
 }
 
-TEST(ZLIB_deflateTune, fail_cases)
+TEST(AOCL_Compression_zlib, deflateTune_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
 
-  EXPECT_EQ(deflateTune(strm, 1, 1, 1, 1), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateTune_common_1
-
-  release_deflate_stream(strm);
+  EXPECT_EQ(deflateTune(deflateObj.get_stream(), 1, 1, 1, 1), Z_STREAM_ERROR); // AOCL_Compression_zlib_deflateTune_common_1
+  EXPECT_EQ(deflateTune(NULL, 1, 2, 1, 4), Z_STREAM_ERROR);
 }
 
-TEST(ZLIB_deflateTune, pass_case)
+TEST(AOCL_Compression_zlib, deflateTune_common)
 {
-  z_streamp strm = get_z_stream();
-  deflateInit(strm, 4);
-  deflate_state *state = strm->state;
+  ZLIB_deflate_stream deflateObj;
+  deflateInit(deflateObj.get_stream(), 4);
+  deflate_state *state = deflateObj.get_stream()->state;
 
-  EXPECT_EQ(deflateTune(strm, 1, 2, 3, 4), Z_OK); // AOCL_Compression_zlib_deflateTune_common_2
+  EXPECT_EQ(deflateTune(deflateObj.get_stream(), 1, 2, 3, 4), Z_OK); // AOCL_Compression_zlib_deflateTune_common_2
   EXPECT_EQ(state->good_match, 1);
   EXPECT_EQ(state->max_lazy_match, 2);
   EXPECT_EQ(state->nice_match, 3);
   EXPECT_EQ(state->max_chain_length, 4);
-
-  release_deflate_stream(strm);
 }
 
-TEST(ZLIB_deflateBound, all_cases)
+TEST(AOCL_Compression_zlib, deflateBound_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
   int sourceLen = 1 << 6;
 
-  EXPECT_EQ(deflateBound(strm, sourceLen), 82); // AOCL_Compression_zlib_deflateBound_common_1
+  EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 82); // AOCL_Compression_zlib_deflateBound_common_1
 
-  deflateInit(strm, 2);
-  deflate_state *state = (deflate_state *)strm->state;
+  deflateInit(deflateObj.get_stream(), 2);
+  deflate_state *state = (deflate_state *)deflateObj.get_stream()->state;
   state->wrap = 3;
   sourceLen = 1 << 25;
 
-  EXPECT_EQ(deflateBound(strm, sourceLen), 33564686); // AOCL_Compression_zlib_deflateBound_common_2
+  EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 33564686); // AOCL_Compression_zlib_deflateBound_common_2
 
   state->wrap = 0;
   sourceLen = 100;
 
-  EXPECT_EQ(deflateBound(strm, sourceLen), 107);  // AOCL_Compression_zlib_deflateBound_common_3
+  EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 107);  // AOCL_Compression_zlib_deflateBound_common_3
 
   state->wrap = 1;
 
-  EXPECT_EQ(deflateBound(strm, sourceLen), 113);  // AOCL_Compression_zlib_deflateBound_common_4
+  EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 113);  // AOCL_Compression_zlib_deflateBound_common_4
 
   state->wrap = 1;
   state->strstart = 1;
 
-  EXPECT_EQ(deflateBound(strm, sourceLen), 117);  // AOCL_Compression_zlib_deflateBound_common_5
+  EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 117);  // AOCL_Compression_zlib_deflateBound_common_5
+
+  //EXPECT_EQ(deflateBound(deflateObj.get_stream(), ULONG_MAX), 4296278157); // deflateBound is undeterministic
 
   gz_headerp gz = (gz_headerp)malloc(sizeof(gz_header));
   state->gzhead = gz;
@@ -537,184 +451,183 @@ TEST(ZLIB_deflateBound, all_cases)
 
   state->wrap = 2;
 
-  EXPECT_EQ(deflateBound(strm, sourceLen), 147);  // AOCL_Compression_zlib_deflateBound_common_6
+  EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 147);  // AOCL_Compression_zlib_deflateBound_common_6
 
   state->w_bits = 14;
 
-  EXPECT_EQ(deflateBound(strm, 0), 44); // AOCL_Compression_zlib_deflateBound_common_7
+  EXPECT_EQ(deflateBound(deflateObj.get_stream(), 0), 44); // AOCL_Compression_zlib_deflateBound_common_7
 
   free(gz);
   gz = nullptr;
-  release_deflate_stream(strm);
-  // s->gzhead!=NULL user supplied gzip header
 }
 
-TEST(ZLIB_deflatePending, fail_cases)
+TEST(AOCL_Compression_zlib, deflatePending_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
   unsigned pending;
   int bits;
 
   EXPECT_EQ(deflatePending(NULL, &pending, &bits), Z_STREAM_ERROR); //  AOCL_Compression_zlib_deflatePending_common_1
-  EXPECT_EQ(deflatePending(strm, &pending, &bits), Z_STREAM_ERROR); //  AOCL_Compression_zlib_deflatePending_common_2
-
-  release_deflate_stream(strm);
+  EXPECT_EQ(deflatePending(deflateObj.get_stream(), &pending, &bits), Z_STREAM_ERROR); //  AOCL_Compression_zlib_deflatePending_common_2
 }
 
-TEST(ZLIB_deflatePending, pass_cases)
+TEST(AOCL_Compression_zlib, deflatePending_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
   unsigned pending=0;
   int bits=0;
-  deflateInit(strm, 3);
+  deflateInit(deflateObj.get_stream(), 3);
 
-  strm->state->pending = 4;
-  strm->state->bi_valid = 9;
-  EXPECT_EQ(deflatePending(strm, &pending, &bits), Z_OK); // AOCL_Compression_zlib_deflatePending_common_3
+  deflateObj.get_stream()->state->pending = 4;
+  deflateObj.get_stream()->state->bi_valid = 9;
+  EXPECT_EQ(deflatePending(deflateObj.get_stream(), &pending, &bits), Z_OK); // AOCL_Compression_zlib_deflatePending_common_3
   EXPECT_EQ(pending, 4);
   EXPECT_EQ(bits, 9);
 
-  strm->state->bi_valid = 3;
-  EXPECT_EQ(deflatePending(strm, NULL, &bits), Z_OK); //  AOCL_Compression_zlib_deflatePending_common_4
+  deflateObj.get_stream()->state->bi_valid = 3;
+  EXPECT_EQ(deflatePending(deflateObj.get_stream(), NULL, &bits), Z_OK); //  AOCL_Compression_zlib_deflatePending_common_4
   EXPECT_EQ(bits, 3);
 
-  strm->state->pending = 1;
-  EXPECT_EQ(deflatePending(strm, &pending, NULL), Z_OK);  //  AOCL_Compression_zlib_deflatePending_common_5
+  deflateObj.get_stream()->state->pending = 1;
+  EXPECT_EQ(deflatePending(deflateObj.get_stream(), &pending, NULL), Z_OK);  //  AOCL_Compression_zlib_deflatePending_common_5
   EXPECT_EQ(pending, 1);
-
-  release_deflate_stream(strm);
 }
 
-TEST(ZLIB_deflatePrime, fail_cases)
+TEST(AOCL_Compression_zlib, deflatePrime_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
 
   EXPECT_EQ(deflatePrime(NULL, 3, 3), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_deflatePrime_common_1
-  EXPECT_EQ(deflatePrime(strm, 3, 3), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_deflatePrime_common_2
+  EXPECT_EQ(deflatePrime(deflateObj.get_stream(), 3, 3), Z_STREAM_ERROR);  //  AOCL_Compression_zlib_deflatePrime_common_2
+  deflateInit(deflateObj.get_stream(), 5);
+  EXPECT_EQ(deflatePrime(deflateObj.get_stream(), -1, 3), Z_BUF_ERROR);
+  EXPECT_EQ(deflatePrime(deflateObj.get_stream(), 17, 3), Z_BUF_ERROR);
 
-  deflateInit(strm, 3);
+  deflateObj.reset_deflate_stream();
+  deflateInit(deflateObj.get_stream(), 3);
   #ifdef LIT_MEM
-  strm->state->pending_out = (Bytef *)strm->state->d_buf + 10;
+  deflateObj.get_stream()->state->pending_out = (Bytef *)deflateObj.get_stream()->state->d_buf + 10;
   #else
-  strm->state->pending_out = (Bytef *)strm->state->sym_buf + 10;
+  deflateObj.get_stream()->state->pending_out = (Bytef *)deflateObj.get_stream()->state->sym_buf + 10;
   #endif
 
-  EXPECT_EQ(deflatePrime(strm, 3, 3), Z_BUF_ERROR); //  AOCL_Compression_zlib_deflatePrime_common_3
-
-  release_deflate_stream(strm);
+  EXPECT_EQ(deflatePrime(deflateObj.get_stream(), 3, 3), Z_BUF_ERROR); //  AOCL_Compression_zlib_deflatePrime_common_3
 }
 
-TEST(ZLIB_deflatePrime, pass_cases)
+TEST(AOCL_Compression_zlib, deflatePrime_common)
 {
-  z_streamp strm = get_z_stream();
-  deflateInit(strm, 3);
+  ZLIB_deflate_stream deflateObj;
+  deflateInit(deflateObj.get_stream(), 3);
 
-  strm->state->bi_buf = 0;
-  strm->state->bi_valid = 0;
-  EXPECT_EQ(deflatePrime(strm, 3, 4), Z_OK);  //  AOCL_Compression_zlib_deflatePrime_common_4
-  EXPECT_EQ(strm->state->bi_valid, 3);
-  EXPECT_EQ(strm->state->bi_buf, 4);
+  deflateObj.get_stream()->state->bi_buf = 0;
+  deflateObj.get_stream()->state->bi_valid = 0;
+  EXPECT_EQ(deflatePrime(deflateObj.get_stream(), 3, 4), Z_OK);  //  AOCL_Compression_zlib_deflatePrime_common_4
+  EXPECT_EQ(deflateObj.get_stream()->state->bi_valid, 3);
+  EXPECT_EQ(deflateObj.get_stream()->state->bi_buf, 4);
 
-  strm->state->bi_buf = 1;
-  strm->state->bi_valid = 8;
-  EXPECT_EQ(deflatePrime(strm, 8, 1), Z_OK);  //  AOCL_Compression_zlib_deflatePrime_common_5
-  EXPECT_EQ(strm->state->bi_buf, 0);
-  EXPECT_EQ(strm->state->bi_valid, 0);
-
-  release_deflate_stream(strm);
+  deflateObj.get_stream()->state->bi_buf = 1;
+  deflateObj.get_stream()->state->bi_valid = 8;
+  EXPECT_EQ(deflatePrime(deflateObj.get_stream(), 8, 1), Z_OK);  //  AOCL_Compression_zlib_deflatePrime_common_5
+  EXPECT_EQ(deflateObj.get_stream()->state->bi_buf, 0);
+  EXPECT_EQ(deflateObj.get_stream()->state->bi_valid, 0);
 }
 
-TEST(ZLIB_deflateSetHeader, fail_cases)
+TEST(AOCL_Compression_zlib, deflateSetHeader_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
   gz_header head;
 
   EXPECT_EQ(deflateSetHeader(NULL, &head), Z_STREAM_ERROR); //  AOCL_Compression_zlib_deflateSetHeader_common_1
-  EXPECT_EQ(deflateSetHeader(strm, &head), Z_STREAM_ERROR); //  AOCL_Compression_zlib_deflateSetHeader_common_2
+  EXPECT_EQ(deflateSetHeader(deflateObj.get_stream(), &head), Z_STREAM_ERROR); //  AOCL_Compression_zlib_deflateSetHeader_common_2
 
-  deflateInit(strm, 4);
-  strm->state->wrap = 1;
+  deflateInit(deflateObj.get_stream(), 4);
+  deflateObj.get_stream()->state->wrap = 1;
 
-  EXPECT_EQ(deflateSetHeader(strm, &head), Z_STREAM_ERROR); //  AOCL_Compression_zlib_deflateSetHeader_common_3
-
-  release_deflate_stream(strm);
+  EXPECT_EQ(deflateSetHeader(deflateObj.get_stream(), &head), Z_STREAM_ERROR); //  AOCL_Compression_zlib_deflateSetHeader_common_3
 }
 
-TEST(ZLIB_deflateSetHeader, pass)
+TEST(AOCL_Compression_zlib, deflateSetHeader_common)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
   gz_header head;
 
-  deflateInit(strm, 4);
-  strm->state->wrap = 2;
-  EXPECT_EQ(deflateSetHeader(strm, &head), Z_OK); //  AOCL_Compression_zlib_deflateSetHeader_common_4
-  EXPECT_EQ(strm->state->gzhead, &head);
+  deflateInit(deflateObj.get_stream(), 4);
+  deflateObj.get_stream()->state->wrap = 2;
+  EXPECT_EQ(deflateSetHeader(deflateObj.get_stream(), &head), Z_OK); //  AOCL_Compression_zlib_deflateSetHeader_common_4
+  EXPECT_EQ(deflateObj.get_stream()->state->gzhead, &head);
 
-  strm->state->gzhead = &head;
-  strm->state->wrap = 2;
-  EXPECT_EQ(deflateSetHeader(strm, NULL), Z_OK);  //  AOCL_Compression_zlib_deflateSetHeader_common_5
-  EXPECT_EQ(strm->state->gzhead,(gz_headerp) NULL);
-
-  release_deflate_stream(strm);
+  deflateObj.get_stream()->state->gzhead = &head;
+  deflateObj.get_stream()->state->wrap = 2;
+  EXPECT_EQ(deflateSetHeader(deflateObj.get_stream(), NULL), Z_OK);  //  AOCL_Compression_zlib_deflateSetHeader_common_5
+  EXPECT_EQ(deflateObj.get_stream()->state->gzhead,(gz_headerp) NULL);
 }
 
-TEST(ZLIB_deflateResetKeep, fail_cases)
+TEST_P(AOCL_Compression_zlib, deflateResetKeep_negative)
 {
-  z_streamp strm = get_z_stream();
+  ZLIB_deflate_stream deflateObj;
 
-  EXPECT_EQ(deflateResetKeep(strm), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateResetKeep_common_1
+  EXPECT_EQ(deflateResetKeep(deflateObj.get_stream()), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateResetKeep_common_1
   EXPECT_EQ(deflateResetKeep(NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_deflateResetKeep_common_2
-
-  release_deflate_stream(strm);
 }
 
-TEST(ZLIB_deflateResetKeep, pass_cases)
+TEST_P(AOCL_Compression_zlib, deflateResetKeep_common)
 {
-  z_streamp strm = get_z_stream();
-  deflateInit(strm, 3);
-  deflate_state *state = (deflate_state *)strm->state;
+  ZLIB_deflate_stream deflateObj;
+  deflateInit(deflateObj.get_stream(), 3);
+  deflate_state *state = (deflate_state *)deflateObj.get_stream()->state;
 
   // 2,1,0
   state->wrap = -2;
   state->last_flush = Z_FINISH;
 
-  EXPECT_EQ(deflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_3
+  EXPECT_EQ(deflateResetKeep(deflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_3
   EXPECT_EQ(state->wrap, 2);
   EXPECT_EQ(state->last_flush, -2);
-  EXPECT_EQ(strm->adler, 0);
+  EXPECT_EQ(deflateObj.get_stream()->adler, 0);
 
   state->wrap = 1;
   state->last_flush = Z_FINISH;
-  EXPECT_EQ(deflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_4
+  EXPECT_EQ(deflateResetKeep(deflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_4
   EXPECT_EQ(state->wrap, 1);
   EXPECT_EQ(state->last_flush, -2);
-  EXPECT_EQ(strm->adler, 1);
+  EXPECT_EQ(deflateObj.get_stream()->adler, 1);
 
   state->wrap = 0;
   state->last_flush = Z_FINISH;
-  EXPECT_EQ(deflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_5
+  EXPECT_EQ(deflateResetKeep(deflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_5
   EXPECT_EQ(state->wrap, 0);
   EXPECT_EQ(state->last_flush, -2);
-  EXPECT_EQ(strm->adler, 1);
+  EXPECT_EQ(deflateObj.get_stream()->adler, 1);
 
   state->wrap = -100;
   state->last_flush = Z_FINISH;
-  EXPECT_EQ(deflateResetKeep(strm), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_6
+  EXPECT_EQ(deflateResetKeep(deflateObj.get_stream()), Z_OK);  // AOCL_Compression_zlib_deflateResetKeep_common_6
   EXPECT_EQ(state->wrap, 100);
   EXPECT_EQ(state->last_flush, -2);
-  EXPECT_EQ(strm->adler, 1);
-
-  release_deflate_stream(strm);
+  EXPECT_EQ(deflateObj.get_stream()->adler, 1);
 }
 
+TEST(AOCL_Compression_zlib, deflate_negative)
+{
+  ZLIB_deflate_stream deflateObj;
+
+  EXPECT_EQ(deflate(NULL, Z_NO_FLUSH), Z_STREAM_ERROR);
+
+  deflateInit(deflateObj.get_stream(), 4);
+  EXPECT_EQ(deflate(deflateObj.get_stream(), -1), Z_STREAM_ERROR);
+  EXPECT_EQ(deflate(deflateObj.get_stream(), 6), Z_STREAM_ERROR);
+
+  deflateObj.get_stream()->avail_out = 0;
+  Bytef temp_buf = 0xFF;
+  deflateObj.get_stream()->next_out = &temp_buf;
+  EXPECT_EQ(deflate(deflateObj.get_stream(), Z_BLOCK), Z_BUF_ERROR);
+}
 /* Test deflate() and inflate() with small buffers */
 static z_const char hello[] = "hello, hello!";
 static const int hello_len = sizeof(hello);
 
-class ZLIB_deflate : public AOCL_setup_zlib {
-};
-
-TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_1) {
+void deflate_small_buffers_(int level)
+{
     z_stream c_strm, d_strm;
     uint8_t compr[128], uncompr[128];
     z_size_t compr_len = sizeof(compr), uncompr_len = sizeof(uncompr);
@@ -723,7 +636,7 @@ TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_1) {
     memset(&c_strm, 0, sizeof(c_strm));
     memset(&d_strm, 0, sizeof(d_strm));
 
-    EXPECT_EQ(deflateInit(&c_strm, 1), Z_OK);
+    EXPECT_EQ(deflateInit(&c_strm, level), Z_OK);
 
     c_strm.next_in  = (z_const unsigned char *)hello;
     c_strm.next_out = compr;
@@ -761,98 +674,11 @@ TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_1) {
     EXPECT_STREQ((char*)uncompr, hello);
 }
 
-TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_2) {
-    z_stream c_strm, d_strm;
-    uint8_t compr[128], uncompr[128];
-    z_size_t compr_len = sizeof(compr), uncompr_len = sizeof(uncompr);
-    int err;
-
-    memset(&c_strm, 0, sizeof(c_strm));
-    memset(&d_strm, 0, sizeof(d_strm));
-
-    EXPECT_EQ(deflateInit(&c_strm, Z_DEFAULT_COMPRESSION), Z_OK);
-
-    c_strm.next_in  = (z_const unsigned char *)hello;
-    c_strm.next_out = compr;
-
-    while (c_strm.total_in != hello_len && c_strm.total_out < compr_len) {
-        c_strm.avail_in = c_strm.avail_out = 1; /* force small buffers */
-        EXPECT_EQ(deflate(&c_strm, Z_NO_FLUSH), Z_OK);
-    }
-    /* Finish the stream, still forcing small buffers */
-    for (;;) {
-        c_strm.avail_out = 1;
-        err = deflate(&c_strm, Z_FINISH);
-        if (err == Z_STREAM_END) break;
-        EXPECT_EQ(err, Z_OK);
-    }
-
-    EXPECT_EQ(deflateEnd(&c_strm), Z_OK);
-
-    strcpy((char*)uncompr, "garbage");
-
-    d_strm.next_in  = compr;
-    d_strm.next_out = uncompr;
-
-    EXPECT_EQ(inflateInit(&d_strm), Z_OK);
-
-    while (d_strm.total_out < uncompr_len && d_strm.total_in < compr_len) {
-        d_strm.avail_in = d_strm.avail_out = 1; /* force small buffers */
-        err = inflate(&d_strm, Z_NO_FLUSH);
-        if (err == Z_STREAM_END) break;
-        EXPECT_EQ(err, Z_OK);
-    }
-
-    EXPECT_EQ(inflateEnd(&d_strm), Z_OK);
-
-    EXPECT_STREQ((char*)uncompr, hello);
-}
-
-TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_3) {
-    z_stream c_strm, d_strm;
-    uint8_t compr[128], uncompr[128];
-    z_size_t compr_len = sizeof(compr), uncompr_len = sizeof(uncompr);
-    int err;
-
-    memset(&c_strm, 0, sizeof(c_strm));
-    memset(&d_strm, 0, sizeof(d_strm));
-
-    EXPECT_EQ(deflateInit(&c_strm, 9), Z_OK);
-
-    c_strm.next_in  = (z_const unsigned char *)hello;
-    c_strm.next_out = compr;
-
-    while (c_strm.total_in != hello_len && c_strm.total_out < compr_len) {
-        c_strm.avail_in = c_strm.avail_out = 1; /* force small buffers */
-        EXPECT_EQ(deflate(&c_strm, Z_NO_FLUSH), Z_OK);
-    }
-    /* Finish the stream, still forcing small buffers */
-    for (;;) {
-        c_strm.avail_out = 1;
-        err = deflate(&c_strm, Z_FINISH);
-        if (err == Z_STREAM_END) break;
-        EXPECT_EQ(err, Z_OK);
-    }
-
-    EXPECT_EQ(deflateEnd(&c_strm), Z_OK);
-
-    strcpy((char*)uncompr, "garbage");
-
-    d_strm.next_in  = compr;
-    d_strm.next_out = uncompr;
-
-    EXPECT_EQ(inflateInit(&d_strm), Z_OK);
-
-    while (d_strm.total_out < uncompr_len && d_strm.total_in < compr_len) {
-        d_strm.avail_in = d_strm.avail_out = 1; /* force small buffers */
-        err = inflate(&d_strm, Z_NO_FLUSH);
-        if (err == Z_STREAM_END) break;
-        EXPECT_EQ(err, Z_OK);
-    }
-
-    EXPECT_EQ(inflateEnd(&d_strm), Z_OK);
-
-    EXPECT_STREQ((char*)uncompr, hello);
+TEST_P(AOCL_Compression_zlib, deflate_small_buffers)
+{
+    deflate_small_buffers_(1); // validate level 1
+    deflate_small_buffers_(Z_DEFAULT_COMPRESSION); // validate level 6
+    deflate_small_buffers_(9); // validate level 9
 }
 
 /* Test deflate() and inflate() with large buffers */
@@ -860,9 +686,9 @@ TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_small_buffers_3) {
 #define UNCOMPR_BUFFER_SIZE (32 * 1024)
 #define UNCOMPR_RAND_SIZE (8 * 1024)
 
-TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_1)
+void deflate_large_buffers_(int level)
 {
-    z_stream c_strm, d_strm;
+  z_stream c_strm, d_strm;
     uint8_t *compr, *uncompr;
     uint32_t compr_len, uncompr_len;
     int32_t i;
@@ -884,7 +710,7 @@ TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_1)
     for (i = 0; i < UNCOMPR_RAND_SIZE; i++)
         uncompr[i] = (uint8_t)(rand() % 256);
 
-    EXPECT_EQ(deflateInit(&c_strm, 1), Z_OK);
+    EXPECT_EQ(deflateInit(&c_strm, level), Z_OK);
 
     c_strm.next_out = compr;
     c_strm.avail_out = compr_len;
@@ -921,131 +747,34 @@ TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_1)
     compr = uncompr = nullptr;
 }
 
-TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_2)
+TEST_P(AOCL_Compression_zlib, deflate_large_buffers)
 {
-    z_stream c_strm, d_strm;
-    uint8_t *compr, *uncompr;
-    uint32_t compr_len, uncompr_len;
-    int32_t i;
-    time_t now;
-    int err;
-
-    memset(&c_strm, 0, sizeof(c_strm));
-    memset(&d_strm, 0, sizeof(d_strm));
-
-    compr = (uint8_t *)calloc(1, COMPR_BUFFER_SIZE);
-    ASSERT_TRUE(compr != NULL);
-    uncompr = (uint8_t *)calloc(1, UNCOMPR_BUFFER_SIZE);
-    ASSERT_TRUE(uncompr != NULL);
-
-    compr_len = COMPR_BUFFER_SIZE;
-    uncompr_len = UNCOMPR_BUFFER_SIZE;
-
-    srand((unsigned)time(&now));
-    for (i = 0; i < UNCOMPR_RAND_SIZE; i++)
-        uncompr[i] = (uint8_t)(rand() % 256);
-
-    EXPECT_EQ(deflateInit(&c_strm, Z_DEFAULT_COMPRESSION), Z_OK);
-
-    c_strm.next_out = compr;
-    c_strm.avail_out = compr_len;
-    c_strm.next_in = uncompr;
-    c_strm.avail_in = uncompr_len;
-
-    EXPECT_EQ(deflate(&c_strm, Z_NO_FLUSH), Z_OK);
-    EXPECT_EQ(c_strm.avail_in, 0);
-
-    EXPECT_EQ(deflate(&c_strm, Z_FINISH), Z_STREAM_END);
-
-    EXPECT_EQ(deflateEnd(&c_strm), Z_OK);
-
-    d_strm.next_in  = compr;
-    d_strm.avail_in = compr_len;
-    d_strm.next_out = uncompr;
-
-    EXPECT_EQ(inflateInit(&d_strm), Z_OK);
-
-    for (;;) {
-        d_strm.next_out = uncompr;            /* discard the output */
-        d_strm.avail_out = uncompr_len;
-        err = inflate(&d_strm, Z_NO_FLUSH);
-        if (err == Z_STREAM_END) break;
-        EXPECT_EQ(err, Z_OK);
-    }
-
-    EXPECT_EQ(inflateEnd(&d_strm), Z_OK);
-
-    EXPECT_EQ(d_strm.total_out, uncompr_len);
-
-    free(compr);
-    free(uncompr);
-    compr = uncompr = nullptr;
+    deflate_large_buffers_(1); // validate level 1
+    deflate_large_buffers_(Z_DEFAULT_COMPRESSION); // validate level 6
+    deflate_large_buffers_(9); // validate level 9
 }
 
-TEST_F(ZLIB_deflate, AOCL_Compression_zlib_deflate_large_buffers_3)
+#if defined(AOCL_ZLIB_DEFLATE_FAST_MODE) && defined(AOCL_INTERNAL_TEST)
+#define MAX_SEARCH_DIST 32768 // refer deflate_quick.c
+extern z_const unsigned quick_dist_codes[MAX_SEARCH_DIST];
+extern z_const ct_data static_dtree[D_CODES];
+extern const int extra_dbits[D_CODES];
+extern const int base_dist[D_CODES];
+
+TEST(AOCL_Compression_zlib, deflate_quick_dist_code_verify)
 {
-    z_stream c_strm, d_strm;
-    uint8_t *compr, *uncompr;
-    uint32_t compr_len, uncompr_len;
-    int32_t i;
-    time_t now;
-    int err;
-
-    memset(&c_strm, 0, sizeof(c_strm));
-    memset(&d_strm, 0, sizeof(d_strm));
-
-    compr = (uint8_t *)calloc(1, COMPR_BUFFER_SIZE);
-    ASSERT_TRUE(compr != NULL);
-    uncompr = (uint8_t *)calloc(1, UNCOMPR_BUFFER_SIZE);
-    ASSERT_TRUE(uncompr != NULL);
-
-    compr_len = COMPR_BUFFER_SIZE;
-    uncompr_len = UNCOMPR_BUFFER_SIZE;
-
-    srand((unsigned)time(&now));
-    for (i = 0; i < UNCOMPR_RAND_SIZE; i++)
-        uncompr[i] = (uint8_t)(rand() % 256);
-
-    EXPECT_EQ(deflateInit(&c_strm, 9), Z_OK);
-
-    c_strm.next_out = compr;
-    c_strm.avail_out = compr_len;
-    c_strm.next_in = uncompr;
-    c_strm.avail_in = uncompr_len;
-
-    EXPECT_EQ(deflate(&c_strm, Z_NO_FLUSH), Z_OK);
-    EXPECT_EQ(c_strm.avail_in, 0);
-
-    EXPECT_EQ(deflate(&c_strm, Z_FINISH), Z_STREAM_END);
-
-    EXPECT_EQ(deflateEnd(&c_strm), Z_OK);
-
-    d_strm.next_in  = compr;
-    d_strm.avail_in = compr_len;
-    d_strm.next_out = uncompr;
-
-    EXPECT_EQ(inflateInit(&d_strm), Z_OK);
-
-    for (;;) {
-        d_strm.next_out = uncompr;            /* discard the output */
-        d_strm.avail_out = uncompr_len;
-        err = inflate(&d_strm, Z_NO_FLUSH);
-        if (err == Z_STREAM_END) break;
-        EXPECT_EQ(err, Z_OK);
-    }
-
-    EXPECT_EQ(inflateEnd(&d_strm), Z_OK);
-
-    EXPECT_EQ(d_strm.total_out, uncompr_len);
-
-    free(compr);
-    free(uncompr);
-    compr = uncompr = nullptr;
+  unsigned value = 0;
+  for(unsigned i = 0; i < MAX_SEARCH_DIST; i++)
+  {
+    value = d_code(i);
+    value = ( static_dtree[value].fc.code << 8 ) | ( static_dtree[value].dl.len + extra_dbits[value] ) | ( (i - base_dist[value]) << 13);
+    EXPECT_EQ(quick_dist_codes[i], value);
+  }
 }
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE && AOCL_INTERNAL_TEST */
 
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
-TEST(ZLIB_deflate_quick, AOCL_Compression_zlib_defqck_dist_code_verify)
-{
-  EXPECT_EQ(Test_quick_dist_code(),0);
-}
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
+
+INSTANTIATE_TEST_SUITE_P(
+    AOCL_Compression_zlib_Parameterized_Tests, AOCL_Compression_zlib,
+    ::testing::ValuesIn(get_supported_optlevels())
+);

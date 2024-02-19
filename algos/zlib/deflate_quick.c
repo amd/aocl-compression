@@ -21,7 +21,11 @@ extern void AOCL_bi_windup(deflate_state *s);
 #endif
 
 local z_const unsigned quick_len_codes[MAX_MATCH-MIN_MATCH+1];
+#ifdef AOCL_UNIT_TEST
+z_const ZLIB_INTERNAL unsigned quick_dist_codes[MAX_SEARCH_DIST];
+#else
 local z_const unsigned quick_dist_codes[MAX_SEARCH_DIST];
+#endif /* AOCL_UNIT_TEST */
 
 
 local inline void quick_send_bits(deflate_state *z_const s, z_const int value,
@@ -236,8 +240,11 @@ local z_const unsigned quick_len_codes[MAX_MATCH-MIN_MATCH+1] = {
 	0x0018230d, 0x0019230d, 0x001a230d, 0x001b230d,
 	0x001c230d, 0x001d230d, 0x001e230d, 0x0000a308,
 };
-
+#ifdef AOCL_UNIT_TEST
+z_const ZLIB_INTERNAL unsigned quick_dist_codes[MAX_SEARCH_DIST] = {
+#else
 local z_const unsigned quick_dist_codes[MAX_SEARCH_DIST] = {
+#endif /* AOCL_UNIT_TEST */
 	0x00000005, 0x00001005, 0x00000805, 0x00001805,
 	0x00000406, 0x00002406, 0x00001406, 0x00003406,
 	0x00000c07, 0x00002c07, 0x00004c07, 0x00006c07,
@@ -8432,24 +8439,4 @@ local z_const unsigned quick_dist_codes[MAX_SEARCH_DIST] = {
 	0x3ff9712, 0x3ffb712, 0x3ffd712, 0x3fff712, 
 };
 
-#ifdef AOCL_UNIT_TEST
-#include "aocl_zlib_test.h"
-extern z_const ct_data static_dtree[D_CODES];
-extern const int extra_dbits[D_CODES];
-extern const int base_dist[D_CODES];
-
-uint32_t ZEXPORT Test_quick_dist_code(void)
-{
-	unsigned value = 0;
-	for(unsigned i = 0; i < MAX_SEARCH_DIST; i++)
-	{
-		value = d_code(i);
-		value = ( static_dtree[value].fc.code << 8 ) | ( static_dtree[value].dl.len + extra_dbits[value] ) | ( (i - base_dist[value]) << 13);
-		if(quick_dist_codes[i] != value)
-			return 1;
-	}
-	return 0;
-}
-#endif /* AOCL_UNIT_TEST */
 #endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
-

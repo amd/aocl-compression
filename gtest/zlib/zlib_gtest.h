@@ -35,63 +35,108 @@
  *
  *  @author Ravi Jangra
  */
+
+#ifndef _ZLIB_GTEST_H_
+#define _ZLIB_GTEST_H_
+
 #include <string>
 
+#include "utils/utils.h" // Note: include this before deflate.h
 #include "algos/zlib/zlib.h"
 #include "algos/zlib/zutil.h"
 #include "algos/zlib/inftrees.h"
 #include "algos/zlib/inflate.h"
 #include "algos/zlib/deflate.h"
-#include "algos/zlib/aocl_zlib_test.h"
 #include "algos/zlib/aocl_send_bits.h"
 #include "api/aocl_compression.h"
 #include "gtest/gtest.h"
 
 using namespace std;
 
-#define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
-
 #define MIN(a,b)    ( (a) < (b) ? (a) : (b) )
 
-/* This base class can be used for all fixtures
-* that require dynamic dispatcher setup */
-class AOCL_setup_zlib : public ::testing::Test {
-public:
-    AOCL_setup_zlib() {
-        int optLevel = DEFAULT_OPT_LEVEL;
-        aocl_setup_zlib(0, optLevel, 0, 0, 0);
+// class for running same gtest for different optimization levels
+class AOCL_Compression_zlib : public ::testing::TestWithParam<int> {
+    void SetUp() override{
+        aocl_setup_zlib(0, (int)GetParam(), 0, 0, 0);
+    }
+
+    void TearDown() override {
+        aocl_destroy_zlib();
     }
 };
 
-// This is for creating a new z_stream data type
-static z_streamp get_z_stream(void)
-{
-  z_streamp s = new z_stream;
-  memset(s, 0, sizeof(z_stream));
+// base class for ZLIB stream management
+class ZLIB_stream {
+  protected:
+    z_streamp s = nullptr;
 
-  return s;
-}
+    void generate_zstream(void) {
+      s = new z_stream;
+      memset(s, 0, sizeof(z_stream));
+    }
 
-// This is to free z_stream
-static void release_z_stream(z_streamp &s)
-{
-    if(s != nullptr)
-      delete s;
-    s = nullptr;
-}
+    void release_zstream(void) {
+      if(s != nullptr)
+        delete s;
+      s = nullptr;
+    }
 
-// This releases memory that is dynamically allocated for deflate pointers
-static void release_deflate_stream(z_streamp &ds)
-{
-  deflateEnd(ds);
-  release_z_stream(ds);
-}
+    void reset_zstream(void) {
+      release_zstream();
+      generate_zstream();
+    }
 
-// This releases memory that is dynamically allocated pointers
-static void release_inflate_stream(z_streamp &is)
-{
-  inflateEnd(is);
-  release_z_stream(is);
+  public:
+    ZLIB_stream(void) {
+      generate_zstream();
+    }
+
+    virtual ~ZLIB_stream(void) {
+      release_zstream();
+    }
+
+    z_streamp get_stream(void) {
+      return s;
+    }
+
+};
+
+// concrete classe for ZLIB stream management for deflate
+class ZLIB_deflate_stream : public ZLIB_stream {
+  public:
+    ~ZLIB_deflate_stream(void) {
+      deflateEnd(get_stream());
+    }
+
+    void reset_deflate_stream(void) {
+      deflateEnd(get_stream());
+      reset_zstream();
+    }
+};
+
+// concrete classe for ZLIB stream management for inflate
+class ZLIB_inflate_stream : public ZLIB_stream {
+  public:
+    ~ZLIB_inflate_stream(void) {
+      inflateEnd(get_stream());
+    }
+
+    void reset_inflate_stream(void) {
+      inflateEnd(get_stream());
+      reset_zstream();
+    }
+};
+
+// returns list of supported optimization levels
+static vector<int> get_supported_optlevels(void) {
+    vector<int> optlevels;
+    int highest_supported_level = get_cpu_opt_flags(0);
+    while(highest_supported_level >= 0) {
+        optlevels.push_back(highest_supported_level);
+        highest_supported_level--;
+    }
+    return optlevels;
 }
 
 // comparision of two different data types
@@ -143,3 +188,9 @@ static int prepare_deflate_stream(z_stream *ds, Bytef *dest, uLongf *destLen, co
 
   return Z_OK;
 }
+
+static void* alloc_null(void* opaque, uInt items, uInt size)
+{
+  return nullptr;
+}
+#endif /* _ZLIB_GTEST_H_ */

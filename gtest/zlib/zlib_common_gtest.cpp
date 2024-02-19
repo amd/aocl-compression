@@ -38,39 +38,13 @@
 
 #include "zlib_gtest.h"
 
-#ifdef AOCL_ZLIB_OPT
-#ifdef __cplusplus
-extern "C" {
-    extern void AOCL_bi_flush(deflate_state* s);
-    extern void AOCL_bi_windup(deflate_state* s);
-}
-#endif
-#endif
-
-TEST(ZLIB_zlibVersion, basic)
+TEST(AOCL_Compression_zlib, zlibVersion_common)
 {
   EXPECT_STREQ(zlibVersion(), ZLIB_VERSION);  // AOCL_compressBoundion_zlib_zlibVersion_common_1
 }
 
-TEST(ZLIB_deflateInit, Z_OK_)
-{
-  z_streamp zp = get_z_stream();
-
-  EXPECT_EQ(deflateInit(zp, 0), Z_OK);  // AOCL_Compression_zlib_deflateInit_common_1
-
-  release_deflate_stream(zp);
-  zp = get_z_stream();
-  EXPECT_EQ(deflateInit(zp, -1), Z_OK); // AOCL_Compression_zlib_deflateInit_common_2
-
-  release_deflate_stream(zp);
-  zp = get_z_stream();
-  EXPECT_EQ(deflateInit(zp, 9), Z_OK);  // AOCL_Compression_zlib_deflateInit_common_3
-
-  release_deflate_stream(zp);
-}
-
 #ifndef AOCL_ENABLE_THREADS
-TEST(ZLIB_compressBound, basic)
+TEST(AOCL_Compression_zlib, compressBound_common)
 {
   EXPECT_EQ(compressBound(0), 13);  // AOCL_compression_zlib_compressBound_common_1
   EXPECT_EQ(compressBound(1 << 13), 8207);  // AOCL_compression_zlib_compressBound_common_2
@@ -79,10 +53,7 @@ TEST(ZLIB_compressBound, basic)
 }
 #endif
 
-class ZLIB_compress : public AOCL_setup_zlib {
-};
-
-TEST_F(ZLIB_compress, fail_cases)
+TEST_P(AOCL_Compression_zlib, compress_negative)
 {
   unsigned long destLen = compressBound(11);
   char c[11] = "helloWorld";
@@ -104,15 +75,14 @@ TEST_F(ZLIB_compress, fail_cases)
   dest = nullptr;
 }
 
-TEST_F(ZLIB_compress, pass)
+TEST_P(AOCL_Compression_zlib, compress_common)
 {
   uLong srcLen = 11;
   char c[11] = "helloWorld";
 
-  uLong destLen = compressBound(11);
-  const uLong uncompressAlloc = 100;
-  uLong uncompressLen = uncompressAlloc;
-  Bytef uncompressed[uncompressAlloc];
+  uLong destLen = compressBound(srcLen);
+  uLong uncompressLen = srcLen;
+  Bytef uncompressed[uncompressLen];
   Bytef *src = (Bytef *)c;
   Bytef* dest = (Bytef*)malloc(destLen * sizeof(Bytef));
 
@@ -124,15 +94,14 @@ TEST_F(ZLIB_compress, pass)
   dest = nullptr;
 }
 
-TEST_F(ZLIB_compress, pass2)
+TEST_P(AOCL_Compression_zlib, compress_boundary)
 {
   char c[11] = "";
   uLong srcLen = 1;
   
-  uLong destLen = compressBound(11);
-  const uLong uncompressAlloc = 100;
-  uLong uncompressLen = uncompressAlloc;
-  Bytef uncompressed[uncompressAlloc];
+  uLong destLen = compressBound(srcLen);
+  uLong uncompressLen = srcLen;
+  Bytef uncompressed[uncompressLen];
   Bytef* src = (Bytef*)c;
   Bytef* dest = (Bytef*)malloc(destLen * sizeof(Bytef));
 
@@ -144,41 +113,41 @@ TEST_F(ZLIB_compress, pass2)
   dest = nullptr;
 }
 
-class ZLIB_compress2 : public AOCL_setup_zlib {
-};
-
-TEST_F(ZLIB_compress2, fail_cases)
+TEST_P(AOCL_Compression_zlib, compress2_negative)
 {
   const uLong srcLen = 10;
   Bytef src[srcLen + 1] = "helloWorld";
   unsigned long destLen = compressBound(srcLen);
   Bytef* dest = (Bytef*)malloc(destLen * sizeof(destLen));
+  int invalid_clevels[2] = {-2, 23};
+  int valid_clevel = 6;
+  int invalid_srcLen = 0;
+
 
 #ifdef AOCL_ENABLE_THREADS
-  EXPECT_EQ(compress2(NULL, &destLen, src, srcLen, 6), Z_MEM_ERROR); // AOCL_Compression_zlib_compress2_common_1
+  EXPECT_EQ(compress2(NULL, &destLen, src, srcLen, valid_clevel), Z_MEM_ERROR); // AOCL_Compression_zlib_compress2_common_1
 #else
-  EXPECT_EQ(compress2(NULL, &destLen, src, srcLen, 6), Z_STREAM_ERROR); // AOCL_Compression_zlib_compress2_common_1
+  EXPECT_EQ(compress2(NULL, &destLen, src, srcLen, valid_clevel), Z_STREAM_ERROR); // AOCL_Compression_zlib_compress2_common_1
 #endif
-  EXPECT_EQ(compress2(dest,NULL,src,srcLen,6),Z_BUF_ERROR); // AOCL_Compression_zlib_compress2_common_2
-  EXPECT_EQ(compress2(dest, &destLen, NULL, srcLen, 6), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_3
-  EXPECT_EQ(compress2(dest, &destLen, src, srcLen, -2), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_4
-  EXPECT_EQ(compress2(dest, &destLen, src, srcLen, 23), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_5
-  EXPECT_EQ(compress2(dest, &destLen, src, 0, 6), Z_BUF_ERROR); // AOCL_Compression_zlib_compress2_common_6
-  destLen = 3;
-  EXPECT_EQ(compress2(dest, &destLen, src, srcLen, 6), Z_BUF_ERROR);  // AOCL_Compression_zlib_compress2_common_7
+  EXPECT_EQ(compress2(dest, NULL, src, srcLen, valid_clevel),Z_BUF_ERROR); // AOCL_Compression_zlib_compress2_common_2
+  EXPECT_EQ(compress2(dest, &destLen, NULL, srcLen, valid_clevel), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_3
+  EXPECT_EQ(compress2(dest, &destLen, src, srcLen, invalid_clevels[0]), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_4
+  EXPECT_EQ(compress2(dest, &destLen, src, srcLen, invalid_clevels[1]), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_5
+  EXPECT_EQ(compress2(dest, &destLen, src, invalid_srcLen, valid_clevel), Z_BUF_ERROR); // AOCL_Compression_zlib_compress2_common_6
+  destLen = 3; // not enough output buffer
+  EXPECT_EQ(compress2(dest, &destLen, src, srcLen, valid_clevel), Z_BUF_ERROR);  // AOCL_Compression_zlib_compress2_common_7
   free(dest);
   dest = nullptr;
 }
 
-TEST_F(ZLIB_compress2, pass)
+TEST_P(AOCL_Compression_zlib, compress2_common)
 {
   uLong srcLen = 11;
   char c[11] = "helloWorld";
 
-  unsigned long destLen = compressBound(11);
-  const uLong uncompressAlloc = 100;
-  uLong uncompressLen = uncompressAlloc;
-  Bytef uncompressed[uncompressAlloc];
+  unsigned long destLen = compressBound(srcLen);
+  uLong uncompressLen = srcLen;
+  Bytef uncompressed[uncompressLen];
   Bytef *src = (Bytef *)c;
   Bytef* dest = (Bytef*)malloc(destLen * sizeof(Bytef));
 
@@ -190,15 +159,14 @@ TEST_F(ZLIB_compress2, pass)
   dest = nullptr;
 }
 
-TEST_F(ZLIB_compress2, pass2)
+TEST_P(AOCL_Compression_zlib, compress2_boundary)
 {
   uLong srcLen = 1;
   char c[11] = "";
   
-  unsigned long destLen = compressBound(11);
-  const uLong uncompressAlloc = 100;
-  uLong uncompressLen = uncompressAlloc;
-  Bytef uncompressed[uncompressAlloc];
+  unsigned long destLen = compressBound(srcLen);
+  uLong uncompressLen = srcLen;
+  Bytef uncompressed[uncompressLen];
   Bytef* src = (Bytef*)c;
   Bytef* dest = (Bytef*)malloc(destLen * sizeof(Bytef));
 
@@ -210,29 +178,24 @@ TEST_F(ZLIB_compress2, pass2)
   dest = nullptr;
 }
 
-class ZLIB_uncompress2 : public AOCL_setup_zlib {
-};
-
-TEST_F(ZLIB_uncompress2, fail_cases)
+TEST_P(AOCL_Compression_zlib, uncompress2_negative)
 {
   string source = "helloWorld";
-  const uLong compressedAlloc = 100;
-  uLong compressedLen = compressedAlloc;
-  Bytef compressed[compressedAlloc];
+  uLong compressedLen = compressBound(source.length());
+  Bytef compressed[compressedLen];
   compress(compressed, &compressedLen, (Bytef *)source.data(), source.size());
 
-  const uLong uncompressAlloc = 100;
-  uLong uncompressLen = uncompressAlloc;
-  Bytef uncompressed[uncompressAlloc];
+  uLong uncompressLen = source.length();
+  Bytef uncompressed[uncompressLen];
   int temp = compressedLen;
-  compressedLen = 3;
+  compressedLen = 3; // partial compressed buffer
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_1
   compressedLen = temp;
   Bytef t = compressed[3];
-  compressed[3] = 4;
+  compressed[3] = 4; // compressed buffer invalid modification
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_2
   compressed[3] = t;
-  uncompressLen = 3;
+  uncompressLen = 3; // insufficient output buffer size
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_3
   EXPECT_EQ(uncompress2(NULL, &uncompressLen, compressed, &compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_4
   EXPECT_EQ(uncompress2(uncompressed,NULL,compressed,&compressedLen),Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_5
@@ -244,35 +207,28 @@ TEST_F(ZLIB_uncompress2, fail_cases)
   EXPECT_EQ(uncompress2(uncompressed,&uncompressLen,compressed,NULL),Z_BUF_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
 }
 
-TEST_F(ZLIB_uncompress2, pass)
+TEST_P(AOCL_Compression_zlib, uncompress2_common)
 {
   string source = "helloWorld";
-  const uLong compressedAlloc = 100;
-  uLong compressedLen = compressedAlloc;
-  Bytef compressed[compressedAlloc];
+  uLong compressedLen = compressBound(source.length());
+  Bytef compressed[compressedLen];
   compress(compressed, &compressedLen, (Bytef *)source.data(), source.size());
-  const uLong uncompressAlloc = 100;
-  uLong uncompressLen = uncompressAlloc;
-  Bytef uncompressed[uncompressAlloc];
+  uLong uncompressLen = source.length();
+  Bytef uncompressed[uncompressLen];
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_OK);  // AOCL_Compression_zlib_uncompress2_common_8
   EXPECT_EQ(uncompressLen, source.size());
   EXPECT_TRUE(cmpr(source.data(), (char *)uncompressed, source.size()));
 }
 
-class ZLIB_uncompress : public AOCL_setup_zlib {
-};
-
-TEST_F(ZLIB_uncompress, fail_cases)
+TEST_P(AOCL_Compression_zlib, uncompress_negative)
 {
   string source = "helloWorld";
-  const uLong compressedAlloc = 100;
-  uLong compressedLen = compressedAlloc;
-  Bytef compressed[compressedAlloc];
+  uLong compressedLen = compressBound(source.length());
+  Bytef compressed[compressedLen];
   compress(compressed, &compressedLen, (Bytef *)source.data(), source.size());
 
-  const uLong uncompressAlloc = 100;
-  uLong uncompressLen = uncompressAlloc;
-  Bytef uncompressed[uncompressAlloc];
+  uLong uncompressLen = source.length();
+  Bytef uncompressed[uncompressLen];
   int temp = compressedLen;
   compressedLen = 3;
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress_common_1
@@ -293,25 +249,23 @@ TEST_F(ZLIB_uncompress, fail_cases)
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, 0), Z_DATA_ERROR); // AOCL_Compression_zlib_uncompress_common_7
 }
 
-TEST_F(ZLIB_uncompress, pass)
+TEST_P(AOCL_Compression_zlib, uncompress_common)
 {
   string source = "helloWorld";
-  const uLong compressedAlloc = 100;
-  uLong compressedLen = compressedAlloc;
-  Bytef compressed[compressedAlloc];
+  uLong compressedLen = compressBound(source.length());
+  Bytef compressed[compressedLen];
   compress(compressed, &compressedLen, (Bytef *)source.data(), source.size());
-  const uLong uncompressAlloc = 100;
-  uLong uncompressLen = uncompressAlloc;
-  Bytef uncompressed[uncompressAlloc];
+  uLong uncompressLen = source.length();
+  Bytef uncompressed[uncompressLen];
 
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_OK);  // AOCL_Compression_zlib_uncompress_common_8
   EXPECT_EQ(uncompressLen, source.size());
   EXPECT_TRUE(cmpr(source.data(), (char *)uncompressed, source.size()));
 }
 
-TEST(ZLIB_adler32_z, all_cases)
+TEST(AOCL_Compression_zlib, adler32_z_common)
 {
-  size_t len = 5552;
+  size_t len = UINT32_MAX;
   Bytef *buf = (Bytef *)malloc(len);
   for (size_t i = 0; i < len; i++)
   {
@@ -320,7 +274,7 @@ TEST(ZLIB_adler32_z, all_cases)
 
   uLong adler = 1 << 16;
   len = 10;
-  EXPECT_EQ(adler32_z(adler, buf, len), 695732091); // AOCL_Compression_zlib_adler32_z_common_1
+  EXPECT_EQ(adler32_z(adler, buf, len), 904792511); // AOCL_Compression_zlib_adler32_z_common_1
 
   adler = 0;
   len = 10;
@@ -328,24 +282,30 @@ TEST(ZLIB_adler32_z, all_cases)
 
   adler = ((uLong)1L << 31) - 1;
   len = 1;
-  EXPECT_EQ(adler32_z(adler, buf, len), 2161180882);  // AOCL_Compression_zlib_adler32_z_common_3
+  EXPECT_EQ(adler32_z(adler, buf, len), 2164982028);  // AOCL_Compression_zlib_adler32_z_common_3
 
   len = 10;
-  EXPECT_EQ(adler32_z(adler, buf, len), 2852259721);  // AOCL_Compression_zlib_adler32_z_common_4
+  EXPECT_EQ(adler32_z(adler, buf, len), 3061320141);  // AOCL_Compression_zlib_adler32_z_common_4
 
   len = 19;
-  EXPECT_EQ(adler32_z(adler, buf, len), 236719599); // AOCL_Compression_zlib_adler32_z_common_5
+  EXPECT_EQ(adler32_z(adler, buf, len), 958927421); // AOCL_Compression_zlib_adler32_z_common_5
 
   len = 5552;
-  EXPECT_EQ(adler32_z(adler, buf, len), 71412899);  // AOCL_Compression_zlib_adler32_z_common_6
+  EXPECT_EQ(adler32_z(adler, buf, len), 866048325);  // AOCL_Compression_zlib_adler32_z_common_6
+
+  len = 0;
+  EXPECT_EQ(adler32_z(adler, buf, len), 2147418126);
+
+  len = UINT32_MAX;
+  EXPECT_EQ(adler32_z(adler, buf, len), 2512482094);
 
   free(buf);
   buf = nullptr;
 }
 
-TEST(ZLIB_adler32, all_cases)
+TEST(AOCL_Compression_zlib, adler32_common)
 {
-  size_t len = 5552;
+  size_t len = UINT32_MAX;
   Bytef *buf = (Bytef *)malloc(len);
   for (size_t i = 0; i < len; i++)
   {
@@ -354,7 +314,7 @@ TEST(ZLIB_adler32, all_cases)
 
   uLong adler = 1 << 16;
   len = 10;
-  EXPECT_EQ(adler32(adler, buf, len), 695732091); // AOCL_Compression_zlib_adler32_common_1
+  EXPECT_EQ(adler32(adler, buf, len), 904792511); // AOCL_Compression_zlib_adler32_common_1
 
   adler = 0;
   len = 10;
@@ -362,61 +322,128 @@ TEST(ZLIB_adler32, all_cases)
 
   adler = ((uLong)1L << 31) - 1;
   len = 1;
-  EXPECT_EQ(adler32(adler, buf, len), 2161180882);  // AOCL_Compression_zlib_adler32_common_3
+  EXPECT_EQ(adler32(adler, buf, len), 2164982028);  // AOCL_Compression_zlib_adler32_common_3
 
   len = 10;
-  EXPECT_EQ(adler32(adler, buf, len), 2852259721);  // AOCL_Compression_zlib_adler32_common_4
+  EXPECT_EQ(adler32(adler, buf, len), 3061320141);  // AOCL_Compression_zlib_adler32_common_4
 
   len = 19;
-  EXPECT_EQ(adler32(adler, buf, len), 236719599); // AOCL_Compression_zlib_adler32_common_5
+  EXPECT_EQ(adler32(adler, buf, len), 958927421); // AOCL_Compression_zlib_adler32_common_5
 
   len = 5552;
-  EXPECT_EQ(adler32(adler, buf, len), 71412899);  // AOCL_Compression_zlib_adler32_common_6
+  EXPECT_EQ(adler32(adler, buf, len), 866048325);  // AOCL_Compression_zlib_adler32_common_6
+
+  len = 0;
+  EXPECT_EQ(adler32(adler, buf, len), 2147418126);
+
+  len = UINT32_MAX;
+  EXPECT_EQ(adler32(adler, buf, len), 2512482094);
 
   free(buf);
   buf = nullptr;
 }
 
-TEST(ZLIB_adler32_combine, all_cases)
+TEST(AOCL_Compression_zlib, adler32_combine_common)
 {
   EXPECT_EQ(adler32_combine( 1, 0, 30), 0); // AOCL_Compression_zlib_adler32_combine_common_1
   EXPECT_EQ(adler32_combine( 1 << 31, 1 << 30, 1 << 30), 4291100656); // AOCL_Compression_zlib_adler32_combine_common_2
+  EXPECT_EQ(adler32_combine( 1 << 31, 1 << 30, -1), 0xffffffffUL);
+
+  size_t len = UINT32_MAX;
+  Bytef *buf = (Bytef *)malloc(len);
+  for (size_t i = 0; i < len; i++)
+  {
+    buf[len - i - 1] = i % 255;
+  }
+
+  EXPECT_EQ(adler32_combine(adler32(1, buf, 255), adler32(1, buf + 255, 1000), 1000), adler32(1, buf, 1255));
+
+  free(buf);
+  buf = nullptr;
 }
 
-TEST(ZLIB_crc32_combine, all_cases)
+TEST(AOCL_Compression_zlib, crc32_combine_common)
 {
   EXPECT_EQ(crc32_combine(1, 0, 30), 1012982536); // AOCL_Compression_zlib_crc32_combine_common_1
   EXPECT_EQ(crc32_combine( 1 << 30, 1 << 29, 1 << 28), 1114707486); // AOCL_Compression_zlib_crc32_combine_common_2
+
+  size_t len = UINT32_MAX;
+  Bytef *buf = (Bytef *)malloc(len);
+  for (size_t i = 0; i < len; i++)
+  {
+    buf[len - i - 1] = i % 255;
+  }
+
+  EXPECT_EQ(crc32_combine(crc32(0, buf, 255), crc32(0, buf + 255, 1000), 1000), crc32(0, buf, 1255));
+
+  free(buf);
+  buf = nullptr;
 }
 
-TEST(ZLIB_crc32, all_cases)
+TEST(AOCL_Compression_zlib, crc32_combine_gen_common)
 {
-  const int len = 100000;
-  unsigned char c[len];
-  for (int i = 0; i < len; i++)
+  EXPECT_EQ(crc32_combine_gen(30), 2654359659);
+  EXPECT_EQ(crc32_combine_gen(1 << 28), 3303156796);
+  EXPECT_EQ(crc32_combine_gen(0), 2147483648);
+  EXPECT_EQ(crc32_combine_gen(LONG_MAX), 1832725837);
+}
+
+TEST(AOCL_Compression_zlib, crc32_combine_op_common)
+{
+  EXPECT_EQ(crc32_combine_op(1, 1, 1), 2852767882);
+  EXPECT_EQ(crc32_combine_op(-1, -1, -1), 3246877207);
+  size_t len = UINT32_MAX;
+  Bytef *buf = (Bytef *)malloc(len);
+  for (size_t i = 0; i < len; i++)
+  {
+    buf[len - i - 1] = i % 255;
+  }
+
+  EXPECT_EQ(crc32_combine_op(crc32(0, buf, 255), crc32(0, buf + 255, 1000), crc32_combine_gen(1000)), crc32_combine(crc32(0, buf, 255), crc32(0, buf + 255, 1000), 1000));
+
+  free(buf);
+  buf = nullptr;
+}
+
+TEST(AOCL_Compression_zlib, crc32_common)
+{
+  z_size_t len = UINT32_MAX;
+  Bytef *c = (Bytef *)malloc(len);
+
+  for (z_size_t i = 0; i < len; i++)
   {
     c[i] = i % 255;
   }
 
   EXPECT_EQ(crc32(1, NULL, 1), 0);  // AOCL_Compression_zlib_crc32_common_1
-  EXPECT_EQ(crc32(7, c, len), 1142422866);  // AOCL_Compression_zlib_crc32_common_2
+  EXPECT_EQ(crc32(7, c, 100000), 1142422866);  // AOCL_Compression_zlib_crc32_common_2
+  EXPECT_EQ(crc32(7, c, len), 7);
+  EXPECT_EQ(crc32(1, c, 0), 1);
+
+  free(c);
+  c = nullptr;
 }
 
-TEST(ZLIB_crc32_z, all_cases)
+TEST(AOCL_Compression_zlib, crc32_z_common)
 {
-  const int len = 100000;
-  unsigned char c[len];
+  z_size_t len = UINT32_MAX;
+  Bytef *c = (Bytef *)malloc(len);
 
-  for (int i = 0; i < len; i++)
+  for (z_size_t i = 0; i < len; i++)
   {
     c[i] = i % 255;
   }
 
   EXPECT_EQ(crc32_z(1, NULL, 1), 0);  // AOCL_Compression_zlib_crc32_z_common_1
-  EXPECT_EQ(crc32_z(7, c, len), 1142422866);  // AOCL_Compression_zlib_crc32_z_common_2
+  EXPECT_EQ(crc32_z(7, c, 100000), 1142422866);  // AOCL_Compression_zlib_crc32_z_common_2
+  EXPECT_EQ(crc32_z(7, c, len), 7);
+  EXPECT_EQ(crc32_z(1, c, 0), 1);
+
+  free(c);
+  c = nullptr;
 }
 
-TEST(ZLIB_zError, basic)
+TEST(AOCL_Compression_zlib, zError_common)
 {
   EXPECT_STREQ(zError(Z_OK), ""); // AOCL_Compression_zlib_zError_common_1
   EXPECT_STREQ(zError(Z_STREAM_END), "stream end"); // AOCL_Compression_zlib_zError_common_2
@@ -432,12 +459,10 @@ TEST(ZLIB_zError, basic)
 }
 
 #ifdef AOCL_ZLIB_OPT
-class ZLIB_adler32_x86 : public AOCL_setup_zlib {
-};
 
-TEST_F(ZLIB_adler32_x86, all_cases)
+TEST_P(AOCL_Compression_zlib, adler32_x86_common)
 {
-  size_t len = 5552;
+  size_t len = UINT32_MAX;
   Bytef *buf = (Bytef *)malloc(len);
   for (size_t i = 0; i < len; i++)
   {
@@ -477,17 +502,32 @@ TEST_F(ZLIB_adler32_x86, all_cases)
   adler = 0xFFFFFFFF;
   EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));  // AOCL_Compression_zlib_adler32_x86_common_9
 
+  len = 0;
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
+
+  len = UINT32_MAX;
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
+
   free(buf);
   buf = nullptr;
 }
 #endif
 
-#ifdef AOCL_ZLIB_OPT
+#if defined(AOCL_ZLIB_OPT) && defined(AOCL_INTERNAL_TEST)
+#ifdef __cplusplus
+extern "C" {
+    extern void AOCL_bi_flush(deflate_state* s);
+    extern void AOCL_bi_windup(deflate_state* s);
+}
+#endif
+
 /*=====================================
  *  Test cases for AOCL_bi_flush
  *=====================================*/
 class ZLIB_AOCL_bi_flush : public ::testing::Test
 {
+private:
+    ZLIB_deflate_stream deflateObj;
 protected:
     z_streamp strm;
     int val;
@@ -495,7 +535,7 @@ protected:
 
     void SetUp() override
     {
-        strm = get_z_stream();
+        strm = deflateObj.get_stream();
         deflateInit(strm, 6);
         state = (deflate_state*)strm->state;
         val = 170; /* 1010 1010 */
@@ -504,7 +544,7 @@ protected:
     }
     ~ZLIB_AOCL_bi_flush()
     {
-        release_deflate_stream(strm);
+        strm = nullptr;
     }
 };
 
@@ -719,6 +759,8 @@ TEST_F(ZLIB_AOCL_bi_windup, AOCL_Compression_zlib_AOCL_bi_windup_common_4)  /* s
  *=====================================*/
 class ZLIB_AOCL_send_bits : public ::testing::Test
 {
+private:
+    ZLIB_deflate_stream deflateObj;
 protected:
     z_streamp strm;
     int val;
@@ -728,7 +770,7 @@ protected:
 
     void SetUp() override
     {
-        strm = get_z_stream();
+        strm = deflateObj.get_stream();
         deflateInit(strm, 6);
         state = (deflate_state*)strm->state;
         val = 170; /* 1010 1010 */
@@ -738,7 +780,7 @@ protected:
 
     ~ZLIB_AOCL_send_bits()
     {
-        release_deflate_stream(strm);
+        strm = nullptr;
     }
 };
 
@@ -820,4 +862,9 @@ TEST_F(ZLIB_AOCL_send_bits, AOCL_Compression_zlib_AOCL_send_bits_common_3)
     EXPECT_EQ(state->bi_buf, 179);
     EXPECT_EQ(state->bi_valid, 8);
 }
-#endif
+#endif /* AOCL_ZLIB_OPT && AOCL_INTERNAL_TEST */
+
+INSTANTIATE_TEST_SUITE_P(
+    AOCL_Compression_zlib_Parameterized_Tests, AOCL_Compression_zlib,
+    ::testing::ValuesIn(get_supported_optlevels())
+);

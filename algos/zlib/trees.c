@@ -206,7 +206,7 @@ local void bi_flush(deflate_state *s) {
 /* AOCL_variant of bi_flush() which uses the s->bi_buf of 64 bits */
 #ifdef AOCL_ZLIB_OPT
 #ifdef AOCL_UNIT_TEST
-ZEXTERN void ZEXPORT AOCL_bi_flush(deflate_state* s) {
+void ZLIB_INTERNAL AOCL_bi_flush(deflate_state* s) {
 #else
 local void AOCL_bi_flush(deflate_state * s) {
 #endif /* AOCL_UNIT_TEST */
@@ -258,14 +258,10 @@ void ZLIB_INTERNAL bi_windup(deflate_state *s) {
 }
 
 #ifdef AOCL_ZLIB_OPT
-#ifdef AOCL_UNIT_TEST
-ZEXTERN void ZEXPORT AOCL_bi_windup(deflate_state *s) {
-#else
-#ifndef AOCL_ZLIB_DEFLATE_FAST_MODE
+#if !defined(AOCL_ZLIB_DEFLATE_FAST_MODE) && !defined(AOCL_UNIT_TEST)
 local void AOCL_bi_windup(deflate_state *s) {
 #else
 void ZLIB_INTERNAL AOCL_bi_windup(deflate_state *s) {
-#endif
 #endif
     if (s->bi_valid > 56) {
         AOCL_put_uInt64_t(s, s->bi_buf);

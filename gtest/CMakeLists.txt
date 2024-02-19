@@ -131,7 +131,10 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             if (AOCL_EXCLUDE_ZSTD)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
             endif()
-            
+            # Non API function tests
+            if (BUILD_STATIC_LIBS)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_INTERNAL_TEST")
+            endif()
             # add target
             add_executable(${GTEST_CUR_EXE_NAME} ${GTEST_CUR_SRC_FILES})
             set_target_properties(${GTEST_CUR_EXE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
