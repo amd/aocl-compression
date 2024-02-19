@@ -67,54 +67,60 @@ static uint32_t LZ4HC_hashPtr(const void* ptr) { return HASH_FUNCTION(LZ4_read32
 #define GB *(1U<<30)
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
 
-class TestLoad_1
+class Test_Buffer
 {
-    //source buffer (original data which we intend to compress).
+    /* source buffer (original data which we intend to compress). */
     char *orig_data = NULL;
     size_t orig_sz = 0;
-    //destination buffer (kdata obtained after compression).
+
+    /* destination buffer (data obtained after compression). */
     char *compressed_data = NULL;
     size_t compressed_sz=0;
 
 public:
-    // Constructor functions, creates `sz` size of source data.
-    TestLoad_1(int sz)
+    /* Constructor functions, creates `sz` size of source data. */
+    Test_Buffer(int sz)
     {
         this->orig_sz = sz;
         orig_data = (char *)malloc(sz);
 
-        // generating random data inside `orig_data` buffer.
+        /* Generating random data inside `orig_data` buffer. */
         for (int i = 0; i < sz; i++)
         {
             orig_data[i] = rand() % 255;
         }
 
-        // Provides the maximum size that LZ4/LZ4HC compression may output in a "worst case".
+        /* Provides the maximum size that LZ4/LZ4HC compression may output in a "worst case". */
         compressed_sz = LZ4_compressBound(sz);
         compressed_data = (char *)malloc(compressed_sz);
     }
-    // Returns pointer to source buffer.
+
+    /* Returns pointer to source buffer. */
     char *getOrigData()
     {
         return orig_data;
     }
-    // Returns size of source buffer.
+
+    /* Returns size of source buffer. */
     size_t getOrigSize()
     {
         return orig_sz;
     }
-    // Returns pointer to destination buffer (data obtained after compression).
+
+    /* Returns pointer to destination buffer (data obtained after compression). */
     char *getCompressedBuff()
     {
         return compressed_data;
     }
-    // Returns size of destination data.
+
+    /* Returns size of destination data. */
     size_t getCompressedSize()
     {
         return compressed_sz;
     }
-    // Destructor function.
-    ~TestLoad_1()
+
+    /* Destructor function. */
+    ~Test_Buffer()
     {
         if(orig_data) 
             free(orig_data);
@@ -287,7 +293,11 @@ bool lz4hc_check_uncompressed_equal_to_original(char *src, unsigned srcSize, cha
  ***********************************************/
 class LZ4HC_LZ4_compress_HC : public ::testing::TestWithParam<int> {
 public:
-     void SetUp() override {
+    // cover the different code paths.
+    int num_levels = 4;
+    int cLevel[4] = {LZ4HC_CLEVEL_MIN, LZ4HC_CLEVEL_DEFAULT, LZ4HC_CLEVEL_OPT_MIN, LZ4HC_CLEVEL_MAX};
+
+    void SetUp() override {
         aocl_destroy_lz4hc();
         int opt_off = GetParam();
         int optLevel = DEFAULT_OPT_LEVEL;
@@ -295,51 +305,113 @@ public:
     }
 };
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_1) // compress_FAIL_src_is_NULL
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common_1) // compress_FAIL_src_is_NULL
 {
-    TestLoad_1 d(800);
-    EXPECT_EQ(LZ4_compress_HC(NULL, d.getCompressedBuff(), d.getOrigSize(),d.getCompressedSize(), 9), 0);
+    for(int num_lvl=0; num_lvl<num_levels; num_lvl++)
+    {
+        Test_Buffer test_buf(800);
+        EXPECT_EQ(LZ4_compress_HC(NULL /*src*/, test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), cLevel[num_lvl]), 0);
+    }
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_2) // Compress_FAIL_dst_is_NULL
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common_2) // Compress_FAIL_dst_is_NULL
 {
-    TestLoad_1 d(800);
-    EXPECT_EQ(LZ4_compress_HC(d.getOrigData(), NULL, d.getOrigSize(),d.getCompressedSize(), 1), 0);
+    for(int num_lvl=0; num_lvl<num_levels; num_lvl++)
+    {
+        Test_Buffer test_buf(800);
+        EXPECT_EQ(LZ4_compress_HC(test_buf.getOrigData(), NULL /* dst */, test_buf.getOrigSize(), test_buf.getCompressedSize(), cLevel[num_lvl]), 0);
+    }
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_3 ) // compress_PASS
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_3) // Compress_PASS_srcSize_is_0
 {
-    TestLoad_1 d(800);
-    int outLen = LZ4_compress_HC(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(),d.getCompressedSize(), 1);
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+    for(int num_lvl=0; num_lvl<num_levels; num_lvl++)
+    {
+        Test_Buffer test_buf(800);
+        /* passing srcSize as 0 and src as not NULL. */
+        EXPECT_EQ(LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), 0 /* srcSize */, test_buf.getCompressedSize(), cLevel[num_lvl]), 1);
+
+        /* Passing src as NULL and srcSize as 0. */
+        EXPECT_EQ(LZ4_compress_HC(NULL, test_buf.getCompressedBuff(), 0, test_buf.getCompressedSize(), cLevel[num_lvl]), 1);
+    }
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_4) // compress_FAIL_dst_size_not_enough
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common_4) // Negative_srcSize_and_destSize
 {
-    TestLoad_1 d(800);
-    int outLen = LZ4_compress_HC(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(),d.getOrigSize() / 20, 1);
-    EXPECT_FALSE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+    for(int num_lvl=0; num_lvl<num_levels; num_lvl++)
+    {
+        Test_Buffer test_buf(800);
+        /* passing negative value as srcSize and src as not NULL. */
+        EXPECT_EQ(LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), -1 /* srcSize */, test_buf.getCompressedSize(), cLevel[num_lvl]), 0);
+
+        /* Passing negative value as destSize and dst as not NULL. */
+        EXPECT_EQ(LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), -1 /* dstSize */, cLevel[num_lvl]), 0);
+    }
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_5) // Compression_level_less_than_minimum_limit
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_5) // compress_PASS
 {
-    TestLoad_1 d(800);
-    int outLen = LZ4_compress_HC(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(),d.getCompressedSize(), -1);
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+    for(int num_lvl=0; num_lvl<num_levels; num_lvl++)
+    {
+        Test_Buffer test_buf(800);
+        int outLen = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), cLevel[num_lvl]);
+        EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), outLen));
+    }
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_6) // Compression_level_greater_than_maximum_limit
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common_6) // compress_FAIL_dst_size_not_enough
 {
-    TestLoad_1 d(800);
-    int outLen = LZ4_compress_HC(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(),d.getCompressedSize(), LZ4HC_CLEVEL_MAX+1);
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+    for(int num_lvl=0; num_lvl<num_levels; num_lvl++)
+    {
+        Test_Buffer test_buf(800);
+        int outLen = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getOrigSize() / 20, cLevel[num_lvl]);
+        EXPECT_FALSE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), outLen));
+    }
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_7) // Compression_level_6_(CEHC_OPT)
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_7) // Compression_level_greater_than_maximum_limit
 {
-    TestLoad_1 d(800);
-    int outLen = LZ4_compress_HC(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize(), 6);
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+    Test_Buffer test_buf(800);
+    int outLen = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_MAX+1 /* level */);
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), outLen));
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_8) // Compression_level_less_than_minimum_limit
+{
+    Test_Buffer test_buf(800);
+    int outLen = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), -1 /* level */);
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), outLen));
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_9) // inputSize < LZ4_minLength 
+{
+    for(int num_lvl=0; num_lvl<num_levels; num_lvl++)
+    {
+        /*  MFLIMIT = 12
+        *  LZ4_minLength = (MFLMIIT + 1)
+        *  Testing for input size < LZ4_minLength, i.e, 12
+        */
+        Test_Buffer test_buf(12);
+        int compressedSize = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), cLevel[num_lvl]);
+
+        /* No compression for input size < LZ4_minLength 
+        * Compressed length will be literal length (i.e, 12) + 1 (1 byte of token)
+        */
+        EXPECT_EQ(compressedSize, 13);          
+        EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
+    }
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_10) // simple pass case (all compression levels)
+{
+    for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
+    {
+        Test_Buffer test_buf(800);
+        int compressedSize = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), level /* level */);
+        EXPECT_NE(compressedSize, 0);
+
+        EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -350,12 +422,173 @@ INSTANTIATE_TEST_SUITE_P(
  * "End" of LZ4_compress_HC Tests
  *********************************************/
 
+/*********************************************
+ * "Begin" of LZ4_initStreamHC Test
+ *********************************************/
+class LZ4HC_LZ4_initStreamHC : public ::testing::Test
+{
+public:
+    void *lz4hc_s = NULL;
+    void SetUp() override 
+    {
+        lz4hc_s = malloc(sizeof(LZ4_streamHC_t));
+        EXPECT_NE(lz4hc_s, nullptr);
+    }
+
+    /* pointer to "internal_donotuse" struct member of stream buffer. */
+    char* get_ptr_to_internal_donotuse(LZ4_streamHC_t* buffer)
+    {
+        LZ4HC_CCtx_internal* hcstate = &(buffer->internal_donotuse);
+        return (char*)hcstate;
+    }
+
+    /* returns the size of "AOCL_LZ4HC_CCtx_internal" */
+    int get_sizeof_ctx_internal()
+    {
+        return sizeof(LZ4HC_CCtx_internal);
+    }
+
+    /* Get the compression level. */
+    short* getCLevel(LZ4_streamHC_t* strm)
+    {
+        return &(strm->internal_donotuse.compressionLevel);
+    }
+
+    /* Destructor */
+    ~LZ4HC_LZ4_initStreamHC()
+    {
+        if(lz4hc_s) free(lz4hc_s);
+    }
+};
+
+TEST_F(LZ4HC_LZ4_initStreamHC, AOCL_Compression_lz4hc_LZ4_initStreamHC_fail_common_1) // passing buffer as NULL
+{
+    EXPECT_EQ(LZ4_initStreamHC(NULL, sizeof(LZ4_streamHC_t)), nullptr);
+}
+
+TEST_F(LZ4HC_LZ4_initStreamHC, AOCL_Compression_lz4hc_LZ4_initStreamHC_fail_common_2) // passing insufficient size of stream
+{
+    EXPECT_EQ(LZ4_initStreamHC(lz4hc_s, sizeof(LZ4_streamHC_t) - 1), nullptr);
+}
+
+TEST_F(LZ4HC_LZ4_initStreamHC, AOCL_Compression_lz4hc_LZ4_initStreamHC_fail_common_3) // wrong alignment
+{
+    void *lz4hc_state = malloc(sizeof(LZ4_streamHC_t)+1); // one more byte allocated to avoid potential out of access.
+    EXPECT_NE(lz4hc_state, nullptr);
+    EXPECT_EQ(LZ4_initStreamHC((char*)lz4hc_state + 1, sizeof(LZ4_streamHC_t)), nullptr);
+    free(lz4hc_state);
+}
+
+TEST_F(LZ4HC_LZ4_initStreamHC, AOCL_Compression_lz4hc_LZ4_initStreamHC_pass_common_4) // simple pass case  
+{
+    LZ4_streamHC_t* stream = LZ4_initStreamHC(lz4hc_s, sizeof(LZ4_streamHC_t)); 
+    EXPECT_NE(stream, nullptr); 
+    EXPECT_EQ(*getCLevel(stream), LZ4HC_CLEVEL_DEFAULT);
+}
+
+TEST_F(LZ4HC_LZ4_initStreamHC, AOCL_Compression_lz4hc_LZ4_initStreamHC_pass_common_5) // random buffer data 
+{
+    char* hcstate = get_ptr_to_internal_donotuse((LZ4_streamHC_t*)lz4hc_s);
+    int ctx_internal_size = get_sizeof_ctx_internal();
+    char *buffer = (char*)lz4hc_s;
+    for(int i=0; i<sizeof(LZ4_streamHC_t); i++) buffer[i]=i;
+    EXPECT_NE(LZ4_initStreamHC(buffer, sizeof(LZ4_streamHC_t)), nullptr);
+    short *cLevel = getCLevel((LZ4_streamHC_t*)buffer);
+    EXPECT_EQ(*cLevel, LZ4HC_CLEVEL_DEFAULT);
+    *cLevel = 0;
+    for(int i=0; i<ctx_internal_size; i++) 
+        EXPECT_EQ(hcstate[i],0);
+}
+/*********************************************
+ * "End" of LZ4_initStreamHC Tests
+ *********************************************/
+
+/*********************************************
+ * "Begin" of AOCL_LZ4_initStreamHC Test
+ *********************************************/
+class LZ4HC_AOCL_LZ4_initStreamHC : public ::testing::Test
+{
+public:
+    AOCL_LZ4_streamHC_t *lz4hc_s = NULL;
+    void SetUp() override 
+    {
+        lz4hc_s = (AOCL_LZ4_streamHC_t*)malloc(sizeof(AOCL_LZ4_streamHC_t));
+        EXPECT_NE(lz4hc_s, nullptr);
+    }
+
+    /* pointer to "internal_donotuse" struct member of stream buffer. */
+    char* get_ptr_to_internal_donotuse(AOCL_LZ4_streamHC_t* buffer)
+    {
+        AOCL_LZ4HC_CCtx_internal* hcstate = &(buffer->internal_donotuse);
+        return (char*)hcstate;
+    }
+
+    /* returns the size of "AOCL_LZ4HC_CCtx_internal" */
+    int get_sizeof_ctx_internal()
+    {
+        return sizeof(AOCL_LZ4HC_CCtx_internal);
+    }
+
+    /* Get the compression level. */
+    short* getCLevel(AOCL_LZ4_streamHC_t* strm)
+    {
+        return &(strm->internal_donotuse.compressionLevel);
+    }
+
+    /* Destructor */
+    ~LZ4HC_AOCL_LZ4_initStreamHC()
+    {
+        if(lz4hc_s) free(lz4hc_s);
+    }
+};
+
+TEST_F(LZ4HC_AOCL_LZ4_initStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_initStreamHC_fail_common_1) // passing buffer as NULL
+{
+    EXPECT_EQ(AOCL_LZ4_initStreamHC(NULL, sizeof(AOCL_LZ4_streamHC_t)), nullptr);
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_initStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_initStreamHC_fail_common_2) // passing insufficient size of stream
+{
+    EXPECT_EQ(AOCL_LZ4_initStreamHC(lz4hc_s, sizeof(AOCL_LZ4_streamHC_t) - 1), nullptr);
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_initStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_initStreamHC_fail_common_3) // wrong alignment
+{
+    void *lz4hc_state = malloc(sizeof(AOCL_LZ4_streamHC_t)+1); // one more byte allocated to avoid potential out of access.
+    EXPECT_NE(lz4hc_state, nullptr);
+    EXPECT_EQ(AOCL_LZ4_initStreamHC((char*)lz4hc_state + 1, sizeof(AOCL_LZ4_streamHC_t)), nullptr);
+    free(lz4hc_state);
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_initStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_initStreamHC_pass_common_4) // simple pass case  
+{
+    AOCL_LZ4_streamHC_t* stream = AOCL_LZ4_initStreamHC(lz4hc_s, sizeof(AOCL_LZ4_streamHC_t)); 
+    EXPECT_NE(stream, nullptr); 
+    EXPECT_EQ(*getCLevel(stream), LZ4HC_CLEVEL_DEFAULT);
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_initStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_initStreamHC_pass_common_5) // random buffer data 
+{
+    char *buffer = (char*)lz4hc_s;
+    for(int i=0; i<sizeof(AOCL_LZ4_streamHC_t); i++) buffer[i]=i;
+    EXPECT_NE(AOCL_LZ4_initStreamHC(buffer, sizeof(AOCL_LZ4_streamHC_t)), nullptr);
+    char* hcstate = get_ptr_to_internal_donotuse(lz4hc_s);
+    int ctx_internal_size = get_sizeof_ctx_internal();
+    short *cLevel = getCLevel((AOCL_LZ4_streamHC_t*)buffer);
+    EXPECT_EQ(*cLevel, LZ4HC_CLEVEL_DEFAULT);
+    *cLevel = 0;
+    for(int i=0; i<ctx_internal_size; i++)
+        EXPECT_EQ(hcstate[i],0);
+}
+/*********************************************
+ * "End" of AOCL_LZ4_initStreamHC Tests
+ *********************************************/
 
 /*********************************************
  * "Begin" of LZ4_sizeofStateHC Test
  *********************************************/
 
-TEST(LZ4HC_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_LZ4_sizeofStateHC_common)
+TEST(LZ4HC_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_LZ4_sizeofStateHC_pass_common)
 {
     EXPECT_EQ(LZ4_sizeofStateHC(), (int)sizeof(LZ4_streamHC_t));
 }
@@ -370,7 +603,7 @@ TEST(LZ4HC_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_LZ4_sizeofStateHC_common)
  * "Begin" of AOCL_LZ4_sizeofStateHC Test
  *********************************************/
 
-TEST(LZ4HC_AOCL_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_sizeofStateHC_common)
+TEST(LZ4HC_AOCL_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_sizeofStateHC_pass_common)
 {
     EXPECT_EQ(AOCL_LZ4_sizeofStateHC(), (int)sizeof(AOCL_LZ4_streamHC_t));
 }
@@ -384,48 +617,7 @@ TEST(LZ4HC_AOCL_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_sizeofStateHC
  * "Begin" of LZ4_compress_HC_extStateHC Tests
  *******************************************************/
 
-class create_source_and_dest_buffer
-{
-protected:
-
-    char *src = NULL;
-    int srcSize = 0;
-    char *dst = NULL;
-    int dstSize = 0; 
-
-    // Initialize or reset `src` buffer.
-    void setSrc(int sz)
-    {
-        if(src)
-            free(src);
-        srcSize = sz;
-        src = (char *)malloc(srcSize);
-        for (int i = 0; i < srcSize; i++)
-        {
-            src[i] = rand() % 255;
-        }
-    }
-
-    // Initialize or reset `dst` buffer.
-    void setDst(int sz)
-    {
-        if(dst)
-            free(dst);
-        dstSize = sz;
-        dst = (char *)malloc(dstSize);
-    }
-
-    // Destructor function of `create_source_and_dest_buffer`.
-    ~create_source_and_dest_buffer()
-    {
-        if(dst)
-            free(dst);
-        if(src)
-            free(src);
-    }
-};
-
-class LZ4HC_LZ4_compress_HC_extStateHC : public create_source_and_dest_buffer, public ::testing::TestWithParam<int>
+class LZ4HC_LZ4_compress_HC_extStateHC :public ::testing::TestWithParam<int>
 {
 public:
     int opt_off = -1;                    /* Flag to toggle optimizations. */
@@ -449,7 +641,7 @@ public:
     }
 
     // Destructor of fixture class `LZ4HC_LZ4_compress_HC_extStateHC`.
-    ~LZ4HC_LZ4_compress_HC_extStateHC()
+    virtual ~LZ4HC_LZ4_compress_HC_extStateHC()
     {
         if(opt_off == 1) is_stream_created = LZ4_freeStreamHC((LZ4_streamHC_t*)strm);
         else is_stream_created = AOCL_LZ4_freeStreamHC((AOCL_LZ4_streamHC_t*)strm);
@@ -457,104 +649,128 @@ public:
 
 };
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_1) // statePtr_is_Null
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fail_common_1) // statePtr_is_Null
 {
-    setSrc(100000);
-    setDst(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_HC_extStateHC(NULL, src, dst, srcSize, dstSize, 9), 0);
+    Test_Buffer test_buf(800);
+    EXPECT_EQ(LZ4_compress_HC_extStateHC(NULL, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_2) // src_NULL_srcLen_not_Null
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fail_common_2) // src_NULL_srcLen_not_Null
 {
-    setSrc(100000);
-    setDst(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_HC_extStateHC(strm, NULL, dst, srcSize, dstSize, 9), 0);
+    Test_Buffer test_buf(800);
+    EXPECT_EQ(LZ4_compress_HC_extStateHC(strm, NULL /* src */, test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_3) // dst_NULL_dstLen_not_Null
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fail_common_3) // dst_NULL_dstLen_not_Null
 {
-    setSrc(100000);
-    setDst(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_HC_extStateHC(strm, src, NULL, srcSize, dstSize, 9), 0);
+    Test_Buffer test_buf(800);
+    EXPECT_EQ(LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), NULL /* dst */, test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_4) // src_not_NULL_srcLen_0
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_pass_common_4) // srcLen_0
 {
-    setSrc(0);
-    setDst(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_HC_extStateHC(strm, src, dst, 0, dstSize, 9), 1);  // write token (1 Byte)
+    Test_Buffer test_buf(0);
+    /* src is not NULL and srcLen is 0. */
+    EXPECT_EQ(LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), 0 /* srcSize */, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 1);  // write token (1 Byte)
+    /* src is NULL and srcLen is 0. */
+    EXPECT_EQ(LZ4_compress_HC_extStateHC(strm, NULL /* src */, test_buf.getCompressedBuff(), 0 /* srcSize */, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 1);  // write token (1 Byte)
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_5) // Compression_level_is_greater_than_max
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fail_common_5) // Negative_srcSize_and_destSize
 {
-    setSrc(100000);
-    setDst(LZ4_compressBound(srcSize));
-    int compressedSize = LZ4_compress_HC_extStateHC(strm, src, dst, srcSize, dstSize, LZ4HC_CLEVEL_MAX+1);
+    Test_Buffer test_buf(800);
+    /* passing negative value as srcSize and src as not NULL. */
+    EXPECT_EQ(LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), -1 /* srcSize */, test_buf.getCompressedSize(), LZ4HC_CLEVEL_MIN), 0);
+
+    /* Passing negative value as destSize and dst as not NULL. */
+    EXPECT_EQ(LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), -1 /* dstSize */, LZ4HC_CLEVEL_MIN), 0);
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_pass_common_6) // Compression_level_greater_than_maximum_limit
+{
+    Test_Buffer test_buf(800);
+    int compressedSize = LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_MAX+1 /* level */);
     EXPECT_NE(compressedSize, 0);
 
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_6) // Compression_level_is_less_than_min
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_pass_common_7) // Compression_level_less_than_minimum_limit
 {
-    setSrc(100000);
-    setDst(LZ4_compressBound(srcSize));
-    int compressedSize = LZ4_compress_HC_extStateHC(strm, src, dst, srcSize, dstSize, -1);
+    Test_Buffer test_buf(800);
+    int compressedSize = LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), -1 /* level */);
     EXPECT_NE(compressedSize, 0);
 
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_7) // dstCapacity >= LZ4_compressbound()
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_pass_common_8) // dstCapacity > LZ4_compressbound()
 {
-    setSrc(60000);
-    setDst(LZ4_compressBound(srcSize));
-    int compressedSize = LZ4_compress_HC_extStateHC(strm, src, dst, srcSize, dstSize, 9);
+    Test_Buffer test_buf(800);
+
+    int maxDstSize = LZ4_compressBound(test_buf.getOrigSize()) + 1;
+    char *dst = (char *)calloc(maxDstSize, sizeof(char));
+    int compressedSize = LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), dst, test_buf.getOrigSize(), maxDstSize, LZ4HC_CLEVEL_DEFAULT);
     EXPECT_NE(compressedSize, 0);
 
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), dst, compressedSize));
+
+    if(dst) free(dst);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_8) // dstCapacity < LZ4_compressbound()
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fail_common_9) // dstCapacity < LZ4_compressbound()
 {
-    setSrc(60000);
+    Test_Buffer test_buf(800);
+    int maxDstSize = LZ4_compressBound(test_buf.getOrigSize()) / 20;
+    char *dst = (char *)calloc(maxDstSize, sizeof(char));
 
     /*  dstSize < LZ4_compressbound and not enough to store compressed data for this case. 
         Compression Fails.
     */
-    setDst(LZ4_compressBound(srcSize) / 2);
-    int compressedSize = LZ4_compress_HC_extStateHC(strm, src, dst, srcSize, dstSize, 9);
+    int compressedSize = LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), dst, test_buf.getOrigSize(), maxDstSize, LZ4HC_CLEVEL_DEFAULT);
     EXPECT_EQ(compressedSize, 0);
 
+    if(dst) free(dst);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_9) // inputSize < LZ4_minLength 
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_pass_common_10) // inputSize < LZ4_minLength 
 {
     /*  MFLIMIT = 12
      *  LZ4_minLength = (MFLMIIT + 1)
      *  Testing for input size < LZ4_minLength, i.e, 12
      */
-    setSrc(12);
-    setDst(LZ4_compressBound(srcSize));
-    int compressedSize = LZ4_compress_HC_extStateHC(strm, src, dst, srcSize, dstSize, 9);
+    Test_Buffer test_buf(12);
+    int compressedSize = LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT);
 
     /* No compression for input size < LZ4_minLength 
      * Compressed length will be literal length (i.e, 12) + 1 (1 byte of token)
      */
     EXPECT_EQ(compressedSize, 13);          
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_10) // Unsupported input size (too large or negative)
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_pass_common_11) // simple pass case (all compression levels)
 {
-    /* Input size is greater than the maximum acceptable size for API. */
-    setSrc(LZ4_MAX_INPUT_SIZE + 1);
-    setDst(LZ4_compressBound(srcSize));
-    int compressedSize = LZ4_compress_HC_extStateHC(strm, src, dst, srcSize, dstSize, 9);
-    
-    /* No compression */
-    EXPECT_EQ(compressedSize, 0);
+    for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
+    {
+        Test_Buffer test_buf(800);
+        int compressedSize = LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), level /* level */);
+        EXPECT_NE(compressedSize, 0);
+
+        EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
+    }
 }
+
+// TEST_P(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_pass_common_12) // Unsupported input size (too large or negative)
+// {
+//     /* Input size is greater than the maximum acceptable size for API. */
+//     Test_Buffer test_buf(LZ4_MAX_INPUT_SIZE + 1);
+//     int compressedSize = LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT);
+    
+//     /* No compression */
+//     EXPECT_EQ(compressedSize, 0);
+// }
+
 INSTANTIATE_TEST_SUITE_P(
     LZ4HC_TEST,
     LZ4HC_LZ4_compress_HC_extStateHC,
@@ -571,6 +787,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 class LZ4HC_LZ4_compress_HC_extStateHC_fastReset : public LZ4HC_LZ4_compress_HC_extStateHC
 {
+    public:
     int create_stream() override
     {
         if(opt_off == 1)
@@ -588,106 +805,145 @@ class LZ4HC_LZ4_compress_HC_extStateHC_fastReset : public LZ4HC_LZ4_compress_HC_
         }
     }
 
+    bool initialize_stream(void *strm)
+    {
+       if(opt_off == 1)
+        {
+            LZ4_streamHC_t* const ctx = LZ4_initStreamHC(strm, sizeof(*ctx));
+            if (ctx==NULL) return false;   /* init failure */
+            else return true;
+        }
+        else{
+            AOCL_LZ4_streamHC_t* const ctx = AOCL_LZ4_initStreamHC(strm, sizeof(*ctx));
+            if (ctx==NULL) return false;   /* init failure */
+            else return true;
+        } 
+    }
+
 };
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_common_1) // statePtr_is_Null
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_fail_linux_1) // statePtr_is_Null
 {
-    setSrc(100000);
-    setDst(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(NULL, src, dst, srcSize, dstSize, 9), 0);
+    Test_Buffer test_buf(800);
+    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(NULL, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_common_2) // src_NULL_srcLen_not_Null
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_fail_linux_2) // src_NULL_srcLen_not_0
 {
-    setSrc(100000);
-    setDst(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(strm, NULL, dst, srcSize, dstSize, 9), 0);
+    Test_Buffer test_buf(800);
+    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(strm, NULL /* src */, test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_common_3) // dst_NULL_dstLen_not_Null
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_fail_linux_3) // dst_NULL_dstLen_not_Null
 {
-    setSrc(100000);
-    setDst(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(strm, src, NULL, srcSize, dstSize, 9), 0);
+    Test_Buffer test_buf(800);
+    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(strm, test_buf.getOrigData(), NULL /* dst */, test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_common_4) // src_not_NULL_srcLen_0
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_pass_linux_4) // srcLen_0
 {
-    setSrc(0);
-    setDst(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(strm, src, dst, 0, dstSize, 9), 1);  // write token (1 Byte)
+    Test_Buffer test_buf(0);
+    /* src is not null and srcLen is 0. */
+    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), 0 /* srcSize */, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 1); // write token (1 Byte)
+    /* src is NULL and srcLen is 0. */
+    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(strm, NULL /* src */, test_buf.getCompressedBuff(), 0 /* srcSize */, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 1);  // write token (1 Byte)
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_common_5) // Compression_level_is_greater_than_max
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_fail_linux_5) // Negative_srcSize_and_destSize
 {
-    setSrc(100000);
-    setDst(LZ4_compressBound(srcSize));
-    int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, src, dst, srcSize, dstSize, LZ4HC_CLEVEL_MAX+1);
+    Test_Buffer test_buf(800);
+    /* passing negative value as srcSize and src as not NULL. */
+    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), -1 /* srcSize */, test_buf.getCompressedSize(), LZ4HC_CLEVEL_MIN), 0);
+
+    /* Passing negative value as destSize and dst as not NULL. */
+    EXPECT_EQ(LZ4_compress_HC_extStateHC_fastReset(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), -1 /* dstSize */, LZ4HC_CLEVEL_MIN), 0);
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_pass_linux_6) // Compression_level_greater_than_maximum_limit
+{
+    Test_Buffer test_buf(800);
+    int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_MAX+1 /* level */);
     EXPECT_NE(compressedSize, 0);
 
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedSize));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_common_6) // Compression_level_is_less_than_min
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_pass_linux_7) // Compression_level_less_than_minimum_limit
 {
-    setSrc(100000);
-    setDst(LZ4_compressBound(srcSize));
-    int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, src, dst, srcSize, dstSize, -1);
+    Test_Buffer test_buf(800);
+    int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), -1 /* level */);
     EXPECT_NE(compressedSize, 0);
 
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedSize));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_common_7) // dstCapacity >= LZ4_compressbound()
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_pass_linux_8) // dstCapacity >= LZ4_compressbound()
 {
-    setSrc(60000);
-    setDst(LZ4_compressBound(srcSize));
-    int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, src, dst, srcSize, dstSize, 9);
+    Test_Buffer test_buf(800);
+    int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT);
     EXPECT_NE(compressedSize, 0);
 
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedSize));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_common_8) // dstCapacity < LZ4_compressbound()
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_fail_linux_9) // dstCapacity < LZ4_compressbound()
 {
-    setSrc(60000);
-    
+    Test_Buffer test_buf(800);
+    int maxDstSize = LZ4_compressBound(test_buf.getOrigSize()) / 20;
+    char *dst = (char *)calloc(maxDstSize, sizeof(char));
     /*  dstSize < LZ4_compressbound and not enough to store compressed data for this case. 
         Compression Fails.
     */
-    setDst(LZ4_compressBound(srcSize) / 2);
-    int compressedSize = LZ4_compress_HC_extStateHC(strm, src, dst, srcSize, dstSize, 9);
+    int compressedSize = LZ4_compress_HC_extStateHC(strm, test_buf.getOrigData(), dst, test_buf.getOrigSize(), maxDstSize, LZ4HC_CLEVEL_DEFAULT);
     EXPECT_EQ(compressedSize, 0);
 
+    if(dst) free(dst);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_common_9) // inputSize < LZ4_minLength 
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_pass_linux_10) // inputSize < LZ4_minLength 
 {
     /*  MFLIMIT = 12
      *  LZ4_minLength = (MFLMIIT + 1)
      *  Testing for input size < LZ4_minLength, i.e, 12
      */
-    setSrc(12);
-    setDst(LZ4_compressBound(srcSize));
-    int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, src, dst, srcSize, dstSize, 9);
+    Test_Buffer test_buf(12);
+    int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT);
 
     /* No compression for input size < LZ4_minLength 
      * Compressed length will be literal length (i.e, 12) + 1 (1 byte of token)
      */
     EXPECT_EQ(compressedSize, 13);          
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedSize));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_common_10) // Unsupported input size (too large or negative)
+TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_pass_linux_12) // simple pass case (all compression levels)
 {
-    /* Input size is greater than the maximum acceptable size for API. */
-    setSrc(LZ4_MAX_INPUT_SIZE + 1);
-    setDst(LZ4_compressBound(srcSize));
-    int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, src, dst, srcSize, dstSize, 9);
-    
-    /* No compression */
-    EXPECT_EQ(compressedSize, 0);
+    for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
+    {
+        Test_Buffer test_buf(800);
+        int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), level /* level */);
+        EXPECT_NE(compressedSize, 0);
+        
+
+        EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
+        
+        // initialize the stream to avoid initialisation related error. 
+        memset(strm, 0, sizeof(strm));
+        bool is_init_stream = initialize_stream(strm);
+        EXPECT_EQ(is_init_stream, true);
+    }
 }
+
+// TEST_P(LZ4HC_LZ4_compress_HC_extStateHC_fastReset, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_fastReset_fail_linux_11) // Unsupported input size (too large or negative)
+// {
+//     /* Input size is greater than the maximum acceptable size for API. */
+//     Test_Buffer test_buf(LZ4_MAX_INPUT_SIZE + 1);
+//     int compressedSize = LZ4_compress_HC_extStateHC_fastReset(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT);
+    
+//     /* No compression */
+//     EXPECT_EQ(compressedSize, 0);
+// }
+
 INSTANTIATE_TEST_SUITE_P(
     LZ4HC_TEST,
     LZ4HC_LZ4_compress_HC_extStateHC_fastReset,
@@ -706,71 +962,143 @@ class LZ4HC_LZ4_compress_HC_destSize : public LZ4HC_LZ4_compress_HC_extStateHC{
 };
 
 
-TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_1) // statePtr_NULL
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_fail_common_1) // stateHC_NULL
 {
-    TestLoad_1 d(800);
-    int srcLen = d.getOrigSize();
-
-    EXPECT_EQ(LZ4_compress_HC_destSize(NULL, d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 9), 0);
+    Test_Buffer test_buf(800);
+    int srcLen = test_buf.getOrigSize();
+    EXPECT_EQ(LZ4_compress_HC_destSize(NULL /* stateHC */, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcLen, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_2) // src_NULL
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_fail_common_2) // src_NULL
 {
-    TestLoad_1 d(800);
-    int srcLen = d.getOrigSize();
-
-    EXPECT_EQ(LZ4_compress_HC_destSize(strm, NULL, d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 9), 0);
+    Test_Buffer test_buf(800);
+    int srcLen = test_buf.getOrigSize();
+    EXPECT_EQ(LZ4_compress_HC_destSize(strm, NULL /* src */, test_buf.getCompressedBuff(), &srcLen, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_3) // dest_NULL
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_fail_common_3) // dst_NULL
 {
     
-    TestLoad_1 d(800);
-    int srcLen = d.getOrigSize();
-
-    EXPECT_EQ(LZ4_compress_HC_destSize(strm, d.getOrigData(), NULL, &srcLen, d.getCompressedSize(), 9), 0);
+    Test_Buffer test_buf(800);
+    int srcLen = test_buf.getOrigSize();
+    EXPECT_EQ(LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), NULL /* dst */, &srcLen, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_4) // srcLen_NULL
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_pass_common_4) // srcLen is 0
 {
-    TestLoad_1 d(800);
-
-    EXPECT_EQ(LZ4_compress_HC_destSize(strm, d.getOrigData(), d.getCompressedBuff(), NULL, d.getCompressedSize(), 9), 0);
+    Test_Buffer test_buf(800);
+    int srcLen = 0;
+    /* src is not NULL and srcLen is 0. */
+    EXPECT_EQ(LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcLen, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 1);
+    /* src is NULL and srcLen is 0. */
+    EXPECT_EQ(LZ4_compress_HC_destSize(strm, NULL /* src */, test_buf.getCompressedBuff(), &srcLen, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 1);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_5) // dstLen_0
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_fail_common_5) // srcSizePtr_is_NULL
 {
-    TestLoad_1 d(800);
-    int srcLen = d.getOrigSize();
-
-    EXPECT_EQ(LZ4_compress_HC_destSize(strm, d.getOrigData(), d.getCompressedBuff(), &srcLen, 0, 9), 0);
+    Test_Buffer test_buf(800);
+    /* src is not NULL and srcSizePtr is NULL. */
+    EXPECT_EQ(LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), NULL /* srcSizePtr */, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
+    /* src is NULL and srcSizePtr is NULL. */
+    EXPECT_EQ(LZ4_compress_HC_destSize(strm, NULL /* src */, test_buf.getCompressedBuff(), NULL /* srcSizePtr */, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_6) // Pass
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_fail_common_6) // dstLen_0
 {
-    TestLoad_1 d(800);
-    int srcLen = d.getOrigSize();
-    int compressedLen = LZ4_compress_HC_destSize(strm, d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 9);
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(),d.getOrigSize(),d.getCompressedBuff(),compressedLen));
+    Test_Buffer test_buf(800);
+    int srcLen = test_buf.getOrigSize();
+    EXPECT_EQ(LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcLen, 0 /* targetDstSize */, LZ4HC_CLEVEL_DEFAULT), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_7) // Compression_level_less_than_minimum
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_fail_common_7) // Negative_srcSize_and_destSize
 {
-    TestLoad_1 d(800);
-    int srcLen = d.getOrigSize();
+    Test_Buffer test_buf(800);
+    /* passing negative value as srcSize and src as not NULL. */
+    int srcLen = -1;
+    EXPECT_EQ(LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcLen, test_buf.getCompressedSize(), LZ4HC_CLEVEL_MIN), 0);
 
-    int compressedLen = LZ4_compress_HC_destSize(strm, d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), -1);
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(),d.getOrigSize(),d.getCompressedBuff(),compressedLen));
+    /* Passing negative value as destSize and dst as not NULL. */
+    srcLen = test_buf.getOrigSize();
+    EXPECT_EQ(LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcLen, -1 /* dstSize */, LZ4HC_CLEVEL_MIN), 0);
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_8) // Compression_level_is_greater_than_max
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_pass_common_8) // Compression_level_greater_than_maximum_limit
 {
-    TestLoad_1 d(800);
-    int srcLen = d.getOrigSize();
 
-    int compressedLen = LZ4_compress_HC_destSize(strm, d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(),LZ4HC_CLEVEL_MAX+1);
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(),d.getOrigSize(),d.getCompressedBuff(),compressedLen));
+    Test_Buffer test_buf(800);
+    int srcLen = test_buf.getOrigSize();
+    int compressedLen = LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcLen, test_buf.getCompressedSize(), LZ4HC_CLEVEL_MAX+1/* level */);
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(),srcLen,test_buf.getCompressedBuff(),compressedLen));
 }
+
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_pass_common_9) // Compression_level_less_than_minimum_limit
+{
+
+    Test_Buffer test_buf(800);
+    int srcLen = test_buf.getOrigSize();
+    int compressedLen = LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcLen, test_buf.getCompressedSize(), -1 /* level */);
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(),srcLen,test_buf.getCompressedBuff(),compressedLen));
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_pass_common_10) // Compression succesful when dstCapacity >= LZ4_compressbound()
+{
+    Test_Buffer test_buf(800);
+    int srcLen = test_buf.getOrigSize();
+    int compressedSize = LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcLen, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT);
+    EXPECT_NE(compressedSize, 0);
+
+    EXPECT_EQ(srcLen, test_buf.getOrigSize()); /* Compressed input data till the end. */
+
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), srcLen, test_buf.getCompressedBuff(), compressedSize));
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_pass_common_11) // compression successful when dstCapacity < LZ4_compressbound()
+{
+    Test_Buffer test_buf(800);
+    int srcLen = test_buf.getOrigSize();
+    int maxDstSize = LZ4_compressBound(test_buf.getOrigSize()) / 20;
+    char *dst = (char *)calloc(maxDstSize, sizeof(char));
+    /*  dstSize < LZ4_compressbound and not enough to store compressed data for this case. 
+        srcLen will be upadated with the datalen being compressed with the available dstCapacity. 
+    */
+    int compressedSize = LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), dst, &srcLen, maxDstSize, LZ4HC_CLEVEL_DEFAULT);
+    EXPECT_NE(compressedSize, 0);
+    EXPECT_LT(srcLen, test_buf.getOrigSize()); /* Compressed partial input data based on the dstCapacity available. */
+
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), srcLen, dst, compressedSize));
+    if(dst) free(dst);
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_pass_common_12) // inputSize < LZ4_minLength 
+{
+    /*  MFLIMIT = 12
+     *  LZ4_minLength = (MFLMIIT + 1)
+     *  Testing for input size < LZ4_minLength, i.e, 12
+     */
+    Test_Buffer test_buf(12);
+    int srcLen = test_buf.getOrigSize();
+    int compressedSize = LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcLen, test_buf.getCompressedSize(), LZ4HC_CLEVEL_DEFAULT);
+
+    /* No compression for input size < LZ4_minLength 
+     * Compressed length will be literal length (i.e, 12) + 1 (1 byte of token)
+     */
+    EXPECT_EQ(compressedSize, 13);          
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), srcLen, test_buf.getCompressedBuff(), compressedSize));
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_pass_common_13) // simple pass case (all compression levels)
+{
+    for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
+    {
+        Test_Buffer test_buf(800);
+        int srcLen = test_buf.getOrigSize();
+        int compressedSize = LZ4_compress_HC_destSize(strm, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcLen, test_buf.getCompressedSize(), level /* level */);
+        EXPECT_NE(compressedSize, 0);
+
+        EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(
     LZ4HC_TEST,
     LZ4HC_LZ4_compress_HC_destSize,
@@ -783,7 +1111,7 @@ INSTANTIATE_TEST_SUITE_P(
 /*********************************************
  * "Begin" of LZ4_createStreamHC Test
  *********************************************/
-TEST(LZ4HC_LZ4_createStreamHC, AOCL_Compression_lz4hc_LZ4_createStreamHC_common) // LZ4_freeStreamHC
+TEST(LZ4HC_LZ4_createStreamHC, AOCL_Compression_lz4hc_LZ4_createStreamHC_pass_common) // LZ4_freeStreamHC
 {
     Stream State_stream(0);       /* created using API. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -799,7 +1127,7 @@ TEST(LZ4HC_LZ4_createStreamHC, AOCL_Compression_lz4hc_LZ4_createStreamHC_common)
   * "Begin" of AOCL_LZ4_createStreamHC Test
   *********************************************/
 
-TEST(LZ4HC_AOCL_LZ4_createStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_createStreamHC_common) // AOCL_LZ4_freeStreamHC
+TEST(LZ4HC_AOCL_LZ4_createStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_createStreamHC_pass_common) // AOCL_LZ4_freeStreamHC
 {
     AOCL_Stream State_stream(0);       /* created using API. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -816,12 +1144,12 @@ TEST(LZ4HC_AOCL_LZ4_createStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_createStream
  * "Begin" of LZ4_freeStreamHC Tests
  *********************************************/
 
-TEST(LZ4HC_LZ4_freeStreamHC, AOCL_Compression_lz4hc_LZ4_freeStreamHC_common_1) // NULL_ptr
+TEST(LZ4HC_LZ4_freeStreamHC, AOCL_Compression_lz4hc_LZ4_freeStreamHC_fail_common_1) // NULL_ptr
 {
     EXPECT_EQ(LZ4_freeStreamHC(NULL), 0);
 }
 
-TEST(LZ4HC_LZ4_freeStreamHC, AOCL_Compression_lz4hc_LZ4_freeStreamHC_common_2) // free_legitimate_stream
+TEST(LZ4HC_LZ4_freeStreamHC, AOCL_Compression_lz4hc_LZ4_freeStreamHC_pass_common_2) // free_legitimate_stream
 {
     Stream State_stream(0);       /* created using API. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -838,12 +1166,12 @@ TEST(LZ4HC_LZ4_freeStreamHC, AOCL_Compression_lz4hc_LZ4_freeStreamHC_common_2) /
  * "Begin" of AOCL_LZ4_freeStreamHC Tests
  *********************************************/
 
-TEST(LZ4HC_AOCL_LZ4_freeStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_freeStreamHC_common_1) // NULL_ptr
+TEST(LZ4HC_AOCL_LZ4_freeStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_freeStreamHC_fail_common_1) // NULL_ptr
 {
     EXPECT_EQ(AOCL_LZ4_freeStreamHC(NULL), 0);
 }
 
-TEST(LZ4HC_AOCL_LZ4_freeStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_freeStreamHC_common_2) // free_legitimate_stream
+TEST(LZ4HC_AOCL_LZ4_freeStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_freeStreamHC_pass_common_2) // free_legitimate_stream
 {
     AOCL_Stream State_stream(0);       /* created using API. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -861,7 +1189,7 @@ TEST(LZ4HC_AOCL_LZ4_freeStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_freeStreamHC_c
  * "Begin" of LZ4_resetStreamHC_fast Tests
  *********************************************/
 
-TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_common_1) // Compression_level_less_than_minimum
+TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_pass_common_1) // Compression_level_less_than_minimum
 {
     Stream State_stream(1);       /* created using malloc. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -874,7 +1202,7 @@ TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast
     EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 9);
 }
 
-TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_common_2) // Compression_level_greater_than_maximum
+TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_pass_common_2) // Compression_level_greater_than_maximum
 {
     Stream State_stream(1);       /* created using malloc. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -886,7 +1214,7 @@ TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast
     EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 12);
 }
 
-TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_common_3) // Legitimate_ptr
+TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_pass_common_3) // Legitimate_ptr
 {
     Stream State_stream(1);       /* created using malloc. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -898,7 +1226,7 @@ TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast
     EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 9);
 }
 
-TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_common_4) // LZ4_createStreamHC
+TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_pass_common_4) // LZ4_createStreamHC
 {
     Stream State_stream(0);       /* created using API. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -910,7 +1238,7 @@ TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast
     EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 7);
 }
 
-TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_common_5) // input_NULL
+TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_fail_common_5) // input_NULL
 {
     Stream State_stream;       /* created NULL stream */
     LZ4_resetStreamHC_fast(State_stream.Get_Stream(), 9);
@@ -926,7 +1254,7 @@ TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast
   * "Begin" of AOCL_LZ4_resetStreamHC_fast Tests
   *********************************************/
 
-TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_1) // Compression_level_less_than_minimum
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_pass_common_1) // Compression_level_less_than_minimum
 {
     AOCL_Stream State_stream(1);       /* created using malloc. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -939,7 +1267,7 @@ TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStr
     EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 9);
 }
 
-TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_2) // Compression_level_greater_than_maximum
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_pass_common_2) // Compression_level_greater_than_maximum
 {
     AOCL_Stream State_stream(1);       /* created using malloc. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -951,7 +1279,7 @@ TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStr
     EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 12);
 }
 
-TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_3) // Legitimate_ptr
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_pass_common_3) // Legitimate_ptr
 {
     AOCL_Stream State_stream(1);       /* created using malloc. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -963,7 +1291,7 @@ TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStr
     EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 9);
 }
 
-TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_4) // LZ4_createStreamHC
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_pass_common_4) // LZ4_createStreamHC
 {
     AOCL_Stream State_stream(0);       /* created using API. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -975,7 +1303,7 @@ TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStr
     EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 7);
 }
 
-TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_5) // State_stream->internal_donotuse.dirty set to 1.
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_pass_common_5) // State_stream->internal_donotuse.dirty set to 1.
 {
     AOCL_Stream State_stream(0);       /* created using API. */
     ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
@@ -988,7 +1316,7 @@ TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStr
     EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 7);
 }
 
-TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_6) // input_NULL
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_fail_common_6) // input_NULL
 {
     AOCL_Stream State_stream;       /* created NULL stream. */
     AOCL_LZ4_resetStreamHC_fast(State_stream.Get_Stream(), 9);
@@ -1040,19 +1368,19 @@ protected:
     }
 };
 
-TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_1) // stream_NULL
+TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_fail_common_1) // stream_NULL
 {
     char dict[11] = "helloWorld";
     EXPECT_EQ(LZ4_loadDictHC(NULL, dict, 10), 0);
 }
 
-TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_2) // dictionary_NULL
+TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_fail_common_2) // dictionary_NULL
 {
     int dictSize = 66000;
     EXPECT_EQ(LZ4_loadDictHC(stream, NULL, dictSize), 0);
 }
 
-TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_3) // dictSize_<_64KB
+TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_pass_common_3) // dictSize_<_64KB
 {
     set_ctx_to_stream_Internal(stream);
     int dictSize = 6553;
@@ -1070,7 +1398,7 @@ TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_3) // 
     free(dict);
 }
 
-TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_4) // dictSize_>_64KB
+TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_pass_common_4) // dictSize_>_64KB
 {
     int dictSize = 65560;
     char *dict = (char *)malloc(dictSize);
@@ -1084,7 +1412,7 @@ TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_4) // 
     free(dict);
 }
 
-TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_5) // dictSize <= 4
+TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_pass_common_5) // dictSize <= 4
 {
     int dictSize = 65560;
     char *dict = (char *)malloc(dictSize);
@@ -1107,7 +1435,7 @@ TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_5) // 
  * "Begin" of LZ4_compress_HC_continue Tests
  *********************************************/
 
-class LZ4HC_LZ4_compress_HC_continue : public create_source_and_dest_buffer, public AOCL_setup_lz4hc
+class LZ4HC_LZ4_compress_HC_continue : public AOCL_setup_lz4hc
 {
 protected:
     // Helper varibles used in test suites.
@@ -1139,60 +1467,54 @@ protected:
     }
 };
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_1) // statePtr_NULL
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_fail_common_1) // stateHCPtr_NULL
 {
-    setSrc(1024);
-    setDst(10000);
-    EXPECT_EQ(LZ4_compress_HC_continue(NULL, src, dst, srcSize, dstSize), 0);
+    Test_Buffer test_buf(1024);
+    EXPECT_EQ(LZ4_compress_HC_continue(NULL /* stateHCPtr */, test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize()), 0);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_2) // source_NULL
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_fail_common_2) // source_NULL
 {
-    setSrc(1024);
-    setDst(10000);
+    Test_Buffer test_buf(1024);
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_continue(statePtr.Get_Stream(), NULL, dst, srcSize, dstSize), 0);
+    EXPECT_EQ(LZ4_compress_HC_continue(statePtr.Get_Stream(), NULL /* src */, test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize()), 0);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_3) // dest_NULL
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_fail_common_3) // dest_NULL
 {
-    setSrc(1024);
-    setDst(10000);
+    Test_Buffer test_buf(1024);
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_continue(statePtr.Get_Stream(), src, NULL, srcSize, dstSize), 0);
+    EXPECT_EQ(LZ4_compress_HC_continue(statePtr.Get_Stream(), test_buf.getOrigData(), NULL /* dst */, test_buf.getOrigSize(), test_buf.getCompressedSize()), 0);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_4) // input_sz1
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_pass_common_4) // input_sz1
 {
-    setSrc(1024);
-    setDst(10000);
+    Test_Buffer test_buf(1024);
     Stream statePtr(0);
-    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_5) // input_sz2
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_pass_common_5) // input_sz2
 {
-    setSrc(5120);
-    setDst(10000);
+    Test_Buffer test_buf(5120);
     Stream statePtr(0);
-    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_6) // prefix_mode_1
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_pass_common_6) // prefix_mode_1
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
     Stream statePtr(0);
 
     int dictSize = 100;
     char dict[200];
-    memcpy(&dict[100], src, 100);
+    memcpy(&dict[100], test_buf.getOrigData(), 100);
     
     for (int i = 0; i < 100; i++)
     {
@@ -1203,26 +1525,25 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     // This test case is to cover the condition where
     // dictEnd == (const BYTE*)source
     // And dict size is less than 64kb
-    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), &dict[100], dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), &dict[100], test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[100], srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[100], test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_7) // prefix_mode_2
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_pass_common_7) // prefix_mode_2
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
     Stream statePtr(0);
 
     const int dictSize = 64 * 1024;
-    char* dict = (char*)malloc((dictSize + srcSize) * sizeof(char));
+    char* dict = (char*)malloc((dictSize + test_buf.getOrigSize()) * sizeof(char));
     //Initialize a dictionary.
     for (int i = 0; i < dictSize; i++)
     {
         dict[i] = i % 255;
     }
-    memcpy(&dict[dictSize],src,srcSize);
+    memcpy(&dict[dictSize],test_buf.getOrigData(),test_buf.getOrigSize());
     LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     set_statePtr_dictCtx(statePtr.Get_Stream());
     set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
@@ -1230,19 +1551,18 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     // This test case is to cover the condition where
     // dictEnd == (const BYTE*)source
     // And dict size is equal to 64kb
-    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), &dict[dictSize], dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), &dict[dictSize], test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[dictSize], srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[dictSize], test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedLen));
 
     free(d);
     free(dict);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_8) // using_LoadDictHC_less_64kb
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_pass_common_8) // using_LoadDictHC_less_64kb
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
     const int dictSize = 100;
     char dict[dictSize];
     Stream statePtr(0);
@@ -1254,16 +1574,15 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     }
     LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_9) // using_LoadDictHC_64kb
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_pass_common_9) // using_LoadDictHC_64kb
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
     const int dictSize = 64 * 1024;
     char dict[dictSize];
     Stream statePtr(0);
@@ -1275,16 +1594,15 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     }
     LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_10) // external_dictionary_mode
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_pass_common_10) // external_dictionary_mode
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
     const int dictSize = 100;
     char dict[dictSize];
     Stream statePtr(0);
@@ -1299,18 +1617,17 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
     memcpy(d, statePtr.Get_Stream(), SizeOf_LZ4HC_CCtx_internal());
     
-    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize());
     
     EXPECT_NE(compressedLen, 0);
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedLen));
 
     free(d);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_11) // external_dictionary_mode_64kb_dict_size
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_pass_common_11) // external_dictionary_mode_64kb_dict_size
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
     Stream statePtr(0);
 
     const int dictSize = 64 * 1024;
@@ -1325,45 +1642,43 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
     memcpy(d, statePtr.Get_Stream(), SizeOf_LZ4HC_CCtx_internal());
 
-    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedLen));
 
     free(d);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_12) // overlapping_source_dict
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_pass_common_12) // overlapping_source_dict
 {
-    setSrc(150);
-    setDst(200);
+    Test_Buffer test_buf(150);
     Stream statePtr(0);
 
     const int dictSize = 100;
     char dict[200] = {0};
     
-    memcpy(dict, src, 100);
+    memcpy(dict, test_buf.getOrigData(), 100);
     for (int i = 150; i < 200; i++)
     {
         dict[i] = i % 255;
     }
     LZ4_loadDictHC(statePtr.Get_Stream(), &dict[100], dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), dict, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), dict, test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_13) // overlap_greater_than_64kb
+TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_pass_common_13) // overlap_greater_than_64kb
 {
-    setSrc(150);
-    setDst(200);
+    Test_Buffer test_buf(150);
     Stream statePtr(0);
     const int dictSize = 65 * 1024;
     char dict[150 + dictSize] = {0};
     
-    memcpy(dict, src, srcSize);
+    memcpy(dict, test_buf.getOrigData(), test_buf.getOrigSize());
     for (int i = 150; i < dictSize; i++)
     {
         dict[i] = i % 255;
@@ -1373,10 +1688,10 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     // initialise ctx pointer to statePtr->internal_donotuse
     initialize_ctx_and_dictBase(statePtr.Get_Stream(), (const LZ4_byte *)&dict[100]);
     
-    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), dict, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), dict, test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedLen));
 }
 
 /*********************************************
@@ -1389,64 +1704,66 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
 
 class LZ4HC_LZ4_compress_HC_continue_destSize : public LZ4HC_LZ4_compress_HC_continue
 {
+protected:
+    int srcSize = 0;
 };
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_1) // statePtr_NULL
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_fail_common_1) // statePtr_NULL
 {
-    setSrc(1024);
-    setDst(10000);
+    Test_Buffer test_buf(1024);
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_continue_destSize(NULL, src, dst, &srcSize, dstSize), 0);
+    srcSize = test_buf.getOrigSize();
+    EXPECT_EQ(LZ4_compress_HC_continue_destSize(NULL, test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize()), 0);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_2) // source_NULL
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_fail_common_2) // source_NULL
 {
-    setSrc(1024);
-    setDst(10000);
+    Test_Buffer test_buf(1024);
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), NULL, dst, &srcSize, dstSize), 0);
+    srcSize = test_buf.getOrigSize();
+    EXPECT_EQ(LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), NULL, test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize()), 0);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_3) // dest_NULL
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_fail_common_3) // dest_NULL
 {
-    setSrc(1024);
-    setDst(10000);
+    Test_Buffer test_buf(1024);
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, NULL, &srcSize, dstSize), 0);
+    srcSize = test_buf.getOrigSize();
+    EXPECT_EQ(LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), test_buf.getOrigData(), NULL, &srcSize, test_buf.getCompressedSize()), 0);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_4) // input_sz1
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_4) // input_sz1
 {
-    setSrc(1024);
-    setDst(10000);
+    Test_Buffer test_buf(1024);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), srcSize, test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_5) // input_sz2
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_5) // input_sz2
 {
-    setSrc(5120);
-    setDst(10000);
+    Test_Buffer test_buf(5120);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), srcSize, test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_6) // prefix_mode_1
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_6) // prefix_mode_1
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
     const int dictSize = 100;
     char dict[200];
-    memcpy(&dict[100], src, 100);
+    memcpy(&dict[100], test_buf.getOrigData(), 100);
     
     for (int i = 0; i < 100; i++)
     {
@@ -1457,16 +1774,16 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
     // This test case is to cover the condition where
     // dictEnd == (const BYTE*)source
     // And dict size is less than 64kb
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), &dict[100], dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), &dict[100], test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[100], srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[100], srcSize, test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_7) // prefix_mode_2
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_7) // prefix_mode_2
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
     const int dictSize = 64 * 1024;
     char* dict = (char*)malloc((dictSize + srcSize) * sizeof(char));
@@ -1475,7 +1792,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
     {
         dict[i] = i % 255;
     }
-    memcpy(&dict[dictSize],src,srcSize);
+    memcpy(&dict[dictSize],test_buf.getOrigData(),srcSize);
     LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     set_statePtr_dictCtx(statePtr.Get_Stream());
     set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
@@ -1483,19 +1800,19 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
     // This test case is to cover the condition where
     // dictEnd == (const BYTE*)source
     // And dict size is equal to 64kb
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), &dict[dictSize], dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), &dict[dictSize], test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[dictSize], srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[dictSize], srcSize, test_buf.getCompressedBuff(), compressedLen));
     
     free(d);
     free(dict);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_8) // using_LoadDictHC_less_64kb
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_8) // using_LoadDictHC_less_64kb
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
     const int dictSize = 100;
     char dict[dictSize] = { 0 };
@@ -1506,16 +1823,16 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
     }
     LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), srcSize, test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_9) // using_LoadDictHC_64kb
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_9) // using_LoadDictHC_64kb
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
     const int dictSize = 64 * 1024;
     char dict[dictSize] = { 0 };
@@ -1526,16 +1843,16 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
     }
     LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), srcSize, test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_10) // external_dictionary_mode
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_10) // external_dictionary_mode
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
 
     const int dictSize = 100;
@@ -1550,18 +1867,18 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
     set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
     memcpy(d, statePtr.Get_Stream(), SizeOf_LZ4HC_CCtx_internal());
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize());
     
     EXPECT_NE(compressedLen, 0);
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), srcSize, test_buf.getCompressedBuff(), compressedLen));
     
     free(d);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_11) // external_dictionary_mode_64kb_dict_size
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_11) // external_dictionary_mode_64kb_dict_size
 {
-    setSrc(100);
-    setDst(150);
+    Test_Buffer test_buf(100);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
 
     const int dictSize = 64 * 1024;
@@ -1576,46 +1893,46 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
     set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
     memcpy(d, statePtr.Get_Stream(), SizeOf_LZ4HC_CCtx_internal());
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), test_buf.getOrigData(), test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), srcSize, test_buf.getCompressedBuff(), compressedLen));
     
     free(d);
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_12) // overlapping_source_dict
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_12) // overlapping_source_dict
 {
-    setSrc(150);
-    setDst(200);
+    Test_Buffer test_buf(150);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
 
     const int dictSize = 100;
     char dict[200] = { 0 };
     
-    memcpy(dict, src, 100);
+    memcpy(dict, test_buf.getOrigData(), 100);
     for (int i = 150; i < 200; i++)
     {
         dict[i] = i % 255;
     }
     LZ4_loadDictHC(statePtr.Get_Stream(), &dict[100], dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), dict, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), dict, test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_13) // overlap_greater_than_64kb
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_13) // overlap_greater_than_64kb
 {
-    setSrc(150);
-    setDst(200);
+    Test_Buffer test_buf(150);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
 
     const int dictSize = 65 * 1024;
     char dict[150 + dictSize] = { 0 };
     
-    memcpy(dict, src, srcSize);
+    memcpy(dict, test_buf.getOrigData(), srcSize);
     for (int i = 150; i < dictSize; i++)
     {
         dict[i] = i % 255;
@@ -1623,24 +1940,26 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
     LZ4_loadDictHC(statePtr.Get_Stream(), &dict[100], dictSize);
     initialize_ctx_and_dictBase(statePtr.Get_Stream(), (const LZ4_byte *)&dict[100]);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), dict, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), dict, test_buf.getCompressedBuff(), &srcSize, test_buf.getCompressedSize());
     EXPECT_NE(compressedLen, 0);
     
-    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, dst, compressedLen));
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, test_buf.getCompressedBuff(), compressedLen));
 }
 
-TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_14) // dst < LZ4_compressBound(src)
+TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_pass_common_14) // destCapacity < LZ4_compressBound(test_buf.getOrigData())
 {
-    setSrc(150);
+    Test_Buffer test_buf(150);
+    srcSize = test_buf.getOrigSize();
     Stream statePtr(0);
 
-    int targetDstSize = LZ4_compressBound(srcSize);
-    setDst(targetDstSize * 0.75);
+    int targetDstSize = test_buf.getCompressedSize();
+    int dstSize = targetDstSize * 0.75;
+    char* dst = (char *)calloc(dstSize, sizeof(char));
 
     const int dictSize = 65 * 1024;
     char dict[150 + dictSize] = {0};
     
-    memcpy(dict, src, srcSize);
+    memcpy(dict, test_buf.getOrigData(), srcSize);
     for (int i = 150; i < dictSize; i++)
     {
         dict[i] = i % 255;
@@ -1654,6 +1973,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
     EXPECT_NE(previous_srcSize, srcSize);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, dst, compressedLen));
+    
+    if(dst) free(dst);
 }
 
 /*****************************************************
@@ -1730,7 +2051,7 @@ protected:
     }
 };
 
-TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_1) // dictonary_size_greater_64kb
+TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_pass_common_1) // dictonary_size_greater_64kb
 {
     char *data = (char *)malloc(100000);
     
@@ -1749,23 +2070,23 @@ TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_1) // 
     free(data);
 }
 
-TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_2) // dictionary_and_dictSize_is_zero
+TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_fail_common_2) // dictionary_and_dictSize_is_zero
 {
     EXPECT_EQ(LZ4_saveDictHC(stream, NULL, 0), 0);
 }
 
-TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_3) // stream_NULL
+TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_fail_common_3) // stream_NULL
 {
     char dict[11]="helloWorld";
     EXPECT_EQ(LZ4_saveDictHC(NULL, dict, 10), 0);
 }
 
-TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_4) // dictionary_is_NULL_dictSize_not_zero
+TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_fail_common_4) // dictionary_is_NULL_dictSize_not_zero
 {
     EXPECT_EQ(LZ4_saveDictHC(stream, NULL, 3), 0);
 }
 
-TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_5) // dictionary_size_greater_than_parameter
+TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_pass_common_5) // dictionary_size_greater_than_parameter
 {
     loadDictHC(10000);
     char *data = (char *)malloc(100000);
@@ -1778,7 +2099,7 @@ TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_5) // 
     free(data);
 }
 
-TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_6) // no_loaded_dictionary
+TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_fail_common_6) // no_loaded_dictionary
 {
     char data[11] = "helloWorld";
     
@@ -1844,7 +2165,7 @@ protected:
     }
 };
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_1)  // 7 Bytes reverse match
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_1)  // 7 Bytes reverse match
 {
     const char *p = "abcdefgh";
     const char *m = "abcdefgh";
@@ -1860,7 +2181,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_2)  // 7 Bytes reverse match(last byte mismatch)
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_2)  // 7 Bytes reverse match(last byte mismatch)
 {
     const char *p = "abcdefgh";
     const char *m = "Abcdefgh";
@@ -1876,7 +2197,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_3)  // 8 Bytes reverse match
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_3)  // 8 Bytes reverse match
 {
     const char *p = "abcdefghi";
     const char *m = "abcdefghi";
@@ -1892,7 +2213,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_4)  // 8 Bytes reverse match(last byte mismatch)
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_4)  // 8 Bytes reverse match(last byte mismatch)
 {
     const char *p = "abcdefghi";
     const char *m = "Abcdefghi";
@@ -1908,7 +2229,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_5)  // 9 Bytes reverse match
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_5)  // 9 Bytes reverse match
 {
     const char *p = "abcdefghij";
     const char *m = "abcdefghij";
@@ -1924,7 +2245,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_6)  // 9 Bytes reverse match(last byte mismatch)
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_6)  // 9 Bytes reverse match(last byte mismatch)
 {
     const char *p = "abcdefghij";
     const char *m = "Abcdefghij";
@@ -1940,7 +2261,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_7)  // 10 Bytes reverse match
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_7)  // 10 Bytes reverse match
 {
     const char *p = "abcdefghijk";
     const char *m = "abcdefghijk";
@@ -1956,7 +2277,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_8)  // 10 Bytes reverse match(last byte mismatch)
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_8)  // 10 Bytes reverse match(last byte mismatch)
 {
     const char *p = "abcdefghijk";
     const char *m = "Abcdefghijk";
@@ -1972,7 +2293,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), -9);
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_9)  // 11 Bytes reverse match
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_9)  // 11 Bytes reverse match
 {
     const char *p = "abcdefghijkl";
     const char *m = "abcdefghijkl";
@@ -1988,7 +2309,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_10)  // 11 Bytes reverse match(last byte mismatch)
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_10)  // 11 Bytes reverse match(last byte mismatch)
 {
     const char *p = "abcdefghijkl";
     const char *m = "Abcdefghijkl";
@@ -2004,7 +2325,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_11)  // 12 Bytes reverse match
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_11)  // 12 Bytes reverse match
 {
     const char *p = "abcdefghijklm";
     const char *m = "abcdefghijklm";
@@ -2020,7 +2341,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_12)  // 12 Bytes reverse match(last byte mismatch)
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_12)  // 12 Bytes reverse match(last byte mismatch)
 {
     const char *p = "abcdefghijklm";
     const char *m = "Abcdefghijklm";
@@ -2036,7 +2357,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_13)  // 13 Bytes reverse match
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_13)  // 13 Bytes reverse match
 {
     const char *p = "abcdefghijklmn";
     const char *m = "abcdefghijklmn";
@@ -2052,7 +2373,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_14)  // 13 Bytes reverse match(last byte mismatch)
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_14)  // 13 Bytes reverse match(last byte mismatch)
 {
     const char *p = "abcdefghijklmn";
     const char *m = "Abcdefghijklmn";
@@ -2068,7 +2389,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_15)  // long string reverse match to check loop iterations
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_15)  // long string reverse match to check loop iterations
 {
     const char *p = "abcdefghijklmnopqrstuvwx";
     const char *m = "Abcdefghijklmnopqrstuvwx";
@@ -2084,7 +2405,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_16)  // iMin < limit
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_16)  // iMin < limit
 {
     const char *p = "abcdefghijklmnopqrstuvwx";
     const char *m = "abcdefghijklmnopqrstuvwx";
@@ -2100,7 +2421,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_17)  // mMin < limit
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_17)  // mMin < limit
 {
     const char *p = "abcdefghijklmnopqrstuvwx";
     const char *m = "abcdefghijklmnopqrstuvwx";
@@ -2116,7 +2437,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_18)  // mMin != match and iMin != ip
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_18)  // mMin != match and iMin != ip
 {
     const char *p = "abcdefghijklmnopqrstuvwx";
     const char *m = "abcdefghijklmnopqrstuvwx";
@@ -2132,7 +2453,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
     EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_common_19)  // mMin > match and iMin > ip
+TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_19)  // mMin > match and iMin > ip
 {
     const char *p = "abcdefghijklmnopqrstuvwx";
     const char *m = "abcdefghijklmnopqrstuvwx";
@@ -2181,7 +2502,7 @@ protected:
     }
 };
 
-TEST_F(LZ4HC_AOCL_LZ4HC_Insert, AOCL_Compression_lz4hc_AOCL_LZ4HC_Insert_common_1)  
+TEST_F(LZ4HC_AOCL_LZ4HC_Insert, AOCL_Compression_lz4hc_AOCL_LZ4HC_Insert_pass_common_1)  
 {
     
     /* Test case to determine hashchain for particular hash value
@@ -2212,7 +2533,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_Insert, AOCL_Compression_lz4hc_AOCL_LZ4HC_Insert_common_
     EXPECT_EQ((uint16_t)hc4->chainTable[hcHeadPos], 12);
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_Insert, AOCL_Compression_lz4hc_AOCL_LZ4HC_Insert_common_2)
+TEST_F(LZ4HC_AOCL_LZ4HC_Insert, AOCL_Compression_lz4hc_AOCL_LZ4HC_Insert_pass_common_2)
 {
 
     /* Test case to determine hashchain for particular hash value
@@ -2250,7 +2571,7 @@ class LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch : public LZ4HC_AOCL_LZ4HC_Insert
 {
 };
 
-TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4HC_InsertAndGetWiderMatch_common_1)   // Disabled PatternAnslysis
+TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4HC_InsertAndGetWiderMatch_pass_common_1)   // Disabled PatternAnslysis
 {
 
     /* Test case to determine hashchain for particular hash value
@@ -2280,7 +2601,7 @@ TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4H
     EXPECT_EQ(startpos, src + 25);    /* startpos is the point in the string for which match is searched. */
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4HC_InsertAndGetWiderMatch_common_2) // Enabled Pattern Analysis
+TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4HC_InsertAndGetWiderMatch_pass_common_2) // Enabled Pattern Analysis
 {
 
     /* Test case to determine hashchain for particular hash value

@@ -976,7 +976,7 @@ TEST(LZ4_compress_destSize, AOCL_Compression_lz4_LZ4_compress_destSize_fail_comm
 
     // negative srcLen: Unsupported srcSize, too large or negative
     int srcLen = -1;
-    int targetDestSize = d.getOrigSize();
+    int targetDestSize = d.getCompressedSize();
     EXPECT_EQ(LZ4_compress_destSize(d.getOrigData(), d.getCompressedBuff(), &srcLen, targetDestSize), 0);
     
     // negative targetDestSize: Impossible to store anything
@@ -984,6 +984,16 @@ TEST(LZ4_compress_destSize, AOCL_Compression_lz4_LZ4_compress_destSize_fail_comm
     targetDestSize = -1;
     EXPECT_EQ(LZ4_compress_destSize(d.getOrigData(), d.getCompressedBuff(), &srcLen, targetDestSize), 0);
 
+}
+
+TEST(LZ4_compress_destSize, AOCL_Compression_lz4_LZ4_compress_destSize_fail_common_11) // srcSizePtr_is_NULL
+{
+    TestLoad d(800);
+
+    // src is not NULL and srcSizePtr is NULL.
+    EXPECT_EQ(LZ4_compress_destSize(d.getOrigData(), d.getCompressedBuff(), NULL /* srcSizePtr */, d.getCompressedSize()), 0);
+    // src is NULL and srcSizePtr is NULL.
+    EXPECT_EQ(LZ4_compress_destSize(NULL /* src */, d.getCompressedBuff(), NULL /* srcSizePtr */, d.getCompressedSize()), 0);
 }
 
 /*********************************************

@@ -3087,7 +3087,7 @@ int LZ4_compress_default(const char* src, char* dst, int srcSize, int maxOutputS
 static int LZ4_compress_destSize_extState (LZ4_stream_t* state, const char* src, char* dst, int* srcSizePtr, int targetDstSize)
 {
     AOCL_SETUP_NATIVE();
-    if(state==NULL || (src==NULL && *srcSizePtr!=0) || dst==NULL || srcSizePtr==NULL)
+    if(state==NULL || dst==NULL || srcSizePtr==NULL || (src==NULL && *srcSizePtr!=0))
         return 0;
     
     void* const s = LZ4_initStream(state, sizeof (*state));

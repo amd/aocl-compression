@@ -2114,7 +2114,7 @@ else
 /* state is presumed sized correctly (>= sizeof(LZ4_streamHC_t)) */
 int LZ4_compress_HC_destSize_internal(void* state, const char* source, char* dest, int* sourceSizePtr, int targetDestSize, int cLevel)
 {
-    if (state == NULL || source == NULL || dest == NULL || sourceSizePtr == NULL)
+    if (state == NULL || dest == NULL || sourceSizePtr == NULL || (source==NULL && *sourceSizePtr!=0))
     {
         LOG_FORMATTED(ERR, logCtx, "Invalid arguements passed. state=%p, source=%p, dest=%p, sourceSizePtr=%p", (void *)state, (void *)source, (void *)dest, (void *)sourceSizePtr);
         return 0;
@@ -2129,7 +2129,7 @@ int LZ4_compress_HC_destSize_internal(void* state, const char* source, char* des
 #ifdef AOCL_LZ4HC_OPT
 int AOCL_LZ4_compress_HC_destSize_internal(void* state, const char* source, char* dest, int* sourceSizePtr, int targetDestSize, int cLevel)
 {
-    if(state==NULL || source==NULL || dest==NULL || sourceSizePtr==NULL)
+    if (state == NULL || dest == NULL || sourceSizePtr == NULL || (source==NULL && *sourceSizePtr!=0))
     {
         LOG_FORMATTED(ERR, logCtx, "Invalid arguements passed. state=%p, source=%p, dest=%p, sourceSizePtr=%p", (void *)state, (void *)source, (void *)dest, (void *)sourceSizePtr);
         return 0;
@@ -2399,9 +2399,9 @@ LZ4_compressHC_continue_generic (LZ4_streamHC_t* LZ4_streamHCPtr,
                                  int* srcSizePtr, int dstCapacity,
                                  limitedOutput_directive limit)
 {
-    if (LZ4_streamHCPtr == NULL || src == NULL || dst == NULL)
+    if (LZ4_streamHCPtr == NULL || (srcSizePtr == NULL ) || (src == NULL && *srcSizePtr!=0) || dst == NULL)
     {
-        LOG_FORMATTED(ERR, logCtx, "Invalid arguments passed. LZ4_streamHCPtr=%p, src=%p, dst=%p", (void *)LZ4_streamHCPtr, (void *)src, (void *)dst);
+        LOG_FORMATTED(ERR, logCtx, "Invalid arguments passed. LZ4_streamHCPtr=%p, src=%p, dst=%p srcSizePtr=%p", (void *)LZ4_streamHCPtr, (void *)src, (void *)dst, (void *)srcSizePtr);
         return 0;
     }
     LZ4HC_CCtx_internal* const ctxPtr = &LZ4_streamHCPtr->internal_donotuse;
@@ -2665,7 +2665,8 @@ static int LZ4HC_compress_optimal ( LZ4HC_CCtx_internal* ctx,
     *srcSizePtr = 0;
     if (limit == fillOutput) oend -= LASTLITERALS;   /* Hack for support LZ4 format restriction */
     if (sufficient_len >= LZ4_OPT_NUM) sufficient_len = LZ4_OPT_NUM-1;
-
+    
+    if(ip==NULL) goto _last_literals;
     /* Main Loop */
     while (ip <= mflimit) {
          int const llen = (int)(ip - anchor);
