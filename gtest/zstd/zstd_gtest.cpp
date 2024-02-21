@@ -179,23 +179,22 @@ int Test_ZSTD_maxCLevel(void) {
     return ZSTD_maxCLevel();
 }
 
-bool zstd_check_uncompressed_equal_to_original(char* src, unsigned srcSize,
-    char* compressed, unsigned compressedLen, ZSTD_decompress_fp decomp_fp)
+bool zstd_check_uncompressed_equal_to_original(const char* src, size_t srcSize,
+    const char* compressed, size_t compressedLen, ZSTD_decompress_fp decomp_fp)
 {
-    int uncompressedLen = srcSize + 10;
-    char* uncompressed = (char*)calloc(uncompressedLen, sizeof(char));
+    char* uncompressed = (char*)calloc(srcSize, sizeof(char));
 
 
     ZSTD_DCtx* const dctx = ZSTD_createDCtx();
-    int uncompressedLenRes = decomp_fp(dctx, uncompressed, uncompressedLen, compressed, compressedLen);
+    size_t uncompressedLenRes = decomp_fp(dctx, uncompressed, srcSize, compressed, compressedLen);
 
-    if (uncompressedLenRes < 0) {//error code
+    if (Test_ZSTD_isError(uncompressedLenRes)) {
         free(uncompressed);
         ZSTD_freeDCtx(dctx);
         return false;
     }
 
-    if (!(srcSize == (unsigned)uncompressedLenRes)) {
+    if (!(srcSize == uncompressedLenRes)) {
         free(uncompressed);
         ZSTD_freeDCtx(dctx);
         return false;
@@ -416,9 +415,8 @@ void ZSTD_ZSTD_compress_base::compress_dst_null(ZSTD_Compress_API api, ZSTD_CCtx
 }
 
 void ZSTD_ZSTD_compress_base::compress_insufficient_dstCapacity(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel) { // compress dstCapacity < ZSTD_compressBound(srcSize)
-    TestLoad_2 d(800);
-    size_t dstCapacity = Test_ZSTD_compressBound(d.getOrigSize()) / 2;
-    size_t outLen = run_compress(api, cctx, cLevel, d.getCompressedBuff(), dstCapacity, d.getOrigData(), d.getOrigSize());
+    TestLoad_2 d(800, 400); // dstCapacity explicitly set to be insufficient
+    size_t outLen = run_compress(api, cctx, cLevel, d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize());
     CHECK_FAIL_ZSTD(outLen);
     EXPECT_EQ(outLen, ERROR(dstSize_tooSmall));
 }
@@ -554,19 +552,19 @@ TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_zstd_ZSTD_compress_pass_common_9)
 /***********************************************
  * Begin of ZSTD_ZSTD_decompress
  ***********************************************/
-void ZSTD_ZSTD_decompress_base::create_frame()
+void ZSTD_frame_creator::create_frame()
 {
     src = d->getCompressedBuff();
     srcLen = insert_frame(src, d->getCompressedSize(), original, origLen);  // Compress data from `original` buffer to `src` buffer.
 }
 
-void ZSTD_ZSTD_decompress_base::create_frame_overwrite()
+void ZSTD_frame_creator::create_frame_overwrite()
 {
     src = d->getCompressedBuff();
     srcLen = insert_frame_overwrite(src, d->getCompressedSize(), original, origLen);
 }
 
-size_t ZSTD_ZSTD_decompress_base::create_frames_multiple()
+size_t ZSTD_frame_creator::create_frames_multiple()
 {
     size_t N = 7;
     size_t srcWritten = 0;
@@ -575,26 +573,26 @@ size_t ZSTD_ZSTD_decompress_base::create_frames_multiple()
     return srcWritten;
 }
 
-void ZSTD_ZSTD_decompress_base::create_frame_skippable(unsigned magicVarint)
+void ZSTD_frame_creator::create_frame_skippable(unsigned magicVarint)
 {
     src = d->getCompressedBuff();
     srcLen = insert_skippable_frame(src, d->getCompressedSize(), original, origLen, magicVarint);
 }
 
-void ZSTD_ZSTD_decompress_base::create_frame_and_skippable()
+void ZSTD_frame_creator::create_frame_and_skippable()
 {
     src = d->getCompressedBuff();
     srcLen = insert_skippable_frame(src, d->getCompressedSize(), original, origLen / 2, rand() % 15); // 1 skippable frame
     srcLen += insert_frame(src + srcLen, d->getCompressedSize() - srcLen, original + (origLen / 2), origLen / 2); // followed by 1 zstd frame
 }
 
-void ZSTD_ZSTD_decompress_base::create_frame_with_no_decomp_size()
+void ZSTD_frame_creator::create_frame_with_no_decomp_size()
 {
     src = d->getCompressedBuff();
     srcLen = insert_frame_via_stream(src, d->getCompressedSize(), original, origLen);
 }
 
-void ZSTD_ZSTD_decompress_base::create_frame_with_params(ZSTD_frameParameters fparams)
+void ZSTD_frame_creator::create_frame_with_params(ZSTD_frameParameters fparams)
 {
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
     if (cctx == NULL) return;
@@ -607,14 +605,14 @@ void ZSTD_ZSTD_decompress_base::create_frame_with_params(ZSTD_frameParameters fp
     CHECK_PASS_ZSTD(ZSTD_freeCCtx(cctx));
 }
 
-void ZSTD_ZSTD_decompress_base::create_frame_prefix_unknown()
+void ZSTD_frame_creator::create_frame_prefix_unknown()
 {
     src = d->getCompressedBuff();
     srcLen = insert_frame(src, d->getCompressedSize(), original, origLen);
     src[0] = 0;
 }
 
-void ZSTD_ZSTD_decompress_base::create_frame_invalid_data_block()
+void ZSTD_frame_creator::create_frame_invalid_data_block()
 {
     src = d->getCompressedBuff();
     srcLen = insert_frame(src, d->getCompressedSize(), original, origLen);
@@ -624,6 +622,18 @@ void ZSTD_ZSTD_decompress_base::create_frame_invalid_data_block()
     src[frameHeaderSize + 3] = 'r';
     src[frameHeaderSize + 4] = 'o';
     src[frameHeaderSize + 5] = 'r';
+}
+
+void ZSTD_frame_creator::create_empty_frame()
+{
+    src = d->getCompressedBuff();
+    srcLen = insert_frame(src, d->getCompressedSize(), NULL, 0);
+}
+
+void ZSTD_frame_creator::create_stream_frame()
+{
+    src = d->getCompressedBuff();
+    srcLen = insert_frame_via_stream(src, d->getCompressedSize(), original, origLen);
 }
 
 size_t ZSTD_ZSTD_decompress_base::run_decompress(ZSTD_Decompress_API api, ZSTD_DCtx* dctx,
@@ -912,26 +922,7 @@ TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_pass_common_1
 /*********************************************
  * Begin of ZSTD_ZSTD_getframeContentSize
  *********************************************/
-class ZSTD_ZSTD_getframeContentSize : public ZSTD_ZSTD_decompress_base {
-public:
-    void create_frame()
-    {
-        src = d->getCompressedBuff();
-        srcLen = insert_frame(src, d->getCompressedSize(), original, origLen);
-    }
-
-    void create_empty_frame()
-    {
-        src = d->getCompressedBuff();
-        srcLen = insert_frame(src, d->getCompressedSize(), NULL, 0);
-    }
-
-    void create_stream_frame()
-    {
-        src = d->getCompressedBuff();
-        srcLen = insert_frame_via_stream(src, d->getCompressedSize(), original, origLen);
-    }
-};
+class ZSTD_ZSTD_getframeContentSize : public ZSTD_ZSTD_decompress_base {};
 
 TEST_F(ZSTD_ZSTD_getframeContentSize, AOCL_Compression_zstd_ZSTD_getFrameContentSize_pass_common_1) // size >= `ZSTD_frameHeaderSize_max`
 {

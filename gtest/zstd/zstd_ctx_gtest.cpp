@@ -174,14 +174,6 @@ size_t Test_ZSTD_estimateDCtxSize(void) {
     return ZSTD_estimateDCtxSize();
 }
 
-size_t Test_ZSTD_estimateCStreamSize(int compressionLevel) {
-    return ZSTD_estimateCStreamSize(compressionLevel);
-}
-
-size_t Test_ZSTD_estimateCStreamSize_usingCCtxParams(const ZSTD_CCtx_params* params) {
-    return ZSTD_estimateCStreamSize_usingCCtxParams(params);
-}
-
 ZSTD_CCtx* Test_ZSTD_initStaticCCtx(void* workspace, size_t workspaceSize){
     return ZSTD_initStaticCCtx(workspace, workspaceSize);
 }
@@ -946,20 +938,14 @@ TEST_F(ZSTD_ZSTD_CCtx_setParametersUsingCCtxParams, AOCL_Compression_zstd_ZSTD_C
 /*********************************************
 * Begin of ZSTD_ZSTD_CCtxParams_init
 *********************************************/
-class ZSTD_ZSTD_CCtxParams_init : public AOCL_setup_zstd {
-public:
+void ZSTD_ZSTD_CCtxParams_init::SetUp() {
+    cctxParams = Test_ZSTD_createCCtxParams();
+    EXPECT_NE(cctxParams, nullptr);
+}
 
-    void SetUp() override {
-        cctxParams = Test_ZSTD_createCCtxParams();
-        EXPECT_NE(cctxParams, nullptr);
-    }
-
-    virtual ~ZSTD_ZSTD_CCtxParams_init() {
-        Test_ZSTD_freeCCtxParams(cctxParams);
-    }
-
-    ZSTD_CCtx_params* cctxParams;
-};
+ZSTD_ZSTD_CCtxParams_init::~ZSTD_ZSTD_CCtxParams_init() {
+    Test_ZSTD_freeCCtxParams(cctxParams);
+}
 
 TEST_F(ZSTD_ZSTD_CCtxParams_init, AOCL_Compression_zstd_ZSTD_CCtxParams_init_pass_common_1) { // valid
     EXPECT_EQ(Test_ZSTD_CCtxParams_init(cctxParams, ZSTD_CLEVEL_DEFAULT), 0);
@@ -1288,32 +1274,49 @@ TEST_F(ZSTD_ZSTD_DCtx_reset, AOCL_Compression_zstd_ZSTD_DCtx_reset_fail_common_6
 /*********************************************
  * Begin of ZSTD_ZSTD_estimateCCtxSize
  * *********************************************/
-TEST(ZSTD_ZSTD_estimateCCtxSize, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_pass_common_1) { // monotonically increasing values based on level for 1 to max
+void ZSTD_ZSTD_estimateSize::monotonic_increasing(ZSTD_estimateSize_fp fp) // monotonically increasing values based on level for 1 to max
+{ 
     int minLevel = 1;
     int maxLevel = Test_ZSTD_maxCLevel();
     size_t prevSize = 0;
     for (int i = minLevel; i <= maxLevel; i++) {
-        size_t size = Test_ZSTD_estimateCCtxSize(i);
+        size_t size = fp(i);
         EXPECT_GE(size, prevSize);
         prevSize = size;
     }
 }
 
-TEST(ZSTD_ZSTD_estimateCCtxSize, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_pass_common_2) { // level <= 0
-    size_t sizeN = Test_ZSTD_estimateCCtxSize(0);
+void ZSTD_ZSTD_estimateSize::level_below_0(ZSTD_estimateSize_fp fp) // level <= 0
+{
+    size_t sizeN = fp(0);
     EXPECT_GT(sizeN, 0);
 
     int minLevel = Test_ZSTD_minCLevel();
-    size_t sizeMin = Test_ZSTD_estimateCCtxSize(minLevel);
+    size_t sizeMin = fp(minLevel);
     EXPECT_GT(sizeMin, 0);
 }
 
-TEST(ZSTD_ZSTD_estimateCCtxSize, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_pass_common_3) { // level > max
+void ZSTD_ZSTD_estimateSize::level_above_max(ZSTD_estimateSize_fp fp) // level > max
+{
     int maxLevel = Test_ZSTD_maxCLevel();
-    size_t sizeMax = Test_ZSTD_estimateCCtxSize(maxLevel);
-    size_t sizeP = Test_ZSTD_estimateCCtxSize(maxLevel + 1);
+    size_t sizeMax = fp(maxLevel);
+    size_t sizeP = fp(maxLevel + 1);
     EXPECT_GT(sizeP, 0);
     EXPECT_EQ(sizeMax, sizeP);
+}
+
+class ZSTD_ZSTD_estimateCCtxSize : public ZSTD_ZSTD_estimateSize {};
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_pass_common_1) { // monotonically increasing values based on level for 1 to max
+    monotonic_increasing(Test_ZSTD_estimateCCtxSize);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_pass_common_2) { // level <= 0
+    level_below_0(Test_ZSTD_estimateCCtxSize);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_pass_common_3) { // level > max
+    level_above_max(Test_ZSTD_estimateCCtxSize);
 }
 /*********************************************
  * End of ZSTD_ZSTD_estimateCCtxSize
@@ -1322,51 +1325,76 @@ TEST(ZSTD_ZSTD_estimateCCtxSize, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_pas
 /*********************************************
  * Begin of ZSTD_ZSTD_estimateCCtxSize_usingCParams
  * *********************************************/
-TEST(ZSTD_ZSTD_estimateCCtxSize_usingCParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCParams_pass_common_1) { // no source estimate
-    size_t size = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
-
-    ZSTD_compressionParameters params = Test_ZSTD_getCParams(ZSTD_CLEVEL_DEFAULT, 0, 0);
-    size_t size_params = Test_ZSTD_estimateCCtxSize_usingCParams(params);
+void ZSTD_ZSTD_estimateSize_usingCParams::no_source_estimate(size_t sz_no_params, int level, ZSTD_estimateSize_usingCParams_fp fp) // no source estimate
+{
+    ZSTD_compressionParameters params = Test_ZSTD_getCParams(level, 0, 0);
+    size_t size_params = fp(params);
     EXPECT_GT(size_params, 0);
-    EXPECT_EQ(size, size_params); // ZSTD_estimateCCtxSize_usingCParams should provide same estimate as ZSTD_estimateCCtxSize
+    EXPECT_EQ(sz_no_params, size_params); // ZSTD_estimateSize_usingCParams should provide same estimate as ZSTD_estimateSize
 }
 
-TEST(ZSTD_ZSTD_estimateCCtxSize_usingCParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCParams_pass_common_2) { // with source estimate
-    size_t size = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
-
-    ZSTD_compressionParameters params = Test_ZSTD_getCParams(ZSTD_CLEVEL_DEFAULT, 128, 0); // source size estimate provided
-    size_t size_params = Test_ZSTD_estimateCCtxSize_usingCParams(params);
+void ZSTD_ZSTD_estimateSize_usingCParams::with_source_estimate(size_t sz_no_params, int level, ZSTD_estimateSize_usingCParams_fp fp) // with source estimate
+{
+    ZSTD_compressionParameters params = Test_ZSTD_getCParams(level, 128, 0); // source size estimate provided
+    size_t size_params = fp(params);
     EXPECT_GT(size_params, 0);
-    EXPECT_LT(size_params, size); // ZSTD_estimateCCtxSize_usingCParams should provide tighter estimate
+    EXPECT_LT(size_params, sz_no_params); // ZSTD_estimateSize_usingCParams should provide tighter estimate
 }
 
-TEST(ZSTD_ZSTD_estimateCCtxSize_usingCParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCParams_pass_common_3) { // level <= 0
+void ZSTD_ZSTD_estimateSize_usingCParams::level_below_0(ZSTD_estimateSize_usingCParams_fp fp) // level <= 0
+{
     {
         ZSTD_compressionParameters params = Test_ZSTD_getCParams(0, 0, 0);
-        size_t sizeN = Test_ZSTD_estimateCCtxSize_usingCParams(params);
+        size_t sizeN = fp(params);
         EXPECT_GT(sizeN, 0);
     }
     {
         int minLevel = Test_ZSTD_minCLevel();
         ZSTD_compressionParameters params = Test_ZSTD_getCParams(minLevel, 0, 0);
-        size_t sizeMin = Test_ZSTD_estimateCCtxSize_usingCParams(params);
+        size_t sizeMin = fp(params);
         EXPECT_GT(sizeMin, 0);
     }
 }
 
-TEST(ZSTD_ZSTD_estimateCCtxSize_usingCParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCParams_pass_common_4) { // level > max
+void ZSTD_ZSTD_estimateSize_usingCParams::level_above_max(ZSTD_estimateSize_usingCParams_fp fp) // level > max
+{
     size_t sizeP, sizeMax;
     int maxLevel = Test_ZSTD_maxCLevel();
     {
         ZSTD_compressionParameters params = Test_ZSTD_getCParams(maxLevel, 0, 0);
-        sizeMax = Test_ZSTD_estimateCCtxSize_usingCParams(params);
+        sizeMax = fp(params);
     }
     {
         ZSTD_compressionParameters params = Test_ZSTD_getCParams(maxLevel + 1, 0, 0);
-        sizeP = Test_ZSTD_estimateCCtxSize_usingCParams(params);
+        sizeP = fp(params);
         EXPECT_GT(sizeP, 0);
         EXPECT_EQ(sizeMax, sizeP);
     }
+}
+
+class ZSTD_ZSTD_estimateCCtxSize_usingCParams : public ZSTD_ZSTD_estimateSize_usingCParams {};
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCParams_pass_common_1) { // no source estimate
+    size_t size_no_params = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
+    no_source_estimate(size_no_params, ZSTD_CLEVEL_DEFAULT, Test_ZSTD_estimateCCtxSize_usingCParams);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCParams_pass_common_2) { // with source estimate
+    size_t size_no_params = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
+    with_source_estimate(size_no_params, ZSTD_CLEVEL_DEFAULT, Test_ZSTD_estimateCCtxSize_usingCParams);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCParams_pass_common_3) { // level <= 0
+    level_below_0(Test_ZSTD_estimateCCtxSize_usingCParams);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCParams_pass_common_4) { // level = 8, row based matchfinder
+    size_t size_no_params = Test_ZSTD_estimateCCtxSize(8);
+    with_source_estimate(size_no_params, 8, Test_ZSTD_estimateCCtxSize_usingCParams);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCParams_pass_common_5) { // level > max
+    level_above_max(Test_ZSTD_estimateCCtxSize_usingCParams);
 }
 /*********************************************
  * End of ZSTD_ZSTD_estimateCCtxSize_usingCParams
@@ -1375,145 +1403,162 @@ TEST(ZSTD_ZSTD_estimateCCtxSize_usingCParams, AOCL_Compression_zstd_ZSTD_estimat
 /*********************************************
  * Begin of ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams
  * *********************************************/
-class ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams : public ZSTD_ZSTD_CCtxParams_init {};
-
-TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCCtxParams_pass_common_1) { // no source estimate
-    size_t size = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
-
-    CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, ZSTD_CLEVEL_DEFAULT));
-    size_t size_params = Test_ZSTD_estimateCCtxSize_usingCCtxParams(cctxParams);
+void ZSTD_ZSTD_estimateSize_usingCCtxParams::no_source_estimate(size_t sz_no_params, int level, ZSTD_estimateSize_usingCCtxParams_fp fp) // no source estimate
+{
+    CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, level));
+    size_t size_params = fp(cctxParams);
     EXPECT_GT(size_params, 0);
-    EXPECT_EQ(size, size_params); // ZSTD_estimateCCtxSize_usingCCtxParams should provide same estimate as ZSTD_estimateCCtxSize
+    EXPECT_EQ(sz_no_params, size_params); // ZSTD_estimateSize_usingCCtxParams should provide same estimate as ZSTD_estimateSize
 }
 
-TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCCtxParams_pass_common_2) { // with source estimate
-    size_t size = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
-
-    CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, ZSTD_CLEVEL_DEFAULT));
+void ZSTD_ZSTD_estimateSize_usingCCtxParams::with_source_estimate(size_t sz_no_params, int level, ZSTD_estimateSize_usingCCtxParams_fp fp) // with source estimate
+{
+    CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, level));
     CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_setParameter(cctxParams, ZSTD_c_srcSizeHint, 128)); // source size estimate provided
-    size_t size_params = Test_ZSTD_estimateCCtxSize_usingCCtxParams(cctxParams);
+    size_t size_params = fp(cctxParams);
     EXPECT_GT(size_params, 0);
-    EXPECT_LT(size_params, size); // ZSTD_estimateCCtxSize_usingCCtxParams should provide tighter estimate
+    EXPECT_LT(size_params, sz_no_params); // ZSTD_estimateSize_usingCCtxParams should provide tighter estimate
 }
 
-TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCCtxParams_pass_common_3) { // level <= 0
+void ZSTD_ZSTD_estimateSize_usingCCtxParams::with_source_estimate_stable(size_t sz_no_params, int level, ZSTD_estimateSize_usingCCtxParams_fp fp) // with source estimate stable mode
+{
+    CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, level));
+    cctxParams->inBufferMode = ZSTD_bm_stable;
+    cctxParams->outBufferMode = ZSTD_bm_stable;
+    CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_setParameter(cctxParams, ZSTD_c_srcSizeHint, 128)); // source size estimate provided
+    size_t size_params = fp(cctxParams);
+    EXPECT_GT(size_params, 0);
+    EXPECT_LT(size_params, sz_no_params); // ZSTD_estimateSize_usingCCtxParams should provide tighter estimate
+}
+
+void ZSTD_ZSTD_estimateSize_usingCCtxParams::level_below_0(ZSTD_estimateSize_usingCCtxParams_fp fp) // level <= 0
+{
     {
         CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, 0));
-        size_t sizeN = Test_ZSTD_estimateCCtxSize_usingCCtxParams(cctxParams);
+        size_t sizeN = fp(cctxParams);
         EXPECT_GT(sizeN, 0);
     }
     {
         int minLevel = Test_ZSTD_minCLevel();
         CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, minLevel));
-        size_t sizeMin = Test_ZSTD_estimateCCtxSize_usingCCtxParams(cctxParams);
+        size_t sizeMin = fp(cctxParams);
         EXPECT_GT(sizeMin, 0);
     }
 }
 
-TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCCtxParams_pass_common_4) { // level > max
+void ZSTD_ZSTD_estimateSize_usingCCtxParams::level_above_max(ZSTD_estimateSize_usingCCtxParams_fp fp) // level > max
+{
     size_t sizeP, sizeMax;
     int maxLevel = Test_ZSTD_maxCLevel();
     {
         CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, maxLevel));
-        sizeMax = Test_ZSTD_estimateCCtxSize_usingCCtxParams(cctxParams);
+        sizeMax = fp(cctxParams);
     }
     {
         CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, maxLevel + 1));
-        sizeP = Test_ZSTD_estimateCCtxSize_usingCCtxParams(cctxParams);
+        sizeP = fp(cctxParams);
         EXPECT_GT(sizeP, 0);
         EXPECT_EQ(sizeMax, sizeP);
     }
+}
+
+class ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams : public ZSTD_ZSTD_estimateSize_usingCCtxParams {};
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCCtxParams_pass_common_1) { // no source estimate
+    size_t sz_no_params = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
+    no_source_estimate(sz_no_params, ZSTD_CLEVEL_DEFAULT, Test_ZSTD_estimateCCtxSize_usingCCtxParams);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCCtxParams_pass_common_2) { // with source estimate
+    size_t sz_no_params = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
+    with_source_estimate(sz_no_params, ZSTD_CLEVEL_DEFAULT, Test_ZSTD_estimateCCtxSize_usingCCtxParams);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCCtxParams_pass_common_3) { // with source estimate stable mode
+    size_t sz_no_params = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
+    with_source_estimate_stable(sz_no_params, ZSTD_CLEVEL_DEFAULT, Test_ZSTD_estimateCCtxSize_usingCCtxParams);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCCtxParams_pass_common_4) { // level <= 0
+    level_below_0(Test_ZSTD_estimateCCtxSize_usingCCtxParams);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCCtxParams_pass_common_5) { // level = 8, row based matchfinder
+    size_t sz_no_params = Test_ZSTD_estimateCCtxSize(8);
+    with_source_estimate(sz_no_params, 8, Test_ZSTD_estimateCCtxSize_usingCCtxParams);
+}
+
+TEST_F(ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCCtxSize_usingCCtxParams_pass_common_6) { // level > max
+    level_above_max(Test_ZSTD_estimateCCtxSize_usingCCtxParams);
 }
 /*********************************************
  * End of ZSTD_ZSTD_estimateCCtxSize_usingCCtxParams
  *********************************************/
 
 /*********************************************
- * Begin of ZSTD_ZSTD_estimateCStreamSize_usingCCtxParams
- * *********************************************/
-class ZSTD_ZSTD_estimateCStreamSize_usingCCtxParams : public ZSTD_ZSTD_CCtxParams_init {};
-
-TEST_F(ZSTD_ZSTD_estimateCStreamSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCStreamSize_usingCCtxParams_pass_common_1) { // no source estimate
-    size_t size = Test_ZSTD_estimateCStreamSize(ZSTD_CLEVEL_DEFAULT);
-
-    CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, ZSTD_CLEVEL_DEFAULT));
-    size_t size_params = Test_ZSTD_estimateCStreamSize_usingCCtxParams(cctxParams);
-    EXPECT_GT(size_params, 0);
-    EXPECT_EQ(size, size_params); // ZSTD_estimateCStreamSize_usingCCtxParams should provide same estimate as ZSTD_estimateCStreamSize
-}
-
-TEST_F(ZSTD_ZSTD_estimateCStreamSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCStreamSize_usingCCtxParams_pass_common_2) { // with source estimate
-    size_t size = Test_ZSTD_estimateCStreamSize(ZSTD_CLEVEL_DEFAULT);
-
-    CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, ZSTD_CLEVEL_DEFAULT));
-    CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_setParameter(cctxParams, ZSTD_c_srcSizeHint, 128)); // source size estimate provided
-    size_t size_params = Test_ZSTD_estimateCStreamSize_usingCCtxParams(cctxParams);
-    EXPECT_GT(size_params, 0);
-    EXPECT_LT(size_params, size); // ZSTD_estimateCStreamSize_usingCCtxParams should provide tighter estimate
-}
-
-TEST_F(ZSTD_ZSTD_estimateCStreamSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCStreamSize_usingCCtxParams_pass_common_3) { // level <= 0
-    {
-        CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, 0));
-        size_t sizeN = Test_ZSTD_estimateCStreamSize_usingCCtxParams(cctxParams);
-        EXPECT_GT(sizeN, 0);
-    }
-    {
-        int minLevel = Test_ZSTD_minCLevel();
-        CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, minLevel));
-        size_t sizeMin = Test_ZSTD_estimateCStreamSize_usingCCtxParams(cctxParams);
-        EXPECT_GT(sizeMin, 0);
-    }
-}
-
-TEST_F(ZSTD_ZSTD_estimateCStreamSize_usingCCtxParams, AOCL_Compression_zstd_ZSTD_estimateCStreamSize_usingCCtxParams_pass_common_4) { // level > max
-    size_t sizeP, sizeMax;
-    int maxLevel = Test_ZSTD_maxCLevel();
-    {
-        CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, maxLevel));
-        sizeMax = Test_ZSTD_estimateCStreamSize_usingCCtxParams(cctxParams);
-    }
-    {
-        CHECK_PASS_ZSTD(Test_ZSTD_CCtxParams_init(cctxParams, maxLevel + 1));
-        sizeP = Test_ZSTD_estimateCStreamSize_usingCCtxParams(cctxParams);
-        EXPECT_GT(sizeP, 0);
-        EXPECT_EQ(sizeMax, sizeP);
-    }
-}
-/*********************************************
- * End of ZSTD_ZSTD_estimateCStreamSize_usingCCtxParams
- *********************************************/
-
-/*********************************************
  * Begin of ZSTD_ZSTD_initStaticCCtx
  * *********************************************/
-TEST(ZSTD_ZSTD_initStaticCCtx, AOCL_Compression_zstd_Test_ZSTD_initStaticCCtx_pass_common_1) { // large enough workspace
-    size_t const workspaceSize = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
-    void * workspace = malloc(workspaceSize);
-    ZSTD_CCtx* cctx = Test_ZSTD_initStaticCCtx(workspace, workspaceSize);
+void ZSTD_ZSTD_initStatic::workspace_sufficient(ZSTD_Compress_API api) // large enough workspace
+{
+    size_t workspaceSize = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
+    void* workspace = malloc(workspaceSize);
+    void* cctx = run_init(api, workspace, workspaceSize);
     EXPECT_NE(cctx, nullptr);
     free(workspace);
 }
 
-TEST(ZSTD_ZSTD_initStaticCCtx, AOCL_Compression_zstd_Test_ZSTD_initStaticCCtx_fail_common_2) { // workspace is null
-    ZSTD_CCtx* cctx = Test_ZSTD_initStaticCCtx(NULL, 0);
+void ZSTD_ZSTD_initStatic::workspace_null(ZSTD_Compress_API api) // workspace is null
+{
+    void* cctx = run_init(api, NULL, 0);
     EXPECT_EQ(cctx, nullptr);
 }
 
-TEST(ZSTD_ZSTD_initStaticCCtx, AOCL_Compression_zstd_Test_ZSTD_initStaticCCtx_fail_common_3) { // workspaceSize is too small
-    size_t const workspaceSize = sizeof(ZSTD_CCtx) - 1;
-    void * workspace = malloc(workspaceSize);
-    ZSTD_CCtx* cctx = Test_ZSTD_initStaticCCtx(workspace, workspaceSize);
+void ZSTD_ZSTD_initStatic::workspace_too_small(ZSTD_Compress_API api) // workspaceSize is too small
+{
+    size_t workspaceSize = sizeof(ZSTD_CCtx) - 1;
+    void* workspace = malloc(workspaceSize);
+    void* cctx = run_init(api, workspace, workspaceSize);
     EXPECT_EQ(cctx, nullptr);
     free(workspace);
 }
 
-TEST(ZSTD_ZSTD_initStaticCCtx, AOCL_Compression_zstd_Test_ZSTD_initStaticCCtx_fail_common_4) { // workspace not 8-byte aligned
-    size_t const workspaceSize = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
-    void * workspace = malloc(workspaceSize + 1);
-    ZSTD_CCtx* cctx = Test_ZSTD_initStaticCCtx((void*)((size_t)workspace + 1), workspaceSize);
+void ZSTD_ZSTD_initStatic::workspace_not_aligned(ZSTD_Compress_API api) // workspace not 8-byte aligned
+{
+    size_t workspaceSize = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
+    void* workspace = malloc(workspaceSize + 1);
+    void* cctx = run_init(api, (void*)((size_t)workspace + 1), workspaceSize);
     EXPECT_EQ(cctx, nullptr);
     free(workspace);
+}
+
+void* ZSTD_ZSTD_initStatic::run_init(ZSTD_Compress_API api, void* workspace, size_t workspaceSize)
+{
+    switch(api){
+        case ZSTD_Compress_API::compress_cctx:
+            return (void*)Test_ZSTD_initStaticCCtx(workspace, workspaceSize);
+        case ZSTD_Compress_API::compress_stream_end:
+            return (void*)Test_ZSTD_initStaticCStream(workspace, workspaceSize);
+        default:
+            return NULL;
+    };
+}
+
+class ZSTD_ZSTD_initStaticCCtx : public ZSTD_ZSTD_initStatic {};
+
+TEST_F(ZSTD_ZSTD_initStaticCCtx, AOCL_Compression_zstd_Test_ZSTD_initStaticCCtx_pass_common_1) { 
+    workspace_sufficient(ZSTD_Compress_API::compress_cctx);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCCtx, AOCL_Compression_zstd_Test_ZSTD_initStaticCCtx_fail_common_2) {
+    workspace_null(ZSTD_Compress_API::compress_cctx);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCCtx, AOCL_Compression_zstd_Test_ZSTD_initStaticCCtx_fail_common_3) {
+    workspace_too_small(ZSTD_Compress_API::compress_cctx);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCCtx, AOCL_Compression_zstd_Test_ZSTD_initStaticCCtx_fail_common_4) {
+    workspace_not_aligned(ZSTD_Compress_API::compress_cctx);
 }
 /*********************************************
  * End of ZSTD_ZSTD_initStaticCCtx

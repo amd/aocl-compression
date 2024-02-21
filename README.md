@@ -296,6 +296,12 @@ Running source code coverage using GCOV
 To measure source code coverage, use CODE_COVERAGE option while configuring the CMake build. Run CMake with the custom target option 'code-coverage' to execute tests and generate code coverage data. The code coverage reports are generated in the build directory under subdirectory called 'coverage/html_report'. Open the HTML files in browser to view the coverage information.
 
 Following is the sample command usage to run code coverage:
+`cmake -B <build directory> <CMakeList.txt filepath> 
+      -DCMAKE_INSTALL_PREFIX=<install path> 
+      -DCMAKE_BUILD_TYPE=Debug 
+      -DBUILD_STATIC_LIBS=ON
+      -DCODE_COVERAGE=ON
+      <Additional Library Build Options>`
 `cmake --build <build directory> --target install code-coverage`
 
 Running Valgrind and ASAN memory checks using CTest
