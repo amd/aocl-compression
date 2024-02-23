@@ -61,22 +61,19 @@
 #ifdef _WINDOWS
 #define LOG_SYSTEM_ERROR()\
 {\
-    LOG_FORMATTED(ERR, log_ctx,"System Error Code: %lu", GetLastError());\
-    printf("System Error Code: %lu\n", GetLastError());\
+    LOG_BENCH(ERR, "System Error Code: %lu\n", GetLastError());\
 } 
 #else
 #define LOG_SYSTEM_ERROR()\
 {\
-    LOG_FORMATTED(ERR, log_ctx,"Error Message: %s.", strerror(errno));\
-    printf("Error Message: %s.\n", strerror(errno));\
+    LOG_BENCH(ERR, "Error Message: %s\n", strerror(errno));\
 }
 #endif
 
 #define STRING_OVERFLOW(src_sz, append_sz, limit) ((src_sz + append_sz)  > (limit - 1))
 #define LOG_STRING_OVERFLOW(text_overflowed)\
 {\
-    LOG_FORMATTED(ERR, log_ctx,"String Overflow Error: [%s] is longer than [%d] characters.", text_overflowed, (int)(MAX_FILENAME_LEN-1));\
-    printf("String Overflow Error: [%s] is longer than [%d] characters.\n", text_overflowed, (int)(MAX_FILENAME_LEN-1));\
+    LOG_BENCH(ERR, "String Overflow Error: [%s] is longer than [%d] characters\n", text_overflowed, (int)(MAX_FILENAME_LEN-1));\
 }
 
 //Input test file name
@@ -95,7 +92,7 @@ AOCL_VOID print_user_options (AOCL_VOID)
     printf("C Compiler: %s\n", CCompiler);
     printf("C++ Compiler: %s\n", CXXCompiler);
     printf("Compile Options: %s%s\n\n", CFLAGS_SET1, CFLAGS_SET2);
-    printf("Usage: aocl_compression_bench <options> input\n\n");
+    printf("Usage: aocl_compression_bench <options> input\n");
     printf("where input is the test file name and <options> can be:\n");
     printf("-h | --help Print help info\n");
     printf("-l          List all the available compression/decompression methods\n");
@@ -108,16 +105,16 @@ AOCL_VOID print_user_options (AOCL_VOID)
     printf("-t          Verification and functional tests of the compression/decompression methods\n");
     printf("-p          Print stats like compression/decompression time, speed, ratio\n");
     printf("-o          Turn off all optimizations\n");
-    printf("-r          Run particular operation only. Supported options are 'compress' and 'decompress'.\n\n");
-    printf("-d          File to dump output data. Based on -r, saves compressed/decompressed data.\n\n");
-    printf("-f          Input uncompressed file to be used for validation in -rdecompress mode.\n\n");
-    printf("-c          Run IPP library methods. Provide the path for the IPP library path after the -c option.\n\n");
-    printf("-n          Use Native APIs for compression/decompression.\n\n");
+    printf("-r          Run particular operation only. Supported options are 'compress' and 'decompress'.\n");
+    printf("-d          File to dump output data. Based on -r, saves compressed/decompressed data.\n");
+    printf("-f          Input uncompressed file to be used for validation in -rdecompress mode.\n");
+    printf("-c          Run IPP library methods. Provide the path for the IPP library path after the -c option.\n");
+    printf("-n          Use Native APIs for compression/decompression.\n");
 }
 
 AOCL_VOID print_supported_compressors (AOCL_VOID)
 {
-   printf("\nSupported compression/decompression methods along with their supported levels are:\n\n");
+   printf("\nSupported compression/decompression methods along with their supported levels are:\n");
    printf("===========================================\n");
    printf("Method Name\tLower Level\tUpper Level\n");
    printf("===========================================\n");
@@ -127,7 +124,7 @@ AOCL_VOID print_supported_compressors (AOCL_VOID)
    printf("SNAPPY\t\t %s\t\t%s\n", "NA", "NA");
    printf("ZLIB\t\t %td\t\t%td\n", codec_list[ZLIB].lower_level, codec_list[ZLIB].upper_level);
    printf("ZSTD\t\t %td\t\t%td\n", codec_list[ZSTD].lower_level, codec_list[ZSTD].upper_level);
-   printf("BZIP2\t\t %td\t\t%td\n\n", codec_list[BZIP2].lower_level, codec_list[BZIP2].upper_level);
+   printf("BZIP2\t\t %td\t\t%td\n", codec_list[BZIP2].lower_level, codec_list[BZIP2].upper_level);
 }
 
 AOCL_VOID *allocMem(AOCL_UINTP size, AOCL_INTP zeroInit)
@@ -412,7 +409,7 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                 case 'r': /* Select operation to run. If not specified, run both. */
                     if (codec_bench_handle->runOperation != RUN_OPERATION_DEFAULT) 
                     { //r option was already processed once
-                        printf("Multiple -r options are not allowed.\n\n");
+                        LOG_BENCH(ERR, "Multiple -r options are not allowed.\n");
                         ret = ERR_CODEC_BENCH_ARGS;
                         break;
                     }
@@ -426,7 +423,7 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                     }
                     else 
                     {
-                        printf("Invalid -r option. Valid options are 'compress' and 'decompress'\n\n");
+                        LOG_BENCH(ERR, "Invalid -r option. Valid options are 'compress' and 'decompress'\n");
                         ret = ERR_CODEC_BENCH_ARGS;
                     }
                     break;
@@ -434,7 +431,7 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                 case 'd': /* file to dump output data */
                     if (dumpEnabled) 
                     {
-                        printf("Multiple -d options are not allowed.\n\n");
+                        LOG_BENCH(ERR, "Multiple -d options are not allowed.\n");
                         ret = ERR_CODEC_BENCH_ARGS;
                         break;
                     }
@@ -448,7 +445,7 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                 case 'f': /* file for validation in decompress only mode */
                     if (valEnabled) 
                     {
-                        printf("Multiple -f options are not allowed.\n\n");
+                        LOG_BENCH(ERR, "Multiple -f options are not allowed.\n");
                         ret = ERR_CODEC_BENCH_ARGS;
                         break;
                     }
@@ -534,9 +531,7 @@ AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
 
         if (codec_bench_handle->file_size > compression_bound(codec_bench_handle->mem_limit))
         {
-            LOG_UNFORMATTED(ERR, log_ctx, 
-                "Cannot decompress this large file.");
-            printf("Cannot decompress this large file.\n");
+            LOG_BENCH(ERR, "Cannot decompress this large file.\n");
             return ERR_CODEC_BENCH_MEM;
 
         }
@@ -585,9 +580,7 @@ AOCL_INTP open_file(aocl_codec_bench_info* codec_bench_handle,
     codec_bench_handle->fp = fopen(filePath, "rb");
     if (!codec_bench_handle->fp)
     {
-        LOG_FORMATTED(ERR, log_ctx,
-            "Error in opening input file [%s].", filename);
-        printf("Error in opening input file [%s].\n", filename);
+        LOG_BENCH(ERR, "Error in opening input file [%s].\n", filename);
 
         return 0;
     }
@@ -697,9 +690,7 @@ AOCL_INTP dump_to_file(aocl_codec_bench_info* codec_bench_handle,
     // open file to dump compressed data
     if (!(dumpFp = fopen(dmpFolder, "wb")))
     {
-        LOG_FORMATTED(ERR, log_ctx,
-            "Error in opening output file [%s].", dmpFolder);
-        printf("Error in opening output file [%s].\n", dmpFolder);
+        LOG_BENCH(ERR, "Error in opening output file [%s].\n", dmpFolder);
         return ERR_CODEC_BENCH_FILE_IO;
     }
 
@@ -707,7 +698,7 @@ AOCL_INTP dump_to_file(aocl_codec_bench_info* codec_bench_handle,
     AOCL_UINTP written = fwrite(buffer, sizeof(AOCL_CHAR), size, dumpFp);
     if (written < size)
     {
-        printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Dump: failed\n",
+        LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] Dump: failed\n",
             codec_list[codec].codec_name,
             level, dmpFolder);
         if (dumpFp) {
@@ -738,9 +729,7 @@ AOCL_INTP create_dump_file(aocl_codec_bench_info* codec_bench_handle, FILE** dum
     // create file
     if (!(*dumpFp = fopen(codec_bench_handle->dumpFile, "wb"))){
                 
-        LOG_FORMATTED(ERR, log_ctx,
-                "Error in opening output file [%s].", codec_bench_handle->dumpFile);
-        printf("Error in opening output file [%s].\n", codec_bench_handle->dumpFile);
+        LOG_BENCH(ERR, "Error in opening output file [%s].\n", codec_bench_handle->dumpFile);
         return ERR_CODEC_BENCH_FILE_IO;        
     }
     codec_bench_handle->dumpFp = *dumpFp;
@@ -751,9 +740,8 @@ AOCL_INTP create_dump_folder(aocl_codec_bench_info* codec_bench_handle)
 {
     if(file_object_exists(codec_bench_handle->dumpFile))
     {
-        LOG_FORMATTED(ERR, log_ctx,
-                "Error, file object named [%s] already exists. Please give a different name for dump folder.", codec_bench_handle->dumpFile);
-        printf("Error, file object named [%s] already exists. Please give a different name for dump folder.\n", codec_bench_handle->dumpFile);
+        LOG_BENCH(ERR, "Error, file object named [%s] already exists. Please give a different name for dump folder.\n",
+            codec_bench_handle->dumpFile);
         return ERR_CODEC_BENCH_FILE_IO;
     }
     // create dump folder with name codec_bench_handle->dumpFile
@@ -764,9 +752,7 @@ AOCL_INTP create_dump_folder(aocl_codec_bench_info* codec_bench_handle)
     if (mkdir(codec_bench_handle->dumpFile, 0777) == -1)
     {
 #endif
-        LOG_FORMATTED(ERR, log_ctx,
-                "Error in creating dump folder [%s].", codec_bench_handle->dumpFile);
-        printf("Error in creating dump folder [%s].\n", codec_bench_handle->dumpFile);
+        LOG_BENCH(ERR, "Error in creating dump folder [%s].\n", codec_bench_handle->dumpFile);
         LOG_SYSTEM_ERROR();
         return ERR_CODEC_BENCH_FILE_IO;
     } 
@@ -799,8 +785,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     //setup the codec method
     if (aocl_llc_setup(aocl_codec_handle, codec) != 0)
     {
-        LOG_FORMATTED(ERR, log_ctx,
-            "Setup failed for codec [%s].", codec_list[codec].codec_name);
+        LOG_BENCH(ERR, "Setup failed for codec [%s]\n", codec_list[codec].codec_name);
         LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
         return -2;
     }
@@ -846,7 +831,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 resultComp = aocl_llc_compress(aocl_codec_handle, codec);
                 if (resultComp <= 0)
                 {
-                    printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Compression: failed\n",
+                    LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] Compression: failed\n",
                         codec_list[codec].codec_name,
                         level, codec_bench_handle->fName);
                     status = -1;
@@ -864,7 +849,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                             codec_bench_handle->dumpFp);
                         if (written < resultComp) 
                         {
-                            printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Dump: failed\n",
+                            LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] Dump: failed\n",
                                 codec_list[codec].codec_name,
                                 level, codec_bench_handle->fName);
                         }
@@ -883,7 +868,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     resultDecomp = aocl_llc_decompress(aocl_codec_handle, codec);
                     if (resultDecomp <= 0)
                     {
-                        printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Decompression: failed\n",
+                        LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] Decompression: failed\n",
                             codec_list[codec].codec_name,
                             level, codec_bench_handle->fName);
                         status = -1;
@@ -895,7 +880,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                         if (memcmp(codec_bench_handle->inPtr,
                             codec_bench_handle->decompPtr, inSize) != 0)
                         {
-                            printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: failed\n",
+                            LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: failed\n",
                                 codec_list[codec].codec_name,
                                 level, codec_bench_handle->fName);
                             status = -1;
@@ -956,7 +941,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 totalResultDecomp += resultDecomp;
                 if (resultDecomp <= 0)
                 {
-                    printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Decompression: failed\n",
+                    LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] Decompression: failed\n",
                         codec_list[codec].codec_name,
                         level, codec_bench_handle->fName);
                     status = -1;
@@ -970,7 +955,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                         codec_bench_handle->dumpFp);
                     if (written < resultDecomp)
                     {
-                        printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] Dump: failed\n",
+                        LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] Dump: failed\n",
                             codec_list[codec].codec_name,
                             level, codec_bench_handle->fName);
                     }
@@ -980,7 +965,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 {
                     if (valFp == NULL) 
                     {
-                        printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] verification file not provided\n",
+                        LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] verification file not provided\n",
                             codec_list[codec].codec_name,
                             level, codec_bench_handle->fName);
                         status = -1;
@@ -993,7 +978,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     if (memcmp(codec_bench_handle->outPtr,
                         codec_bench_handle->decompPtr, codec_bench_handle->outSize) != 0)
                     {
-                        printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: failed\n",
+                        LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: failed\n",
                             codec_list[codec].codec_name,
                             level, codec_bench_handle->fName);
                         status = -1;
@@ -1052,8 +1037,8 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
     if (status != 0)
     {
-        LOG_FORMATTED(ERR, log_ctx,
-            "Compression/Decompression/Verification operation failed for codec [%s].", codec_list[codec].codec_name);
+        LOG_BENCH(ERR, "Compression/Decompression/Verification operation failed for codec [%s]\n",
+            codec_list[codec].codec_name);
         LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
         return status;
     }
@@ -1063,7 +1048,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     {
         if (codec_bench_handle->verify)
         {
-            printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: passed\n",
+            LOG_BENCH(INFO, "AOCL-COMPRESSION [%s-%td] [Filename:%s] verification: passed\n",
                 codec_list[codec].codec_name,
                 level, codec_bench_handle->fName);
 
@@ -1072,7 +1057,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
     if (codec_bench_handle->print_stats)
     {
-        printf("AOCL-COMPRESSION [%s-%td] [Filename:%s] -------------------------------------\n",
+        LOG_BENCH(INFO, "AOCL-COMPRESSION [%s-%td] [Filename:%s] -------------------------------------\n",
             codec_list[codec].codec_name,
             level, codec_bench_handle->fName);
 
@@ -1085,7 +1070,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             codec_bench_handle->cBestSpeed =
                 (codec_bench_handle->file_size * 1000.0) /
                 codec_bench_handle->cBestTime;
-            printf("Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
+            LOG_BENCH(INFO, "Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
                 codec_bench_handle->cSpeed,
                 codec_bench_handle->cTime /
                 (codec_bench_handle->iterations * 1000000.0),
@@ -1113,7 +1098,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 codec_bench_handle->dBestSpeed = (resultDecomp * 1000.0) /
                     codec_bench_handle->dBestTime;
             }
-            printf("Decompression:       speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
+            LOG_BENCH(INFO, "Decompression:       speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
                 codec_bench_handle->dSpeed,
                 codec_bench_handle->dTime /
                 (codec_bench_handle->iterations * 1000000.0),
@@ -1125,7 +1110,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
             codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS) 
         {
-            printf("Ratio:               %.2f\n",
+            LOG_BENCH(INFO, "Ratio:               %.2f\n",
                 (((codec_bench_handle->cSize * 100.0) /
                     codec_bench_handle->iterations) /
                     codec_bench_handle->file_size));
@@ -1154,9 +1139,7 @@ AOCL_INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
     {
         /* data decompressed using a certain codec can only be decompressed
          * by that particular codec. Run-all-codecs mode is not supported in this case */
-        LOG_UNFORMATTED(ERR, log_ctx,
-            "Codec not specified. Specify codec using -e when running -rdecompress mode.");
-        printf("Codec not specified. Specify codec using -e when running -rdecompress mode.\n\n");
+        LOG_BENCH(ERR, "Codec not specified. Specify codec using -e when running -rdecompress mode.\n");
         LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
         return -2;
     }
@@ -1263,23 +1246,17 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
 
     if (ret == 0)
     {
-        LOG_UNFORMATTED(ERR, log_ctx,
-        "Invalid option passed, ignoring more than one input file. Use -h to know supported user options.");
-        printf("Invalid option passed, ignoring more than one input file. Use -h to know supported user options.\n");
+        LOG_BENCH(ERR, "Invalid option passed, ignoring more than one input file. Use -h to know supported user options.\n");
     }
     else if (ret == ERR_CODEC_BENCH_ARGS)
     {
-        LOG_UNFORMATTED(ERR, log_ctx,
-        "Invalid option passed. Use -h to know supported user options.");
-        printf("Invalid option passed. Use -h to know supported user options.\n");
+        LOG_BENCH(ERR, "Invalid option passed. Use -h to know supported user options.\n");
         result = ret;
         goto exit;
     }
     else if (ret == ERR_CODEC_BENCH_METHOD)
     {
-        LOG_UNFORMATTED(ERR, log_ctx,
-        "Unsupported compression method or level specified. Use -l to know supported methods and -h for exact user options.");
-        printf("Unsupported option passed. Use -l to know supported methods and -h for exact user options.\n");
+        LOG_BENCH(ERR, "Unsupported option passed. Use -l to know supported methods and -h for exact user options.\n");
         result = ret;
 		goto exit;
     }
@@ -1293,8 +1270,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
             //List all the files
             AOCL_INTP file_count = get_file_count(inFolder);
             if(file_count <= 0){
-                LOG_UNFORMATTED(ERR, log_ctx,"No input file present in the folder path provided.");
-                printf("No input file present in the folder path provided.\n");
+                LOG_BENCH(ERR, "No input file present in the folder path provided.\n");
                 return ERR_CODEC_BENCH_FILE_IO;
             }
 
@@ -1345,9 +1321,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
         // handle invalid cases
         if (codec_bench_handle.codec_method < 0) 
         {
-            LOG_UNFORMATTED(ERR, log_ctx,
-                "Arg -d ignored. Specify codec and level using -e to avail this feature.");
-            printf("Arg -d ignored. Specify codec and level using -e to avail this feature.\n\n");
+            LOG_BENCH(INFO, "Arg -d ignored. Specify codec and level using -e to avail this feature.\n");
             dumpEnabled = 0;
         }
         else if (codec_bench_handle.codec_level == UNINIT_LEVEL &&
@@ -1356,9 +1330,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
                     == codec_list[codec_bench_handle.codec_method].upper_level /* method supports only 1 level */)))
         {
             // Level must be specified in non-decompress only modes, as dump is for a single run only.
-            LOG_UNFORMATTED(ERR, log_ctx,
-                "Arg -d ignored. Specify codec level with -e arg to avail this feature.");
-            printf("Arg -d ignored. Specify codec level with -e arg to avail this feature.\n\n");
+            LOG_BENCH(INFO, "Arg -d ignored. Specify codec level with -e arg to avail this feature.\n");
             dumpEnabled = 0;
         }
         else 
@@ -1371,15 +1343,12 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
     {
         if (codec_bench_handle.runOperation != RUN_OPERATION_DECOMPRESS) 
         {
-            LOG_UNFORMATTED(INFO, log_ctx,
-                "-f option ignored. It is valid only when -rdecompress is passed.");
+            LOG_BENCH(INFO, "-f option ignored. It is valid only when -rdecompress is passed.\n");
         }
         // open file with reference decompressed data for validation
         if (!(valFp = fopen(valFile, "rb")))
         {
-            LOG_FORMATTED(ERR, log_ctx,
-                "Error in opening validation file [%s].", valFile);
-            printf("Error in opening validation file [%s].\n", valFile);
+            LOG_BENCH(ERR, "Error in opening validation file [%s].\n", valFile);
             result = ERR_CODEC_BENCH_FILE_IO;
             goto exit;
         }
@@ -1388,29 +1357,30 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
 
     if (init(&codec_bench_handle, aocl_codec_handle) < 0)
     {
-        LOG_UNFORMATTED(ERR, log_ctx,
-        "Error in allocating memory.");
+        LOG_BENCH(ERR, "Error in allocating memory.\n");
         result = ERR_CODEC_BENCH_MEM;
 		goto exit;
     }
 
-    if (codec_bench_handle.useIPP)
+    if (codec_bench_handle.useIPP) 
+    {
 #ifdef _WINDOWS
-        LOG_UNFORMATTED(ERR, log_ctx,
-            "IPP test execution not supported on Windows for now.");
+        LOG_BENCH(ERR, "IPP test execution not supported on Windows for now.\n");
 #else
         result = ipp_bench_run(aocl_codec_handle, &codec_bench_handle);
 #endif
+    }
     else if (codec_bench_handle.useNAPI)
-        {
-            result = native_api_bench_run(aocl_codec_handle, &codec_bench_handle);
-        }   
+    {
+        result = native_api_bench_run(aocl_codec_handle, &codec_bench_handle);
+    }
     else
+    {
         result = aocl_bench_run(aocl_codec_handle, &codec_bench_handle);
+    }
     if (result != 0)
     {
-        LOG_UNFORMATTED(ERR, log_ctx,
-        "Error in compression and decompression operations.");
+        LOG_BENCH(ERR, "Error in compression and decompression operations.\n");
     }
 
     destroy(&codec_bench_handle);

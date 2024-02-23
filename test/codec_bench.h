@@ -158,4 +158,7 @@ AOCL_INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
                     aocl_codec_bench_info *codec_bench_handle);
 AOCL_VOID destroy(aocl_codec_bench_info *codec_bench_handle);
 
+//Log messages to console
+#define LOG_BENCH(logType, ...) \
+        printf(__VA_ARGS__);
 #endif

@@ -87,7 +87,7 @@ AOCL_INT64 native_lz4_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *o
     AOCL_INT64 resultComp = LZ4_compress_default(inbuf, outbuf, insize, outsize);
     if (resultComp < 0)
     {
-        fprintf(stderr, "LZ4 compression failed. \n");
+        LOG_BENCH(ERR, "LZ4 compression failed. \n");
         return -1;
     }
     return resultComp;
@@ -103,7 +103,7 @@ AOCL_INT64 native_lz4_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR 
     AOCL_INT64 resultDecomp = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
     if (resultDecomp < 0)
     {
-        fprintf(stderr, "LZ4 decompression failed. \n");
+        LOG_BENCH(ERR, "LZ4 decompression failed. \n");
         return -1;
     }
     return resultDecomp;
@@ -120,7 +120,7 @@ AOCL_INT64 native_lz4hc_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR 
     AOCL_INT64 resultComp = LZ4_compress_HC(inbuf, outbuf, insize, outsize, level);
     if (resultComp < 0)
     {
-        fprintf(stderr, "LZ4 compression failed. \n");
+        LOG_BENCH(ERR, "LZ4 compression failed. \n");
         return -1;
     }
     return resultComp;
@@ -136,7 +136,7 @@ AOCL_INT64 native_lz4hc_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHA
     AOCL_INT64 resultDecomp = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
     if (resultDecomp < 0)
     {
-        fprintf(stderr, "LZ4 decompression failed. \n");
+        LOG_BENCH(ERR, "LZ4 decompression failed. \n");
         return -1;
     }
     return resultDecomp;
@@ -153,7 +153,7 @@ AOCL_INT64 native_snappy_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
     snappy_status status = snappy_compress(inbuf, insize, outbuf, &outsize); 
     if (status != SNAPPY_OK)
     {
-        fprintf(stderr, "Snappy compression failed. \n");
+        LOG_BENCH(ERR, "Snappy compression failed. \n");
         return -1;
     }
     return outsize;
@@ -169,7 +169,7 @@ AOCL_INT64 native_snappy_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CH
     snappy_status status = snappy_uncompress(inbuf, insize, outbuf, &outsize);
     if (status != SNAPPY_OK)
     {
-        fprintf(stderr, "Snappy Decompression failed. \n");
+        LOG_BENCH(ERR, "Snappy Decompression failed. \n");
         return -1;
     }
     return outsize;
@@ -188,7 +188,7 @@ AOCL_INT64 native_zlib_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
     AOCL_INTP result = compress2((AOCL_UINT8 *)outbuf, &destLen, (AOCL_UINT8 *)inbuf, insize, level);
     if (result != Z_OK)
     {
-        fprintf(stderr, "ZLIB compression failed. \n");
+        LOG_BENCH(ERR, "ZLIB compression failed. \n");
         return -1;
     }
     //AOCL_UINTP outsize = destLen;
@@ -207,7 +207,7 @@ AOCL_INT64 native_zlib_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
     AOCL_INTP result = uncompress((AOCL_UINT8 *)outbuf, &destLen, (AOCL_UINT8 *)inbuf, insize);
     if (result != Z_OK)
     {
-        fprintf(stderr, "ZLIB Decompression failed. \n");
+        LOG_BENCH(ERR, "ZLIB Decompression failed. \n");
         return -1;
     }
     return destLen;
@@ -227,7 +227,7 @@ AOCL_INT64 native_bzip2_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR 
 
     if (result != BZ_OK)
     {
-        fprintf(stderr, "BZIP2 Compression failed. \n");
+        LOG_BENCH(ERR, "BZIP2 Compression failed. \n");
         return -1;
     }
     return outSizeL;
@@ -245,7 +245,7 @@ AOCL_INT64 native_bzip2_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHA
 
     if (result != BZ_OK)
     {
-        fprintf(stderr, "BZIP2 decompression failed. \n");
+        LOG_BENCH(ERR, "BZIP2 decompression failed. \n");
         return -1;
     }
     return outSizeL;
@@ -277,7 +277,7 @@ AOCL_INT64 native_lzma_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
                      &lzma_alloc, &lzma_alloc);
 	if (result != SZ_OK)
     {
-        fprintf(stderr, "LZMA compression failed. \n");
+        LOG_BENCH(ERR, "LZMA compression failed. \n");
         return -1;
     }
     return LZMA_PROPS_SIZE + outLen;
@@ -300,7 +300,7 @@ AOCL_INT64 native_lzma_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
                      &status, &lzma_alloc);
     if (result != SZ_OK)
     {
-        fprintf(stderr, "LZMA Decompression failed. \n");
+        LOG_BENCH(ERR, "LZMA Decompression failed. \n");
         return -1;
     }
     return outLen;
@@ -312,7 +312,7 @@ AOCL_INT64 native_lzma_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
 //ZSTD
 static int ZSTD_native_c_nbWorkers = 0;
 #define CHECK_RET_ZSTD(x) if (ZSTD_isError(x)) { \
-    fprintf(stderr, "ZSTD compression error: %s\n", ZSTD_getErrorName(x)); \
+    LOG_BENCH(ERR, "ZSTD compression error: %s\n", ZSTD_getErrorName(x)); \
     if (cctx) \
         ZSTD_freeCCtx(cctx); \
     return -1; \
@@ -325,7 +325,7 @@ AOCL_INT64 native_zstd_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
     ZSTD_CCtx*  cctx = ZSTD_createCCtx();
     if (!cctx)
     {
-        fprintf(stderr, "ZSTD compression context creation failed. \n");
+        LOG_BENCH(ERR, "ZSTD compression context creation failed. \n");
         return -1;
     }
     ZSTD_parameters zparams = ZSTD_getParams(level, insize, 0);
@@ -351,14 +351,14 @@ AOCL_INT64 native_zstd_mt_compress(AOCL_CHAR* inbuf, AOCL_UINTP insize, AOCL_CHA
 #if defined(AOCL_EXCLUDE_ZSTD)
     return -2;
 #elif !defined(NATIVE_ENABLE_THREADS)
-    fprintf(stderr, "Unable to run ZSTD multithreaded reference with %d threads as library is not built with NATIVE_ENABLE_THREADS.\n", ZSTD_native_c_nbWorkers);
+    LOG_BENCH(ERR, "Unable to run ZSTD multithreaded reference with %d threads as library is not built with NATIVE_ENABLE_THREADS.\n", ZSTD_native_c_nbWorkers);
     return -3;
 #else
     AOCL_INT64 res;
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
     if (!cctx)
     {
-        fprintf(stderr, "ZSTD compression context creation failed. \n");
+        LOG_BENCH(ERR, "ZSTD compression context creation failed. \n");
         return -1;
     }
     res = ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, ZSTD_native_c_nbWorkers); CHECK_RET_ZSTD(res);
@@ -379,7 +379,7 @@ AOCL_INT64 native_zstd_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
     ZSTD_DCtx* dctx = ZSTD_createDCtx();
     if(!dctx)
     {
-        fprintf(stderr, "ZSTD decompression context creation failed. \n");
+        LOG_BENCH(ERR, "ZSTD decompression context creation failed. \n");
         return -1;
     }
 
@@ -387,7 +387,7 @@ AOCL_INT64 native_zstd_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
     res = ZSTD_decompressDCtx(dctx, outbuf, outsize, inbuf, insize);
     if (ZSTD_isError(res))
     {
-        fprintf(stderr, "ZSTD decompression error: %s", ZSTD_getErrorName(res));
+        LOG_BENCH(ERR, "ZSTD decompression error: %s\n", ZSTD_getErrorName(res));
         res = -1;
 
     }
@@ -505,7 +505,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                              resultComp = native_run_compress(aocl_codec_handle, native_zstd_mt_compress);
                          }
                          else
-                        resultComp = native_run_compress(aocl_codec_handle, native_zstd_compress);
+                             resultComp = native_run_compress(aocl_codec_handle, native_zstd_compress);
                         break;
                     default:
                         return -2;
@@ -514,12 +514,12 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 {   
                     if (resultComp == -2)
                     {
-                        printf("COMPRESSION Native API [%s-%td] [Filename:%s] failed. The library is not built with Method %s\n",
+                        LOG_BENCH(ERR, "COMPRESSION Native API [%s-%td] [Filename:%s] failed. The library is not built with Method %s\n",
                             codec_list[codec].codec_name,
                             level, codec_bench_handle->fName, codec_list[codec].codec_name);   
                     }
                     else
-                        printf("COMPRESSION Native API [%s-%td] [Filename:%s] Compression: failed\n",
+                        LOG_BENCH(ERR, "COMPRESSION Native API [%s-%td] [Filename:%s] Compression: failed\n",
                             codec_list[codec].codec_name,
                             level, codec_bench_handle->fName);
                     status = -1;
@@ -565,7 +565,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     
                     if (resultDecomp <= 0)
                     {
-                        printf("COMPRESSION Native API [%s-%td] [Filename:%s] Decompression: failed\n",
+                        LOG_BENCH(ERR, "COMPRESSION Native API [%s-%td] [Filename:%s] Decompression: failed\n",
                             codec_list[codec].codec_name,
                             level, codec_bench_handle->fName);
                         status = -1;
@@ -579,7 +579,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                         if (memcmp(codec_bench_handle->inPtr,
                             codec_bench_handle->decompPtr, inSize) != 0)
                         {
-                            printf("COMPRESSION Native API [%s-%td] [Filename:%s] verification: failed\n",
+                            LOG_BENCH(ERR, "COMPRESSION Native API [%s-%td] [Filename:%s] verification: failed\n",
                                 codec_list[codec].codec_name,
                                 level, codec_bench_handle->fName);
                             status = -1;
@@ -663,7 +663,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             }
             if (resultDecomp <= 0)
             {
-                printf("COMPRESSION Native API [%s-%td] [Filename:%s] Decompression: failed\n",
+                LOG_BENCH(ERR, "COMPRESSION Native API [%s-%td] [Filename:%s] Decompression: failed\n",
                     codec_list[codec].codec_name,
                     level, codec_bench_handle->fName);
                 status = -1;
@@ -674,7 +674,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             {
                 if (valFp == NULL) 
                 {
-                    printf("COMPRESSION Native API [%s-%td] [Filename:%s] verification file not provided\n",
+                    LOG_BENCH(ERR, "COMPRESSION Native API [%s-%td] [Filename:%s] verification file not provided\n",
                         codec_list[codec].codec_name,
                         level, codec_bench_handle->fName);
                     status = -1;
@@ -687,7 +687,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 if (memcmp(codec_bench_handle->outPtr,
                     codec_bench_handle->decompPtr, codec_bench_handle->outSize) != 0)
                 {
-                    printf("COMPRESSION Native API [%s-%td] [Filename:%s] verification: failed\n",
+                    LOG_BENCH(ERR, "COMPRESSION Native API [%s-%td] [Filename:%s] verification: failed\n",
                         codec_list[codec].codec_name,
                         level, codec_bench_handle->fName);
                     status = -1;
@@ -716,8 +716,8 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
     if (status != 0)
     {
-        LOG_FORMATTED(ERR, log_ctx,
-            "Compression/Decompression/Verification operation failed for codec [%s].", codec_list[codec].codec_name);
+        LOG_BENCH(ERR, "Compression/Decompression/Verification operation failed for codec [%s]\n", 
+            codec_list[codec].codec_name);
         return status;
     }
 
@@ -726,7 +726,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     {
         if (codec_bench_handle->verify)
         {
-            printf("COMPRESSION Native API [%s-%td] [Filename:%s] verification: passed\n",
+            LOG_BENCH(INFO, "COMPRESSION Native API [%s-%td] [Filename:%s] verification: passed\n",
                 codec_list[codec].codec_name,
                 level, codec_bench_handle->fName);
 
@@ -735,7 +735,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
     if (codec_bench_handle->print_stats)
     {
-        printf("COMPRESSION Native API [%s-%td] [Filename:%s] -------------------------------------\n",
+        LOG_BENCH(INFO, "COMPRESSION Native API [%s-%td] [Filename:%s] -------------------------------------\n",
             codec_list[codec].codec_name,
             level, codec_bench_handle->fName);
 
@@ -748,7 +748,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             codec_bench_handle->cBestSpeed =
                 (codec_bench_handle->file_size * 1000.0) /
                 codec_bench_handle->cBestTime;
-            printf("Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
+            LOG_BENCH(INFO, "Compression:         speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
                 codec_bench_handle->cSpeed,
                 codec_bench_handle->cTime /
                 (codec_bench_handle->iterations * 1000000.0),
@@ -776,7 +776,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 codec_bench_handle->dBestSpeed = (resultDecomp * 1000.0) /
                     codec_bench_handle->dBestTime;
             }
-            printf("Decompression:       speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
+            LOG_BENCH(INFO, "Decompression:       speed(avg) %.2f MB/s, time(avg) %.2f ms, size %zu, speed(best) %.2f MB/s, time(best) %.2f ms\n",
                 codec_bench_handle->dSpeed,
                 codec_bench_handle->dTime /
                 (codec_bench_handle->iterations * 1000000.0),
@@ -788,7 +788,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
             codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS) 
         {
-            printf("Ratio:               %.2f\n",
+            LOG_BENCH(INFO, "Ratio:               %.2f\n",
                 (((codec_bench_handle->cSize * 100.0) /
                     codec_bench_handle->iterations) /
                     codec_bench_handle->file_size));
@@ -817,9 +817,7 @@ AOCL_INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
     {
         /* data decompressed using a certain codec can only be decompressed
          * by that particular codec. Run-all-codecs mode is not supported in this case */
-        LOG_UNFORMATTED(ERR, log_ctx,
-            "Codec not specified. Specify codec using -e when running -rdecompress mode.");
-        printf("Codec not specified. Specify codec using -e when running -rdecompress mode.\n\n");
+        LOG_BENCH(ERR, "Codec not specified. Specify codec using -e when running -rdecompress mode.\n");
         return -2;
     }
 
