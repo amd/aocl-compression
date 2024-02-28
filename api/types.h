@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -41,22 +41,22 @@
 #include <stdint.h>
 #include <stddef.h>
 
-typedef int64_t INT64;          //fixed signed 64 bits int
-typedef int32_t INT32;          //fixed signed 32 bits int : Use it for signed int
-typedef ptrdiff_t INTP;         //portable signed int type : 4 bytes (ILP32), 8 bytes (LP64)
-typedef uint64_t UINT64;        //fixed unsigned 64 bits int
-typedef uint32_t UINT32;        //fixed unsigned 32 bits int : Use it for unsigned int
-typedef size_t UINTP;           //portable unsigned int type : 4 bytes (ILP32), 8 bytes (LP64)
-typedef char CHAR;              //signed character data type : 1 byte
-typedef unsigned char UCHAR;    //unsigned character data type : 1 byte
-typedef short SHORT;            //signed short integer : 2 bytes
-typedef unsigned short USHORT;  //unsigned short integer : 2 bytes
-typedef void VOID;              //void
-typedef float FLOAT32;          //single-precision
-typedef double FLOAT64;         //double-precision
-typedef double DOUBLE;          //double-precision
-typedef uint8_t UINT8;          //unsigned 1 byte integer
-typedef int8_t INT8;            //signed 1 byte integer
+typedef int64_t AOCL_INT64;          //fixed signed 64 bits int
+typedef int32_t AOCL_INT32;          //fixed signed 32 bits int : Use it for signed int
+typedef ptrdiff_t AOCL_INTP;         //portable signed int type : 4 bytes (ILP32), 8 bytes (LP64)
+typedef uint64_t AOCL_UINT64;        //fixed unsigned 64 bits int
+typedef uint32_t AOCL_UINT32;        //fixed unsigned 32 bits int : Use it for unsigned int
+typedef size_t AOCL_UINTP;           //portable unsigned int type : 4 bytes (ILP32), 8 bytes (LP64)
+typedef char AOCL_CHAR;              //signed character data type : 1 byte
+typedef unsigned char AOCL_UCHAR;    //unsigned character data type : 1 byte
+typedef short AOCL_SHORT;            //signed short integer : 2 bytes
+typedef unsigned short AOCL_USHORT;  //unsigned short integer : 2 bytes
+typedef void AOCL_VOID;              //void
+typedef float AOCL_FLOAT32;          //single-precision
+typedef double AOCL_FLOAT64;         //double-precision
+typedef double AOCL_DOUBLE;          //double-precision
+typedef uint8_t AOCL_UINT8;          //unsigned 1 byte integer
+typedef int8_t AOCL_INT8;            //signed 1 byte integer
 
 #endif
 

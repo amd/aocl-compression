@@ -34,21 +34,20 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "utils/utils.h"
 #include "deflate.h"
 #include <immintrin.h>
+
+#ifdef AOCL_ZLIB_OPT
+#include "aocl_zlib_setup.h"
+
+static int setup_ok_zlib_longest = 0; // flag to indicate status of dynamic dispatcher setup
 
 #define NIL 0
 
 /* Please retain this line */
 const char fast_lm_copyright[] = " Fast match finder for zlib, https://github.com/gildor2/fast_zlib ";
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-/* Function pointer holding the optimized variant as per the detected CPU 
- * features */
-static uInt (*longest_match_fp)(deflate_state* s, IPos cur_match);
-#endif
-
-#ifdef AOCL_ZLIB_OPT
 static inline uInt longest_match_c_opt(deflate_state* s, IPos cur_match)
 {
     unsigned chain_length = s->max_chain_length;/* max hash chain length */
@@ -266,10 +265,15 @@ break_matching: /* sorry for goto's, but such code is smaller and easier to view
     return s->lookahead;
 }
 
+/* Function pointer holding the optimized variant as per the detected CPU 
+ * features */
+static uInt (*longest_match_fp)(deflate_state* s, IPos cur_match) = longest_match_c_opt;
+
 #if defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
 __attribute__((__target__("avx2")))
 static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
 {
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     uint32_t match_len = 0;
     while(match_len < 256) {
         __m256i buff1 = _mm256_lddqu_si256((__m256i*)src1);
@@ -301,13 +305,14 @@ static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
 #include "longest_match_x86.h"
 #undef COMPARE256
 #undef LONGEST_MATCH_AVX_FAMILY
-#endif
+#endif /* AOCL_ZLIB_AVX2_OPT && HAVE_BUILTIN_CTZ */
 
 #ifdef AOCL_ZLIB_AVX_OPT
 #define control _SIDD_CMP_EQUAL_EACH | _SIDD_UBYTE_OPS | _SIDD_NEGATIVE_POLARITY
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
 static inline uint32_t compare256_avx(const Bytef *src1, const Bytef *src2)
 {
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     uint32_t match_len = 0;
     while(match_len < 256) {
         __m128i buff1 = _mm_lddqu_si128((__m128i *)src1);
@@ -336,36 +341,20 @@ static inline uint32_t compare256_avx(const Bytef *src1, const Bytef *src2)
 #include "longest_match_x86.h"
 #undef COMPARE256
 #undef LONGEST_MATCH_AVX_FAMILY
-#endif
+#endif /* AOCL_ZLIB_AVX_OPT */
 
 /* This function intercepts non optimized code path and orchestrate 
  * optimized code flow path */
 uInt ZLIB_INTERNAL longest_match_x86(deflate_state *s, IPos cur_match)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
     return longest_match_fp(s, cur_match);
-#elif defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
-    return longest_match_avx2_opt(s, cur_match);
-#elif defined(AOCL_ZLIB_AVX_OPT)
-    return longest_match_avx_opt(s, cur_match);
-#else
-    return longest_match_c_opt(s, cur_match);
-#endif
 }
 
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
-uint32_t (*aocl_compare256_fp) (const Bytef *src1, const Bytef *src2) = compare256_avx;
-#endif
-
-#endif //AOCL_ZLIB_OPT
-
-#ifdef AOCL_DYNAMIC_DISPATCHER
-void aocl_register_longest_match_fmv(int optOff, int optLevel,
-                                  uInt (*longest_match_c_fp)(deflate_state* s, IPos cur_match))
+static inline void aocl_register_longest_match_fmv(int optOff, int optLevel)
 {
-    if (UNLIKELY(optOff==1))
+    if (UNLIKELY(optOff == 1))
     {
-        longest_match_fp = longest_match_c_fp;
+        longest_match_fp = longest_match_c_opt;
     }
     else
     {
@@ -376,25 +365,41 @@ void aocl_register_longest_match_fmv(int optOff, int optLevel,
             longest_match_fp = longest_match_c_opt;
             break;
         case 2://AVX version
+#ifdef AOCL_ZLIB_AVX_OPT
             longest_match_fp = longest_match_avx_opt;
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
-            aocl_compare256_fp = compare256_avx;
+#else
+            longest_match_fp = longest_match_c_opt;
 #endif
             break;
+        case -1: // undecided. use defaults based on compiler flags
         case 3://AVX2 version
         default://AVX512 and other versions
-#ifdef HAVE_BUILTIN_CTZ
+#if defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
             longest_match_fp = longest_match_avx2_opt;
 #elif defined(AOCL_ZLIB_AVX_OPT)
             longest_match_fp = longest_match_avx_opt;
 #else
             longest_match_fp = longest_match_c_opt;
 #endif
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE_3
-            aocl_compare256_fp = compare256_avx2;
-#endif
             break;
         }
     }
 }
-#endif
+
+void ZLIB_INTERNAL aocl_register_longest_match(int optOff, int optLevel){
+    AOCL_ENTER_CRITICAL(setup_zlib_longest)
+    if (!setup_ok_zlib_longest) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_longest_match_fmv(optOff, optLevel);
+        setup_ok_zlib_longest = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_longest)
+}
+
+void ZLIB_INTERNAL aocl_destroy_longest_match(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_longest)
+    setup_ok_zlib_longest = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib_longest)
+}
+
+#endif /* AOCL_ZLIB_OPT */

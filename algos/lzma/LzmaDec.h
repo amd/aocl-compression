@@ -1,9 +1,33 @@
 /* LzmaDec.h -- LZMA Decoder
 2020-03-19 : Igor Pavlov : Public domain */
 
-/*
- * Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
- */
+/**
+* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*
+* 1. Redistributions of source code must retain the above copyright notice,
+* this list of conditions and the following disclaimer.
+* 2. Redistributions in binary form must reproduce the above copyright notice,
+* this list of conditions and the following disclaimer in the documentation
+* and/or other materials provided with the distribution.
+* 3. Neither the name of the copyright holder nor the names of its
+* contributors may be used to endorse or promote products derived from this
+* software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+* ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+* LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+* CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+* SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+* INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+* CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+* ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+* POSSIBILITY OF SUCH DAMAGE.
+*/
 
 #ifndef __LZMA_DEC_H
 #define __LZMA_DEC_H
@@ -240,6 +264,7 @@ typedef enum
 * |:-----------|:------------|
 * | Success    |SZ_OK                                          |
 * | Fail       |SZ_ERROR_MEM         - Memory allocation error |
+* | ^          |SZ_ERROR_PARAM       - Incorrect parameter     |
 * | ^          |SZ_ERROR_UNSUPPORTED - Unsupported properties  |
 * 
 */
@@ -273,6 +298,7 @@ LZMALIB_API void LzmaDec_FreeProbs(CLzmaDec* p, ISzAllocPtr alloc);
 * |:-----------|:------------|
 * | Success    |SZ_OK                                          |
 * | Fail       |SZ_ERROR_MEM         - Memory allocation error |
+* | ^          |SZ_ERROR_PARAM       - Incorrect parameter     |
 * | ^          |SZ_ERROR_UNSUPPORTED - Unsupported properties  |
 * 
 */
@@ -373,6 +399,7 @@ Returns:
 * |:-----------|:------------|
 * | Success    |SZ_OK                      |
 * | Fail       |SZ_ERROR_DATA - Data error |
+* | ^          |SZ_ERROR_PARAM       - Incorrect parameter |
 * | ^          |SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure  |
 * 
 */
@@ -454,6 +481,7 @@ Returns:
 * | Success    |SZ_OK                      |
 * | Fail       |SZ_ERROR_DATA - Data error |
 * | ^          |SZ_ERROR_MEM  - Memory allocation error  |
+* | ^          |SZ_ERROR_PARAM       - Incorrect parameter |
 * | ^          |SZ_ERROR_UNSUPPORTED - Unsupported properties |
 * | ^          |SZ_ERROR_INPUT_EOF - It needs more bytes in input buffer (src) |
 * | ^          |SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure  |
@@ -467,7 +495,6 @@ LZMALIB_API SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* 
  * @}
 */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /*! @brief AOCL-Compression defined setup function that configures with the right
  * AMD optimized lzma routines depending upon the detected CPU features.
  *
@@ -483,7 +510,11 @@ LZMALIB_API SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* 
  */
 LZMALIB_API void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
-#endif
+
+/**
+ * @brief AOCL-Compression defined destroy function for lzma decode.
+ */
+LZMALIB_API void aocl_destroy_lzma_decode(void);
 
 /**
  * @}
@@ -491,7 +522,7 @@ LZMALIB_API void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
 
 EXTERN_C_END
 
-#ifdef AOCL_LZMA_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 /* Move these APIs within the scope of gtest once the framework is ready */
 EXTERN_C_BEGIN
 LZMALIB_API void Test_Rc_Get_Bit_2_Dec_Ref(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
@@ -499,5 +530,5 @@ LZMALIB_API void Test_Rc_Get_Bit_2_Dec_Opt(const Byte* buf, UInt32* range, UInt3
 LZMALIB_API void Test_Rc_Rev_Bit_Dec_Ref(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
 LZMALIB_API void Test_Rc_Rev_Bit_Dec_Opt(const Byte* buf, UInt32* range, UInt32* code, CLzmaProb* prob, unsigned symbol);
 EXTERN_C_END
-#endif
+#endif /* AOCL_UNIT_TEST */
 #endif

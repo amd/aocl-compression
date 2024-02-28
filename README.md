@@ -8,6 +8,8 @@ compression and decompression methods which facilitate the applications to
 easily integrate and use them.
 AOCL-Compression supports lz4, zlib/deflate, lzma, zstd, bzip2, snappy, and lz4hc
 based compression and decompression methods along with their native APIs.
+The library offers openMP based multi-threaded implementation of lz4, zlib, 
+zstd and snappy compression methods.
 It supports the dynamic dispatcher feature that executes the most optimal
 function variant implemented using Function Multi-versioning thereby offering
 a single optimized library portable across different x86 CPU architectures.
@@ -23,7 +25,7 @@ Installation
 ------------
 
 1. Download the latest stable release from the Github repository:<br>
-https://github.amd.com/AOCL/aocl-compression
+https://github.com/amd/aocl-compression
 2. Install CMake on the machine where the sources are to be compiled.
 3. Make any one of the compilers GCC or Clang available on the machine.
 4. Then, use the cmake based build system to compile and generate AOCL-Compression <br>
@@ -90,7 +92,11 @@ Building with Visual Studio IDE (GUI)
    Microsoft Visual Studio project is generated.
 6. Click __Open Project__.
    Microsoft Visual Studio project for the source package __is launched__.
-7. Build the entire solution or the required projects.
+7. For building multi-threaded library based on AOCL_ENABLE_THREADS, set the 
+   LLVM openMP library path in the Linker->General option and openMP library name
+   in the Linker->Input under the project properties. Set /openmp as the additional
+   compilation option.
+8. Build the entire solution or the required projects.
 
 Building with Visual Studio IDE (command line)
 ----------------------------------------------
@@ -112,13 +118,20 @@ AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |  Enable LZ4 optimizations related to backw
 SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Disabled by default)
 LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
-AOCL_ZSTD_4BYTE_LAZY2_MATCH_FINDER  |  Enable 4-byte comparison for finding a potential better match candidate with Lazy2 compressor (Disabled by default)
+AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST|  Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Disabled by default)
+AOCL_ZSTD_WILDCOPY_LONG             |  Faster wildcopy when match lengths are long in ZSTD decompression (Disabled by default)
 AOCL_TEST_COVERAGE                  |  Enable GTest and AOCL test bench based CTest suite (Disabled by default)
+AOCL_ENABLE_LOG_FEATURE             |  Enables logging through environment variable `AOCL_ENABLE_LOG` (Disabled by default)
+CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
+ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
+VALGRIND                            |  Enable Valgrind checks. Only supported on Linux/Debug and incompatible with ASAN=ON (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Disabled by default)
-ZLIB_DEFLATE_FAST_MODE_2            |  Enable optimization for deflate fast using Z_FIXED strategy. Do not combine with ZLIB_DEFLATE_FAST_MODE_3 (Disabled by default)
-ZLIB_DEFLATE_FAST_MODE_3            |  Enable ZLIB deflate quick strategy. Do not combine with ZLIB_DEFLATE_FAST_MODE_2 (Disabled by default)
+ZLIB_DEFLATE_FAST_MODE              |  Enable ZLIB deflate quick strategy (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1  |  Enable LZ4 match skipping optimization strategy-1 based on a larger base step size applied for long distance search (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2  |  Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1. Preferred to be used with Silesia corpus (Disabled by default)
+AOCL_LZ4_NEW_PRIME_NUMBER           |  Enable the usage of a new prime number for LZ4 hashing function. Preferred to be used with Silesia corpus (Disabled by default)
+AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES   |  Enable storing of additional potential matches to improve compression ratio. Recommended for higher compressibility use cases (Disabled by default)
+AOCL_LZ4_HASH_BITS_USED             |  Control the number of bits used for LZ4 hashing, allowed values are LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (Disabled by default)
 AOCL_EXCLUDE_BZIP2                  |  Exclude BZIP2 compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_LZ4                    |  Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)
 AOCL_EXCLUDE_LZ4HC                  |  Exclude LZ4HC compression method from the library build (Disabled by default)
@@ -126,6 +139,8 @@ AOCL_EXCLUDE_LZMA                   |  Exclude LZMA compression method from the 
 AOCL_EXCLUDE_SNAPPY                 |  Exclude SNAPPY compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_ZLIB                   |  Exclude ZLIB compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_ZSTD                   |  Exclude ZSTD compression method from the library build (Disabled by default)
+AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL |  Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)
+AOCL_ENABLE_THREADS                 |  Enable multi-threaded compression and decompression using SMP based openMP threads (Disabled by default)
 
 Running AOCL-Compression Test Bench On Linux
 --------------------------------------------
@@ -165,18 +180,41 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
    Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
   
 
-* To run the test bench with error/debug/trace/info logs, use the command:<br>
-   `aocl_compression_bench -a -t -v <input filename>`<br>
-   Here, `-v` can be passed with a number such as v<n> that can take values:
-      * 1 for Error (default)
-      * 2 for Info
-      * 3 for Debug
-      * 4 for Trace.
+* To run the test bench with error/debug/trace/info logs, build the library by using `-DAOCL_ENABLE_LOG_FEATURE=ON` & set the environment variable `AOCL_ENABLE_LOG` to any of the following:<br>
+   * `AOCL_ENABLE_LOG=ERR`   for Error logs.
+   * `AOCL_ENABLE_LOG=INFO`  for Error, Info logs.
+   * `AOCL_ENABLE_LOG=DEBUG` for Error, Info, Debug logs.
+   * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.<br>
+  Note: When building the library for highest performance, do not enable `DAOCL_ENABLE_LOG_FEATURE`.
 
+
+* To run the test bench but only compression or decompression <br>
+   for a given input file, use the command:<br>
+   `aocl_compression_bench -rcompress <input filename>` or <br>
+   `aocl_compression_bench -rdecompress -ezstd <compressed input filename>` or <br>
+   `aocl_compression_bench -rdecompress -ezstd -t -f<uncompressed file for validation> <compressed input filename>` <br>
+   Note: In -rdecompress mode, compression method must be specified using -e option. <br>
+   If validation of decompressed data is needed, specify -t and -f options additionally.
+
+* To run the test bench and dump output data generated <br>
+   for a given input file, use the command:<br>
+   `aocl_compression_bench -d<dump filename> -ezstd:1 <input filename>` or <br>
+   `aocl_compression_bench -d<dump filename> -rcompress -ezstd:1 <input filename>` or <br>
+   `aocl_compression_bench -d<dump filename> -rdecompress -ezstd <compressed input filename>` <br>
+   Here, when -rcompress operation is selected, compressed file gets dumped <br>
+   and when -rdecompress operation is selected, decompressed file gets dumped. <br>
+   Method name and level must be specified using -e for default and -rcompress modes. <br>
+   Method name must be specified using -e for -rdecompress mode. <br>
+
+* NOTE: <br>
+   1. Compression and decompression of large files (>1GB) are supported in the test bench. <br>
+   2. Decompression of compressed files (> 1GB) that are not generated by aocl-compression <br> 
+      is not guaranteed by the test bench. <br>
+ 
 ---
   
 To test and benchmark the performance of IPP's compression methods, use the
-test bench option `-c` along with other relevant options (as explained above).
+test bench option `-c<path to IPP library method>` along with other relevant options (as explained above).
 IPP's lz4, lz4hc, zlib and bzip2 methods are supported by the test bench.
 Check the following details for the exact steps:
 1. Set the library path environment variable (export LD_LIBRARY_PATH on <br>
@@ -190,15 +228,15 @@ Check the following details for the exact steps:
 4. Build the patched IPP lz4, zlib and bzip2 libraries per the steps <br>
    in the IPP readme files in the corresponding patch file <br>
    locations for these compression methods.
-5. Set the library path environment variable (export LD_LIBRARY_PATH on <br>
-   Linux) to point to the patched IPP lz4, zlib and bzip2 libraries.
+5. Append the library path to `-c` option and pass it to executable as command line argument <br>
+   (Linux is only supported) for running patched IPP lz4, zlib and bzip2 libraries.
 6. Run the test bench to benchmark the IPP library methods as follows:
 ```
-    aocl_compression_bench -a -p -c <input filename>
-    aocl_compression_bench -elz4 -p -c <input filename>
-    aocl_compression_bench -elz4hc -p -c <input filename>
-    aocl_compression_bench -ezlib -p -c <input filename>
-    aocl_compression_bench -ebzip2 -p -c <input filename>
+    aocl_compression_bench -a -p -c/path/to/ipp_patch <input filename>
+    aocl_compression_bench -elz4 -p -c/path/to/ipp_patch <input filename>
+    aocl_compression_bench -elz4hc -p -c/path/to/ipp_patch <input filename>
+    aocl_compression_bench -ezlib -p -c/path/to/ipp_patch <input filename>
+    aocl_compression_bench -ebzip2 -p -c/path/to/ipp_patch <input filename>
 ```
 
 Running AOCL-Compression Test Bench On Windows
@@ -229,6 +267,27 @@ Following are a few sample commands that can be executed in the build directory 
  To run GTest test cases for a specific method<br>
  `ctest -R <METHOD_NAME_IN_CAPITALS>`
 
+Running source code coverage using GCOV
+---------------------------------------
+
+To measure source code coverage, use CODE_COVERAGE option while configuring the CMake build. Run CMake with the custom target option 'code-coverage' to execute tests and generate code coverage data. The code coverage reports are generated in the build directory under subdirectory called 'coverage/html_report'. Open the HTML files in browser to view the coverage information.
+
+Following is the sample command usage to run code coverage:
+`cmake --build <build directory> --target install code-coverage`
+
+Running Valgrind and ASAN memory checks using CTest
+---------------------------------------------------
+
+Use VALGRIND option for Valgrind memory check and ASAN option for ASAN memory check while configuring the CMake build. VALGRIND and ASAN options can not be enabled together.
+
+Following are the commands to execute in the 'build' directory to run memory checks.
+
+ To run Valgrind memory check<br>
+ `ctest -T memcheck` 
+ 
+ To run ASAN memory check<br>
+ `ctest`
+
 Running Performance Benchmarking
 --------------------------------
 
@@ -252,6 +311,38 @@ Generating Documentation
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
 - Documents will be generated in HTML format in the folder __docs/html__ . Open the index.html file in any browser to view the documentation.
 - CMake will use the existing Doxygen if available. Else, it will prompt the user to install doxygen and try again.
+
+Enabling/disabling optimizations
+--------------------------------
+- AOCL optimizations can be disabled by setting the environment variable AOCL_DISABLE_OPT to ON.
+- Reference code paths are taken in such a scenario.
+- This needs to be set before launching the application for it to take effect.
+- If optimization is turned off via aocl_compression_desc::optOff (= 1) passed to aocl_llc_setup(), then reference code paths are taken.
+- If optimization is turned on  via aocl_compression_desc::optOff (= 0) passed to aocl_llc_setup(), then AOCL_DISABLE_OPT is checked 
+  additionally to override aocl_compression_desc::optOff value.
+
+Enabling specific instructions (ISA)
+------------------------------------
+- AOCL optimizations can be restricted to certain ISAs by setting the environment variable 
+  AOCL_ENABLE_INSTRUCTIONS. Supported values are SSE2, AVX, AVX2 and AVX512.
+- This ensures optimized code paths with ISAs above the set value are not taken. E.g. If 
+  it is set to AVX, no AVX2 and AVX512 optimized code paths are taken.
+- This needs to be set before launching the application for it to take effect.
+- It takes precedence over aocl_compression_desc::optLevel setting passed to aocl_llc_setup().
+- Note: When calling aocl_llc_setup() API from multiple threads, changing aocl_compression_desc::optOff
+  and aocl_compression_desc::optLevel values between threads can lead to undefined behaviour.
+
+Multi-threaded Compression and Decompression
+--------------------------------------------
+- Parallel compression and decompression of lz4, zlib, zstd and snappy is implemented using
+  openMP multi-threading. A RAP (random access point) frame is introduced in AOCL-Compression
+  to support parallel decompression of the compressed streams/files. Use AOCL_ENABLE_THREADS
+  config option to enable the multi-threading.
+- A stream compressed with multi-threaded AOCL-Compression library can be decompressed using any
+  single-threaded standard decompressor by simply skipping the initial block of bytes containing
+  the RAP frame present at the start of the stream.
+- The multi-threaded compression support is optimally tuned for AMD CPUs on Linux® OS whereas
+  this support is experimental for Windows® platforms.
 
 
 CONTACTS

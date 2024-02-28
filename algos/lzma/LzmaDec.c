@@ -2,19 +2,44 @@
 2021-04-01 : Igor Pavlov : Public domain */
 
 /**
- * Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
- */
+* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*
+* 1. Redistributions of source code must retain the above copyright notice,
+* this list of conditions and the following disclaimer.
+* 2. Redistributions in binary form must reproduce the above copyright notice,
+* this list of conditions and the following disclaimer in the documentation
+* and/or other materials provided with the distribution.
+* 3. Neither the name of the copyright holder nor the names of its
+* contributors may be used to endorse or promote products derived from this
+* software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+* ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+* LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+* CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+* SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+* INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+* CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+* ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+* POSSIBILITY OF SUCH DAMAGE.
+*/
 
 #include "Precomp.h"
 
 #include <string.h>
 
+#include "utils/utils.h"
 /* #include "CpuArch.h" */
 #include "LzmaDec.h"
 
-#ifdef AOCL_LZMA_OPT
+#include "utils/utils.h"
+
 #include <limits.h>
-#endif
 
 #define kNumTopBits 24
 #define kTopValue ((UInt32)1 << kNumTopBits)
@@ -23,6 +48,20 @@
 #define kBitModelTotal (1 << kNumBitModelTotalBits)
 
 #define RC_INIT_SIZE 5 //skip 1st byte. use next 4 for code initialization
+
+#ifdef AOCL_LZMA_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+static int setup_ok_lzma_decode = 0; // flag to indicate status of dynamic dispatcher setup
 
 /* Key terms used in range decoder:
 *
@@ -375,7 +414,6 @@ int MY_FAST_CALL LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* bufLimit
 
 #else
 
-#if defined(AOCL_DYNAMIC_DISPATCHER) || !defined(AOCL_LZMA_OPT)
 static
 int MY_FAST_CALL LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* bufLimit)
 {
@@ -776,7 +814,7 @@ int MY_FAST_CALL LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* bufLimit
         return SZ_ERROR_DATA;
     return SZ_OK;
 }
-#endif
+
 #endif
 
 #ifdef AOCL_LZMA_OPT
@@ -1244,9 +1282,7 @@ We use early check of (RangeCoder:Code) over kBadRepCode to simplify main decodi
 #error Stop_Compiling_Bad_LZMA_Check
 #endif
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 int (*Lzma_Decode_Real_fp)(CLzmaDec* p, SizeT limit, const Byte* bufLimit) = LZMA_DECODE_REAL;
-#endif
 
 /*
 LzmaDec_DecodeReal2():
@@ -1273,11 +1309,7 @@ static int MY_FAST_CALL LzmaDec_DecodeReal2(CLzmaDec* p, SizeT limit, const Byte
     }
     {
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
         int res = Lzma_Decode_Real_fp(p, limit, bufLimit);
-#else
-        int res = AOCL_LZMA_DECODE_REAL(p, limit, bufLimit);
-#endif
 #else
         int res = LZMA_DECODE_REAL(p, limit, bufLimit);
 #endif
@@ -1536,6 +1568,7 @@ When the decoder lookahead, and the lookahead symbol is not end_marker, we have 
 SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* srcLen,
     ELzmaFinishMode finishMode, ELzmaStatus* status)
 {
+    AOCL_SETUP_NATIVE();
     if (p == NULL || src == NULL || srcLen == NULL || status == NULL)
         return SZ_ERROR_PARAM;
 
@@ -1786,6 +1819,10 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
 
 SRes LzmaDec_DecodeToBuf(CLzmaDec* p, Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen, ELzmaFinishMode finishMode, ELzmaStatus* status)
 {
+    AOCL_SETUP_NATIVE();
+    if (p == NULL || src == NULL || srcLen == NULL || status == NULL)
+        return SZ_ERROR_PARAM;
+
     SizeT outSize = *destLen;
     SizeT inSize = *srcLen;
     *srcLen = *destLen = 0;
@@ -1934,6 +1971,8 @@ SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
     const Byte* propData, unsigned propSize, ELzmaFinishMode finishMode,
     ELzmaStatus* status, ISzAllocPtr alloc)
 {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    AOCL_SETUP_NATIVE();
     if (src == NULL || srcLen == NULL || dest == NULL || propData == NULL ||
         destLen == NULL || *srcLen == 0 ||
         *srcLen > (ULLONG_MAX - LZMA_PROPS_SIZE)) // handles case when src size is < LZMA_PROPS_SIZE, resulting in destLen rolling over in calling APIs
@@ -1960,8 +1999,7 @@ SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
     return res;
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
+static void aocl_register_lzma_decode_fmv(int optOff, int optLevel)
 {
     if (optOff)
     {
@@ -1972,13 +2010,26 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
     {
         switch (optLevel)
         {
-        case 0://C version
-        case 1://SSE version
-        case 2://AVX version
-        case 3://AVX2 version
-        default://AVX512 and other versions
-            Lzma_Decode_Real_fp = AOCL_LZMA_DECODE_REAL;
-            break;
+            case -1: // undecided. use defaults based on compiler flags
+    #ifdef AOCL_LZMA_OPT
+                Lzma_Decode_Real_fp = AOCL_LZMA_DECODE_REAL;
+    #else
+                Lzma_Decode_Real_fp = LZMA_DECODE_REAL;
+    #endif
+                break;
+#ifdef AOCL_LZMA_OPT
+            case 0://C version
+            case 1://SSE version
+            case 2://AVX version
+            case 3://AVX2 version
+            default://AVX512 and other versions
+                Lzma_Decode_Real_fp = AOCL_LZMA_DECODE_REAL;
+                break;
+#else
+            default:
+                Lzma_Decode_Real_fp = LZMA_DECODE_REAL;
+                break;
+#endif
         }
     }
 }
@@ -1986,11 +2037,36 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
 void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog)
 {
-    aocl_register_lzma_encode_fmv(optOff, optLevel);
+    AOCL_ENTER_CRITICAL(setup_lzmadec)
+    if (!setup_ok_lzma_decode) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_lzma_decode_fmv(optOff, optLevel);
+        setup_ok_lzma_decode = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lzmadec)
+}
+
+#ifdef AOCL_LZMA_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_lzmadec)
+    if (!setup_ok_lzma_decode) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_lzma_decode_fmv(optOff, optLevel);
+        setup_ok_lzma_decode = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lzmadec)
 }
 #endif
 
-#ifdef AOCL_LZMA_UNIT_TEST
+void aocl_destroy_lzma_decode(void){
+    AOCL_ENTER_CRITICAL(setup_lzma_decode)
+    setup_ok_lzma_decode = 0;
+    AOCL_EXIT_CRITICAL(setup_lzma_decode)
+}
+
+#ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZMA_OPT
 /* Move these APIs within the scope of gtest once the framework is ready */
 void Test_Rc_Get_Bit_2_Dec_Ref(const Byte* buf, UInt32* _range, UInt32* _code, CLzmaProb* prob, unsigned symbol) {
     unsigned ttt;
@@ -2027,4 +2103,5 @@ void Test_Rc_Rev_Bit_Dec_Opt(const Byte* buf, UInt32* _range, UInt32* _code, CLz
     *_range = range;
     *_code = code;
 }
-#endif
+#endif /* AOCL_LZMA_OPT */
+#endif /* AOCL_UNIT_TEST */

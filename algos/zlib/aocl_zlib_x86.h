@@ -31,9 +31,14 @@
 #include "deflate.h"
 
 #ifdef AOCL_ZLIB_OPT
-ZEXTERN uint32_t adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
 ZEXTERN void slide_hash_x86(deflate_state *s);
 ZEXTERN uInt longest_match_x86 (deflate_state *s, IPos cur_match);
+
+/* Equivalent functions for adler32_x86
+ * that do not call AOCL_SETUP_NATIVE(). When these functions are called
+ * from other APIs, dynamic dispatcher setup is already done, and overhead
+ * from calling AOCL_SETUP_NATIVE() can be avoided. */
+ZEXTERN uint32_t adler32_x86_internal(uint32_t adler, const Bytef *buf, z_size_t len);
 #endif
 
 #endif

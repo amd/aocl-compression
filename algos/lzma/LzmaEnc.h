@@ -1,9 +1,33 @@
 /*  LzmaEnc.h -- LZMA Encoder
 2019-10-30 : Igor Pavlov : Public domain */
 
-/*
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
- */
+/**
+* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*
+* 1. Redistributions of source code must retain the above copyright notice,
+* this list of conditions and the following disclaimer.
+* 2. Redistributions in binary form must reproduce the above copyright notice,
+* this list of conditions and the following disclaimer in the documentation
+* and/or other materials provided with the distribution.
+* 3. Neither the name of the copyright holder nor the names of its
+* contributors may be used to endorse or promote products derived from this
+* software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+* ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+* LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+* CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+* SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+* INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+* CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+* ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+* POSSIBILITY OF SUCH DAMAGE.
+*/
 
 #ifndef __LZMA_ENC_H
 #define __LZMA_ENC_H
@@ -53,6 +77,7 @@ typedef struct _CLzmaEncProps
 
 #ifdef AOCL_LZMA_OPT
   size_t srcLen;
+  int cacheEfficientStrategy; /**< 0: disabled, 1 : enabled, -1: optimal defaults */
 #endif
 } CLzmaEncProps;
 
@@ -276,7 +301,6 @@ LZMALIB_API SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT s
  * @}
 */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /*! @brief AOCL-Compression defined setup function that configures with the right
  * AMD optimized lzma routines depending upon the detected CPU features.
  *
@@ -292,7 +316,11 @@ LZMALIB_API SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT s
  */
 LZMALIB_API void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
   size_t level, size_t windowLog);
-#endif
+
+/**
+ * @brief AOCL-Compression defined destroy function for lzma encode.
+ */
+LZMALIB_API void aocl_destroy_lzma_encode(void);
 
 /*!
  * @name Encode Functions
@@ -333,14 +361,28 @@ LZMALIB_API SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* p
  * @}
 */
 
-#ifdef AOCL_LZMA_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
+typedef struct { // struct to expose CLzmaEnc properties for unit testing
+    unsigned numFastBytes;
+    unsigned lc, lp, pb;
+    BoolInt fastMode;
+    BoolInt writeEndMark;
+    UInt32 dictSize;
+
+    //MFB params
+    Byte btMode;
+    UInt32 cutValue;
+    UInt16 level;
+    UInt16 cacheEfficientSearch;
+    UInt32 numHashBytes;
+} TestCLzmaEnc;
+
 LZMALIB_API void Test_LzmaEncProps_Normalize_Dyn(CLzmaEncProps* p);
 LZMALIB_API SRes Test_SetProps_Dyn(CLzmaEncHandle pp, const CLzmaEncProps* props);
-LZMALIB_API SRes Test_Validate_NumFastBytes(CLzmaEncHandle pp, unsigned numFastBytes);
-LZMALIB_API SRes Test_Validate_NumHashBytes(CLzmaEncHandle pp, unsigned numHashBytes);
 LZMALIB_API UInt64 Test_SetDataSize(CLzmaEncHandle pp, UInt64 expectedDataSize);
 LZMALIB_API SRes Test_WriteProperties(CLzmaEncHandle pp, Byte* props, SizeT* size, UInt32 dictSize);
 LZMALIB_API unsigned Test_IsWriteEndMark(CLzmaEncHandle pp, unsigned wem);
+LZMALIB_API TestCLzmaEnc Get_CLzmaEnc_Params(CLzmaEncHandle pp);
 #endif
 
 /**

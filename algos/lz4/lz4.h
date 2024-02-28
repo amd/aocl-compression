@@ -42,6 +42,7 @@ extern "C" {
 
 /* --- Dependency --- */
 #include <stddef.h>   /* size_t */
+#include "aoclAlgoOpt.h"
 
 
 /*!
@@ -138,13 +139,15 @@ LZ4LIB_API const char* LZ4_versionString (void);
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
 
 /**----- AOCL Optimization flags -----*/
-#define AOCL_LZ4_OPT
+
+#ifdef AOCL_LZ4_OPT
 #define AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
 //#define AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
 //#define AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
 #ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
 #define AOCL_LZ4_MATCH_SKIPPING_THRESHOLD 3
-#endif
+#endif /* AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 */
+#endif /* AOCL_LZ4_OPT */
 
 /*-************************************
 *  Tuning parameter
@@ -194,7 +197,7 @@ LZ4LIB_API const char* LZ4_versionString (void);
  *  |Result | Description                                                                                           |
  *  |:------|:------------------------------------------------------------------------------------------------------|
  *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst.|
- *  |Fail   | Returns <= 0.                                                                                         |
+ *  |Fail   | Returns 0.                                                                                            |
  *
  */
 LZ4LIB_API int LZ4_compress_default(const char* src, char* dst, int srcSize, int dstCapacity);
@@ -231,6 +234,14 @@ LZ4LIB_API int LZ4_decompress_safe (const char* src, char* dst, int compressedSi
 /**
  * @}
  */
+
+
+#ifdef AOCL_LZ4_AVX_OPT
+#ifdef AOCL_UNIT_TEST
+/* Wrapper function for static inlined AOCL_LZ4_wildCopy64_AVX function for unit testing. */
+LZ4LIB_API void Test_AOCL_LZ4_wildCopy64_AVX(void*dstPtr, const void* srcPtr, void*dstEnd);
+#endif /* AOCL_UNIT_TEST */
+#endif /* AOCL_LZ4_AVX_OPT */
 
 /*-************************************
 *  Advanced Functions
@@ -293,7 +304,7 @@ LZ4LIB_API int LZ4_compressBound(int inputSize);
  *  |Result | Description                                                                                            |
  *  |:------|:-------------------------------------------------------------------------------------------------------|   
  *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst. |
- *  |Fail   | Returns <= 0.                                                                                          |
+ *  |Fail   | Returns 0.                                                                                             |
 */
 LZ4LIB_API int LZ4_compress_fast (const char* src, char* dst, int srcSize, int dstCapacity, int acceleration);
 
@@ -327,7 +338,7 @@ LZ4LIB_API int LZ4_sizeofState(void);
  *  |Result | Description                                                                                            |
  *  |:------|:----------- -------------------------------------------------------------------------------------------|
  *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst. |
- *  |Fail   | Returns <= 0.                                                                                          |
+ *  |Fail   | Returns 0.                                                                                             |
  */
 LZ4LIB_API int LZ4_compress_fast_extState (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int acceleration);
 
@@ -357,7 +368,7 @@ LZ4LIB_API int LZ4_compress_fast_extState (void* state, const char* src, char* d
  *  |Result | Description                                                                                            |
  *  |:------|:----------- -------------------------------------------------------------------------------------------|
  *  |Success| Returns a positive number (<= dstCapacity) indicating the number of bytes written into the buffer dst. |
- *  |Fail   | Returns <= 0.                                                                                          |
+ *  |Fail   | Returns 0.                                                                                             |
  */
 LZ4LIB_API int AOCL_LZ4_compress_fast_extState(void* state, const char* source,
     char* dest, int inputSize,
@@ -438,7 +449,6 @@ LZ4LIB_API int LZ4_compress_destSize (const char* src, char* dst, int* srcSizePt
  */
 LZ4LIB_API int LZ4_decompress_safe_partial (const char* src, char* dst, int srcSize, int targetOutputSize, int dstCapacity);
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /**
  * @brief AOCL-Compression defined setup function that configures with the right
  * AMD optimized lz4 routines depending upon the detected CPU features.
@@ -453,7 +463,22 @@ LZ4LIB_API int LZ4_decompress_safe_partial (const char* src, char* dst, int srcS
  */
 LZ4LIB_API char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
-#endif
+
+/**
+ * @brief AOCL-Compression defined destroy function for lz4.
+ */
+LZ4LIB_API void aocl_destroy_lz4(void);
+
+#ifdef AOCL_LZ4_OPT
+#ifdef AOCL_UNIT_TEST
+#if defined(__cplusplus) || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */)
+# include <stdint.h>
+LZ4LIB_API unsigned int Test_AOCL_LZ4_hash5(uint64_t sequence, int tableType);
+#else
+LZ4LIB_API unsigned int Test_AOCL_LZ4_hash5(unsigned long long sequence, int tableType);
+#endif /* defined(__cplusplus) || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)) */
+#endif /* AOCL_UNIT_TEST */
+#endif /* AOCL_LZ4_OPT */
 /**
  * @}
  */
@@ -547,6 +572,7 @@ LZ4LIB_API void LZ4_resetStream_fast (LZ4_stream_t* streamPtr);
  *  |Result | Description                                            |
  *  |:------|:-------------------------------------------------------|
  *  |Success|Loaded dictionary size, in bytes (<= 64 KB).            |
+ *  |Fail   |-1 if (streamPtr == NULL) or (dictionary == NULL && dictSize >= sizeof(reg_t)).|
  */
 LZ4LIB_API int LZ4_loadDict (LZ4_stream_t* streamPtr, const char* dictionary, int dictSize);
 

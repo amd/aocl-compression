@@ -43,6 +43,8 @@
 #ifndef AOCL_EXCLUDE_ZSTD
 #define ZSTD_STATIC_LINKING_ONLY
 #include "algos/zstd/lib/zstd.h"
+#include "algos/zstd/lib/compress/zstd_lazy.h"
+#include "algos/zstd/lib/decompress/zstd_decompress_block.h"
 #endif
 
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
@@ -115,27 +117,35 @@ public:
     }
 };
 
-bool zstd_check_uncompressed_equal_to_original(char *src, unsigned srcSize, char *compressed, unsigned compressedLen)
+typedef size_t(*ZSTD_decompress_fp)(ZSTD_DCtx* dctx,
+    void* dst, size_t dstCapacity,
+    const void* src, size_t srcSize);
+
+bool zstd_check_uncompressed_equal_to_original(char *src, unsigned srcSize, 
+    char *compressed, unsigned compressedLen, ZSTD_decompress_fp decomp_fp)
 {
     int uncompressedLen = srcSize + 10;
     char* uncompressed = (char*)calloc(uncompressedLen, sizeof(char));
     
     
     ZSTD_DCtx* const dctx = ZSTD_createDCtx();
-    int uncompressedLenRes = ZSTD_decompressDCtx(dctx, uncompressed, uncompressedLen, compressed, compressedLen);
+    int uncompressedLenRes = decomp_fp(dctx, uncompressed, uncompressedLen, compressed, compressedLen);
 
     if (uncompressedLenRes < 0) {//error code
         free(uncompressed);
+        ZSTD_freeDCtx(dctx);
         return false;
     }
 
     if (!(srcSize == (unsigned)uncompressedLenRes)) {
         free(uncompressed);
+        ZSTD_freeDCtx(dctx);
         return false;
     }
 
     bool ret = (memcmp(src, uncompressed, srcSize) == 0);
     free(uncompressed);
+    ZSTD_freeDCtx(dctx);
     return ret;
 }
 
@@ -211,14 +221,19 @@ class ZSTD_ZSTD_compress : public AOCL_setup_zstd {
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_1) // compress_FAIL_src_is_NULL
 {
     TestLoad_2 d(8000);
-    
-    EXPECT_EQ(Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), NULL, d.getOrigSize(), 1), -1);
+
+    // ZSTD_error_GENERIC
+    size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), NULL, d.getOrigSize(), 1);
+    EXPECT_TRUE(Test_ZSTD_isError(outLen));
 }
 
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_2) // Compress_FAIL_dst_is_NULL
 {
     TestLoad_2 d(800);
-    EXPECT_EQ(Test_ZSTD_compress(NULL, d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), 1), -1);
+
+    // ZSTD_error_dstBuffer_null
+    size_t outLen = Test_ZSTD_compress(NULL, d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), 1);
+    EXPECT_TRUE(Test_ZSTD_isError(outLen));
 }
 
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_3 ) // compress_PASS
@@ -226,7 +241,7 @@ TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_3 ) // com
     for(int cLevel=1; cLevel<=22; cLevel++) {
         TestLoad_2 d(8000);
         size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(),d.getOrigSize(), cLevel);
-        EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+        EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
     }
 }
 
@@ -245,7 +260,7 @@ TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_5) // Comp
      * while other levels uses the corresponding entry to set compression parameters.
      */
     size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), cLevel);
-    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
 }
 
 TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_6) // Compression_level_greater_than_maximum_limit
@@ -254,7 +269,7 @@ TEST_F(ZSTD_ZSTD_compress, AOCL_Compression_ZSTD_ZSTD_compress_common_6) // Comp
     int cLevel = 23;
     // For level > maximum possible level, level will be set to ZSTD_MAX_CLEVEL, which is 22.
     size_t outLen = Test_ZSTD_compress(d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(),d.getOrigSize(), cLevel);
-    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
 }
 
 /*********************************************
@@ -341,12 +356,16 @@ public:
 
 TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_1) // src_NULL
 {
-    EXPECT_EQ(Test_ZSTD_decompress(output, Test_ZSTD_decompressBound(src, srcLen), NULL, srcLen), -1);
+    // ZSTD_error_GENERIC
+    size_t decLen = Test_ZSTD_decompress(output, Test_ZSTD_decompressBound(src, srcLen), NULL, srcLen);
+    EXPECT_TRUE(Test_ZSTD_isError(decLen));
 }
 
 TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_2) // dst_NULL
 {
-    EXPECT_EQ(Test_ZSTD_decompress(NULL, Test_ZSTD_decompressBound(src, srcLen), src, srcLen), -1);
+    // ZSTD_error_dstBuffer_null
+    size_t decLen = Test_ZSTD_decompress(NULL, Test_ZSTD_decompressBound(src, srcLen), src, srcLen);
+    EXPECT_TRUE(Test_ZSTD_isError(decLen));
 }
 
 TEST_F(ZSTD_ZSTD_decompress, AOCL_Compression_zstd_ZSTD_decompress_common_3) // successfull_decompression
@@ -562,9 +581,27 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
     size_t outLen_2 = Test_ZSTD_compress_advanced(cctx, d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), NULL, 0, param);
 
     EXPECT_EQ(outLen_1, outLen_2);
-    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen_1));
-    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen_2));
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen_1, ZSTD_decompressDCtx));
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen_2, ZSTD_decompressDCtx));
 }
+
+#ifdef AOCL_ENABLE_THREADS
+TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_common_2) // compress multithreaded. decompress reference. format compliance test.
+{
+    TestLoad_2 d(1024 * 1024 * 32); //use larger input so that compression gets triggered on multiple threads
+    int level = 3;
+
+    param = ZSTD_getParams(level, d.getOrigSize(), 0);
+    ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, level);
+
+    //Compress using multithreaded compressor
+    size_t outLen = Test_ZSTD_compress_advanced(cctx, d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), NULL, 0, param);
+    //Decompress using reference decompressor Test_ZSTD_decompressDCtxRef
+    //As ZSTD writes RAP frame inside skippable frame, compressed output must be format compliant
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, 
+                Test_ZSTD_decompressDCtxRef));
+}
+#endif
 
 /*********************************************
  * End of ZSTD_compress_advanced
@@ -601,17 +638,23 @@ public:
 
 TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_1) // dctx_NULL
 {
-    EXPECT_EQ(Test_ZSTD_decompressDCtx(NULL, output, Test_ZSTD_decompressBound(src, srcLen), src, srcLen), -1);
+    // ZSTD_error_GENERIC
+    int decLen = Test_ZSTD_decompressDCtx(NULL, output, Test_ZSTD_decompressBound(src, srcLen), src, srcLen);
+    EXPECT_TRUE(Test_ZSTD_isError(decLen));
 }
 
 TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_2) // src_NULL
 {
-    EXPECT_EQ(Test_ZSTD_decompressDCtx(dctx, output, Test_ZSTD_decompressBound(src, srcLen), NULL, srcLen), -1);
+    // ZSTD_error_GENERIC
+    int decLen = Test_ZSTD_decompressDCtx(dctx, output, Test_ZSTD_decompressBound(src, srcLen), NULL, srcLen);
+    EXPECT_TRUE(Test_ZSTD_isError(decLen));
 }
 
 TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_3) // dst_NULL
 {
-    EXPECT_EQ(Test_ZSTD_decompressDCtx(dctx, NULL, Test_ZSTD_decompressBound(src, srcLen), src, srcLen), -1);
+    // ZSTD_error_dstBuffer_null
+    int decLen = Test_ZSTD_decompressDCtx(dctx, NULL, Test_ZSTD_decompressBound(src, srcLen), src, srcLen);
+    EXPECT_TRUE(Test_ZSTD_isError(decLen));
 }
 
 TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_common_4) // successfull_decompression
@@ -672,5 +715,345 @@ TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_commo
  * End of ZSTD_decompressDCtx
  *********************************************/
 
+#ifdef AOCL_ZSTD_OPT
+ /*********************************************
+  * Begin of ZSTD_AOCL_ZSTD_row_getMatchMask
+  *********************************************/
+class ZSTD_AOCL_ZSTD_row_getMatchMask : public ::testing::TestWithParam<int> {
+public:
+    typedef unsigned char BYTE;
+    enum MATCH_TYPE { MATCH_TYPE_ALL, MATCH_TYPE_SOME, MATCH_TYPE_NONE };
+    void SetUp() override {
+        srand(0);
+        rowEntries = GetParam();
+        tagRow = (BYTE*)malloc(sizeof(BYTE) * rowEntries);
+        headRow = (BYTE*)malloc(sizeof(BYTE) * rowEntries);
+    }
 
+    void TearDown() override {
+        if (tagRow)
+            free(tagRow);
+        if (headRow)
+            free(headRow);
+    }
 
+    //Fill bytes in tagRow based on MATCH_TYPE selected
+    void setup_tag_row(BYTE tag, unsigned matchPos[], int matchSz, MATCH_TYPE type) {
+        if (type == MATCH_TYPE_ALL) {
+            for (int i = 0; i < rowEntries; ++i) { //fill all with tag bytes
+                tagRow[i] = tag;
+            }
+        }
+        else {
+            for (int i = 0; i < rowEntries; ++i) { //fill with random non-tag bytes
+                BYTE cur = rand() % 256;
+                if (cur == tag)
+                    cur++;
+                tagRow[i] = cur;
+            }
+        }
+
+        if (type == MATCH_TYPE_SOME) {
+            for (int i = 0; i < matchSz; ++i) { //set some bytes to tag
+                ASSERT_LT(matchPos[i], rowEntries);
+                tagRow[matchPos[i]] = tag;
+            }
+        }
+    }
+
+    //validate if expected mask is generated
+    void validate_mask(BYTE tag, U64 mask, int head) {
+        //rotate tagRow left by head and save in headRow
+        ASSERT_LT(head, rowEntries);
+        head = (rowEntries - head) % rowEntries;
+        for (int i = 0; i < rowEntries; ++i) {
+            int headpos = (head + i) % rowEntries;
+            headRow[headpos] = tagRow[i];
+        }
+        
+        //check each bit in mask
+        for (int i = 0; i < rowEntries; ++i) {
+            int curbit = mask & 0x01;
+            if (i == head) {
+                //test head pos bit. Should always be 0.
+                EXPECT_EQ(curbit, 0);
+            }
+            else {
+                //test rest of the mask
+                if (headRow[i] == tag) {
+                    EXPECT_EQ(curbit, 1);
+                }
+                else {
+                    EXPECT_EQ(curbit, 0);
+                }
+            }
+            mask >>= 1;
+        }
+    }
+
+    uint32_t rowEntries; //size of tag row
+    BYTE* tagRow; //input tag row bytes
+    BYTE* headRow; //temp buffer to hold rotated tag bytes
+};
+
+// all bytes set to tag
+TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_allMatch_common_1) {
+    BYTE tag = 'a';
+    const int head = 0;
+    setup_tag_row(tag, { 0 }, 0, MATCH_TYPE_ALL);
+    U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
+    validate_mask(tag, mask, head);
+}
+
+// some bytes set to tag
+TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_someMatch_common_1) {
+    BYTE tag = 'a';
+    const int head = 0;
+    unsigned matchPos[6] = { 1, 3, 7, 8, rowEntries - 3, rowEntries - 1 };
+    setup_tag_row(tag, matchPos, 6, MATCH_TYPE_SOME);
+    U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
+    validate_mask(tag, mask, head);
+}
+
+// no bytes set to tag
+TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_nonematch_common_1) {
+    BYTE tag = 'a';
+    const int head = 0;
+    setup_tag_row(tag, { 0 }, 0, MATCH_TYPE_NONE);
+    U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
+    validate_mask(tag, mask, head);
+}
+
+// test with head rotation
+TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_headRotated_common_1) {
+    BYTE tag = 'a';
+    for (int head = 1; head < rowEntries; ++head) {
+        unsigned matchPos[6] = { 1, 3, 7, 8, rowEntries - 3, rowEntries - 1 };
+        setup_tag_row(tag, matchPos, 6, MATCH_TYPE_ALL);
+        U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
+        validate_mask(tag, mask, head);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AOCL_ZSTD_row_getMatchMask_TEST,
+    ZSTD_AOCL_ZSTD_row_getMatchMask,
+    ::testing::ValuesIn({ 16, 32, 64 })); // 3 configurations supported for rowEntries
+
+/*********************************************
+ * End of ZSTD_AOCL_ZSTD_row_getMatchMask
+ *********************************************/
+#endif
+
+ /*********************************************
+ * Begin of ZSTD_ZSTD_selectBlockCompressor
+ *********************************************/
+
+ // Test valid compressors are set on optOff
+TEST(ZSTD_ZSTD_selectBlockCompressor, AOCL_Compression_zstd_ZSTD_selectBlockCompressor_optOff_common_1)
+{
+    int aoclOptFlag = 0; //optOff
+    for (int strat = 1; strat <= 9; ++strat) { //Refer to ZSTD_strategy for valid range of values
+        for (int useRowMatchFinder = 0; useRowMatchFinder <= 1; useRowMatchFinder++) {
+            for (int dictMode = 0; dictMode <= 3; ++dictMode) { //Refer to ZSTD_dictMode_e for valid range of values
+                int ret = Test_ZSTD_selectBlockCompressor(strat, useRowMatchFinder, dictMode, aoclOptFlag);
+                EXPECT_EQ(ret, 0);
+            }
+        }
+    }
+}
+
+// Test valid compressors are set on optOn
+TEST(ZSTD_ZSTD_selectBlockCompressor, AOCL_Compression_zstd_ZSTD_selectBlockCompressor_optOn_common_1)
+{
+    int aoclOptFlag = 1; //optOn
+    for (int strat = 1; strat <= 9; ++strat) { //Refer to ZSTD_strategy for valid range of values
+        for (int useRowMatchFinder = 0; useRowMatchFinder <= 1; useRowMatchFinder++) {
+            for (int dictMode = 0; dictMode <= 3; ++dictMode) { //Refer to ZSTD_dictMode_e for valid range of values
+                int ret = Test_ZSTD_selectBlockCompressor(strat, useRowMatchFinder, dictMode, aoclOptFlag);
+                EXPECT_EQ(ret, 0);
+            }
+        }
+    }
+}
+
+ /*********************************************
+ * End of ZSTD_ZSTD_selectBlockCompressor
+ *********************************************/
+
+ /*********************************************
+ * Begin of ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long
+ *********************************************/
+class ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long : public AOCL_setup_zstd
+{
+public:
+    ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long() : stream(nullptr), src(nullptr), dst(nullptr) {}
+
+    ~ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long() {
+        if (stream) free(stream);
+    }
+
+    void create(size_t len, size_t slen) {
+        ASSERT_GE(len, slen * 2); //enough space to hold src and dst
+        buf_len = len + WILDCOPY_OVERLENGTH;
+        src_len = slen;
+
+        stream = (char*)malloc(sizeof(char) * buf_len);
+        src = stream;
+        reset();
+    }
+
+    void reset() {
+        ASSERT_NE(src, nullptr);
+        memset(stream, 0, sizeof(char) * buf_len);
+        
+        for (size_t i = 0; i < src_len; ++i) { //fill non-0 values for src
+            src[i] = (i % 256);
+            if (src[i] == 0) src[i] = 1;
+        }
+    }
+
+    void setDst(size_t pos) {
+        ASSERT_LE(pos + src_len, buf_len - WILDCOPY_OVERLENGTH); //enough space in dst to hold src_len
+        ASSERT_NE(src, nullptr);
+        dst = src + pos;
+    }
+
+    void validate() {
+        EXPECT_EQ(memcmp(src, dst, src_len), 0); //validate src and dst are equal
+        
+        
+        if (dst > (src + src_len)) 
+        { //validate bytes HERE are not polluted: [src...src+length..<HERE>..dst..dst+len]
+            bool polluted = false;
+            char* cur = src + src_len;
+            char* end = dst;
+            while (cur < end) {
+                if ((*cur) != 0) {
+                    polluted = true;
+                    break;
+                }
+                cur++;
+            }
+            EXPECT_NE(polluted, true);
+        }
+        //[src...src+length...dst..dst+len..<HERE>..buf_len]. Ok to pollute here
+    }
+
+    char* getSrc() {
+        return src;
+    }
+
+    char* getDst() {
+        return dst;
+    }
+    
+private:
+    char* stream, *src, *dst;
+    size_t buf_len, src_len;
+};
+
+TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildcopy_long_common_1) // (dst-src) >= WILDCOPY_VECLEN, length < WILDCOPY_VECLEN
+{
+    size_t length = WILDCOPY_VECLEN - 1;
+    size_t test_cnt = 8;
+    size_t buf_len = length + WILDCOPY_VECLEN + test_cnt; //(dst bytes) + (gap btw dst,src) + (test for > WILDCOPY_VECLEN gap)
+
+    int ovtype = 0;
+    create(buf_len, length);
+
+    for (int i = WILDCOPY_VECLEN; i < (WILDCOPY_VECLEN + test_cnt); ++i) {
+        setDst(i);
+        TEST_AOCL_ZSTD_wildcopy_long((void*)getDst(), (void*)getSrc(), length, ovtype);
+        validate();
+        reset();
+    }
+}
+
+TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildcopy_long_common_2) // (dst-src) >= WILDCOPY_VECLEN, length > WILDCOPY_VECLEN
+{
+    size_t length = WILDCOPY_VECLEN + 1;
+    size_t test_cnt = 8;
+    size_t buf_len = length + WILDCOPY_VECLEN + test_cnt; //(dst bytes) + (gap btw dst,src) + (test for > WILDCOPY_VECLEN gap)
+
+    int ovtype = 0;
+    create(buf_len, length);
+
+    for (int i = WILDCOPY_VECLEN; i < (WILDCOPY_VECLEN + test_cnt); ++i) {
+        setDst(i);
+        TEST_AOCL_ZSTD_wildcopy_long((void*)getDst(), (void*)getSrc(), length, ovtype);
+        validate();
+        reset();
+    }
+}
+
+TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildcopy_long_common_3) // 8 <= (dst-src) < WILDCOPY_VECLEN, length < WILDCOPY_VECLEN
+{
+    size_t length = WILDCOPY_VECLEN - 1;
+    size_t buf_len = length + WILDCOPY_VECLEN; //(dst bytes) + (gap btw dst,src)
+
+    int ovtype = 1;
+    create(buf_len, length);
+
+    for (int i = 8; i < WILDCOPY_VECLEN; ++i) {
+        setDst(i);
+        TEST_AOCL_ZSTD_wildcopy_long((void*)getDst(), (void*)getSrc(), length, ovtype);
+        validate();
+        reset();
+    }
+}
+
+TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildcopy_long_common_4) // 8 <= (dst-src) < WILDCOPY_VECLEN, length > WILDCOPY_VECLEN
+{
+    size_t length = WILDCOPY_VECLEN + 1;
+    size_t buf_len = length + length; //(dst bytes) + (src bytes)
+
+    int ovtype = 1;
+    create(buf_len, length);
+
+    for (int i = 8; i < WILDCOPY_VECLEN; ++i) {
+        setDst(i);
+        TEST_AOCL_ZSTD_wildcopy_long((void*)getDst(), (void*)getSrc(), length, ovtype);
+        validate();
+        reset();
+    }
+}
+
+/*********************************************
+* End of ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long
+*********************************************/
+
+#ifdef AOCL_ENABLE_THREADS
+/*********************************************
+* Begin of ZSTD_GET_WINDOW_FACTOR
+*********************************************/
+TEST(ZSTD_ZSTD_GET_WINDOW_FACTOR, AOCL_Compression_zstd_ZSTD_GET_WINDOW_FACTOR_common_1)
+{
+    size_t srcSize = 0;
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 1);
+
+    srcSize = (100 * 1024 * 1024) - 1; //< 100 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 1);
+
+    srcSize = (100 * 1024 * 1024); //100 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 1);
+
+    srcSize = (100 * 1024 * 1024) + 1; //>100 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 1);
+
+    srcSize = (200 * 1024 * 1024); //200 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 2);
+
+    srcSize = (300 * 1024 * 1024); //300 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 3);
+
+    srcSize = (400 * 1024 * 1024); //400 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 4);
+
+    srcSize = (400 * 1024 * 1024) + 1; //>400 MB
+    EXPECT_EQ(Test_ZSTD_getWindowFactor(srcSize), 4);
+}
+/*********************************************
+* End of ZSTD_GET_WINDOW_FACTOR
+*********************************************/
+#endif /* AOCL_ENABLE_THREADS */

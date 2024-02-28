@@ -384,11 +384,34 @@ namespace snappy {
    *  @return
    *  |Result | Description                            |
    *  |:------|:---------------------------------------|
-   *  |Success| Returns \b true on successful parsing.|
+   *  |Success| Returns \b true on successful parsing. |
    *  |Failure| Returns \b false on parsing error.     |
    */
 
  SNAPPYLIB_API bool GetUncompressedLength(const char* compressed, size_t compressed_length,
+                             size_t* result);
+
+    /**
+   * @brief Get the Uncompressed Length object from the AOCL multithreaded compressor's compressed buffer.
+   * 
+   * This operation takes O(1) time.
+   * 
+   * @attention REQUIRES: "compressed[]" was produced by RawCompress() or Compress() IN AOCL's MULTITHREADED MODE.
+   *
+   *  |Parameters            |Direction| Description                                                                 |
+   *  |:---------------------|:-------:|:----------------------------------------------------------------------------|
+   *  | \b compressed        |  in     | This is a buffer which contains compressed data. (along with the RAP frame) |
+   *  | \b compressed_length |  in     | This is the length of the compressed buffer (including the RAP frame).      |
+   *  | \b result            |  out    | This is the pointer to type size_t where the uncompressed length is stored. |
+   *
+   *  @return
+   *  |Result | Description                            |
+   *  |:------|:---------------------------------------|
+   *  |Success| Returns \b true on successful parsing. |
+   *  |Failure| Returns \b false on parsing error.     |
+   */
+
+ SNAPPYLIB_API bool GetUncompressedLengthFromMTCompressedBuffer(const char* compressed, size_t compressed_length,
                              size_t* result);
 
   /**
@@ -436,7 +459,6 @@ namespace snappy {
 
   /* AOCL-Compression defined setup function that configures with the right
 *  AMD optimized snappy routines depending upon the detected CPU features. */
-#ifdef AOCL_DYNAMIC_DISPATCHER
 
 /**
  * @brief AOCL-Compression defined setup function that configures with the right
@@ -453,7 +475,11 @@ namespace snappy {
 
  SNAPPYLIB_API char * aocl_setup_snappy(int optOff, int optLevel, size_t insize,
                            size_t level, size_t windowLog);
-#endif
+
+/**
+ * @brief AOCL-Compression defined destroy function.
+ */
+ SNAPPYLIB_API void aocl_destroy_snappy(void);
 
 /**
  * @brief This class is created to expose internal functions which are not available external to this method.

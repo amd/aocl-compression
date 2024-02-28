@@ -36,5 +36,5 @@
 #undef INFLATE_FAST_MIN_OUTPUT
 #define INFLATE_FAST_MIN_OUTPUT 260
 #endif
-void ZLIB_INTERNAL inflate_fast_chunk_ OF((z_streamp strm, unsigned start));
+void ZLIB_INTERNAL inflate_fast_chunk_ (z_streamp strm, unsigned start);
 #endif /* AOCL_ZLIB_SSE2_OPT */

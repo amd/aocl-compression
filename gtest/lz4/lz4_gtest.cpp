@@ -170,14 +170,14 @@ TEST_F(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_comm
 {
     TestLoad d(800);
 
-    EXPECT_EQ(LZ4_compress_default(NULL, d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize()), -1);
+    EXPECT_EQ(LZ4_compress_default(NULL, d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize()), 0);
 }
 
 TEST_F(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_common_2) // compressFail_dst_NULL
 {
     TestLoad d(800);
 
-    EXPECT_EQ(LZ4_compress_default(d.getOrigData(), NULL, d.getOrigSize(), d.getCompressedSize()), -1);
+    EXPECT_EQ(LZ4_compress_default(d.getOrigData(), NULL, d.getOrigSize(), d.getCompressedSize()), 0);
 }
 
 TEST_F(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_common_3) // compressionPass
@@ -283,7 +283,7 @@ TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_3) 
 {
     int decLen = LZ4_decompress_safe(src, output, srcLen, origLen);
     ASSERT_EQ(origLen, decLen);
-    EXPECT_EQ(0, memcmp(output, original, decLen));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
 }
 
 TEST_F(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_common_4) // cmp_siz_inadeqate
@@ -367,14 +367,14 @@ TEST_F(LZ4_compress_fast_test, AOCL_Compression_lz4_LZ4_compress_fast_common_1) 
 {
     TestLoad d(800);
 
-    EXPECT_EQ(LZ4_compress_fast(NULL, d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize(), 1), -1);
+    EXPECT_EQ(LZ4_compress_fast(NULL, d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize(), 1), 0);
 }
 
 TEST_F(LZ4_compress_fast_test, AOCL_Compression_lz4_LZ4_compress_fast_common_2) // dest_NULL
 {
     TestLoad d(800);
 
-    EXPECT_EQ(LZ4_compress_fast(d.getOrigData(), NULL, d.getOrigSize(), d.getCompressedSize(), 1), -1);
+    EXPECT_EQ(LZ4_compress_fast(d.getOrigData(), NULL, d.getOrigSize(), d.getCompressedSize(), 1), 0);
 }
 
 TEST_F(LZ4_compress_fast_test, AOCL_Compression_lz4_LZ4_compress_fast_common_3) // Pass
@@ -421,7 +421,7 @@ TEST(LZ4_compress_destSize, AOCL_Compression_lz4_LZ4_compress_destSize_common_1)
     TestLoad d(800);
     int srcLen = d.getOrigSize();
 
-    EXPECT_EQ(LZ4_compress_destSize(NULL, d.getCompressedBuff(), &srcLen, d.getCompressedSize()), -1);
+    EXPECT_EQ(LZ4_compress_destSize(NULL, d.getCompressedBuff(), &srcLen, d.getCompressedSize()), 0);
 }
 
 TEST(LZ4_compress_destSize, AOCL_Compression_lz4_LZ4_compress_destSize_common_2) // output_NULL
@@ -429,14 +429,14 @@ TEST(LZ4_compress_destSize, AOCL_Compression_lz4_LZ4_compress_destSize_common_2)
     TestLoad d(800);
     int srcLen = d.getOrigSize();
 
-    EXPECT_EQ(LZ4_compress_destSize(d.getOrigData(), NULL, &srcLen, d.getCompressedSize()), -1);
+    EXPECT_EQ(LZ4_compress_destSize(d.getOrigData(), NULL, &srcLen, d.getCompressedSize()), 0);
 }
 
 TEST(LZ4_compress_destSize, AOCL_Compression_lz4_LZ4_compress_destSize_common_3) // srcLen_NULL
 {
     TestLoad d(800);
 
-    EXPECT_EQ(LZ4_compress_destSize(d.getOrigData(), d.getCompressedBuff(), NULL, d.getCompressedSize()), -1);
+    EXPECT_EQ(LZ4_compress_destSize(d.getOrigData(), d.getCompressedBuff(), NULL, d.getCompressedSize()), 0);
 }
 
 TEST(LZ4_compress_destSize, AOCL_Compression_lz4_LZ4_compress_destSize_common_4) // Pass
@@ -485,7 +485,7 @@ TEST_F(LLZ4_decompress_safe_partial, AOCL_Compression_lz4_LZ4_decompress_safe_pa
 {
     int decLen = LZ4_decompress_safe_partial(src, output, srcLen, outLen, outLen);
     ASSERT_EQ(decLen, origLen);
-    EXPECT_EQ(0, memcmp(output, original, decLen));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
 }
 
 TEST_F(LLZ4_decompress_safe_partial, AOCL_Compression_lz4_LZ4_decompress_safe_partial_common_5) // srcLen_1
@@ -503,7 +503,7 @@ TEST_F(LLZ4_decompress_safe_partial, AOCL_Compression_lz4_LZ4_decompress_safe_pa
 {
     int decLen = LZ4_decompress_safe_partial(src, output, srcLen, srcLen / 2, srcLen);
     EXPECT_EQ(decLen, srcLen/2);
-    EXPECT_EQ(0, memcmp(output, original, decLen));
+    EXPECT_EQ(0, memcmp(output, original, srcLen/2));
 }
 /*********************************************
  * End of LZ4_decompress_safe_partial
@@ -571,21 +571,21 @@ TEST_F(LLZ4_compress_fast_extState, AOCL_Compression_lz4_LZ4_compress_fast_extSt
 {
     setSrcSize(100000);
     setDstSize(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_fast_extState(NULL, src, dst, srcSize, dstSize, 5), -1);
+    EXPECT_EQ(LZ4_compress_fast_extState(NULL, src, dst, srcSize, dstSize, 5), 0);
 }
 
 TEST_F(LLZ4_compress_fast_extState, AOCL_Compression_lz4_LZ4_compress_fast_extState_common_2) // src_NULL_srcLen_not_NULL
 {
     setSrcSize(100000);
     setDstSize(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_fast_extState(state, NULL, dst, srcSize, dstSize, 5), -1);
+    EXPECT_EQ(LZ4_compress_fast_extState(state, NULL, dst, srcSize, dstSize, 5), 0);
 }
 
 TEST_F(LLZ4_compress_fast_extState, AOCL_Compression_lz4_LZ4_compress_fast_extState_common_3) // dst_NULL
 {
     setSrcSize(100000);
     setDstSize(LZ4_compressBound(srcSize));
-    EXPECT_EQ(LZ4_compress_fast_extState(state, src, NULL, srcSize, dstSize, 5), -1);
+    EXPECT_EQ(LZ4_compress_fast_extState(state, src, NULL, srcSize, dstSize, 5), 0);
 }
 
 TEST_F(LLZ4_compress_fast_extState, AOCL_Compression_lz4_LZ4_compress_fast_extState_common_4) // src_NULL_srcSize_0
@@ -678,7 +678,7 @@ TEST_F(LLZ4_compress_fast_extState, AOCL_Compression_lz4_LZ4_compress_fast_extSt
 /*********************************************
  * "Begin" of LZ4_AOCL_LZ4_compress_fast_extState
  *********************************************/
-
+#ifdef AOCL_LZ4_OPT
 class LZ4_AOCL_LZ4_compress_fast_extState : public LLZ4_compress_fast_extState
 {
 };
@@ -687,21 +687,21 @@ TEST_F(LZ4_AOCL_LZ4_compress_fast_extState, AOCL_Compression_lz4_AOCL_LZ4_compre
 {
     setSrcSize(100000);
     setDstSize(LZ4_compressBound(srcSize));
-    EXPECT_EQ(AOCL_LZ4_compress_fast_extState(NULL, src, dst, srcSize, dstSize, 5), -1);
+    EXPECT_EQ(AOCL_LZ4_compress_fast_extState(NULL, src, dst, srcSize, dstSize, 5), 0);
 }
 
 TEST_F(LZ4_AOCL_LZ4_compress_fast_extState, AOCL_Compression_lz4_AOCL_LZ4_compress_fast_extState_common_2) // src_NULL_srcLen_not_NULL
 {
     setSrcSize(100000);
     setDstSize(LZ4_compressBound(srcSize));
-    EXPECT_EQ(AOCL_LZ4_compress_fast_extState(state, NULL, dst, srcSize, dstSize, 5), -1);
+    EXPECT_EQ(AOCL_LZ4_compress_fast_extState(state, NULL, dst, srcSize, dstSize, 5), 0);
 }
 
 TEST_F(LZ4_AOCL_LZ4_compress_fast_extState, AOCL_Compression_lz4_AOCL_LZ4_compress_fast_extState_common_3) // dst_NULL
 {
     setSrcSize(100000);
     setDstSize(LZ4_compressBound(srcSize));
-    EXPECT_EQ(AOCL_LZ4_compress_fast_extState(state, src, NULL, srcSize, dstSize, 5), -1);
+    EXPECT_EQ(AOCL_LZ4_compress_fast_extState(state, src, NULL, srcSize, dstSize, 5), 0);
 }
 
 TEST_F(LZ4_AOCL_LZ4_compress_fast_extState, AOCL_Compression_lz4_AOCL_LZ4_compress_fast_extState_common_4) // src_NULL_srcSize_0
@@ -786,7 +786,7 @@ TEST_F(LZ4_AOCL_LZ4_compress_fast_extState, AOCL_Compression_lz4_AOCL_LZ4_compre
 
     EXPECT_TRUE(check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
 }
-
+#endif /* AOCL_LZ4_OPT */
 /*********************************************
  * End of LZ4_compress_fast_extState
  *********************************************/
@@ -941,6 +941,15 @@ TEST(LZ4_loadDict, AOCL_Compression_lz4_LZ4_loadDict_common_5) // dictSize_1024
     free(dict);
 }
 
+TEST(LZ4_loadDict, AOCL_Compression_lz4_LZ4_loadDict_common_6) // dictionary_NULL_dictSize_7
+{
+    LZ4_stream_t *stream = LZ4_createStream();
+    int dictSize = 7;
+    EXPECT_EQ(LZ4_loadDict(stream, NULL, dictSize), 0);
+
+    LZ4_freeStream(stream);
+}
+
 /*********************************************
  * End of LZ4_loadDict
  *********************************************/
@@ -957,21 +966,21 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
 {
     setSrcSize(1024);
     setDstSize(10000);
-    EXPECT_EQ(LZ4_compress_fast_continue(NULL, src, dst, srcSize, dstSize, 50), -1);
+    EXPECT_EQ(LZ4_compress_fast_continue(NULL, src, dst, srcSize, dstSize, 50), 0);
 }
 
 TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_continue_common_2) // source_NULL
 {
     setSrcSize(1024);
     setDstSize(10000);
-    EXPECT_EQ(LZ4_compress_fast_continue(state, NULL, dst, srcSize, dstSize, 50), -1);
+    EXPECT_EQ(LZ4_compress_fast_continue(state, NULL, dst, srcSize, dstSize, 50), 0);
 }
 
 TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_continue_common_3) // dest_NULL
 {
     setSrcSize(1024);
     setDstSize(10000);
-    EXPECT_EQ(LZ4_compress_fast_continue(state, src, NULL, srcSize, dstSize, 50), -1);
+    EXPECT_EQ(LZ4_compress_fast_continue(state, src, NULL, srcSize, dstSize, 50), 0);
 }
 
 TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_continue_common_4) // input_sz1
@@ -1173,7 +1182,7 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
     setSrcSize(150);
     setDstSize(200);
     const int dictSize = 100;
-    char dict[200];
+    char dict[200] = {0};
     
     memcpy(dict, src, 100);
     for (int i = 150; i < 200; i++)
@@ -1193,7 +1202,7 @@ TEST_F(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
     setSrcSize(150);
     setDstSize(200);
     const int dictSize = 65 * 1024;
-    char dict[150 + dictSize];
+    char dict[150 + dictSize] ={0};
     
     memcpy(dict, src, srcSize);
     for (int i = 150; i < dictSize; i++)
@@ -1288,12 +1297,12 @@ TEST_F(LLZ4_saveDict, AOCL_Compression_lz4_LZ4_saveDict_common_2) // dictionary_
 TEST_F(LLZ4_saveDict, AOCL_Compression_lz4_LZ4_saveDict_common_3) // stream_NULL
 {
     char dict[11]="helloWorld";
-    EXPECT_EQ(LZ4_saveDict(NULL, dict, 10), -1);
+    EXPECT_EQ(LZ4_saveDict(NULL, dict, 10), 0);
 }
 
 TEST_F(LLZ4_saveDict, AOCL_Compression_lz4_LZ4_saveDict_common_4) // dictionary_is_NULL_dictSize_not_zero
 {
-    EXPECT_EQ(LZ4_saveDict(stream, NULL, 3), -1);
+    EXPECT_EQ(LZ4_saveDict(stream, NULL, 3), 0);
 }
 
 TEST_F(LLZ4_saveDict, AOCL_Compression_lz4_LZ4_saveDict_common_5) // dictionary_size_greater_than_parameter
@@ -1384,7 +1393,7 @@ TEST(LZ4_setStreamDecode, AOCL_Compression_lz4_LZ4_setStreamDecode_common_2) // 
     int dictSize = 1024;
     char* dict = (char*)malloc(dictSize);
     
-    EXPECT_EQ(LZ4_setStreamDecode(NULL, dict, dictSize), -1);
+    EXPECT_EQ(LZ4_setStreamDecode(NULL, dict, dictSize), 0);
     
     LZ4_freeStreamDecode(lz);
     free(dict);
@@ -1459,7 +1468,7 @@ TEST_F(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     int decompress = LZ4_decompress_safe_continue(decode, src, output, srcLen, outLen);
     EXPECT_EQ(decompress, origLen);
     
-    EXPECT_EQ(0, memcmp(output, original, decompress));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
     
     LZ4_freeStreamDecode(decode);
 }
@@ -1474,11 +1483,11 @@ TEST_F(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     int decompress = LZ4_decompress_safe_continue(decode, src, output, srcLen, outLen);
     EXPECT_EQ(decompress, origLen);
     
-    EXPECT_EQ(0, memcmp(output, original, decompress));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
     
     decompress = LZ4_decompress_safe_continue(decode, src, output2, srcLen, outlen_2);
     EXPECT_EQ(decompress, origLen);
-    EXPECT_EQ(0, memcmp(output2, original, decompress));
+    EXPECT_EQ(0, memcmp(output2, original, origLen));
     
     LZ4_freeStreamDecode(decode);
     free(output2);
@@ -1516,13 +1525,13 @@ TEST_F(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     
     int decompress = LZ4_decompress_safe_continue(decode, src, output, srcLen, outLen);
     EXPECT_EQ(decompress, origLen);
-    EXPECT_EQ(0, memcmp(output, original, decompress));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
     
     // The condition (lz4sd->prefixEnd == (BYTE*)dest) is made by previous decompress call
     // covers: lz4sd->extDictSize == 0 
     decompress = LZ4_decompress_safe_continue(decode, src, output + decompress, srcLen, outLen);
     EXPECT_EQ(decompress, origLen);
-    EXPECT_EQ(0, memcmp(output + decompress, original, decompress));
+    EXPECT_EQ(0, memcmp(output + decompress, original, origLen));
     
     LZ4_freeStreamDecode(decode);
 }
@@ -1533,7 +1542,7 @@ TEST_F(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     
     int decompress = LZ4_decompress_safe_continue(decode, src, output, srcLen, outLen);
     EXPECT_EQ(decompress, origLen);
-    EXPECT_EQ(0, memcmp(output, original, decompress));
+    EXPECT_EQ(0, memcmp(output, original, origLen));
     
     // The condition (lz4sd->prefixEnd == (BYTE*)dest) is made by previous decompress call
     // covers: lz4sd->extDictSize == 0 , and we expect return value to be less than zero.
@@ -1753,4 +1762,248 @@ TEST_F(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
 
 /*********************************************
  * End of LZ4_decompress_safe_usingDict
+ *********************************************/
+
+/*********************************************
+ * "Begin" of LZ4_AOCL_LZ4_wildCopy64_AVX
+ *********************************************/
+
+/*
+* AOCL_LZ4_wildCopy64_AVX() is AVX implementation of wildCopy that copies two times 32 bytes in an iteration. 
+*/
+#ifdef AOCL_LZ4_AVX_OPT
+class LZ4_AOCL_LZ4_wildCopy64_AVX : public AOCL_setup_lz4
+{
+protected:
+    
+    char* srcPtr = NULL;
+    char* dstPtr = NULL;
+    
+    // Initialize pointers.
+    void SetUp() override
+    {
+        int srcLen = 500;    
+        srcPtr = (char *)malloc(srcLen);
+        for (int i = 0; i < srcLen; i++)
+        {
+            // random numbers from 1 to 250
+            srcPtr[i] = (rand() % 250) + 1;
+        }
+
+        int dstLen = 500;   
+        dstPtr = (char *)malloc(dstLen);
+        for (int i = 0; i < dstLen; i++)
+        {
+            // Null (NULL)
+            dstPtr[i] = 0;
+        }
+    }
+    
+    // Destructor function of `LZ4_AOCL_LZ4_wildCopy64_AVX` class.
+    ~LZ4_AOCL_LZ4_wildCopy64_AVX()
+    {
+        if (srcPtr) { free(srcPtr); }            
+        if (dstPtr) { free(dstPtr); }
+    }
+};
+
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX_common_1) // len_multiple_of_64
+{
+    // case1: When no. of bytes to copy is multiple of 64
+    //        exact no. of bytes are copied
+    int length = 64;
+
+    Test_AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstPtr+length);
+    EXPECT_EQ(memcmp(dstPtr, srcPtr, length), 0);
+    EXPECT_NE(memcmp(dstPtr, srcPtr, length+1), 0); 
+}
+
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX_common_2) // len_NOT_multiple_of_64
+{
+    // case2: When no. of bytes to copy is not a multiple of 64
+    //        additional byte/s is/are copied 
+    int length = 1;
+
+    Test_AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstPtr+length);                 
+    EXPECT_EQ(memcmp(dstPtr, srcPtr, 64), 0);          // additional 63 bytes are copied            
+    EXPECT_NE(memcmp(dstPtr, srcPtr, 65), 0);                
+
+    length = 127;
+
+    Test_AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstPtr+length);               
+    EXPECT_EQ(memcmp(dstPtr, srcPtr, 128), 0);         // additional 1 byte is copied                 
+    EXPECT_NE(memcmp(dstPtr, srcPtr, 129), 0); 
+}
+
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX_common_3) // offset_less_than_32
+{
+    // case 1: offset < 32 
+
+    // The function cannot be called to copy 100 bytes starting from `src` to `dst` which is 31 bytes apart,
+    // with an expectation that 100 bytes from `dst` must be same as 100 bytes from `src` after the function call.
+
+    // Since offset < 32, there is an overlap between `src` and `dst`
+    // due to which length (100) bytes from `dst` is not same as length
+    // (100) bytes from `src`.
+
+    // There occurs no overlap between `src` and `dst` when (offset >= 32).
+
+    int length = 100;
+    int offset = 31;
+
+    // fill valid (not NULL) data in dstPtr (until dst+offset) to copy
+    char c = 'A';
+    for(int i=0; i<offset; i++){
+        dstPtr[i] = c++;
+    }
+
+    char* src = dstPtr;             
+    char* dst = dstPtr+offset;
+
+    Test_AOCL_LZ4_wildCopy64_AVX(dst, src, dst+length);
+    EXPECT_NE(memcmp(dst, src, length), 0);
+}
+
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX_common_4) // offset_equal_32
+{
+    // case 2: offset = 32
+    int length = 100;
+    int offset = 32;
+
+    char c = 'A';
+    for(int i=0; i<offset; i++){
+        dstPtr[i] = c++;
+    }
+
+    char* src = dstPtr;
+    char* dst = dstPtr+offset;
+
+    Test_AOCL_LZ4_wildCopy64_AVX(dst, src, dst+length);
+    EXPECT_EQ(memcmp(dst, src, length), 0);
+}
+
+TEST_F(LZ4_AOCL_LZ4_wildCopy64_AVX, AOCL_Compression_lz4_AOCL_LZ4_wildCopy64_AVX_common_5) // offset_greater_than_32
+{
+    // case 3: offset > 32
+    int length = 100;
+    int offset = 33;
+
+    char c = 'A';
+    for(int i=0; i<offset; i++){
+        dstPtr[i] = c++;
+    }
+
+    char* src = dstPtr;
+    char* dst = dstPtr+offset;
+
+    Test_AOCL_LZ4_wildCopy64_AVX(dst, src, dst+length);
+    EXPECT_EQ(memcmp(dst, src, length), 0);
+}
+#endif /* AOCL_LZ4_AVX_OPT */
+
+/*********************************************
+ * End of LZ4_AOCL_LZ4_wildCopy64_AVX
+ ********************************************/ 
+
+/*********************************************
+ * "Begin" of AOCL_LZ4_hash5
+ *********************************************/
+
+#ifdef AOCL_LZ4_OPT
+TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_1) // Simple edge cases, checking lowest and highest value behaviour
+{
+    unsigned long long seq = 0;
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq, 2), 0);
+
+    seq = 0xFFFFFFFFFFFFFFFF;
+    EXPECT_LE(Test_AOCL_LZ4_hash5(seq, 2), LZ4_HASH_SIZE_U32);
+}
+
+TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_2)
+{
+    // Least significant 5 bytes are same, Highest significant 3 bytes may vary
+    // Hash function output is expected to be same.
+    unsigned long long seq1;
+    unsigned long long seq2;
+#if AOCL_LZ4_HASH_BITS_USED == 41
+    seq1 = 0xFFFFFFFF12345678; // 0xFFFFF'1111'[FF12345678]
+    seq2 = 0xFFFFFDFF12345678; // 0xFFFFF'1101'[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x000000FF12345678; // 0x00000'0000'[FF12345678]
+    seq2 = 0x000002FF12345678; // 0x00000'0010'[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x123456FF12345678; // 0x12345'0110'[FF12345678]
+    seq2 = 0xFEB124FF12345678; // 0xFEB12'0100'[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x000000FF12345678; // 0x000000[FF12345678]  41st bit is different, lower 40bits are same
+    seq2 = 0x000001FF12345678; // 0x000001[FF12345678]
+    EXPECT_NE(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+#elif AOCL_LZ4_HASH_BITS_USED == 44
+    seq1 = 0xFFFFFFFF12345678; // 0xFFFFF[FFF12345678]
+    seq2 = 0xFFFFEFFF12345678; // 0xFFFFE[FFF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x000000FF12345678; // 0x00000[0FF12345678]
+    seq2 = 0x000010FF12345678; // 0x00001[0FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x123465FF12345678; // 0x12346[5FF12345678]
+    seq2 = 0xFEB135FF12345678; // 0xFEB13[5FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0xFFFFFFFF12345678; // 0xFFFFF'1111'[FF12345678] 44th bit is different, lower 43bits are same
+    seq2 = 0xFFFFF7FF12345678; // 0xFFFFF'0111'[FF12345678]
+    EXPECT_NE(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+#else
+    seq1 = 0xFFFFFFFF12345678; // 0xFFFFFF[FF12345678]
+    seq2 = 0xFFFFFEFF12345678; // 0xFFFFFE[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x000000FF12345678; // 0x000000[FF12345678]
+    seq2 = 0x000001FF12345678; // 0x000001[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0x123456FF12345678; // 0x123456[FF12345678]
+    seq2 = 0xFEB123FF12345678; // 0xFEB123[FF12345678]
+    EXPECT_EQ(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0xFFFFFFFF12345678; // 0xFFFFFF'1111'[F12345678] 40th bit is different, lower 39bits are same
+    seq2 = 0xFFFFFF7F12345678; // 0xFFFFFF'0111'[F12345678]
+    EXPECT_NE(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+#endif /* AOCL_LZ4_HASH_BITS_USED */
+}
+
+TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_3)
+{
+    // Most significant 5 bytes are same, but the Least significant 3 bytes differ
+    // Hash function output might vary.
+
+    unsigned long long seq1 = 0xFF12345678FFFFFF; // 0x[FF12345678]FFFFFF
+    unsigned long long seq2 = 0xFF12345678FFFFFE; // 0x[FF12345678]FFFFFE
+    EXPECT_NE(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+
+    seq1 = 0xFF12345678123456; // 0x[FF12345678]123456
+    seq2 = 0xFF12345678FEB123; // 0x[FF12345678]FEB123
+    EXPECT_NE(Test_AOCL_LZ4_hash5(seq1, 2), Test_AOCL_LZ4_hash5(seq2, 2));
+}
+
+TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_common_4)
+{
+    // Whatever random value is given as the input,
+    // Hash function output is expected to be less than Hash table size.
+    
+    unsigned long long seq = 0;
+    
+    for(int i=0; i<100000; i++)
+    {
+        seq = ((rand()*1ULL)<<32) | (rand()*1ULL); // For generating 64 bit random value.
+        EXPECT_LT(Test_AOCL_LZ4_hash5(seq, 2), LZ4_HASH_SIZE_U32);
+    }
+}
+#endif /* AOCL_LZ4_OPT */
+/*********************************************
+ * "End" of AOCL_LZ4_hash5
  *********************************************/

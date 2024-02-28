@@ -78,8 +78,9 @@ file(GLOB calgary_dataset ${CMAKE_BINARY_DIR}/calgary/*)
 foreach(filename ${calgary_dataset})
     file(RELATIVE_PATH TFILE ${CMAKE_BINARY_DIR}/calgary ${filename})
     foreach(method ${METHODS})
-        add_test(BENCH-${method}-calgary-${TFILE} ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -v ${filename})
-        add_test(BENCH-${method}-calgary-${TFILE}-optoff ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -v -o ${filename})
+        add_test(BENCH-${method}-calgary-${TFILE} ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t ${filename})
+        add_test(BENCH-${method}-calgary-${TFILE}-optoff ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -o ${filename})
+        add_test(BENCH-${method}-calgary-${TFILE}-native ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -n ${filename})
     endforeach()
 endforeach()
 
@@ -87,8 +88,9 @@ file(GLOB canterbury_dataset ${CMAKE_BINARY_DIR}/canterbury/*)
 foreach(filename ${canterbury_dataset})
     file(RELATIVE_PATH TFILE ${CMAKE_BINARY_DIR}/canterbury ${filename})
     foreach(method ${METHODS})
-        add_test(BENCH-${method}-canterbury-${TFILE} ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -v ${filename})
-        add_test(BENCH-${method}-canterbury-${TFILE}-optoff ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -v -o ${filename})
+        add_test(BENCH-${method}-canterbury-${TFILE} ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t ${filename})
+        add_test(BENCH-${method}-canterbury-${TFILE}-optoff ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -o ${filename})
+        add_test(BENCH-${method}-canterbury-${TFILE}-native ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -n ${filename})
     endforeach()
 endforeach()
 
@@ -96,7 +98,40 @@ file(GLOB silesia_dataset ${CMAKE_BINARY_DIR}/silesia/*)
 foreach(filename ${silesia_dataset})
     file(RELATIVE_PATH TFILE ${CMAKE_BINARY_DIR}/silesia ${filename})
     foreach(method ${METHODS})
-        add_test(BENCH-${method}-silesia-${TFILE} ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -v ${filename})
-        add_test(BENCH-${method}-silesia-${TFILE}-optoff ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -v -o ${filename})
+        add_test(BENCH-${method}-silesia-${TFILE} ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t ${filename})
+        add_test(BENCH-${method}-silesia-${TFILE}-optoff ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -o ${filename})
+        add_test(BENCH-${method}-silesia-${TFILE}-native ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -n ${filename})
     endforeach()
 endforeach()
+
+# only run if code coverage is enabled
+if (CODE_COVERAGE)
+    find_program(GCOV gcov)
+    find_program(LCOV lcov)
+    find_program(GENHTML genhtml)
+  
+    if (NOT (GCOV AND LCOV AND GENHTML))
+        message(WARNING "Required tools not found: gcov,lcov,genhtml. Code coverage can not be performed")
+    endif()  
+  
+    # set lcov variable to exclude paths during code coverage
+    set(LCOV_FILTERS "'/usr/*';'/*/_deps/*'")
+  
+    # add custom target for running ctest and generating code coverage report
+    add_custom_target(code-coverage
+        COMMAND ${CMAKE_COMMAND} -E make_directory coverage/
+        COMMAND ctest -j
+        COMMAND ${LCOV} --rc lcov_branch_coverage=1 --capture --directory . --output-file coverage/coverage.info
+        COMMAND ${LCOV} --rc lcov_branch_coverage=1 --remove  coverage/coverage.info ${LCOV_FILTERS} --output-file coverage/coverage_filtered.info 
+        COMMAND ${LCOV} --list coverage/coverage_filtered.info
+        COMMAND ${GENHTML} --rc genhtml_branch_coverage=1 coverage/coverage_filtered.info --output-directory coverage/html_report
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Generating Code Coverage Report (LCOV) after tests.."
+    )
+endif()
+
+if (VALGRIND)
+    set(MEMORYCHECK_COMMAND_OPTIONS "-q --trace-children=yes --child-silent-after-fork=yes --leak-check=full --show-leak-kinds=all --track-origins=yes --default-suppressions=no --suppressions=${PROJECT_SOURCE_DIR}/test/.valgrind-suppressions")
+	# To run all registered tests with valgrind use "ctest -T memcheck"
+	include(CTest) # Default to using valgrind
+endif()

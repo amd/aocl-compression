@@ -66,6 +66,7 @@ extern "C" {
  */
 
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
+#ifndef EXPORT_SYM_DYN
 #ifdef _WINDOWS
 /**
  * You can export data, functions, classes, or class member functions from a DLL
@@ -80,9 +81,10 @@ extern "C" {
  */
 #define EXPORT_SYM_DYN
 #endif
+#endif
 
-#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 4.1.0"
-#define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 2.0"
+#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 4.2.0"
+#define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 3.0"
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
  /**
@@ -92,10 +94,11 @@ extern "C" {
   */
 typedef enum
 {
-    ERR_UNSUPPORTED_METHOD = -3,     ///<Compression method not supported by the library
-    ERR_EXCLUDED_METHOD,             ///<Compression method excluded from this library build
-    ERR_COMPRESSION_FAILED,          ///<Failure during compression/decompression
-    ERR_COMPRESSION_INVALID_OUTPUT   ///<Invalid compression/decompression output
+    ERR_INVALID_INPUT = -5,        ///<Invalid input parameter provided
+    ERR_UNSUPPORTED_METHOD,        ///<Compression method not supported by the library
+    ERR_EXCLUDED_METHOD,           ///<Compression method excluded from this library build
+    ERR_COMPRESSION_FAILED,        ///<Failure during compression/decompression
+    ERR_COMPRESSION_INVALID_OUTPUT ///<Invalid compression/decompression output
 } aocl_error_type;
 
 /**
@@ -145,7 +148,6 @@ typedef struct
                                2 - AVX optimizations, \n
                                3 - AVX2 optimizations, \n
                                4 - AVX512 optimizations                               */
-    int printDebugLogs;  /**<  Print debug logs                                       */
     //size_t chunk_size; //Unused variable
 } aocl_compression_desc;
 
@@ -227,6 +229,7 @@ EXPORT_SYM_DYN void aocl_llc_destroy(aocl_compression_desc *handle,
  */
 
 EXPORT_SYM_DYN const char *aocl_llc_version(void);
+
 /**
  * @}
  */

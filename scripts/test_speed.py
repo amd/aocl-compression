@@ -156,12 +156,6 @@ def download_datasets(url, extract_dir):
 # Retrieve the relevant components and move to the processing steps
 ## ================================================================
         
-rx_dict = {
-    'libdata': re.compile(r'AOCL-COMPRESSION \[(.*)\] \[Filename:(.*)\] --'),
-    'comp': re.compile(r'Compression: (.*) speed\(best\) (.*) MB/s,'),
-    'decomp': re.compile(r'Decompression: (.*) speed\(best\) (.*) MB/s,'),
-    'ratio': re.compile(r'Ratio:(.*)\n'),
-}
 
 def parse_line(line, amd_opt):
     """
@@ -169,6 +163,13 @@ def parse_line(line, amd_opt):
     return the key and match result of the first matching regex
 
     """
+    rx_dict = {
+        'libdata': re.compile(r'AOCL-COMPRESSION \[(.*)\] \[Filename:(.*)\] --'),
+        'comp': re.compile(r'Compression: (.*) speed\(best\) (.*) MB/s,'),
+        'decomp': re.compile(r'Decompression: (.*) speed\(best\) (.*) MB/s,'),
+        'ratio': re.compile(r'Ratio:(.*)\n'),
+    }
+    
     # Check if Error occurred
     if "Error" in line:
         print("\n" + line)
@@ -177,6 +178,10 @@ def parse_line(line, amd_opt):
     # If IPP option enabled
     if amd_opt == "IPP":
         rx_dict['libdata'] = re.compile(r'IPP \[(.*)\] \[Filename:(.*)\] --')
+    
+    # If Native API option enabled
+    if amd_opt == "NAPI":
+        rx_dict['libdata'] = re.compile(r'COMPRESSION Native API \[(.*)\] \[Filename:(.*)\] --')
 
     for key, rx in rx_dict.items():
         match = rx.search(line)
@@ -445,6 +450,8 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
         amd_opt = 'AMD_OPT_OFF'
     if amd_opt == "ipp" or amd_opt == "IPP":
         amd_opt = 'IPP'
+    if amd_opt == "napi" or amd_opt == "NAPI":
+        amd_opt = 'NAPI'
 
     method = "-e{}".format(method_name)
     testOptions = []
@@ -459,10 +466,11 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
         for dataset in datasetFile_lst:
             testOptions = ["-t", "-p"]
             if amd_opt == "IPP" or amd_opt == "ipp":
-                testOptions.append("-c")
-                testOptions.append("-v3")
+                testOptions.append("-c{}".format(args.ipp))
             if amd_opt == "AMD_OPT_OFF" or amd_opt == "off":
                 testOptions.append("-o")
+            if amd_opt == "NAPI" or amd_opt == "napi":
+                testOptions.append("-n")
             cmd = "{}/{}".format(args.dataset, dataset)
             testOptions.append(cmd)
             testOptions.append(method)
@@ -481,11 +489,13 @@ def run_benchmark_test(datasetFile_lst, method_name, iters, amd_opt="on", compar
                 exit()
         elif comparewith == "vanilla":
             amd_opt = 'AMD_OPT_OFF'
+        elif comparewith == "napi":
+            amd_opt = 'NAPI'
         else:
             run = False
         comparewith = "off"
 
-    if compare == 'ipp' or compare == 'vanilla':
+    if compare in ('ipp', 'vanilla', 'napi'):
         compare_benchmarks_numbers('final_{}_AMD_OPT_ON.csv'.format(
             method_name.replace(':', '_Level_')), 'final_{}_{}.csv'.format(method_name.replace(':', '_Level_'), amd_opt), 
             method_name, amd_opt)
@@ -522,18 +532,18 @@ if __name__ == '__main__':
         '--ipp', '-ipp',
         help='Provide IPP installed library path like for lz4: --ipp $PATH/lz4-1.9.3/lib) and for zlib: --ipp $PATH/zlib-1.2.11)', default=ipp)
     parser.add_argument(
-        '--optimization', '-o', choices=['on', 'off', 'ipp'],
-        help='Specify one of the options: on(default - with AOCL optimization), off(without AOCL optimization), ipp(with IPP patch)', type=str,
+        '--optimization', '-o', choices=['on', 'off', 'ipp', 'napi'],
+        help='Specify one of the options: on(default - with AOCL optimization), off(without AOCL optimization), ipp(with IPP patch), napi(with NativeAPI)', type=str,
         default="AMD_OPT_ON")
     parser.add_argument(
-        '--comparewith', '-cw', choices=['ipp', 'vanilla'],
-        help='Please specify a library for comparison, options are vanilla(Vanilla VS AOCL optimization), ipp(IPP VS AOCL optimization)', type=str
+        '--comparewith', '-cw', choices=['ipp', 'vanilla', 'napi'],
+        help='Please specify a library for comparison, options are vanilla(AOCL optimization Vs Vanilla), ipp(AOCL optimization Vs IPP) napi(AOCL optimization Vs NativeAPI)', type=str
     )
     parser.add_argument(
         '--iterations', '-itr',
         help='Specify number of iterations for compression/decompression.', default=ITERS)
     parser.add_argument('--optionalFlags', '-flags',
-                        help='Pass a list of supported optional flags (SNAPPY_MATCH_SKIP_OPT, AOCL_LZ4_OPT_PREFETCH_BACKWARDS, and LZ4_FRAME_FORMAT_SUPPORT) as required. For example: -flags SNAPPY_MATCH_SKIP_OPT=ON AOCL_LZ4_OPT_PREFETCH_BACKWARDS=ON LZ4_FRAME_FORMAT_SUPPORT=ON',
+                        help='Pass a list of supported optional flags (SNAPPY_MATCH_SKIP_OPT, AOCL_LZ4_OPT_PREFETCH_BACKWARDS, AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST, AOCL_ZSTD_WILDCOPY_LONG and LZ4_FRAME_FORMAT_SUPPORT) as required. For example: -flags SNAPPY_MATCH_SKIP_OPT=ON AOCL_LZ4_OPT_PREFETCH_BACKWARDS=ON AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON AOCL_ZSTD_WILDCOPY_LONG=ON LZ4_FRAME_FORMAT_SUPPORT=ON',
                         type=str, nargs="*", default=[])
     parser.add_argument('--VSVersion', '-vs',
                         type=str, help='This is a Windows platform specific option. Use this option to provide an installed Visual Studio version available on the system. Default is "Visual Studio 17 2022"', default="Visual Studio 17 2022")
@@ -554,11 +564,11 @@ if __name__ == '__main__':
         
     # Linux specific library configuration and installation commands with default flags
     compression_cmds = {
-        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
+        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
         'install_cmd': 'cmake --build build -v -j --target uninstall --target install'}
     # Windows specific library configuration and installation commands with default flags
     compression_cmds_windows = {
-        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
+        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
         'install_cmd': 'cmake --build ./build --config Release --target INSTALL'
     }
                 
@@ -634,13 +644,10 @@ if __name__ == '__main__':
     datasetFile_lst = sorted(os.listdir("{}".format(args.dataset)))
     ipp_supports_methods = ['lz4', 'lz4hc', 'zlib', "bzip2"]
 
-    # Sets the IPP enviroment variable before running IPP patched method
+    # Checks IPP supports before running IPP patched method
     if (args.ipp != "off" or "ipp" in [args.comparewith, args.optimization]):
-        if (args.method[0].split(":")[0] in ipp_supports_methods) and which_platform != 'Windows':
-            os.environ['LD_LIBRARY_PATH'] = args.ipp
-        else:
-            print(
-                error + "Compression test framework does not support IPP method: {} on {}".format(args.method, which_platform))
+        if (not ((args.method[0].split(":")[0] in ipp_supports_methods) and which_platform != 'Windows')):
+            print(error + "Compression test framework does not support IPP method: {} on {}".format(args.method, which_platform))
             exit()
     
     ## =====================================

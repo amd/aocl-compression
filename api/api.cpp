@@ -41,21 +41,19 @@
 #include "aocl_compression.h"
 #include "codec.h"
 
-static INT32 enableLogs = 0;
-
 //Unified API function to compress the input
-INT64 aocl_llc_compress(aocl_compression_desc *handle,
+AOCL_INT64 aocl_llc_compress(aocl_compression_desc *handle,
                         aocl_compression_type codec_type)
 {
-    INT64 ret;
+    AOCL_INT64 ret;
 #ifdef WIN32
     timer clkTick;
 #endif
     timeVal startTime, endTime;
 
-    LOG_UNFORMATTED(TRACE, enableLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
-    LOG_FORMATTED(INFO, enableLogs,
+    LOG_FORMATTED(INFO, logCtx,
        "Calling compression method: %s", aocl_codec[codec_type].codec_name);
     initTimer(clkTick);
     getTime(startTime);
@@ -76,24 +74,27 @@ INT64 aocl_llc_compress(aocl_compression_desc *handle,
         handle->cSpeed = (handle->inSize * 1000.0) / handle->cTime;
     }
     
-    LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 
+    if (ret < 0)
+        return ERR_COMPRESSION_FAILED;
+        
     return ret;
 }
 
 //Unified API function to decompress the input
-INT64 aocl_llc_decompress(aocl_compression_desc *handle,
+AOCL_INT64 aocl_llc_decompress(aocl_compression_desc *handle,
                           aocl_compression_type codec_type)
 {
-    INT64 ret;
+    AOCL_INT64 ret;
 #ifdef WIN32
     timer clkTick;
 #endif
     timeVal startTime, endTime;
     
-    LOG_UNFORMATTED(TRACE, enableLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
-    LOG_FORMATTED(INFO, enableLogs,
+    LOG_FORMATTED(INFO, logCtx,
        "Calling decompression method: %s", aocl_codec[codec_type].codec_name);
     initTimer(clkTick);
     getTime(startTime);
@@ -114,33 +115,34 @@ INT64 aocl_llc_decompress(aocl_compression_desc *handle,
         handle->dSpeed = (handle->dSize * 1000.0) / handle->dTime;
     }
 
-    LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 
+    if (ret < 0)
+        return ERR_COMPRESSION_FAILED;
+        
     return ret;
 }
 
 //API to setup and initialize memory for the compression method
-INT32 aocl_llc_setup(aocl_compression_desc *handle,
+AOCL_INT32 aocl_llc_setup(aocl_compression_desc *handle,
                     aocl_compression_type codec_type)
 {
-    enableLogs = handle->printDebugLogs;
 
-    LOG_UNFORMATTED(TRACE, enableLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
     if ((codec_type < LZ4) || (codec_type >= AOCL_COMPRESSOR_ALGOS_NUM))
     {
-        LOG_UNFORMATTED(ERR, enableLogs,
+        LOG_UNFORMATTED(ERR, logCtx,
             "setup failed !! compression method is not supported.");
         return ERR_UNSUPPORTED_METHOD;
     }
 
-    LOG_FORMATTED(INFO, enableLogs,
+    LOG_FORMATTED(INFO, logCtx,
        "All optimizations are turned %s", (handle->optOff ? "off" : "on"));
 
-    if (!handle->optOff)
-        set_cpu_opt_flags((VOID *)handle);
+    set_cpu_opt_flags((AOCL_VOID *)handle);
 
-    LOG_FORMATTED(INFO, enableLogs,
+    LOG_FORMATTED(INFO, logCtx,
        "Calling setup method for: %s", aocl_codec[codec_type].codec_name);
 
     if (aocl_codec[codec_type].setup)
@@ -153,23 +155,23 @@ INT32 aocl_llc_setup(aocl_compression_desc *handle,
     }
     else
     {
-        LOG_UNFORMATTED(ERR, enableLogs,
+        LOG_UNFORMATTED(ERR, logCtx,
             "setup failed !! compression method is excluded from this library build.");
-        LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return ERR_EXCLUDED_METHOD;
     }
 
-    LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return 0;
 }
 
 //API to destroy memory and deinit the compression method
-VOID aocl_llc_destroy(aocl_compression_desc *handle,
+AOCL_VOID aocl_llc_destroy(aocl_compression_desc *handle,
                       aocl_compression_type codec_type)
 {
-    LOG_UNFORMATTED(TRACE, enableLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
-    LOG_FORMATTED(INFO, enableLogs,
+    LOG_FORMATTED(INFO, logCtx,
        "Calling destroy method for: %s", aocl_codec[codec_type].codec_name);
 
     if (aocl_codec[codec_type].destroy)
@@ -177,11 +179,11 @@ VOID aocl_llc_destroy(aocl_compression_desc *handle,
         aocl_codec[codec_type].destroy(handle->workBuf);
     }
 
-    LOG_UNFORMATTED(TRACE, enableLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 }
 
 //API to return the compression library version string
-const CHAR *aocl_llc_version(VOID)
+const AOCL_CHAR *aocl_llc_version(AOCL_VOID)
 {
     return (AOCL_COMPRESSION_LIBRARY_VERSION " " AOCL_BUILD_VERSION);
 }

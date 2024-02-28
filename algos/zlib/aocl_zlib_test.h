@@ -35,9 +35,11 @@
 extern "C" {
 #endif
 
-#ifdef AOCL_ZLIB_UNIT_TEST
-ZEXTERN uint32_t ZEXPORT Test_adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
-#endif
+#ifdef AOCL_UNIT_TEST
+#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
+ZEXTERN uint32_t ZEXPORT Test_quick_dist_code(void);
+#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
+#endif /* AOCL_UNIT_TEST */
 
 #ifdef __cplusplus
 }

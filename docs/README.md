@@ -27,7 +27,8 @@ A test suite is provided for the validation and performance benchmarking
 of the supported compression and decompression methods. This suite also
 supports the benchmarking of IPP compression methods, such as, lz4, lz4hc, zlib and bzip2.
 The library build framework offers CTest-based testing of the test cases
-implemented using GTest and the library test suite.
+implemented using GTest and the library test suite. Starting from AOCL-Compression 4.2,
+the library offers openMP based multi-threaded compression for a few methods.
 
 #### Contacts
 

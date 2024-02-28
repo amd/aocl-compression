@@ -24,6 +24,7 @@
 #define _BZLIB_PRIVATE_H
 
 #include <stdlib.h>
+#include "aoclAlgoOpt.h"
 
 #ifndef BZ_NO_STDIO
 #include <stdio.h>
@@ -505,15 +506,11 @@ BZ2_hbCreateDecodeTables ( Int32*, Int32*, Int32*, UChar*,
 #endif
 #endif
 
-#define AOCL_BZIP2_OPT
-#define AOCL_BZIP2_AVX2_OPT
 
 #ifdef AOCL_BZIP2_OPT
 extern Int32 AOCL_BZ2_decompress ( DState* );
-#ifdef AOCL_DYNAMIC_DISPATCHER
-extern void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog);
 #endif
-#endif
+extern void aocl_register_mainSimpleSort_fmv (int optOff, int optLevel);
 
 /*-------------------------------------------------------------*/
 /*--- end                                   bzlib_private.h ---*/

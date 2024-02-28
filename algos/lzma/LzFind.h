@@ -2,20 +2,43 @@
 2021-07-13 : Igor Pavlov : Public domain */
 
 /**
- * Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
- */
+* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*
+* 1. Redistributions of source code must retain the above copyright notice,
+* this list of conditions and the following disclaimer.
+* 2. Redistributions in binary form must reproduce the above copyright notice,
+* this list of conditions and the following disclaimer in the documentation
+* and/or other materials provided with the distribution.
+* 3. Neither the name of the copyright holder nor the names of its
+* contributors may be used to endorse or promote products derived from this
+* software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+* ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+* LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+* CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+* SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+* INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+* CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+* ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+* POSSIBILITY OF SUCH DAMAGE.
+*/
 
 #ifndef __LZ_FIND_H
 #define __LZ_FIND_H
 
 #include "7zTypes.h"
-#if defined(AOCL_LZMA_DEBUG) && (AOCL_LZMA_DEBUG>=1)
-#  include <assert.h>
-#else
-#  ifndef assert
-#    define assert(condition) ((void)0)
-#  endif
-#endif
+/* 
+    In Release mode assert statements are disabled by CMake,
+    by passing NDEBUG flag, which disables assert statement.
+    In Debug mode assert statements are automatically enabled.
+ */
+#include <assert.h>
 
 #ifdef AOCL_LZMA_OPT
 #include "LzHash.h"
@@ -35,10 +58,16 @@ hcChain part is a circular buffer */
 #define HASH_CHAIN_SLOT_SZ_16 (HASH_CHAIN_MAX_16+1) // head_ptr and hash-chain
 #endif
 
-#define MIN_SIZE_FOR_CF_HC (kHashGuarentee * HASH_CHAIN_SLOT_SZ_8)
+/* Default strategy to enable cache efficient hash chain implementation:
+* input_size < MAX_SIZE_FOR_CE_HC_OFF : disabled
+* MAX_SIZE_FOR_CE_HC_OFF <= input_size < MIN_SIZE_FOR_CE_HC_ON : enabled/disabled based on other settings
+* input_size >= MIN_SIZE_FOR_CE_HC_ON : enabled */
+#define MAX_SIZE_FOR_CE_HC_OFF (32 * 1024) // 32KB
+#define MIN_SIZE_FOR_CE_HC_ON (kHashGuarentee * HASH_CHAIN_SLOT_SZ_8) //512KB
+
 
 // Condition to use cache efficient hash chains
-#define USE_CACHE_EFFICIENT_HASH_CHAIN (!p->btMode && p->expectedDataSize > MIN_SIZE_FOR_CF_HC)
+#define USE_CACHE_EFFICIENT_HASH_CHAIN (!p->btMode && p->cacheEfficientSearch)
 
 EXTERN_C_BEGIN
 
@@ -80,7 +109,15 @@ typedef struct _CMatchFinder
   UInt32 hashMask; // determines the max number of bits in the hash
   UInt32 cutValue; // hard limit on number of nodes to look at in BT/HC when searching for matches
 #ifdef AOCL_LZMA_OPT
-  int level; // 0 <= level <= 9
+  UInt16 level; // 0 <= level <= 9
+  /* Value of cacheEfficientSearch determines the function used for dictionary search.
+   * -----------------------------------------------------------------------|--------------------------|------------------------------------------------|
+   * Conditions when method is called                                       |Method                    | Description                                    |
+   * -----------------------------------------------------------------------|--------------------------|------------------------------------------------|
+   * cacheEfficientSearch = 1, algo = !btMode, level  < HASH_CHAIN_16_LEVEL |AOCL_Hc_GetMatchesSpec_8  | Cache efficient hash chains with block size 8  |
+   * cacheEfficientSearch = 1, algo = !btMode, level >= HASH_CHAIN_16_LEVEL |AOCL_Hc_GetMatchesSpec_16 | Cache efficient hash chains with block size 16 |
+   * cacheEfficientSearch = 0, algo = !btMode,                              |AOCL_Hc_GetMatchesSpec    | Reference style intervowen hash chains         | */
+  UInt16 cacheEfficientSearch; // 0: disabled, 1: cache efficient hash chains
 #endif
   Byte *bufferBase;
   ISeqInStream *stream;
@@ -198,8 +235,8 @@ EXTERN_C_END
 #define SetUi16(p, v) { *(UInt16 *)(void *)(p) = (v); }
 #define SetUi32(p, v) { *(UInt32 *)(void *)(p) = (v); }
 
-#ifdef AOCL_LZMA_UNIT_TEST
-/* Move these APIs within the scope of gtest once the framework is ready */
+#ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZMA_OPT
 EXTERN_C_BEGIN
 LZMALIB_API void Test_HC_MatchFinder_Normalize3(UInt32 subValue, CLzRef* hash, CLzRef* son,
     Byte btMode, UInt32 fixedHashSize, UInt32 cyclicBufferSize, UInt32 hashSizeSum,
@@ -219,9 +256,10 @@ LZMALIB_API UInt32 Test_Circular_Inc(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, U
 
 LZMALIB_API UInt32 Test_Circular_Dec(UInt32 hcHead, UInt32 HASH_CHAIN_SLOT_SZ, UInt32 HASH_CHAIN_MAX);
 
-LZMALIB_API UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 pos,
+LZMALIB_API UInt32 Test_Hc_GetMatchesSpec(size_t lenLimit, UInt32 hcHead, UInt32 hv, UInt32 pos,
     const Byte* cur, CLzRef* son, size_t _cyclicBufferPos, UInt32 _cyclicBufferSize,
     UInt32 cutValue, UInt32* d, unsigned maxLen, int blockSz);
 EXTERN_C_END
-#endif
+#endif /* AOCL_LZMA_OPT */
+#endif /* AOCL_UNIT_TEST */
 #endif

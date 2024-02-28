@@ -8,13 +8,11 @@
 #ifndef __7Z_TYPES_H
 #define __7Z_TYPES_H
 
-#define AOCL_LZMA_OPT
+#include "aoclAlgoOpt.h" /* AOCL Optimization flags */
 
-#ifdef AOCL_LZMA_UNIT_TEST
+#ifdef AOCL_UNIT_TEST
 // Enabling this will allow code paths to reach some of the hard to reach sections in the code
-//#define AOCL_EXTEND_CODE_COVERAGE //DO NOT ENABLE THIS IN PRODUCTION CODE! 
-// Enables asserts for debugging
-//#define AOCL_LZMA_DEBUG 1 //DO NOT ENABLE THIS IN PRODUCTION CODE! 
+//#define AOCL_EXTEND_CODE_COVERAGE //DO NOT ENABLE THIS IN PRODUCTION CODE!
 #endif
 
 /*

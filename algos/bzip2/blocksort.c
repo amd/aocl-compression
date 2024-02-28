@@ -19,7 +19,7 @@
    in the file LICENSE.
    ------------------------------------------------------------------ */
 
-
+#include "utils/utils.h"
 #include "bzlib_private.h"
 
 /*---------------------------------------------*/
@@ -762,9 +762,7 @@ void AOCL_mainSimpleSort ( UInt32* ptr,
 
 #endif
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-
-void (*AOCL_mainSimpleSort_fp) ( UInt32* ptr,
+ void (*AOCL_mainSimpleSort_fp) ( UInt32* ptr,
                       UChar*  block,
                       UInt16* quadrant,
                       Int32   nblock,
@@ -773,7 +771,7 @@ void (*AOCL_mainSimpleSort_fp) ( UInt32* ptr,
                       Int32   d,
                       Int32*  budget ) = mainSimpleSort;
 
-void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog)
+void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel)
 {
    if (optOff)
    {
@@ -783,6 +781,14 @@ void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel, size_t insize, s
    {
       switch (optLevel)
       {
+         case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_BZIP2_OPT
+            AOCL_mainSimpleSort_fp = AOCL_mainSimpleSort;
+#else
+            AOCL_mainSimpleSort_fp = mainSimpleSort;
+#endif
+            break;
+#ifdef AOCL_BZIP2_OPT
          case 0://C version
          case 1://SSE version
          case 2://AVX version
@@ -790,11 +796,14 @@ void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel, size_t insize, s
          default://AVX512 and other versions
             AOCL_mainSimpleSort_fp = AOCL_mainSimpleSort;
             break;
+#else
+         default:
+            AOCL_mainSimpleSort_fp = mainSimpleSort;
+            break;
+#endif
       }
    }
 }
-
-#endif
 
 /*---------------------------------------------*/
 /*--
@@ -890,11 +899,7 @@ void mainQSort3 ( UInt32* ptr,
       if (hi - lo < MAIN_QSORT_SMALL_THRESH || 
           d > MAIN_QSORT_DEPTH_THRESH) {
 #ifdef AOCL_BZIP2_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
          AOCL_mainSimpleSort_fp ( ptr, block, quadrant, nblock, lo, hi, d, budget );
-#else
-         AOCL_mainSimpleSort ( ptr, block, quadrant, nblock, lo, hi, d, budget );
-#endif
 #else
          mainSimpleSort ( ptr, block, quadrant, nblock, lo, hi, d, budget );
 #endif

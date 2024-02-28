@@ -1,4 +1,5 @@
 // Copyright 2005 Google Inc. All Rights Reserved.
+// Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -30,6 +31,15 @@
 #include "snappy-internal.h"
 #include "snappy-sinksource.h"
 
+#include "utils/utils.h"
+
+#ifdef AOCL_SNAPPY_AVX_OPT
+#include<immintrin.h>
+#define AOCL_SNAPPY_TARGET_AVX __attribute__((__target__("avx")))
+#else
+#define AOCL_SNAPPY_TARGET_AVX
+#endif /* AOCL_SNAPPY_AVX_OPT */
+
 #if !defined(SNAPPY_HAVE_SSSE3)
 // __SSSE3__ is defined by GCC and Clang. Visual Studio doesn't target SIMD
 // support between SSE2 and AVX (so SSSE3 instructions require AVX support), and
@@ -41,20 +51,25 @@
 #endif
 #endif  // !defined(SNAPPY_HAVE_SSSE3)
 
-#if !defined(SNAPPY_HAVE_BMI2)
-// __BMI2__ is defined by GCC and Clang. Visual Studio doesn't target BMI2
-// specifically, but it does define __AVX2__ when AVX2 support is available.
-// Fortunately, AVX2 was introduced in Haswell, just like BMI2.
-//
-// BMI2 is not defined as a subset of AVX2 (unlike SSSE3 and AVX above). So,
-// GCC and Clang can build code with AVX2 enabled but BMI2 disabled, in which
-// case issuing BMI2 instructions results in a compiler error.
-#if defined(__BMI2__) || (defined(_MSC_VER) && defined(__AVX2__))
-#define SNAPPY_HAVE_BMI2 1
-#else
-#define SNAPPY_HAVE_BMI2 0
-#endif
-#endif  // !defined(SNAPPY_HAVE_BMI2)
+/*
+* bmi2 support checks are handled in runtime. SNAPPY_HAVE_BMI2 is not used anymore.
+* If avx2 support is available on the runtime machine, code paths that were under
+* SNAPPY_HAVE_BMI2 flag are enabled.
+*/
+//#if !defined(SNAPPY_HAVE_BMI2)
+//// __BMI2__ is defined by GCC and Clang. Visual Studio doesn't target BMI2
+//// specifically, but it does define __AVX2__ when AVX2 support is available.
+//// Fortunately, AVX2 was introduced in Haswell, just like BMI2.
+////
+//// BMI2 is not defined as a subset of AVX2 (unlike SSSE3 and AVX above). So,
+//// GCC and Clang can build code with AVX2 enabled but BMI2 disabled, in which
+//// case issuing BMI2 instructions results in a compiler error.
+//#if defined(__BMI2__) || (defined(_MSC_VER) && defined(__AVX2__))
+//#define SNAPPY_HAVE_BMI2 1
+//#else
+//#define SNAPPY_HAVE_BMI2 0
+//#endif
+//#endif  // !defined(SNAPPY_HAVE_BMI2)
 
 #if SNAPPY_HAVE_SSSE3
 // Please do not replace with <x86intrin.h>. or with headers that assume more
@@ -62,10 +77,12 @@
 #include <tmmintrin.h>
 #endif
 
-#if SNAPPY_HAVE_BMI2
+#ifdef AOCL_SNAPPY_AVX2_OPT
+//#if SNAPPY_HAVE_BMI2
 // Please do not replace with <x86intrin.h>. or with headers that assume more
 // advanced SSE versions without checking with all the OWNERS.
 #include <immintrin.h>
+//#endif
 #endif
 
 #include <algorithm>
@@ -74,21 +91,46 @@
 #include <string>
 #include <vector>
 
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif
+
 namespace snappy {
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-    //Forward declarations to allow default pointer initializations
-    bool SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed);
+#ifdef AOCL_SNAPPY_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
 
-    static char* (*SNAPPY_compress_fragment_fp)(const char* input,
-        size_t input_size, char* op,
-        uint16_t* table, const int table_size) = internal::CompressFragment;
+static int setup_ok_snappy = 0; // flag to indicate status of dynamic dispatcher setup
 
-    // function pointer to variants of the RawUncompress function, used for integration
-    // with the dynamic dispatcher. "SAW" stands for "SnappyArrayWriter" as that is the
-    // class used for decompression of flat buffers to flat buffers in this library.
-    static bool (*SNAPPY_SAW_raw_uncompress_fp)(const char* compressed,
-        size_t compressed_length, char* uncompressed) = SAW_RawUncompress;
+//Forward declarations to allow default pointer initializations
+bool SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed);
+
+#ifdef AOCL_ENABLE_THREADS
+    bool SAW_RawUncompressDirect(const char* compressed, size_t compressed_length, char* uncompressed, AOCL_UINT32 uncompressed_len);
+#endif
+
+static char* (*SNAPPY_compress_fragment_fp)(const char* input,
+    size_t input_size, char* op,
+    uint16_t* table, const int table_size) = internal::CompressFragment;
+
+// function pointer to variants of the RawUncompress function, used for integration
+// with the dynamic dispatcher. "SAW" stands for "SnappyArrayWriter" as that is the
+// class used for decompression of flat buffers to flat buffers in this library.
+static bool (*SNAPPY_SAW_raw_uncompress_fp)(const char* compressed,
+    size_t compressed_length, char* uncompressed) = SAW_RawUncompress;
+
+#ifdef AOCL_ENABLE_THREADS
+    static bool (*SNAPPY_SAW_raw_uncompress_direct_fp)(const char* compressed,
+        size_t compressed_length, char* uncompressed, AOCL_UINT32 uncompressed_len) = SAW_RawUncompressDirect;
 #endif
 
 // The amount of slop bytes writers are using for unconditional copies.
@@ -141,7 +183,10 @@ size_t MaxCompressedLength(size_t source_bytes) {
 
 namespace {
 
+#ifdef AOCL_SNAPPY_AVX_OPT
+AOCL_SNAPPY_TARGET_AVX
 inline void FastMemcopy64Bytes(char* dst, char* src) {
+  AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
   // assume: kSlopBytes is 64
   // assume: there is always space to copy 64 bytes
   // assume: copy is always from a lower address to a higher address (op - offset) to (op)
@@ -168,6 +213,7 @@ inline void FastMemcopy64Bytes(char* dst, char* src) {
   _mm256_storeu_si256(dst1, s1);
   _mm256_storeu_si256(dst1 + 1, s2);
 }
+#endif /* AOCL_SNAPPY_AVX_OPT */
 
 void UnalignedCopy64(const void* src, void* dst) {
   char tmp[8];
@@ -489,6 +535,7 @@ static inline char* EmitCopy(char* op, size_t offset, size_t len) {
   }
 }
 
+#ifdef AOCL_SNAPPY_OPT
 template <bool len_less_than_12>
 static inline char* AOCL_EmitCopy(char* op, size_t offset, size_t len) {
   assert(len_less_than_12 == (len < 12));
@@ -499,11 +546,7 @@ static inline char* AOCL_EmitCopy(char* op, size_t offset, size_t len) {
     // it's in the noise.
 
     // Emit 64 byte copies but make sure to keep at least four bytes reserved.
-#ifdef AOCL_SNAPPY_OPT 
     while (len >= 68) {
-#else
-    while (SNAPPY_PREDICT_FALSE(len >= 68)) {
-#endif
       op = EmitCopyAtMost64</*len_less_than_12=*/false>(op, offset, 64);
       len -= 64;
     }
@@ -523,6 +566,7 @@ static inline char* AOCL_EmitCopy(char* op, size_t offset, size_t len) {
     return op;
   }
 }
+#endif /* AOCL_SNAPPY_OPT */
 
 bool GetUncompressedLength(const char* start, size_t n, size_t* result) {
   if (start == NULL || result == NULL) return false;
@@ -535,6 +579,41 @@ bool GetUncompressedLength(const char* start, size_t n, size_t* result) {
     return false;
   }
 }
+
+#ifdef AOCL_ENABLE_THREADS
+// By default, the snappy API doesn't return the length of the uncompressed
+// file. To get that information, the caller has to make a call to
+// 'GetUncompressedLength'. Files compressed using the AOCL multithreaded
+// compressor have a RAP frame header with its RAP metadata which is absent in
+// files compressed using the single threaded compressors. This causes a
+// difference in the location of the encoded uncompressed length varint in the
+// stream; where for the single theaded compressor's output it is located in the
+// first few bytes of the stream and for the the multithreaded compressor's
+// output it is located in the bytes immediately after the RAP frame header.
+// Currently, the only way to get the width of the RAP frame header is to make a
+// call to 'aocl_setup_parallel_decompress_mt' and so we need to make a call to
+// this function to figure out the offset for the location of the varint.
+bool GetUncompressedLengthFromMTCompressedBuffer(const char* start, size_t n, size_t* result) {
+  if (start == NULL || result == NULL) return false;
+  aocl_thread_group_t thread_group_handle;
+  AOCL_INT32 offset = aocl_setup_parallel_decompress_mt(&thread_group_handle, 
+                                                  (char *)start,
+                                                  NULL, /* 'outbuf', safe, since the setup function does not do any operation on it */
+                                                  n,
+                                                  0 /* maxDecompressedSize (not required by snappy, hence 0) */, 
+                                                  1 /* use_ST_decompressor (get only the RAP metadata length, no allocations done) */);
+  const char* start_of_stream = start + offset;
+  size_t size_of_stream = n - offset;
+  uint32_t v = 0;
+  const char* limit = start_of_stream + size_of_stream;
+  if (Varint::Parse32WithLimit(start_of_stream, limit, &v) != NULL) {
+    *result = v;
+    return true;
+  } else {
+    return false;
+  }
+}
+#endif
 
 namespace {
 uint32_t CalculateTableSize(uint32_t input_size) {
@@ -763,6 +842,7 @@ char* CompressFragment(const char* input,
   return op;
 }
 
+#ifdef AOCL_SNAPPY_OPT
 char* AOCL_CompressFragment(const char* input,
                        size_t input_size,
                        char* op,
@@ -778,11 +858,7 @@ char* AOCL_CompressFragment(const char* input,
   const char* base_ip = ip;
 
   const size_t kInputMarginBytes = 15;
-#ifdef AOCL_SNAPPY_OPT 
   if (input_size >= kInputMarginBytes) {
-#else
-  if (SNAPPY_PREDICT_TRUE(input_size >= kInputMarginBytes)) {
-#endif  
     const char* ip_limit = input + input_size - kInputMarginBytes;
 
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
@@ -842,11 +918,7 @@ char* AOCL_CompressFragment(const char* input,
             assert(candidate >= base_ip);
             assert(candidate < ip + i);
             table[hash] = delta + i;
-#ifdef AOCL_SNAPPY_OPT 
             if (LittleEndian::AOCL_Load32(candidate) == dword) {
-#else
-            if (SNAPPY_PREDICT_FALSE(LittleEndian::AOCL_Load32(candidate) == dword)) {
-#endif
               *op = LITERAL | (i << 2);
               UnalignedCopy128(next_emit, op + 1);
               ip += i;
@@ -872,11 +944,7 @@ char* AOCL_CompressFragment(const char* input,
         skip += bytes_between_hash_lookups;
 #endif
         const char* next_ip = ip + bytes_between_hash_lookups;
-#ifdef AOCL_SNAPPY_OPT 
         if (next_ip > ip_limit) {
-#else
-        if (SNAPPY_PREDICT_FALSE(next_ip > ip_limit)) {
-#endif
           ip = next_emit;
           goto emit_remainder;
         }
@@ -885,13 +953,8 @@ char* AOCL_CompressFragment(const char* input,
         assert(candidate < ip);
 
         table[hash] = ip - base_ip;
-#ifdef AOCL_SNAPPY_OPT 
         if (static_cast<uint32_t>(data) ==
                                 LittleEndian::AOCL_Load32(candidate)) {
-#else
-        if (SNAPPY_PREDICT_FALSE(static_cast<uint32_t>(data) ==
-                                LittleEndian::AOCL_Load32(candidate))) {
-#endif
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
             //set offset to 0 or 1/2 of current value depending on how large 
             //bytes_between_hash_lookups(bbhl) is.
@@ -925,9 +988,7 @@ char* AOCL_CompressFragment(const char* input,
       // by proceeding to the next iteration of the main loop.  We also can exit
       // this loop via goto if we get close to exhausting the input.
     emit_match:
-#ifdef AOCL_SNAPPY_OPT 
       uint32_t candidate_data;
-#endif
       do {
         // We have a 4-byte match at ip, and no need to emit any
         // "literal bytes" prior to ip.
@@ -943,11 +1004,7 @@ char* AOCL_CompressFragment(const char* input,
         } else {
           op = AOCL_EmitCopy</*len_less_than_12=*/false>(op, offset, matched);
         }
-#ifdef AOCL_SNAPPY_OPT 
         if (ip >= ip_limit) {
-#else
-        if (SNAPPY_PREDICT_FALSE(ip >= ip_limit)) {
-#endif
           goto emit_remainder;
         }
         // Expect 5 bytes to match
@@ -960,9 +1017,7 @@ char* AOCL_CompressFragment(const char* input,
             ip - base_ip - 1;
         uint32_t hash = HashBytes(data, shift);
         candidate = base_ip + table[hash];
-#ifdef AOCL_SNAPPY_OPT 
         candidate_data = LittleEndian::AOCL_Load32(candidate);
-#endif
         table[hash] = ip - base_ip;
         // Measurements on the benchmarks have shown the following probabilities
         // for the loop to exit (ie. avg. number of iterations is reciprocal).
@@ -974,11 +1029,7 @@ char* AOCL_CompressFragment(const char* input,
         // BM_Flat/11 gaviota p = 0.1
         // BM_Flat/12 cp      p = 0.5
         // BM_Flat/13 c       p = 0.3
-#ifdef AOCL_SNAPPY_OPT 
       } while (static_cast<uint32_t>(data) == candidate_data);
-#else
-      } while (static_cast<uint32_t>(data) == LittleEndian::AOCL_Load32(candidate));
-#endif
       // Because the least significant 5 bytes matched, we can utilize data
       // for the next iteration.
       preload = data >> 8;
@@ -993,6 +1044,7 @@ char* AOCL_CompressFragment(const char* input,
 
   return op;
 }
+#endif /* AOCL_SNAPPY_OPT */
 }  // end namespace internal
 
 // Called back at avery compression call to trace parameters and sizes.
@@ -1060,18 +1112,34 @@ static inline void Report(const char *algorithm, size_t compressed_size,
 //   bool TryFastAppend(const char* ip, size_t available, size_t length, T* op);
 // };
 
-static inline uint32_t ExtractLowBytes(uint32_t v, int n) {
+class with_bmi_avx {};
+class with_avx {};
+class with_c {};
+
+/* ExtractLowBytes from reference code is split into 2 functions:
+* ExtractLowBytes_bmi uses bmi instructions
+* ExtractLowBytes_no_bmi does not use bmi instructions
+* Selection is done by dynamic dispatcher in runtime */
+static inline uint32_t ExtractLowBytes_no_bmi(uint32_t v, int n) {
   assert(n >= 0);
   assert(n <= 4);
-#if SNAPPY_HAVE_BMI2
-  return _bzhi_u32(v, 8 * n);
-#else
   // This needs to be wider than uint32_t otherwise `mask << 32` will be
   // undefined.
   uint64_t mask = 0xffffffff;
   return v & ~(mask << (8 * n));
-#endif
 }
+
+#ifdef AOCL_SNAPPY_AVX2_OPT
+//#if SNAPPY_HAVE_BMI2
+__attribute__((__target__("bmi2,avx2")))
+static inline uint32_t ExtractLowBytes_bmi(uint32_t v, int n) {
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
+    assert(n >= 0);
+    assert(n <= 4);
+    return _bzhi_u32(v, 8 * n);
+}
+//#endif
+#endif
 
 static inline bool LeftShiftOverflows(uint8_t value, uint32_t shift) {
   assert(shift < 32);
@@ -1084,6 +1152,7 @@ static inline bool LeftShiftOverflows(uint8_t value, uint32_t shift) {
 }
 
 // Helper class for decompression
+template<typename T>
 class SnappyDecompressor {
  private:
   Source*       reader_;         // Underlying source of bytes to decompress
@@ -1153,6 +1222,241 @@ class SnappyDecompressor {
     return true;
   }
 
+/* Same as DecompressAllTags, but calls ExtractLowBytes_bmi and is built with
+* target attribute bmi2 and avx. Attribute 'target' multiversioned functions do not support
+* function templates in clang yet, hence DecompressAllTags_bmi and DecompressAllTags
+* have to be maintained separately. */
+#ifdef AOCL_SNAPPY_AVX2_OPT
+    template <class Writer>
+#if defined(__GNUC__) && defined(__x86_64__)
+  __attribute__((aligned(32)))
+#endif
+__attribute__((__target__("bmi2,avx2")))
+AOCL_SNAPPY_TARGET_AVX
+  void DecompressAllTags_bmi(Writer* writer) {
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
+    const char* ip = ip_;
+    ResetLimit(ip);
+    auto op = writer->GetOutputPtr();
+    // We could have put this refill fragment only at the beginning of the loop.
+    // However, duplicating it at the end of each branch gives the compiler more
+    // scope to optimize the <ip_limit_ - ip> expression based on the local
+    // context, which overall increases speed.
+#define MAYBE_REFILL()                                      \
+  if (SNAPPY_PREDICT_FALSE(ip >= ip_limit_min_maxtaglen_)) { \
+    ip_ = ip;                                               \
+    if (SNAPPY_PREDICT_FALSE(!RefillTag())) goto exit;       \
+    ip = ip_;                                               \
+    ResetLimit(ip);                                         \
+  }                                                         \
+  preload = static_cast<uint8_t>(*ip)
+
+    // At the start of the for loop below the least significant byte of preload
+    // contains the tag.
+    uint32_t preload;
+    MAYBE_REFILL();
+    for ( ;; ) {
+      const uint8_t c = static_cast<uint8_t>(preload);
+      ip++;
+
+      // Ratio of iterations that have LITERAL vs non-LITERAL for different
+      // inputs.
+      //
+      // input          LITERAL  NON_LITERAL
+      // -----------------------------------
+      // html|html4|cp   23%        77%
+      // urls            36%        64%
+      // jpg             47%        53%
+      // pdf             19%        81%
+      // txt[1-4]        25%        75%
+      // pb              24%        76%
+      // bin             24%        76%
+      if (SNAPPY_PREDICT_FALSE((c & 0x3) == LITERAL)) {
+        size_t literal_length = (c >> 2) + 1u;
+        if (writer->TryFastAppend(ip, ip_limit_ - ip, literal_length, &op)) {
+          assert(literal_length < 61);
+          ip += literal_length;
+          // NOTE: There is no MAYBE_REFILL() here, as TryFastAppend()
+          // will not return true unless there's already at least five spare
+          // bytes in addition to the literal.
+          preload = static_cast<uint8_t>(*ip);
+          continue;
+        }
+        if (SNAPPY_PREDICT_FALSE(literal_length >= 61)) {
+          // Long literal.
+          const size_t literal_length_length = literal_length - 60;
+          literal_length =
+              ExtractLowBytes_bmi(LittleEndian::Load32(ip), literal_length_length) +
+              1;
+          ip += literal_length_length;
+        }
+
+        size_t avail = ip_limit_ - ip;
+        while (avail < literal_length) {
+          if (!writer->Append(ip, avail, &op)) goto exit;
+          literal_length -= avail;
+          reader_->Skip(peeked_);
+          size_t n;
+          ip = reader_->Peek(&n);
+          avail = n;
+          peeked_ = avail;
+          if (avail == 0) goto exit;
+          ip_limit_ = ip + avail;
+          ResetLimit(ip);
+        }
+        if (!writer->Append(ip, literal_length, &op)) goto exit;
+        ip += literal_length;
+        MAYBE_REFILL();
+      } else {
+        if (SNAPPY_PREDICT_FALSE((c & 3) == COPY_4_BYTE_OFFSET)) {
+          const size_t copy_offset = LittleEndian::Load32(ip);
+          const size_t length = (c >> 2) + 1;
+          ip += 4;
+
+          if (!writer->AppendFromSelf(copy_offset, length, &op)) goto exit;
+        } else {
+          const uint32_t entry = char_table[c];
+          preload = LittleEndian::Load32(ip);
+          const uint32_t trailer = ExtractLowBytes_bmi(preload, c & 3);
+          const uint32_t length = entry & 0xff;
+
+          // copy_offset/256 is encoded in bits 8..10.  By just fetching
+          // those bits, we get copy_offset (since the bit-field starts at
+          // bit 8).
+          const uint32_t copy_offset = (entry & 0x700) + trailer;
+          if (!writer->AppendFromSelf(copy_offset, length, &op)) goto exit;
+
+          ip += (c & 3);
+          // By using the result of the previous load we reduce the critical
+          // dependency chain of ip to 4 cycles.
+          preload >>= (c & 3) * 8;
+          if (ip < ip_limit_min_maxtaglen_) continue;
+        }
+        MAYBE_REFILL();
+      }
+    }
+#undef MAYBE_REFILL
+  exit:
+    writer->SetOutputPtr(op);
+  }
+#endif
+
+/* Same as DecompressAllTags, but is built with target attribute avx. 
+* Attribute 'target' multiversioned functions do not support
+* function templates in clang yet, hence DecompressAllTags_avx and DecompressAllTags
+* have to be maintained separately. */
+  template <class Writer>
+#if defined(__GNUC__) && defined(__x86_64__)
+  __attribute__((aligned(32)))
+#endif
+AOCL_SNAPPY_TARGET_AVX
+  void DecompressAllTags_avx(Writer* writer) {
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
+    const char* ip = ip_;
+    ResetLimit(ip);
+    auto op = writer->GetOutputPtr();
+    // We could have put this refill fragment only at the beginning of the loop.
+    // However, duplicating it at the end of each branch gives the compiler more
+    // scope to optimize the <ip_limit_ - ip> expression based on the local
+    // context, which overall increases speed.
+#define MAYBE_REFILL()                                      \
+  if (SNAPPY_PREDICT_FALSE(ip >= ip_limit_min_maxtaglen_)) { \
+    ip_ = ip;                                               \
+    if (SNAPPY_PREDICT_FALSE(!RefillTag())) goto exit;       \
+    ip = ip_;                                               \
+    ResetLimit(ip);                                         \
+  }                                                         \
+  preload = static_cast<uint8_t>(*ip)
+
+    // At the start of the for loop below the least significant byte of preload
+    // contains the tag.
+    uint32_t preload;
+    MAYBE_REFILL();
+    for ( ;; ) {
+      const uint8_t c = static_cast<uint8_t>(preload);
+      ip++;
+
+      // Ratio of iterations that have LITERAL vs non-LITERAL for different
+      // inputs.
+      //
+      // input          LITERAL  NON_LITERAL
+      // -----------------------------------
+      // html|html4|cp   23%        77%
+      // urls            36%        64%
+      // jpg             47%        53%
+      // pdf             19%        81%
+      // txt[1-4]        25%        75%
+      // pb              24%        76%
+      // bin             24%        76%
+      if (SNAPPY_PREDICT_FALSE((c & 0x3) == LITERAL)) {
+        size_t literal_length = (c >> 2) + 1u;
+        if (writer->TryFastAppend(ip, ip_limit_ - ip, literal_length, &op)) {
+          assert(literal_length < 61);
+          ip += literal_length;
+          // NOTE: There is no MAYBE_REFILL() here, as TryFastAppend()
+          // will not return true unless there's already at least five spare
+          // bytes in addition to the literal.
+          preload = static_cast<uint8_t>(*ip);
+          continue;
+        }
+        if (SNAPPY_PREDICT_FALSE(literal_length >= 61)) {
+          // Long literal.
+          const size_t literal_length_length = literal_length - 60;
+          literal_length =
+              ExtractLowBytes_no_bmi(LittleEndian::Load32(ip), literal_length_length) +
+              1;
+          ip += literal_length_length;
+        }
+
+        size_t avail = ip_limit_ - ip;
+        while (avail < literal_length) {
+          if (!writer->Append(ip, avail, &op)) goto exit;
+          literal_length -= avail;
+          reader_->Skip(peeked_);
+          size_t n;
+          ip = reader_->Peek(&n);
+          avail = n;
+          peeked_ = avail;
+          if (avail == 0) goto exit;
+          ip_limit_ = ip + avail;
+          ResetLimit(ip);
+        }
+        if (!writer->Append(ip, literal_length, &op)) goto exit;
+        ip += literal_length;
+        MAYBE_REFILL();
+      } else {
+        if (SNAPPY_PREDICT_FALSE((c & 3) == COPY_4_BYTE_OFFSET)) {
+          const size_t copy_offset = LittleEndian::Load32(ip);
+          const size_t length = (c >> 2) + 1;
+          ip += 4;
+
+          if (!writer->AppendFromSelf(copy_offset, length, &op)) goto exit;
+        } else {
+          const uint32_t entry = char_table[c];
+          preload = LittleEndian::Load32(ip);
+          const uint32_t trailer = ExtractLowBytes_no_bmi(preload, c & 3);
+          const uint32_t length = entry & 0xff;
+
+          // copy_offset/256 is encoded in bits 8..10.  By just fetching
+          // those bits, we get copy_offset (since the bit-field starts at
+          // bit 8).
+          const uint32_t copy_offset = (entry & 0x700) + trailer;
+          if (!writer->AppendFromSelf(copy_offset, length, &op)) goto exit;
+
+          ip += (c & 3);
+          // By using the result of the previous load we reduce the critical
+          // dependency chain of ip to 4 cycles.
+          preload >>= (c & 3) * 8;
+          if (ip < ip_limit_min_maxtaglen_) continue;
+        }
+        MAYBE_REFILL();
+      }
+    }
+#undef MAYBE_REFILL
+  exit:
+    writer->SetOutputPtr(op);
+  }
+
   // Process the next item found in the input.
   // Returns true if successful, false on error or end of input.
   template <class Writer>
@@ -1211,7 +1515,7 @@ class SnappyDecompressor {
           // Long literal.
           const size_t literal_length_length = literal_length - 60;
           literal_length =
-              ExtractLowBytes(LittleEndian::Load32(ip), literal_length_length) +
+              ExtractLowBytes_no_bmi(LittleEndian::Load32(ip), literal_length_length) +
               1;
           ip += literal_length_length;
         }
@@ -1242,7 +1546,7 @@ class SnappyDecompressor {
         } else {
           const uint32_t entry = char_table[c];
           preload = LittleEndian::Load32(ip);
-          const uint32_t trailer = ExtractLowBytes(preload, c & 3);
+          const uint32_t trailer = ExtractLowBytes_no_bmi(preload, c & 3);
           const uint32_t length = entry & 0xff;
 
           // copy_offset/256 is encoded in bits 8..10.  By just fetching
@@ -1266,7 +1570,32 @@ class SnappyDecompressor {
   }
 };
 
-bool SnappyDecompressor::RefillTag() {
+#ifdef AOCL_SNAPPY_AVX2_OPT
+template<>
+template <class Writer>
+#if defined(__GNUC__) && defined(__x86_64__)
+  __attribute__((aligned(32)))
+#endif
+AOCL_SNAPPY_TARGET_AVX
+void SnappyDecompressor<with_bmi_avx>::DecompressAllTags(Writer* writer) {
+      DecompressAllTags_bmi(writer);
+}
+#endif
+
+#ifdef AOCL_SNAPPY_AVX_OPT
+template<>
+template <class Writer>
+#if defined(__GNUC__) && defined(__x86_64__)
+  __attribute__((aligned(32)))
+#endif
+AOCL_SNAPPY_TARGET_AVX
+void SnappyDecompressor<with_avx>::DecompressAllTags(Writer* writer) {
+      DecompressAllTags_avx(writer);
+}
+#endif
+
+template<typename T>
+bool SnappyDecompressor<T>::RefillTag() {
   const char* ip = ip_;
   if (ip == ip_limit_) {
     // Fetch a new fragment from the reader
@@ -1323,10 +1652,10 @@ bool SnappyDecompressor::RefillTag() {
   return true;
 }
 
-template <typename Writer>
+template <typename Writer, typename T>
 static bool InternalUncompress(Source* r, Writer* writer) {
   // Read the uncompressed length from the front of the compressed input
-  SnappyDecompressor decompressor(r);
+  SnappyDecompressor<T> decompressor(r);
   uint32_t uncompressed_len = 0;
   if (!decompressor.ReadUncompressedLength(&uncompressed_len)) return false;
 
@@ -1334,8 +1663,45 @@ static bool InternalUncompress(Source* r, Writer* writer) {
                                    uncompressed_len);
 }
 
-template <typename Writer>
-static bool InternalUncompressAllTags(SnappyDecompressor* decompressor,
+/* Same as InternalUncompress, but is built with target attribute avx. */
+template <typename Writer, typename T>
+AOCL_SNAPPY_TARGET_AVX
+static bool InternalUncompress_avx(Source* r, Writer* writer) {
+  AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
+  // Read the uncompressed length from the front of the compressed input
+  SnappyDecompressor<T> decompressor(r);
+  uint32_t uncompressed_len = 0;
+  if (!decompressor.ReadUncompressedLength(&uncompressed_len)) return false;
+
+  return InternalUncompressAllTags_avx(&decompressor, writer, r->Available(),
+                                   uncompressed_len);
+}
+
+#ifdef AOCL_ENABLE_THREADS
+// since multithreaded decompression happens using externally available uncompressed
+// lengths rather than reading the lengths from the stream, we need a decompression
+// function that takes the uncompressed length as a parameter and which does not read
+// or modify the stream pointer for the computation of the uncompressed length
+template <typename Writer, typename T>
+static bool InternalUncompressDirect(Source* r, Writer* writer, AOCL_UINT32 uncompressed_len) {
+  SnappyDecompressor<T> decompressor(r);
+  return InternalUncompressAllTags(&decompressor, writer, r->Available(),
+                                   uncompressed_len);
+}
+
+/* Same as InternalUncompressDirect, but is built with target attribute avx. */
+template <typename Writer, typename T>
+AOCL_SNAPPY_TARGET_AVX
+static bool InternalUncompressDirect_avx(Source* r, Writer* writer, AOCL_UINT32 uncompressed_len) {
+  AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
+  SnappyDecompressor<T> decompressor(r);
+  return InternalUncompressAllTags_avx(&decompressor, writer, r->Available(),
+                                   uncompressed_len);
+}
+#endif
+
+template <typename Writer, typename T>
+static bool InternalUncompressAllTags(SnappyDecompressor<T>* decompressor,
                                       Writer* writer,
                                       uint32_t compressed_len,
                                       uint32_t uncompressed_len) {
@@ -1349,13 +1715,39 @@ static bool InternalUncompressAllTags(SnappyDecompressor* decompressor,
   return (decompressor->eof() && writer->CheckLength());
 }
 
+/* Same as InternalUncompressAllTags, but is built with target attribute avx. */
+template <typename Writer, typename T>
+AOCL_SNAPPY_TARGET_AVX
+static bool InternalUncompressAllTags_avx(SnappyDecompressor<T>* decompressor,
+                                      Writer* writer,
+                                      uint32_t compressed_len,
+                                      uint32_t uncompressed_len) {
+  AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
+  Report("snappy_uncompress", compressed_len, uncompressed_len);
+
+  writer->SetExpectedLength(uncompressed_len);
+
+  // Process the entire input
+  decompressor->DecompressAllTags(writer);
+  writer->Flush();
+  return (decompressor->eof() && writer->CheckLength());
+}
+
+template <typename T>
+bool InternalGetUncompressedLength(Source* source, uint32_t* result) {
+    if (source == NULL || result == NULL) return false;
+    SnappyDecompressor<T> decompressor(source);
+    return decompressor.ReadUncompressedLength(result);
+}
+
+static bool (*GetUncompressedLengthInternal_fp)(Source* source, uint32_t* result) = InternalGetUncompressedLength<with_avx>;
 bool GetUncompressedLength(Source* source, uint32_t* result) {
-  if (source == NULL || result == NULL) return false;
-  SnappyDecompressor decompressor(source);
-  return decompressor.ReadUncompressedLength(result);
+  AOCL_SETUP_NATIVE();
+  return GetUncompressedLengthInternal_fp(source, result);
 }
 
 size_t Compress(Source* reader, Sink* writer) {
+  AOCL_SETUP_NATIVE();
   if (reader == NULL || writer == NULL) return 0;
   size_t written = 0;
   size_t N = reader->Available();
@@ -1414,11 +1806,7 @@ size_t Compress(Source* reader, Sink* writer) {
     char* dest = writer->GetAppendBuffer(max_output, wmem.GetScratchOutput());
 
 #ifdef AOCL_SNAPPY_OPT 
-#ifdef AOCL_DYNAMIC_DISPATCHER
     char* end = SNAPPY_compress_fragment_fp(fragment, fragment_size, dest, table, table_size);
-#else
-    char* end = internal::AOCL_CompressFragment(fragment, fragment_size, dest, table, table_size);
-#endif
 #else
     char* end = internal::CompressFragment(fragment, fragment_size, dest, table, table_size);
 #endif
@@ -1623,16 +2011,19 @@ class SnappyIOVecWriter {
 
 bool RawUncompressToIOVec(const char* compressed, size_t compressed_length,
                           const struct iovec* iov, size_t iov_cnt) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL || iov == NULL) return false;
   ByteArraySource reader(compressed, compressed_length);
   return RawUncompressToIOVec(&reader, iov, iov_cnt);
 }
 
+bool (*InternalUncompressIOVec_fp)(Source* r, SnappyIOVecWriter* writer) = InternalUncompress<SnappyIOVecWriter, with_avx>;
 bool RawUncompressToIOVec(Source* compressed, const struct iovec* iov,
                           size_t iov_cnt) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL || iov == NULL) return false;
   SnappyIOVecWriter output(iov, iov_cnt);
-  return InternalUncompress(compressed, &output);
+  return InternalUncompressIOVec_fp(compressed, &output);
 }
 
 // -----------------------------------------------------------------------
@@ -1642,7 +2033,8 @@ bool RawUncompressToIOVec(Source* compressed, const struct iovec* iov,
 // A type that writes to a flat array.
 // Note that this is not a "ByteSink", but a type that matches the
 // Writer template argument to SnappyDecompressor::DecompressAllTags().
-class AOCL_SnappyArrayWriter {
+#ifdef AOCL_SNAPPY_AVX_OPT
+class AOCL_SnappyArrayWriter_AVX {
  private:
   char* base_;
   char* op_;
@@ -1652,11 +2044,13 @@ class AOCL_SnappyArrayWriter {
   char* op_limit_min_slop_;
 
  public:
-  inline explicit AOCL_SnappyArrayWriter(char* dst)
+  inline explicit AOCL_SnappyArrayWriter_AVX(char* dst)
       : base_(dst),
         op_(dst),
         op_limit_(dst),
-        op_limit_min_slop_(dst) {}  // Safe default see invariant.
+        op_limit_min_slop_(dst) {
+  AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
+  }  // Safe default see invariant.
 
   inline void SetExpectedLength(size_t len) {
     op_limit_ = op_ + len;
@@ -1694,6 +2088,7 @@ class AOCL_SnappyArrayWriter {
     }
   }
 
+  AOCL_SNAPPY_TARGET_AVX
   SNAPPY_ATTRIBUTE_ALWAYS_INLINE
   inline bool AppendFromSelf(size_t offset, size_t len, char** op_p) {
     char* const op = *op_p;
@@ -1713,7 +2108,6 @@ class AOCL_SnappyArrayWriter {
       *op_p = IncrementalCopy(op - offset, op, op_end, op_limit_);
       return true;
     }
-
     FastMemcopy64Bytes(op, op - offset);
     *op_p = op_end;
     return true;
@@ -1725,6 +2119,7 @@ class AOCL_SnappyArrayWriter {
   }
   inline void Flush() {}
 };
+#endif /* AOCL_SNAPPY_AVX_OPT */
 
 // -----------------------------------------------------------------------
 // Flat array interfaces
@@ -1813,70 +2208,216 @@ class SnappyArrayWriter {
   inline void Flush() {}
 };
 
+bool (*InternalUncompressArray_fp)(Source* r, SnappyArrayWriter* writer) = InternalUncompress<SnappyArrayWriter, with_avx>;
 bool SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
   ByteArraySource reader(compressed, compressed_length);
   SnappyArrayWriter output(uncompressed);
-  return InternalUncompress(&reader, &output);
+  return InternalUncompressArray_fp(&reader, &output);
 }
 
-bool AOCL_SAW_RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
+#ifdef AOCL_SNAPPY_AVX_OPT
+bool (*InternalUncompressAOCLArray_fp)(Source* r, AOCL_SnappyArrayWriter_AVX* writer) = InternalUncompress<AOCL_SnappyArrayWriter_AVX, with_avx>;
+AOCL_SNAPPY_TARGET_AVX
+bool AOCL_SAW_RawUncompress_AVX(const char* compressed, size_t compressed_length, char* uncompressed) {
+  AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
   ByteArraySource reader(compressed, compressed_length);
-  AOCL_SnappyArrayWriter output(uncompressed);
-  return InternalUncompress(&reader, &output);
+  AOCL_SnappyArrayWriter_AVX output(uncompressed);
+  return InternalUncompressAOCLArray_fp(&reader, &output);
+}
+#endif /* AOCL_SNAPPY_AVX_OPT */
+
+#ifdef AOCL_ENABLE_THREADS // Threaded
+bool (*InternalUncompressDirectArray_fp)(Source* r, SnappyArrayWriter* writer, AOCL_UINT32 uncompressed_len) = InternalUncompressDirect< SnappyArrayWriter, with_avx>;
+// for multithreaded decompression, where the uncompressed length is not available
+// on the stream but rather is stored externally, we need to have a decompression
+// function that takes the uncompressed length as a parameter. The following functions
+// are top level functions that facilitate said behavior
+bool SAW_RawUncompressDirect(const char* compressed, size_t compressed_length, char* uncompressed, AOCL_UINT32 uncompressed_len) {
+  ByteArraySource reader(compressed, compressed_length);
+  SnappyArrayWriter output(uncompressed);
+  return InternalUncompressDirectArray_fp(&reader, &output, uncompressed_len);
 }
 
-#ifdef AOCL_SNAPPY_OPT 
+#ifdef AOCL_SNAPPY_AVX_OPT
+bool (*InternalUncompressDirectAOCLArray_fp)(Source* r, AOCL_SnappyArrayWriter_AVX* writer, AOCL_UINT32 uncompressed_len) = InternalUncompressDirect< AOCL_SnappyArrayWriter_AVX, with_avx>;
+bool AOCL_SAW_RawUncompressDirect(const char* compressed, size_t compressed_length, char* uncompressed, AOCL_UINT32 uncompressed_len) {
+  ByteArraySource reader(compressed, compressed_length);
+  AOCL_SnappyArrayWriter_AVX output(uncompressed);
+  return InternalUncompressDirectAOCLArray_fp(&reader, &output, uncompressed_len);
+}
+#endif
+
+// similar to GetUncompressedLength; difference being that in addition to setting the 
+// value encoded within the varint in `result`, it returns a non-zero value signifying
+// the number of bytes occupied by the varint in the stream. In case of errors during
+// parsing of the varint, the function returns 0.
+AOCL_INT32 AOCL_GetUncompressedLengthAndVarintByteWidth(const char* start, size_t n, AOCL_UINT32* result) {
+  if (start == NULL || result == NULL) return 0;
+  *result = 0;
+  AOCL_UINT32 v = 0;
+  const char* limit = start + n;
+  const char* end_of_varint = Varint::Parse32WithLimit(start, limit, &v);
+  if (end_of_varint != NULL) {
+    *result = v;
+    return (AOCL_INT32)(end_of_varint - start);
+  } else {
+    return 0;
+  }
+}
+#endif // AOCL_ENABLE_THREADS
+
+
+#ifdef AOCL_SNAPPY_OPT
 bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+  AOCL_SETUP_NATIVE();
+#ifdef AOCL_ENABLE_THREADS // Threaded
+  aocl_thread_group_t thread_group_handle;
+  aocl_thread_info_t cur_thread_info;
+  AOCL_INT32 ret_status = -1;
+
+  // check 'compressed' here, since passing a null pointer to the setup function
+  // will lead to a segmentation fault
+  if (compressed != NULL) {
+    ret_status = aocl_setup_parallel_decompress_mt(&thread_group_handle, 
+                                                  (char *)compressed, uncompressed,
+                                                  compressed_length, 
+                                                  0 /* maxDecompressedSize (not required by snappy, hence 0) */, 
+                                                  0 /* use_ST_decompressor (not required here, hence 0) */);
+    if (ret_status < 0)
+      return false;
+  }
+  else {
+    // if 'compressed' is a null pointer, we can set 'ret_status' to 0 and pass
+    // over the control flow to the single threaded compressor. This way we can
+    // guarantee that the behavior for this special case remains the same,
+    // whether we use the multithreaded compressor or the single threaded one.
+    ret_status = 0;
+  }
+
+  if (ret_status == 0 /* for when compressed is NULL*/ || thread_group_handle.num_threads == 1) {
+    size_t ulength;
+    const char *start_compressed = compressed + ret_status;
+    size_t compressed_length_actual = compressed_length - ret_status;
+
+    if (!GetUncompressedLength(start_compressed, compressed_length_actual, &ulength))
+      return false;
+    if (ulength != 0 && uncompressed == NULL)
+      return false;
+
+    return SNAPPY_SAW_raw_uncompress_fp(start_compressed, compressed_length_actual, uncompressed);
+  }
+  else {
+#ifdef AOCL_THREADS_LOG
+        printf("Decompress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
+#endif
+
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+    {
+#ifdef AOCL_THREADS_LOG
+      printf("Decompress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
+#endif
+      AOCL_UINT32 is_error = 1;
+      AOCL_UINT32 thread_id = omp_get_thread_num();
+      bool local_result = false;
+      AOCL_INT32 thread_parallel_res = 0;
+
+      thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, &cur_thread_info, 0 /*cmpr_bound_pad*/, thread_id);
+      if (thread_parallel_res == 0)
+      {
+        local_result = SNAPPY_SAW_raw_uncompress_direct_fp(cur_thread_info.partition_src, cur_thread_info.partition_src_size, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+        is_error = local_result ? 0 : 1;
+      } // aocl_do_partition_decompress_mt
+      else if (thread_parallel_res == 1)
+      {
+        local_result = 0;
+        is_error = 0;
+      }
+
+      thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+      thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+      thread_group_handle.threads_info_list[thread_id].dst_trap_size = cur_thread_info.dst_trap_size;
+      thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+      thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+      thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+    } // #pragma omp parallel
+
+#ifdef AOCL_THREADS_LOG
+    printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
+#endif
+
+    AOCL_UINT32 thread_cnt = 0;
+    // For all the threads: Write to a single output buffer in single threaded mode
+    for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+    {
+      cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+      // In case of any thread partitioning or alloc errors, exit the compression process with error
+      if (cur_thread_info.is_error)
+      {
+        aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+#ifdef AOCL_THREADS_LOG
+        printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+        return false;
+      }
+      // Copy this thread's chunk to the output final buffer
+      memcpy(thread_group_handle.dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+      thread_group_handle.dst += cur_thread_info.dst_trap_size;
+    }
+    // free the memory allocated for the the thread_info_list and/or for each thread's dst_trap
+    aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+    return true;
+  }
+#else // Non-threaded
   // sanity checks ------------------------------------------------------------
      size_t ulength;
-     if (!GetUncompressedLength(compressed, compressed_length, &ulength)) return false;
-     if (ulength != 0 && uncompressed == NULL) return false;
+     if (!GetUncompressedLength(compressed, compressed_length, &ulength))
+     {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return false;
+     }
+     if (ulength != 0 && uncompressed == NULL)
+     {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return false;
+     }
   // sanity checks ------------------------------------------------------------
-
-  #ifdef AOCL_DYNAMIC_DISPATCHER
-    return SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
-  #else
-    return AOCL_SAW_RawUncompress(compressed, compressed_length, uncompressed);
-  #endif
-}
-
-bool RawUncompress(Source* compressed, char* uncompressed) {
-  // sanity checks ------------------------------------------------------------
-     size_t _readable_length, ulength;
-     const char* _compressed_buffer;
-     if (compressed == NULL) return false;
-     _compressed_buffer = compressed->Peek(&_readable_length);
-     if (!GetUncompressedLength(_compressed_buffer, _readable_length, &ulength)) return false;
-     if (ulength != 0 && uncompressed == NULL) return false;
-  // sanity checks ------------------------------------------------------------
-
-  AOCL_SnappyArrayWriter output(uncompressed);
-  return InternalUncompress(compressed, &output);
+  bool ret = false;
+  ret = SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
+  LOG_UNFORMATTED(INFO, logCtx, "Exit");
+  return ret;
+#endif
 }
 #else
 bool RawUncompress(const char* compressed, size_t compressed_length,
                    char* uncompressed) {
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
   ByteArraySource reader(compressed, compressed_length);
-  return RawUncompress(&reader, uncompressed);
-}
 
-bool RawUncompress(Source* compressed, char* uncompressed) {
-  // sanity checks ------------------------------------------------------------
-     size_t _readable_length, ulength;
-     const char* _compressed_buffer;
-     if (compressed == NULL) return false;
-     _compressed_buffer = compressed->Peek(&_readable_length);
-     if (!GetUncompressedLength(_compressed_buffer, _readable_length, &ulength)) return false;
-     if (ulength != 0 && uncompressed == NULL) return false;
-  // sanity checks ------------------------------------------------------------
+  bool ret = RawUncompress(&reader, uncompressed);
 
-  SnappyArrayWriter output(uncompressed);
-  return InternalUncompress(compressed, &output);
+  LOG_UNFORMATTED(INFO, logCtx, "Exit");
+  return ret;
 }
 #endif
 
+bool RawUncompress(Source* compressed, char* uncompressed) {
+    // sanity checks ------------------------------------------------------------
+    size_t _readable_length, ulength;
+    const char* _compressed_buffer;
+    if (compressed == NULL) return false;
+    _compressed_buffer = compressed->Peek(&_readable_length);
+    if (!GetUncompressedLength(_compressed_buffer, _readable_length, &ulength)) return false;
+    if (ulength != 0 && uncompressed == NULL) return false;
+    // sanity checks ------------------------------------------------------------
+
+    SnappyArrayWriter output(uncompressed);
+    return InternalUncompressArray_fp(compressed, &output);
+}
+
 bool Uncompress(const char* compressed, size_t compressed_length,
                 std::string* uncompressed) {
+  AOCL_SETUP_NATIVE();
   size_t ulength;
   if (!GetUncompressedLength(compressed, compressed_length, &ulength)) {
     return false;
@@ -1934,34 +2475,199 @@ class SnappyDecompressionValidator {
   inline void Flush() {}
 };
 
+bool (*InternalUncompressDecompression_fp)(Source* r, SnappyDecompressionValidator* writer) = InternalUncompress<SnappyDecompressionValidator, with_avx>;
 bool IsValidCompressedBuffer(const char* compressed, size_t compressed_length) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL) return false;
   ByteArraySource reader(compressed, compressed_length);
   SnappyDecompressionValidator writer;
-  return InternalUncompress(&reader, &writer);
+  return InternalUncompressDecompression_fp(&reader, &writer);
 }
 
 bool IsValidCompressed(Source* compressed) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL) return false;
   SnappyDecompressionValidator writer;
-  return InternalUncompress(compressed, &writer);
+  return InternalUncompressDecompression_fp(compressed, &writer);
 }
 
 void RawCompress(const char* input,
                  size_t input_length,
                  char* compressed,
                  size_t* compressed_length) {
-  if (input == NULL || compressed == NULL || compressed_length == NULL) return;
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+  if (input == NULL || compressed == NULL || compressed_length == NULL)
+  {
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return;
+  }
+  AOCL_SETUP_NATIVE();
+
+#if defined(AOCL_ENABLE_THREADS) && defined(AOCL_SNAPPY_OPT) // Threaded
+  aocl_thread_group_t thread_group_handle;
+  aocl_thread_info_t cur_thread_info;
+  AOCL_INT32 ret_status = -1;
+  AOCL_INT32 maxCompressedLength = (AOCL_INT32)MaxCompressedLength(input_length);
+
+  ret_status = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)input, compressed,
+                                              (AOCL_INT32)input_length, maxCompressedLength,
+                                              (AOCL_INT32)kBlockSize, WINDOW_FACTOR);
+  if (ret_status < 0)
+    return;
+
+  if (thread_group_handle.num_threads == 1) {
+    ByteArraySource reader(input, input_length);
+    UncheckedByteArraySink writer(compressed);
+    Compress(&reader, &writer);
+
+    // Compute how many bytes were added
+    *compressed_length = (writer.CurrentDestination() - compressed);
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return;
+  }
+  else {
+#ifdef AOCL_THREADS_LOG
+      printf("Compress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
+#endif
+
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+    {
+#ifdef AOCL_THREADS_LOG
+      printf("Compress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
+#endif
+      AOCL_INT32 thread_max_src_size = thread_group_handle.common_part_src_size + thread_group_handle.leftover_part_src_bytes;
+      AOCL_UINT32 cmpr_bound_pad = (AOCL_INT32)MaxCompressedLength(thread_max_src_size) - thread_max_src_size;
+      AOCL_UINT32 is_error = 1;
+      AOCL_UINT32 thread_id = omp_get_thread_num();
+      AOCL_INT32 partition_compressed_length = 0;
+
+      if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
+      {
+        ByteArraySource reader(cur_thread_info.partition_src, cur_thread_info.partition_src_size);
+        UncheckedByteArraySink writer(cur_thread_info.dst_trap);
+        Compress(&reader, &writer);
+
+        // Compute how many bytes were added
+        partition_compressed_length = (writer.CurrentDestination() - cur_thread_info.dst_trap);
+        is_error = 0;
+      } // aocl_do_partition_compress_mt
+
+      thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+      thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+      thread_group_handle.threads_info_list[thread_id].dst_trap_size = partition_compressed_length;
+      thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+      thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+      thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+
+    } // #pragma omp parallel
+#ifdef AOCL_THREADS_LOG
+    printf("Compress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
+#endif
+    
+    // set pointers to the desired locations in their respective buffers
+    AOCL_CHAR* dst_org = thread_group_handle.dst;
+    AOCL_CHAR* dst_ptr = dst_org;
+    thread_group_handle.dst += ret_status /* on success, ret_status stores the RAP metadata length */;
+    dst_ptr += RAP_START_OF_PARTITIONS;
+
+    AOCL_UINT32 thread_cnt = 0;
+    aocl_thread_info_t *thread_info_iter;
+    AOCL_UINT32 combined_uncompressed_length = 0;
+
+    // compute the sum of all uncompressed lengths and check for errors
+    for (; thread_cnt < thread_group_handle.num_threads; ++thread_cnt) {
+      thread_info_iter = &thread_group_handle.threads_info_list[thread_cnt];
+
+      // check if this thread encountered any errors during compression
+      if (thread_info_iter->is_error) {
+        aocl_destroy_parallel_compress_mt(&thread_group_handle);
+
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+        return;
+      }
+
+      // read the uncompressed length from the snappy stream produced
+      AOCL_UINT32 uncompressed_length_from_stream;
+      AOCL_INT32 data_start_offset = AOCL_GetUncompressedLengthAndVarintByteWidth(thread_info_iter->dst_trap,
+                                                                             thread_info_iter->dst_trap_size,
+                                                                             &uncompressed_length_from_stream);
+
+      // check if the uncompressed length matches the source partition's size
+      if (data_start_offset == 0 || uncompressed_length_from_stream != thread_info_iter->partition_src_size) {
+        aocl_destroy_parallel_compress_mt(&thread_group_handle);
+
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+        return;
+      }
+
+      // add the uncompressed length to a length accumulator
+      combined_uncompressed_length += uncompressed_length_from_stream;
+
+      // store data start location (byte immediately after the varint) for later
+      thread_info_iter->additional_state_info = (AOCL_VOID*)(thread_info_iter->dst_trap + data_start_offset);
+
+      // modify the thread's buffer length to adjust for the varint
+      thread_info_iter->dst_trap_size -= data_start_offset;
+    }
+
+    // encode length accumulator's value as a varint and write to destination buffer
+    char* after_varint = Varint::Encode32(thread_group_handle.dst, combined_uncompressed_length);
+    *compressed_length = (size_t)(after_varint - dst_org);
+    thread_group_handle.dst = after_varint;
+
+    thread_cnt = 0;
+    // since at this point, 'compressed_length' stores the number of bytes
+    // between the start of the buffer and the byte immediately after the
+    // encoded varint, it also stores the offset for the starting location of
+    // the data of the first compressed buffer
+    AOCL_UINT32 thread_dst_offset = (AOCL_UINT32)(*compressed_length);
+    for (; thread_cnt < thread_group_handle.num_threads; ++thread_cnt) {
+      thread_info_iter = &thread_group_handle.threads_info_list[thread_cnt];
+
+      // copy compressed data of the current thread to the destination buffer.
+      // (the dst_trap_size for each thread has already been modified to take
+      // into account the varint at beginning and additional_state_info has the
+      // location in the dst_trap buffer that is just past the varint's bytes)
+      memcpy(thread_group_handle.dst, (AOCL_CHAR*)thread_info_iter->additional_state_info, thread_info_iter->dst_trap_size);
+
+      // push the dst buffer pointer ahead by the number of bytes copied
+      thread_group_handle.dst += thread_info_iter->dst_trap_size;
+
+      // generate RAP data and write to corresponding location in destination buffer
+      *(AOCL_UINT32*)dst_ptr = thread_dst_offset;
+      dst_ptr += RAP_OFFSET_BYTES;
+      thread_dst_offset += thread_info_iter->dst_trap_size;
+      *(AOCL_INT32*)dst_ptr = thread_info_iter->dst_trap_size;
+      dst_ptr += RAP_LEN_BYTES;
+      *(AOCL_INT32*)dst_ptr = thread_info_iter->partition_src_size;
+      dst_ptr += DECOMP_LEN_BYTES;
+
+      // update the compressed_length to include the current thread's compressed length
+      *compressed_length += thread_info_iter->dst_trap_size;
+    }
+
+    // free the memory allocated for the the thread_info_list and/or for each thread's dst_trap
+    aocl_destroy_parallel_compress_mt(&thread_group_handle);
+  }
+#else /* !(defined(AOCL_ENABLE_THREADS) && defined(AOCL_SNAPPY_OPT)) */ // Non-threaded
   ByteArraySource reader(input, input_length);
   UncheckedByteArraySink writer(compressed);
   Compress(&reader, &writer);
 
   // Compute how many bytes were added
   *compressed_length = (writer.CurrentDestination() - compressed);
+#endif /* defined(AOCL_ENABLE_THREADS) && defined(AOCL_SNAPPY_OPT) */
+
+  LOG_UNFORMATTED(INFO, logCtx, "Exit");
 }
 
 size_t Compress(const char* input, size_t input_length,
                 std::string* compressed) {
+  AOCL_SETUP_NATIVE();
   if (input == NULL || compressed == NULL) return 0;
   // Pre-grow the buffer to the max length of the compressed output
   STLStringResizeUninitialized(compressed, MaxCompressedLength(input_length));
@@ -1972,40 +2678,6 @@ size_t Compress(const char* input, size_t input_length,
   compressed->resize(compressed_length);
   return compressed_length;
 }
-
-#ifdef AOCL_DYNAMIC_DISPATCHER
-static void aocl_register_snappy_fmv(int optOff, int optLevel) {
-    if (optOff)
-    {
-        //C version
-        SNAPPY_compress_fragment_fp = internal::CompressFragment;
-        SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress;
-    }
-    else
-    {
-        switch (optLevel)
-        {
-        case 0://C version
-        case 1://SSE version
-            SNAPPY_compress_fragment_fp = internal::CompressFragment;
-            SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress;
-            break;
-        case 2://AVX version
-        case 3://AVX2 version
-        default://AVX512 and other versions
-            SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment;
-            SNAPPY_SAW_raw_uncompress_fp = AOCL_SAW_RawUncompress;
-            break;
-        }
-    }
-}
-
-char* aocl_setup_snappy(int optOff, int optLevel, size_t insize,
-    size_t level, size_t windowLog) {
-    aocl_register_snappy_fmv(optOff, optLevel);
-    return NULL;
-}
-#endif
 
 // -----------------------------------------------------------------------
 // Sink interface
@@ -2241,18 +2913,20 @@ class SnappySinkAllocator {
   // Note: copying this object is allowed
 };
 
+bool (*InternalUncompressScattered_fp)(Source* r, SnappyScatteredWriter<SnappySinkAllocator>* writer) = InternalUncompress<SnappyScatteredWriter<SnappySinkAllocator>, with_avx>;
 size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed) {
+  AOCL_SETUP_NATIVE();
   if (compressed == NULL || uncompressed == NULL) return 0;
   SnappySinkAllocator allocator(uncompressed);
   SnappyScatteredWriter<SnappySinkAllocator> writer(allocator);
-  InternalUncompress(compressed, &writer);
+  InternalUncompressScattered_fp(compressed, &writer);
   return writer.Produced();
 }
 
-bool Uncompress(Source* compressed, Sink* uncompressed) {
+bool InternalUncompress(Source* compressed, Sink* uncompressed) {
   if (compressed == NULL || uncompressed == NULL) return false;
   // Read the uncompressed length from the front of the compressed input
-  SnappyDecompressor decompressor(compressed);
+  SnappyDecompressor<with_c> decompressor(compressed);
   uint32_t uncompressed_len = 0;
   if (!decompressor.ReadUncompressedLength(&uncompressed_len)) {
     return false;
@@ -2280,6 +2954,46 @@ bool Uncompress(Source* compressed, Sink* uncompressed) {
   }
 }
 
+/* Same as InternalUncompress but creates SnappyDecompressor<T>
+* and calls InternalUncompressAllTags_avx */
+template <typename T>
+bool InternalUncompress_avx(Source* compressed, Sink* uncompressed) {
+  if (compressed == NULL || uncompressed == NULL) return false;
+  // Read the uncompressed length from the front of the compressed input
+  SnappyDecompressor<T> decompressor(compressed);
+  uint32_t uncompressed_len = 0;
+  if (!decompressor.ReadUncompressedLength(&uncompressed_len)) {
+    return false;
+  }
+
+  char c;
+  size_t allocated_size;
+  char* buf = uncompressed->GetAppendBufferVariable(
+      1, uncompressed_len, &c, 1, &allocated_size);
+
+  const size_t compressed_len = compressed->Available();
+  // If we can get a flat buffer, then use it, otherwise do block by block
+  // uncompression
+  if (allocated_size >= uncompressed_len) {
+    SnappyArrayWriter writer(buf);
+    bool result = InternalUncompressAllTags_avx(&decompressor, &writer,
+                                            compressed_len, uncompressed_len);
+    uncompressed->Append(buf, writer.Produced());
+    return result;
+  } else {
+    SnappySinkAllocator allocator(uncompressed);
+    SnappyScatteredWriter<SnappySinkAllocator> writer(allocator);
+    return InternalUncompressAllTags_avx(&decompressor, &writer, compressed_len,
+                                     uncompressed_len);
+  }
+}
+
+bool (*UncompressInternal_fp)(Source* compressed, Sink* uncompressed) = InternalUncompress;
+bool Uncompress(Source* compressed, Sink* uncompressed) {
+    AOCL_SETUP_NATIVE();
+    return UncompressInternal_fp(compressed, uncompressed);
+}
+
 // This method is used by snappy_test.cc for creating an instance of
 // ByteArraySource class, the constructor of this class can't be
 // accessed by snappy_test.cc.
@@ -2302,4 +3016,168 @@ void SNAPPY_Gtest_Util::Append32(std::string* s, uint32_t value)
   return Varint::Append32(s,value);
 }
 
+#define SET_FP_TO_WITH_C \
+InternalUncompressIOVec_fp           = InternalUncompress<SnappyIOVecWriter, with_c>;\
+InternalUncompressArray_fp           = InternalUncompress<SnappyArrayWriter, with_c>;\
+InternalUncompressDecompression_fp   = InternalUncompress<SnappyDecompressionValidator, with_c>;\
+InternalUncompressScattered_fp       = InternalUncompress<SnappyScatteredWriter<SnappySinkAllocator>, with_c>;\
+UncompressInternal_fp                = InternalUncompress;\
+GetUncompressedLengthInternal_fp     = InternalGetUncompressedLength<with_c>;
+
+#define SET_FP_TO_WITH_AVX \
+InternalUncompressIOVec_fp           = InternalUncompress<SnappyIOVecWriter, with_avx>;\
+InternalUncompressArray_fp           = InternalUncompress<SnappyArrayWriter, with_avx>;\
+InternalUncompressDecompression_fp   = InternalUncompress<SnappyDecompressionValidator, with_avx>;\
+InternalUncompressScattered_fp       = InternalUncompress<SnappyScatteredWriter<SnappySinkAllocator>, with_avx>;\
+UncompressInternal_fp                = InternalUncompress_avx<with_avx>;\
+GetUncompressedLengthInternal_fp     = InternalGetUncompressedLength<with_avx>;
+
+#define SET_FP_TO_WITH_BMI_AVX \
+InternalUncompressIOVec_fp           = InternalUncompress<SnappyIOVecWriter, with_bmi_avx>;\
+InternalUncompressArray_fp           = InternalUncompress<SnappyArrayWriter, with_bmi_avx>;\
+InternalUncompressDecompression_fp   = InternalUncompress<SnappyDecompressionValidator, with_bmi_avx>;\
+InternalUncompressScattered_fp       = InternalUncompress<SnappyScatteredWriter<SnappySinkAllocator>, with_bmi_avx>;\
+UncompressInternal_fp                = InternalUncompress_avx<with_bmi_avx>;\
+GetUncompressedLengthInternal_fp     = InternalGetUncompressedLength<with_bmi_avx>;
+
+static void aocl_register_snappy_fmv(int optOff, int optLevel) {
+    if (optOff)
+    {
+        //C version
+        SNAPPY_compress_fragment_fp    = internal::CompressFragment;
+        SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
+#ifdef AOCL_ENABLE_THREADS
+        SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+#endif
+        /* bmi2 optimizations are part of reference code.
+        * optLevel is used even when optOff=1 to choose
+        * between bmi2 code or otherwise based on dynamic dispatcher */
+        switch (optLevel)
+        {
+        case 0://C version
+        case 1://SSE version
+            SET_FP_TO_WITH_C
+                break;
+        case 2://AVX version
+            SET_FP_TO_WITH_AVX
+            break;
+        case -1:// undecided. use defaults based on compiler flags
+        case 3://AVX2 version
+        default://AVX512 and other versions
+#ifdef AOCL_SNAPPY_AVX2_OPT
+            SET_FP_TO_WITH_BMI_AVX
+#elif defined(AOCL_SNAPPY_AVX_OPT)
+            SET_FP_TO_WITH_AVX
+#else
+            SET_FP_TO_WITH_C
+#endif
+            break;
+        }
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case 0://C version
+        case 1://SSE version
+#ifdef AOCL_SNAPPY_OPT
+            SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
+#else
+            SNAPPY_compress_fragment_fp    = internal::CompressFragment;
+#endif
+            SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
+#endif
+            SET_FP_TO_WITH_C
+            break;
+        case 2://AVX version
+#ifdef AOCL_SNAPPY_AVX_OPT
+            SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp = AOCL_SAW_RawUncompress_AVX;
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
+            InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_avx>;
+            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_avx>;
+#endif
+            SET_FP_TO_WITH_AVX
+            InternalUncompressAOCLArray_fp = InternalUncompress<AOCL_SnappyArrayWriter_AVX, with_avx>;
+#else /* !AOCL_SNAPPY_AVX_OPT */
+            SNAPPY_compress_fragment_fp = internal::CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress;
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
+#endif
+            SET_FP_TO_WITH_C
+#endif
+            break;
+        case -1:// undecided. use defaults based on compiler flags
+        case 3://AVX2 version
+        default://AVX512 and other versions
+#ifdef AOCL_SNAPPY_AVX_OPT
+            SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp   = AOCL_SAW_RawUncompress_AVX;
+#ifdef AOCL_SNAPPY_AVX2_OPT
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
+            InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_bmi_avx>;
+            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_bmi_avx>;
+#endif
+            SET_FP_TO_WITH_BMI_AVX
+            InternalUncompressAOCLArray_fp = InternalUncompress<AOCL_SnappyArrayWriter_AVX, with_bmi_avx>;
+#else
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
+            InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_avx>;
+            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_avx>;
+#endif
+            SET_FP_TO_WITH_AVX
+            InternalUncompressAOCLArray_fp = InternalUncompress<AOCL_SnappyArrayWriter_AVX, with_avx>;
+#endif
+#else /* !AOCL_SNAPPY_AVX_OPT */
+            SNAPPY_compress_fragment_fp    = internal::CompressFragment;
+            SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
+#ifdef AOCL_ENABLE_THREADS
+            SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
+#endif
+            SET_FP_TO_WITH_C
+#endif
+            break;
+        }
+    }
+}
+
+char* aocl_setup_snappy(int optOff, int optLevel, size_t insize,
+    size_t level, size_t windowLog) {
+    AOCL_ENTER_CRITICAL(setup_snappy)
+    if (!setup_ok_snappy) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_snappy_fmv(optOff, optLevel);
+        setup_ok_snappy = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_snappy)
+    return NULL;
+}
+
+#ifdef AOCL_SNAPPY_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_snappy)
+    if (!setup_ok_snappy) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_snappy_fmv(optOff, optLevel);
+        setup_ok_snappy = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_snappy)
+}
+#endif
+
+void aocl_destroy_snappy(void){
+    AOCL_ENTER_CRITICAL(setup_snappy)
+    setup_ok_snappy = 0;
+    AOCL_EXIT_CRITICAL(setup_snappy)
+}
 }  // namespace snappy

@@ -2,8 +2,32 @@
 2022-07-15: Igor Pavlov : Public domain */
 
 /**
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
- */
+* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*
+* 1. Redistributions of source code must retain the above copyright notice,
+* this list of conditions and the following disclaimer.
+* 2. Redistributions in binary form must reproduce the above copyright notice,
+* this list of conditions and the following disclaimer in the documentation
+* and/or other materials provided with the distribution.
+* 3. Neither the name of the copyright holder nor the names of its
+* contributors may be used to endorse or promote products derived from this
+* software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+* ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+* LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+* CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+* SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+* INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+* CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+* ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+* POSSIBILITY OF SUCH DAMAGE.
+*/
 
 #include "Precomp.h"
 
@@ -16,7 +40,11 @@
 #include <stdio.h>
 #endif
 
+#include "utils/utils.h"
+
 #include "LzmaEnc.h"
+
+#include "utils/utils.h"
 
 #include "LzFind.h"
 #define _7ZIP_ST
@@ -24,9 +52,7 @@
 #include "LzFindMt.h"
 #endif
 
-#ifdef AOCL_LZMA_OPT
 #include <limits.h>
-#endif
 /* the following LzmaEnc_* declarations is internal LZMA interface for LZMA2 encoder */
 
 SRes LzmaEnc_PrepareForLzma2(CLzmaEncHandle pp, ISeqInStream *inStream, UInt32 keepWindowSize,
@@ -63,14 +89,27 @@ static unsigned g_STAT_OFFSET = 0;
 
 #define REP_LEN_COUNT 64
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_LZMA_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+static int setup_ok_lzma_encode = 0; // flag to indicate status of dynamic dispatcher setup
+
 //Forward declarations to allow default pointer initializations
 // Function pointers for optimization overloads
 void (*LzmaEncProps_Normalize_fp)(CLzmaEncProps* p) = LzmaEncProps_Normalize;
-#endif
 
 void LzmaEncProps_Init(CLzmaEncProps *p)
 {
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
   p->level = 5;
   p->dictSize = p->mc = 0;
   p->reduceSize = (UInt64)(Int64)-1;
@@ -79,7 +118,9 @@ void LzmaEncProps_Init(CLzmaEncProps *p)
   p->affinity = 0;
 #ifdef AOCL_LZMA_OPT
   p->srcLen = 0;
+  p->cacheEfficientStrategy = -1;
 #endif
+  LOG_UNFORMATTED(INFO, logCtx, "Exit");
 }
 
 // Default settings as per LZMA SDK 22.01
@@ -136,17 +177,49 @@ void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
   int level = p->level;
   if (level < 0) level = 5;
   p->level = level;
-  
-  if (p->srcLen > 0 && p->srcLen <= MIN_SIZE_FOR_CF_HC) { //use reference settings
-      if (p->dictSize == 0)
-          p->dictSize =
-              ( level <= 3 ? ((UInt32)1 << (level * 2 + 16)) :
-              ( level <= 6 ? ((UInt32)1 << (level + 19)) :
-              ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
-              )));
+
+  if (p->lc < 0) p->lc = 3;
+  if (p->lp < 0) p->lp = 0;
+  if (p->pb < 0) p->pb = 2;
+
+  if (p->algo < 0) p->algo = (level < 5 ? 0 : 1);
+  if (p->fb < 0) p->fb = (level < 7 ? 32 : 64);
+  if (p->btMode < 0) p->btMode = (p->algo == 0 ? 0 : 1);
+  if (p->numHashBytes < 0) p->numHashBytes = (p->btMode ? 4 : 5);
+  if (p->mc == 0) p->mc = (16 + ((unsigned)p->fb >> 1)) >> (p->btMode ? 0 : 1);
+
+  if (!p->btMode) { // cache efficient implementation is available only for hash chain mode
+      if (p->cacheEfficientStrategy < 0) { // if not explicitly set by user
+          if (p->srcLen > 0) {
+              if (p->srcLen < MAX_SIZE_FOR_CE_HC_OFF) { // file size too small to benefit from cehc
+                  p->cacheEfficientStrategy = 0;
+              }
+              else if (p->srcLen >= MAX_SIZE_FOR_CE_HC_OFF && p->srcLen < MIN_SIZE_FOR_CE_HC_ON) { // for mid size files, set based on numHashBytes
+                  if (p->numHashBytes < 5) {
+                      // Lower numHashBytes result in more collisions. This produces longer hash chains.
+                      // Cehc benefits are primarily seen when more time is spent searching through the
+                      // dictionary, which happens when chains are longer.
+                      p->cacheEfficientStrategy = 1;
+                  }
+                  else {
+                      p->cacheEfficientStrategy = 0;
+                  }
+              }
+              else { // p->srcLen >= MIN_SIZE_FOR_CE_HC_ON
+                  p->cacheEfficientStrategy = 1; // file lize large enought to benefit from cehc
+              }
+          }
+          else {
+              p->cacheEfficientStrategy = 0;
+          }
+      }
   }
-  else { //use cache efficient settings for lower levels
-      /* Using larger dictionaries for level <= 4 to compensate for compression drop 
+  else {
+      p->cacheEfficientStrategy = 0;
+  }
+
+  if (p->cacheEfficientStrategy) { // use cache efficient settings
+      /* Using larger dictionaries to compensate for compression drop
        * due to unused slots in cache efficient dictionary blocks */
       if (p->dictSize == 0) 
           p->dictSize =
@@ -155,6 +228,14 @@ void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
           ( level <= 6 ? ((UInt32)1 << (level + 19)) :
           ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
           ))));
+  }
+  else { // use reference settings
+      if (p->dictSize == 0)
+          p->dictSize =
+              ( level <= 3 ? ((UInt32)1 << (level * 2 + 16)) :
+              ( level <= 6 ? ((UInt32)1 << (level + 19)) :
+              ( level <= 7 ? ((UInt32)1 << 25) : ((UInt32)1 << 26)
+              )));
   }
 
   if (p->dictSize > p->reduceSize)
@@ -167,17 +248,7 @@ void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
       p->dictSize = v;
   }
 
-  if (p->lc < 0) p->lc = 3;
-  if (p->lp < 0) p->lp = 0;
-  if (p->pb < 0) p->pb = 2;
-
-  if (p->algo < 0) p->algo = (level < 5 ? 0 : 1);
-  if (p->fb < 0) p->fb = (level < 7 ? 32 : 64);
-  if (p->btMode < 0) p->btMode = (p->algo == 0 ? 0 : 1);
-  if (p->numHashBytes < 0) p->numHashBytes = (p->btMode ? 4 : 5);
-  if (p->mc == 0) p->mc = (16 + ((unsigned)p->fb >> 1)) >> (p->btMode ? 0 : 1);
-
-  if (!p->btMode && p->srcLen > MIN_SIZE_FOR_CF_HC) {
+  if (p->cacheEfficientStrategy) {
       /* For hash chain algo, cache efficient hash chains with direct mapping
       * from hash to blocks are used. Size of the hash table is derived from dictSize.
       * Due to certain assumptions on the hashes, a minimum hash table size of 
@@ -208,11 +279,7 @@ UInt32 LzmaEncProps_GetDictSize(const CLzmaEncProps *props2)
 {
   CLzmaEncProps props = *props2;
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
   LzmaEncProps_Normalize_fp(&props);
-#else
-  AOCL_LzmaEncProps_Normalize(&props);
-#endif
 #else
   LzmaEncProps_Normalize(&props);
 #endif
@@ -616,19 +683,17 @@ typedef struct
   #endif
 } CLzmaEnc;
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 //Forward declarations to allow default pointer initializations
 static unsigned GetOptimum(CLzmaEnc* p, UInt32 position);
 
 // Function pointers for optimization overloads
-void (*MatchFinder_CreateVTable_fp)(CMatchFinder* p, IMatchFinder2* vTable) = MatchFinder_CreateVTable;
-int (*MatchFinder_Create_fp)(CMatchFinder* p, UInt32 historySize,
+ void (*MatchFinder_CreateVTable_fp)(CMatchFinder* p, IMatchFinder2* vTable) = MatchFinder_CreateVTable;
+ int (*MatchFinder_Create_fp)(CMatchFinder* p, UInt32 historySize,
   UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
   ISzAllocPtr alloc) = MatchFinder_Create;
-void (*MatchFinder_Free_fp)(CMatchFinder* p, ISzAllocPtr alloc) = MatchFinder_Free;
-unsigned (*GetOptimum_fp)(CLzmaEnc* p, UInt32 position) = GetOptimum;
-SRes(*LzmaEnc_SetProps_fp)(CLzmaEncHandle pp, const CLzmaEncProps* props2) = LzmaEnc_SetProps;
-#endif
+ void (*MatchFinder_Free_fp)(CMatchFinder* p, ISzAllocPtr alloc) = MatchFinder_Free;
+ unsigned (*GetOptimum_fp)(CLzmaEnc* p, UInt32 position) = GetOptimum;
+ SRes(*LzmaEnc_SetProps_fp)(CLzmaEncHandle pp, const CLzmaEncProps* props2) = LzmaEnc_SetProps;
 
 #define MFB (p->matchFinderBase)
 /*
@@ -822,6 +887,12 @@ SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* props2)
 
     MFB.cutValue = props.mc;
     MFB.level = props.level; // pass level to MFB
+    if (!props.btMode && props.cacheEfficientStrategy) {
+        MFB.cacheEfficientSearch = 1; // Search using cache efficient hash chains
+    }
+    else {
+        MFB.cacheEfficientSearch = 0; // Cache efficient search disabled
+    }
 
     p->writeEndMark = (BoolInt)props.writeEndMark;
 
@@ -3513,11 +3584,7 @@ static void LzmaEnc_Construct(CLzmaEnc *p)
     CLzmaEncProps props;
     LzmaEncProps_Init(&props);
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     LzmaEnc_SetProps_fp(p, &props);
-#else
-    AOCL_LzmaEnc_SetProps(p, &props);
-#endif
 #else
     LzmaEnc_SetProps(p, &props);
 #endif
@@ -3534,6 +3601,7 @@ static void LzmaEnc_Construct(CLzmaEnc *p)
 
 CLzmaEncHandle LzmaEnc_Create(ISzAllocPtr alloc)
 {
+  AOCL_SETUP_NATIVE();
   void *p = NULL;
   if (alloc == NULL) return p;
   p = ISzAlloc_Alloc(alloc, sizeof(CLzmaEnc));
@@ -3557,11 +3625,7 @@ static void LzmaEnc_Destruct(CLzmaEnc *p, ISzAllocPtr alloc, ISzAllocPtr allocBi
   #endif
   
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
   MatchFinder_Free_fp(&MFB, allocBig);
-#else
-  AOCL_MatchFinder_Free(&MFB, allocBig);
-#endif
 #else
   MatchFinder_Free(&MFB, allocBig);
 #endif
@@ -3571,6 +3635,7 @@ static void LzmaEnc_Destruct(CLzmaEnc *p, ISzAllocPtr alloc, ISzAllocPtr allocBi
 
 void LzmaEnc_Destroy(CLzmaEncHandle p, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  AOCL_SETUP_NATIVE();
   LzmaEnc_Destruct((CLzmaEnc *)p, alloc, allocBig);
   ISzAlloc_Free(alloc, p);
 }
@@ -3624,11 +3689,7 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpa
       unsigned oci = p->optCur;
       if (p->optEnd == oci)
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
         len = GetOptimum_fp(p, nowPos32);
-#else
-        len = AOCL_GetOptimum(p, nowPos32);
-#endif
 #else
         len = GetOptimum(p, nowPos32);
 #endif
@@ -3952,15 +4013,9 @@ static SRes LzmaEnc_Alloc(CLzmaEnc *p, UInt32 keepWindowSize, ISzAllocPtr alloc,
   #endif
   {
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     if (!MatchFinder_Create_fp(&MFB, dictSize, beforeSize,
         p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
         , allocBig))
-#else
-      if (!AOCL_MatchFinder_Create(&MFB, dictSize, beforeSize,
-          p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
-          , allocBig))
-#endif
 #else
       if (!MatchFinder_Create(&MFB, dictSize, beforeSize,
           p->numFastBytes, LZMA_MATCH_LEN_MAX + 1 /* 21.03 */
@@ -3969,11 +4024,7 @@ static SRes LzmaEnc_Alloc(CLzmaEnc *p, UInt32 keepWindowSize, ISzAllocPtr alloc,
       return SZ_ERROR_MEM;
     p->matchFinderObj = &MFB;
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     MatchFinder_CreateVTable_fp(&MFB, &p->matchFinder);
-#else
-    AOCL_MatchFinder_CreateVTable(&MFB, &p->matchFinder);
-#endif
 #else
     MatchFinder_CreateVTable(&MFB, &p->matchFinder);
 #endif
@@ -4257,6 +4308,7 @@ static SRes LzmaEnc_Encode2(CLzmaEnc *p, ICompressProgress *progress)
 SRes LzmaEnc_Encode(CLzmaEncHandle pp, ISeqOutStream *outStream, ISeqInStream *inStream, ICompressProgress *progress,
     ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  AOCL_SETUP_NATIVE();
   RINOK(LzmaEnc_Prepare(pp, outStream, inStream, alloc, allocBig));
   return LzmaEnc_Encode2((CLzmaEnc *)pp, progress);
 }
@@ -4307,6 +4359,7 @@ unsigned LzmaEnc_IsWriteEndMark(CLzmaEncHandle pp)
 SRes LzmaEnc_MemEncode(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  AOCL_SETUP_NATIVE();
   if (pp == NULL || src == NULL || srcLen == 0 || dest == NULL || destLen == NULL)
       return SZ_ERROR_PARAM;
 
@@ -4361,27 +4414,34 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    AOCL_SETUP_NATIVE();
   if (src == NULL || srcLen == 0 || dest == NULL || propsEncoded == NULL ||
       props == NULL || propsSize == NULL || destLen == NULL ||
       *destLen > (ULLONG_MAX - LZMA_PROPS_SIZE)) // handles case when dest size is < LZMA_PROPS_SIZE, resulting in destLen rolling over in calling APIs
+  {
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return SZ_ERROR_PARAM;
+  }
 
   if (ValidateParams(props) != SZ_OK)
+  {
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return SZ_ERROR_PARAM;
+  }
 
   CLzmaEnc *p = (CLzmaEnc *)LzmaEnc_Create(alloc);
   SRes res;
   if (!p)
+  {
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return SZ_ERROR_MEM;
+  }
 
 #ifdef AOCL_LZMA_OPT
   CLzmaEncProps props_cur = *props;
   props_cur.srcLen = srcLen; //same srcLen value must be set here and passed to LzmaEnc_MemEncode()
-#ifdef AOCL_DYNAMIC_DISPATCHER
   res = LzmaEnc_SetProps_fp(p, &props_cur);
-#else
-  res = AOCL_LzmaEnc_SetProps(p, &props_cur);
-#endif
 #else
   res = LzmaEnc_SetProps(p, props);
 #endif
@@ -4395,57 +4455,107 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
   }
 
   LzmaEnc_Destroy(p, alloc, allocBig);
+  
+  LOG_UNFORMATTED(INFO, logCtx, "Exit");
   return res;
 }
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
 {
-  if (optOff)
-  {
-    //C version
-    MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
-    MatchFinder_Create_fp = MatchFinder_Create;
-    MatchFinder_Free_fp = MatchFinder_Free;
-    GetOptimum_fp = GetOptimum;
-    LzmaEncProps_Normalize_fp = LzmaEncProps_Normalize;
-    LzmaEnc_SetProps_fp = LzmaEnc_SetProps;
-  }
-  else
-  {
-    switch (optLevel)
+    if (optOff)
     {
-    case 0://C version
-    case 1://SSE version
-    case 2://AVX version
-    case 3://AVX2 version
-    default://AVX512 and other versions
-      MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
-      MatchFinder_Create_fp = AOCL_MatchFinder_Create;
-      MatchFinder_Free_fp = AOCL_MatchFinder_Free;
-      GetOptimum_fp = AOCL_GetOptimum;
-      LzmaEncProps_Normalize_fp = AOCL_LzmaEncProps_Normalize;
-      LzmaEnc_SetProps_fp = AOCL_LzmaEnc_SetProps;
-      break;
+        //C version
+        MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
+        MatchFinder_Create_fp       = MatchFinder_Create;
+        MatchFinder_Free_fp         = MatchFinder_Free;
+        GetOptimum_fp               = GetOptimum;
+        LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
+        LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
     }
-  }
+    else
+    {
+        switch (optLevel)
+        {
+        case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_LZMA_OPT
+            MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
+            MatchFinder_Create_fp       = AOCL_MatchFinder_Create;
+            MatchFinder_Free_fp         = AOCL_MatchFinder_Free;
+            GetOptimum_fp               = AOCL_GetOptimum;
+            LzmaEncProps_Normalize_fp   = AOCL_LzmaEncProps_Normalize;
+            LzmaEnc_SetProps_fp         = AOCL_LzmaEnc_SetProps;
+#else
+            MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
+            MatchFinder_Create_fp       = MatchFinder_Create;
+            MatchFinder_Free_fp         = MatchFinder_Free;
+            GetOptimum_fp               = GetOptimum;
+            LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
+            LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
+#endif
+            break;
+#ifdef AOCL_LZMA_OPT
+        case 0://C version
+        case 1://SSE version
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+            MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
+            MatchFinder_Create_fp       = AOCL_MatchFinder_Create;
+            MatchFinder_Free_fp         = AOCL_MatchFinder_Free;
+            GetOptimum_fp               = AOCL_GetOptimum;
+            LzmaEncProps_Normalize_fp   = AOCL_LzmaEncProps_Normalize;
+            LzmaEnc_SetProps_fp         = AOCL_LzmaEnc_SetProps;
+            break;
+#else
+        default:
+            MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
+            MatchFinder_Create_fp       = MatchFinder_Create;
+            MatchFinder_Free_fp         = MatchFinder_Free;
+            GetOptimum_fp               = GetOptimum;
+            LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
+            LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
+            break;
+#endif
+        }
+    }
 }
 
 void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
-  size_t level, size_t windowLog)
+    size_t level, size_t windowLog)
 {
-  aocl_register_lzma_encode_fmv(optOff, optLevel);
+    AOCL_ENTER_CRITICAL(setup_lzmaenc)
+    if (!setup_ok_lzma_encode) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_lzma_encode_fmv(optOff, optLevel);
+        setup_ok_lzma_encode = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lzmaenc)
+}
+
+#ifdef AOCL_LZMA_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_lzmaenc)
+    if (!setup_ok_lzma_encode) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_lzma_encode_fmv(optOff, optLevel);
+        setup_ok_lzma_encode = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lzmaenc)
 }
 #endif
 
-#ifdef AOCL_LZMA_UNIT_TEST
+void aocl_destroy_lzma_encode(void){
+    AOCL_ENTER_CRITICAL(setup_lzma_encode)
+    setup_ok_lzma_encode = 0;
+    AOCL_EXIT_CRITICAL(setup_lzma_encode)
+}
+
+#ifdef AOCL_UNIT_TEST
+#ifdef AOCL_LZMA_OPT
 void Test_LzmaEncProps_Normalize_Dyn(CLzmaEncProps* p) {
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     LzmaEncProps_Normalize_fp(p);
-#else
-    AOCL_LzmaEncProps_Normalize(p);
-#endif
 #else
     LzmaEncProps_Normalize(p);
 #endif
@@ -4472,31 +4582,29 @@ unsigned Test_IsWriteEndMark(CLzmaEncHandle pp, unsigned wem) {
 SRes Test_SetProps_Dyn(CLzmaEncHandle pp, const CLzmaEncProps* props) {
     CLzmaEnc* p = (CLzmaEnc*)pp;
 #ifdef AOCL_LZMA_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
     SRes res = LzmaEnc_SetProps_fp(p, props);
-#else
-    SRes res = AOCL_LzmaEnc_SetProps(p, props);
-#endif
 #else
     SRes res = LzmaEnc_SetProps(p, props);
 #endif
     return res;
 }
 
-SRes Test_Validate_NumFastBytes(CLzmaEncHandle pp, unsigned numFastBytes) {
+TestCLzmaEnc Get_CLzmaEnc_Params(CLzmaEncHandle pp) {
     CLzmaEnc* p = (CLzmaEnc*)pp;
-    if (p->numFastBytes == numFastBytes)
-        return SZ_OK;
-    else
-        return SZ_ERROR_DATA;
+    TestCLzmaEnc params;
+    params.numFastBytes         = p->numFastBytes;
+    params.lc                   = p->lc;
+    params.lp                   = p->lp;
+    params.pb                   = p->pb;
+    params.fastMode             = p->fastMode;
+    params.writeEndMark         = p->writeEndMark;
+    params.dictSize             = p->dictSize;
+    params.btMode               = p->matchFinderBase.btMode;
+    params.cutValue             = p->matchFinderBase.cutValue;
+    params.level                = p->matchFinderBase.level;
+    params.cacheEfficientSearch = p->matchFinderBase.cacheEfficientSearch;
+    params.numHashBytes         = p->matchFinderBase.numHashBytes;
+    return params;
 }
-
-SRes Test_Validate_NumHashBytes(CLzmaEncHandle pp, unsigned numHashBytes) {
-    CLzmaEnc* p = (CLzmaEnc*)pp;
-    if (p->matchFinderBase.numHashBytes == numHashBytes)
-        return SZ_OK;
-    else
-        return SZ_ERROR_DATA;
-}
-
-#endif
+#endif /* AOCL_LZMA_OPT */
+#endif /* AOCL_UNIT_TEST */

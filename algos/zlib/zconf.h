@@ -1,5 +1,6 @@
 /* zconf.h -- configuration of the zlib compression library
  * Copyright (C) 1995-2016 Jean-loup Gailly, Mark Adler
+ * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -38,6 +39,9 @@
 #  define crc32                 z_crc32
 #  define crc32_combine         z_crc32_combine
 #  define crc32_combine64       z_crc32_combine64
+#  define crc32_combine_gen     z_crc32_combine_gen
+#  define crc32_combine_gen64   z_crc32_combine_gen64
+#  define crc32_combine_op      z_crc32_combine_op
 #  define crc32_z               z_crc32_z
 #  define deflate               z_deflate
 #  define deflateBound          z_deflateBound
@@ -238,7 +242,11 @@
 #endif
 
 #ifdef Z_SOLO
-   typedef unsigned long z_size_t;
+#  ifdef _WIN64
+     typedef unsigned long long z_size_t;
+#  else
+     typedef unsigned long z_size_t;
+#  endif
 #else
 #  define z_longlong long long
 #  if defined(NO_SIZE_T)
@@ -351,6 +359,9 @@
 #  ifdef ZLIB_WINAPI
 #    ifdef FAR
 #      undef FAR
+#    endif
+#    ifndef WIN32_LEAN_AND_MEAN
+#      define WIN32_LEAN_AND_MEAN
 #    endif
 #    include <windows.h>
      /* No need for _export, use ZLIB.DEF instead. */
@@ -537,14 +548,11 @@ typedef uLong FAR uLongf;
 #endif
 
 /* AOCL optimization flags */
-#define AOCL_ZLIB_OPT /* Main flag to control all AOCL ZLIB optimizations */
+#include "aoclAlgoOpt.h"
 #ifdef AOCL_ZLIB_OPT
-/* Note: For native compilation comment out below flags based on ISA support */
-#define AOCL_ZLIB_AVX512_OPT
-#define AOCL_ZLIB_AVX2_OPT
-#define AOCL_ZLIB_AVX_OPT
-#define AOCL_ZLIB_SSE2_OPT
-//#define USE_AOCL_ADLER32_AVX2
+     #include <stdint.h>
+#endif /* AOCL_ZLIB_OPT */
+#include <stdint.h>
 #ifdef HAVE_BUILTIN_EXPECT
 #define LIKELY(x) (__builtin_expect((x), 1))
 #define UNLIKELY(x) (__builtin_expect((x), 0))
@@ -552,10 +560,5 @@ typedef uLong FAR uLongf;
 #define LIKELY(x) x
 #define UNLIKELY(x) x
 #endif
-#include <stdint.h>
-#ifdef AOCL_DYNAMIC_DISPATCHER
 extern int zlibOptOff; /* Flag to choose code paths based on dynamic dispatcher settings */
-extern int zlibOptLevel; /* Flag to choose code paths based on dynamic dispatcher settings */
-#endif /* AOCL_DYNAMIC_DISPATCHER */
-#endif /* AOCL_ZLIB_OPT */
 #endif /* ZCONF_H */

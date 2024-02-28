@@ -45,15 +45,29 @@
 
 using namespace std;
 
+/* read function to be called for Hash */
+static uint32_t LZ4_read32(const void* memPtr)
+{
+    uint32_t val; memcpy(&val, memPtr, sizeof(val)); return val;
+}
+
+/* Hash function */
+#define MINMATCH 4
+#define LZ4HC_HASH_LOG 15
+#define HASH_FUNCTION(i)         (((i) * 2654435761U) >> ((MINMATCH*8)-LZ4HC_HASH_LOG))
+static uint32_t LZ4HC_hashPtr(const void* ptr) { return HASH_FUNCTION(LZ4_read32(ptr)); }
+
+#define KB *(1 <<10)
+#define GB *(1U<<30)
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
 
 class TestLoad_1
 {
     //source buffer (original data which we intend to compress).
-    char *orig_data;
+    char *orig_data = NULL;
     size_t orig_sz = 0;
     //destination buffer (kdata obtained after compression).
-    char *compressed_data;
+    char *compressed_data = NULL;
     size_t compressed_sz=0;
 
 public:
@@ -96,9 +110,9 @@ public:
     // Destructor function.
     ~TestLoad_1()
     {
-        if(orig_data != NULL) 
+        if(orig_data) 
             free(orig_data);
-        if(compressed_data != NULL)
+        if(compressed_data)
             free(compressed_data);
     }
 };
@@ -116,17 +130,32 @@ public:
 // Create stream
 class Stream
 {
-public:
+private:
     LZ4_streamHC_t* stream = NULL;
-
+    int create_using_malloc;
+public:
     Stream() { stream = NULL; }
 
-    Stream(int create_using_malloc)
+    Stream(int CREATE_USING_MALLOC)   /* creating stream by malloc if parameter is passed as 1, else creating by API. */
     {
-        if(create_using_malloc == 0) stream = LZ4_createStreamHC();
-        else if(create_using_malloc == 1) { stream = (LZ4_streamHC_t *)malloc(sizeof(LZ4_streamHC_t)); };
+        create_using_malloc = CREATE_USING_MALLOC;
+        if (create_using_malloc == 1)
+        {
+            stream = (LZ4_streamHC_t*)malloc(sizeof(LZ4_streamHC_t));
+            memset(stream, 0, sizeof(LZ4_streamHC_t));
+        }
+        else stream = LZ4_createStreamHC();
     }
 
+    LZ4_streamHC_t* Get_Stream()
+    {
+        return this->stream;
+    }
+
+    void Set_Stream(LZ4_streamHC_t* ptr)
+    {
+        this->stream = ptr;
+    }
     int get_stream_Internal_dirty()
     {
         return stream->internal_donotuse.dirty;
@@ -149,10 +178,81 @@ public:
 
     ~Stream()
     {
-        if(!stream)
-            LZ4_freeStreamHC(stream);
+        if (stream)
+        {
+            if (create_using_malloc == 1) free(stream);
+            else LZ4_freeStreamHC(stream);
+        }
     }
 };
+
+#ifdef AOCL_LZ4HC_OPT
+// Create AOCL stream
+class AOCL_Stream
+{
+private:
+    AOCL_LZ4_streamHC_t* AOCL_stream = NULL;
+    int create_using_malloc;
+
+public:
+    AOCL_Stream() { AOCL_stream = NULL; }
+
+    AOCL_Stream(int CREATE_USING_MALLOC)    /* creating stream by malloc if parameter is passed as 1, else creating by API. */
+    {
+        create_using_malloc = CREATE_USING_MALLOC;
+        if (create_using_malloc == 1)
+        {
+            AOCL_stream = (AOCL_LZ4_streamHC_t*)malloc(sizeof(AOCL_LZ4_streamHC_t));
+            memset(AOCL_stream, 0, sizeof(AOCL_LZ4_streamHC_t));
+        }
+        else AOCL_stream = AOCL_LZ4_createStreamHC();
+    }
+
+    AOCL_LZ4_streamHC_t* Get_Stream()
+    {
+        return this->AOCL_stream;
+    }
+
+    void Set_Stream(AOCL_LZ4_streamHC_t* ptr)
+    {
+        this->AOCL_stream = ptr;
+    }
+
+    int get_stream_Internal_dirty()
+    {
+        return AOCL_stream->internal_donotuse.dirty;
+    }
+
+    void set_stream_Internal_dirty()
+    {
+        AOCL_stream->internal_donotuse.dirty = 1;
+    }
+
+    const LZ4_byte* get_stream_Internal_base()
+    {
+        return AOCL_stream->internal_donotuse.base;
+    }
+
+    const AOCL_LZ4HC_CCtx_internal* get_stream_Internal_dictCtx()
+    {
+        return AOCL_stream->internal_donotuse.dictCtx;
+    }
+
+    int get_stream_Internal_compressionLevel()
+    {
+        return AOCL_stream->internal_donotuse.compressionLevel;
+    }
+
+    ~AOCL_Stream()
+    {
+        if (AOCL_stream)
+        {
+            if (create_using_malloc == 1) free(AOCL_stream);
+            else AOCL_LZ4_freeStreamHC(AOCL_stream);
+        }
+    }
+};
+#endif
 
 bool lz4hc_check_uncompressed_equal_to_original(char *src, unsigned srcSize, char *compressed, unsigned compressedLen)
 {
@@ -185,13 +285,13 @@ class LZ4HC_LZ4_compress_HC : public AOCL_setup_lz4hc {
 TEST_F(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_1) // compress_FAIL_src_is_NULL
 {
     TestLoad_1 d(800);
-    EXPECT_EQ(LZ4_compress_HC(NULL, d.getCompressedBuff(), d.getOrigSize(),d.getCompressedSize(), 9), -1);
+    EXPECT_EQ(LZ4_compress_HC(NULL, d.getCompressedBuff(), d.getOrigSize(),d.getCompressedSize(), 9), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_2) // Compress_FAIL_dst_is_NULL
 {
     TestLoad_1 d(800);
-    EXPECT_EQ(LZ4_compress_HC(d.getOrigData(), NULL, d.getOrigSize(),d.getCompressedSize(), 1), -1);
+    EXPECT_EQ(LZ4_compress_HC(d.getOrigData(), NULL, d.getOrigSize(),d.getCompressedSize(), 1), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_3 ) // compress_PASS
@@ -231,15 +331,29 @@ TEST_F(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_common_6) /
  * "Begin" of LZ4_sizeofStateHC Test
  *********************************************/
 
-TEST(LZ4HC_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_LZ4_sizeofStateHC_commom_1)
+TEST(LZ4HC_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_LZ4_sizeofStateHC_common)
 {
-    EXPECT_EQ(LZ4_sizeofStateHC(), 262200);
+    EXPECT_EQ(LZ4_sizeofStateHC(), 262200);  
 }
 
 /*********************************************
  * "End" of LZ4_sizeofStateHC Test
  *********************************************/
 
+#ifdef AOCL_LZ4HC_OPT
+ /*********************************************
+  * "Begin" of AOCL_LZ4_sizeofStateHC Test
+  *********************************************/
+
+TEST(LZ4HC_AOCL_LZ4_sizeofStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_sizeofStateHC_common)
+{
+    EXPECT_EQ(AOCL_LZ4_sizeofStateHC(), 16908344);
+}
+
+/*********************************************
+ * "End" of AOCL_LZ4_sizeofStateHC Test
+ *********************************************/
+#endif
 
 /*************************************************
  * "Begin" of LZ4_compress_HC_extStateHC Tests
@@ -251,13 +365,13 @@ class LZ4HC_LZ4_compress_HC_extStateHC : public AOCL_setup_lz4hc
 protected:
 
     char *src = NULL;
-    int srcSize;
+    int srcSize= 0;
     char *dst = NULL;
-    int dstSize;
+    int dstSize =0;
     // For the function `LZ4_compress_HC_extStateHC`, `statePtr` is a parameter, declared in test cases. 
 
     // Initialize or reset `src` buffer.
-    void setSrcSize(int sz)
+    void setSrc(int sz)
     {
         if(src)
             free(src);
@@ -270,7 +384,7 @@ protected:
     }
 
     // Initialize or reset `dst` buffer.
-    void setDstSize(int sz)
+    void setDst(int sz)
     {
         if(dst)
             free(dst);
@@ -281,50 +395,50 @@ protected:
     // Destructor function of `LLZ4_compress_HC_extStateHC`.
     ~LZ4HC_LZ4_compress_HC_extStateHC()
     {
-        if(dst != NULL)
+        if(dst)
             free(dst);
-        if(src != NULL)
+        if(src)
             free(src);
     }
 };
 
 TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_1) // statePtr_is_Null
 {
-    setSrcSize(100000);
-    setDstSize(LZ4_compressBound(srcSize));
+    setSrc(100000);
+    setDst(LZ4_compressBound(srcSize));
     EXPECT_EQ(LZ4_compress_HC_extStateHC(NULL, src, dst, srcSize, dstSize, 9), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_2) // src_NULL_srcLen_not_Null
 {
-    setSrcSize(100000);
-    setDstSize(LZ4_compressBound(srcSize));
+    setSrc(100000);
+    setDst(LZ4_compressBound(srcSize));
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_extStateHC(statePtr.stream, NULL, dst, srcSize, dstSize, 9), -1);
+    EXPECT_EQ(LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), NULL, dst, srcSize, dstSize, 9), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_3) // dst_NULL_dstLen_not_Null
 {
-    setSrcSize(100000);
-    setDstSize(LZ4_compressBound(srcSize));
+    setSrc(100000);
+    setDst(LZ4_compressBound(srcSize));
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_extStateHC(statePtr.stream, src, NULL, srcSize, dstSize, 9), -1);
+    EXPECT_EQ(LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, NULL, srcSize, dstSize, 9), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_4) // src_not_NULL_srcLen_0
 {
-    setSrcSize(0);
-    setDstSize(LZ4_compressBound(srcSize));
+    setSrc(0);
+    setDst(LZ4_compressBound(srcSize));
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_extStateHC(statePtr.stream, src, dst, 0, dstSize, 9), 1);  // write token (1 Byte)
+    EXPECT_EQ(LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, 0, dstSize, 9), 1);  // write token (1 Byte)
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_5) // Compression_level_is_greater_than_max
 {
-    setSrcSize(100000);
-    setDstSize(LZ4_compressBound(srcSize));
+    setSrc(100000);
+    setDst(LZ4_compressBound(srcSize));
     Stream statePtr(0);
-    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.stream, src, dst, srcSize, dstSize, 13);
+    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, srcSize, dstSize, 13);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -332,10 +446,10 @@ TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_
 
 TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_6) // Compression_level_is_less_than_min
 {
-    setSrcSize(100000);
-    setDstSize(LZ4_compressBound(srcSize));
+    setSrc(100000);
+    setDst(LZ4_compressBound(srcSize));
     Stream statePtr(0);
-    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.stream, src, dst, srcSize, dstSize, -1);
+    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, srcSize, dstSize, -1);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -344,10 +458,10 @@ TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_
 
 TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_7) // if_coverage1
 {
-    setSrcSize(60000);
-    setDstSize(LZ4_compressBound(srcSize));
+    setSrc(60000);
+    setDst(LZ4_compressBound(srcSize));
     Stream statePtr(0);
-    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.stream, src, dst, srcSize, dstSize, 9);
+    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, srcSize, dstSize, 9);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -355,10 +469,10 @@ TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_
 
 TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_8) // if_coverage2
 {
-    setSrcSize(70000);
-    setDstSize(LZ4_compressBound(srcSize));
+    setSrc(70000);
+    setDst(LZ4_compressBound(srcSize));
     Stream statePtr(0);
-    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.stream, src, dst, srcSize, dstSize, 9);
+    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, srcSize, dstSize, 9);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -366,8 +480,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_
 
 TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_9) // if_coverage3
 {
-    setSrcSize(7000);
-    setDstSize(7000);
+    setSrc(7000);
+    setDst(7000);
     Stream statePtr(0);
     
     for (int i = 0; i < srcSize; i++)
@@ -375,7 +489,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_
         src[i] = 100;
     }
     
-    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.stream, src, dst, srcSize, dstSize, 9);
+    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, srcSize, dstSize, 9);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -383,8 +497,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_
 
 TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_extStateHC_common_10) // if_coverage4
 {
-    setSrcSize(70000);
-    setDstSize(70000);
+    setSrc(70000);
+    setDst(70000);
     Stream statePtr(0);
     
     for (int i = 0; i < srcSize; i++)
@@ -392,7 +506,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_
         src[i] = 100;
     }
     
-    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.stream, src, dst, srcSize, dstSize, 9);
+    int compressedSize = LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, srcSize, dstSize, 9);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -401,6 +515,147 @@ TEST_F(LZ4HC_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_LZ4_compress_HC_
 /*********************************************
  * "End" of LZ4_compress_HC_extStateHC Tests
  *********************************************/
+
+#ifdef AOCL_LZ4HC_OPT
+ /*************************************************
+  * "Begin" of AOCL_LZ4_compress_HC_extStateHC Tests
+  *************************************************/
+
+class LZ4HC_AOCL_LZ4_compress_HC_extStateHC : public AOCL_setup_lz4hc
+{
+
+protected:
+
+    char* src = NULL;
+    int srcSize = 0;
+    char* dst = NULL;
+    int dstSize = 0;
+    // For the function `LZ4_compress_HC_extStateHC`, `statePtr` is a parameter, declared in test cases. 
+
+    // Initialize or reset `src` buffer.
+    void setSrc(int sz)
+    {
+        if (src)
+            free(src);
+        srcSize = sz;
+        src = (char*)malloc(srcSize);
+        for (int i = 0; i < srcSize; i++)
+        {
+            src[i] = rand() % 255;
+        }
+    }
+
+    // Initialize or reset `dst` buffer.
+    void setDst(int sz)
+    {
+        if (dst)
+            free(dst);
+        dstSize = sz;
+        dst = (char*)malloc(dstSize);
+    }
+
+    // Destructor function of `LLZ4_compress_HC_extStateHC`.
+    ~LZ4HC_AOCL_LZ4_compress_HC_extStateHC()
+    {
+        if (dst)
+            free(dst);
+        if (src)
+            free(src);
+    }
+};
+
+TEST_F(LZ4HC_AOCL_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_compress_HC_extStateHC_common_1) // statePtr_is_Null
+{
+    setSrc(100000);
+    setDst(LZ4_compressBound(srcSize));
+    EXPECT_EQ(AOCL_LZ4_compress_HC_extStateHC(NULL, src, dst, srcSize, dstSize, 9), 0);
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_compress_HC_extStateHC_common_2) // src_NULL_srcLen_not_Null
+{
+    setSrc(100000);
+    setDst(LZ4_compressBound(srcSize));
+    AOCL_Stream statePtr(0);
+    EXPECT_EQ(AOCL_LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), NULL, dst, srcSize, dstSize, 9), 0);
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_compress_HC_extStateHC_common_3) // dst_NULL_dstLen_not_Null
+{
+    setSrc(100000);
+    setDst(LZ4_compressBound(srcSize));
+    AOCL_Stream statePtr(0);
+    EXPECT_EQ(AOCL_LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, NULL, srcSize, dstSize, 9), 0);
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_compress_HC_extStateHC_common_4) // src_not_NULL_srcLen_0
+{
+    setSrc(0);
+    setDst(LZ4_compressBound(srcSize));
+    AOCL_Stream statePtr(0);
+    EXPECT_EQ(AOCL_LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, 0, dstSize, 9), 1);  // write token (1 Byte)
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_compress_HC_extStateHC_common_5) // Coverage for level 5 i.e, less than allowed levels
+{
+    setSrc(60000);
+    setDst(LZ4_compressBound(srcSize));
+    AOCL_Stream statePtr(0);
+    int cLevel = 5;
+    int compressedSize = AOCL_LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, srcSize, dstSize, cLevel);
+    EXPECT_EQ(compressedSize, 0);
+
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_compress_HC_extStateHC_common_6) // Coverage for level 6 i.e, minimum allowed level
+{
+    setSrc(70000);
+    setDst(LZ4_compressBound(srcSize));
+    AOCL_Stream statePtr(0);
+    int cLevel = 6;
+    int compressedSize = AOCL_LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, srcSize, dstSize, cLevel);
+    EXPECT_NE(compressedSize, 0);
+
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedSize));
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_compress_HC_extStateHC_common_7) // Coverage for level 9 i.e, maximum allowed level
+{
+    setSrc(7000);
+    setDst(7000);
+    AOCL_Stream statePtr(0);
+    int cLevel = 9;
+
+    for (int i = 0; i < srcSize; i++)
+    {
+        src[i] = 100;
+    }
+
+    int compressedSize = AOCL_LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, srcSize, dstSize, cLevel);
+    EXPECT_NE(compressedSize, 0);
+
+    EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedSize));
+}
+
+TEST_F(LZ4HC_AOCL_LZ4_compress_HC_extStateHC, AOCL_Compression_lz4hc_AOCL_LZ4_compress_HC_extStateHC_common_8) // Coverage for level 10, i.e, level greater than allowed levels
+{
+    setSrc(70000);
+    setDst(70000);
+    AOCL_Stream statePtr(0);
+    int cLevel = 10;
+
+    for (int i = 0; i < srcSize; i++)
+    {
+        src[i] = 100;
+    }
+
+    int compressedSize = AOCL_LZ4_compress_HC_extStateHC(statePtr.Get_Stream(), src, dst, srcSize, dstSize, cLevel);
+    EXPECT_EQ(compressedSize, 0);
+}
+
+/*************************************************
+ * "End" of AOCL_LZ4_compress_HC_extStateHC Tests
+ *************************************************/
+#endif
 
 /*********************************************
  * "Begin" of LZ4_compress_HC_destSize Tests
@@ -413,7 +668,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_de
     TestLoad_1 d(800);
     int srcLen = d.getOrigSize();
 
-    EXPECT_EQ(LZ4_compress_HC_destSize(NULL, d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 9), -1);
+    EXPECT_EQ(LZ4_compress_HC_destSize(NULL, d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 9), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_2) // src_NULL
@@ -422,7 +677,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_de
     Stream statePtr(0);
     int srcLen = d.getOrigSize();
 
-    EXPECT_EQ(LZ4_compress_HC_destSize(statePtr.stream, NULL, d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 9), -1);
+    EXPECT_EQ(LZ4_compress_HC_destSize(statePtr.Get_Stream(), NULL, d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 9), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_3) // dest_NULL
@@ -432,7 +687,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_de
     Stream statePtr(0);
     int srcLen = d.getOrigSize();
 
-    EXPECT_EQ(LZ4_compress_HC_destSize(statePtr.stream, d.getOrigData(), NULL, &srcLen, d.getCompressedSize(), 9), -1);
+    EXPECT_EQ(LZ4_compress_HC_destSize(statePtr.Get_Stream(), d.getOrigData(), NULL, &srcLen, d.getCompressedSize(), 9), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_4) // srcLen_NULL
@@ -440,7 +695,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_de
     TestLoad_1 d(800);
     Stream statePtr(0);
 
-    EXPECT_EQ(LZ4_compress_HC_destSize(statePtr.stream, d.getOrigData(), d.getCompressedBuff(), NULL, d.getCompressedSize(), 9), -1);
+    EXPECT_EQ(LZ4_compress_HC_destSize(statePtr.Get_Stream(), d.getOrigData(), d.getCompressedBuff(), NULL, d.getCompressedSize(), 9), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_5) // dstLen_0
@@ -449,7 +704,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_de
     Stream statePtr(0);
     int srcLen = d.getOrigSize();
 
-    EXPECT_EQ(LZ4_compress_HC_destSize(statePtr.stream, d.getOrigData(), d.getCompressedBuff(), &srcLen, 0, 9), 0);
+    EXPECT_EQ(LZ4_compress_HC_destSize(statePtr.Get_Stream(), d.getOrigData(), d.getCompressedBuff(), &srcLen, 0, 9), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_destSize_common_6) // Pass
@@ -457,7 +712,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_de
     TestLoad_1 d(800);
     Stream statePtr(0);
     int srcLen = d.getOrigSize();
-    int compressedLen = LZ4_compress_HC_destSize(statePtr.stream, d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 9);
+    int compressedLen = LZ4_compress_HC_destSize(statePtr.Get_Stream(), d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 9);
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(),d.getOrigSize(),d.getCompressedBuff(),compressedLen));
 }
 
@@ -467,7 +722,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_de
     Stream statePtr(0);
     int srcLen = d.getOrigSize();
 
-    int compressedLen = LZ4_compress_HC_destSize(statePtr.stream, d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), -1);
+    int compressedLen = LZ4_compress_HC_destSize(statePtr.Get_Stream(), d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), -1);
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(),d.getOrigSize(),d.getCompressedBuff(),compressedLen));
 }
 
@@ -477,7 +732,7 @@ TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_de
     Stream statePtr(0);
     int srcLen = d.getOrigSize();
 
-    int compressedLen = LZ4_compress_HC_destSize(statePtr.stream, d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 13);
+    int compressedLen = LZ4_compress_HC_destSize(statePtr.Get_Stream(), d.getOrigData(), d.getCompressedBuff(), &srcLen, d.getCompressedSize(), 13);
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(d.getOrigData(),d.getOrigSize(),d.getCompressedBuff(),compressedLen));
 }
 
@@ -488,15 +743,34 @@ TEST_F(LZ4HC_LZ4_compress_HC_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_de
 /*********************************************
  * "Begin" of LZ4_createStreamHC Test
  *********************************************/
-TEST(LZ4HC_LZ4_createStreamHC, AOCL_Compression_lz4hc_LZ4_createStreamHC_common_1) // LZ4_freeStreamHC
+TEST(LZ4HC_LZ4_createStreamHC, AOCL_Compression_lz4hc_LZ4_createStreamHC_common) // LZ4_freeStreamHC
 {
-    Stream State_stream(0);
-    ASSERT_NE((long long)State_stream.stream, NULL);
-    EXPECT_EQ(LZ4_freeStreamHC(State_stream.stream), 0);
+    Stream State_stream(0);       /* created using API. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
+    EXPECT_EQ(LZ4_freeStreamHC(State_stream.Get_Stream()), 0);
+    State_stream.Set_Stream(NULL);
 }
 /*********************************************
  * "End" of LZ4_createStreamHC Test
  *********************************************/
+
+#ifdef AOCL_LZ4HC_OPT
+ /*********************************************
+  * "Begin" of AOCL_LZ4_createStreamHC Test
+  *********************************************/
+
+TEST(LZ4HC_AOCL_LZ4_createStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_createStreamHC_common) // AOCL_LZ4_freeStreamHC
+{
+    AOCL_Stream State_stream(0);       /* created using API. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
+    EXPECT_EQ(AOCL_LZ4_freeStreamHC(State_stream.Get_Stream()), 0);
+    State_stream.Set_Stream(NULL);
+}
+
+/*********************************************
+ * "End" of AOCL_LZ4_createStreamHC Test
+ *********************************************/
+#endif
 
 /*********************************************
  * "Begin" of LZ4_freeStreamHC Tests
@@ -509,13 +783,37 @@ TEST(LZ4HC_LZ4_freeStreamHC, AOCL_Compression_lz4hc_LZ4_freeStreamHC_common_1) /
 
 TEST(LZ4HC_LZ4_freeStreamHC, AOCL_Compression_lz4hc_LZ4_freeStreamHC_common_2) // free_legitimate_stream
 {
-    Stream State_stream(0);
-    ASSERT_NE((long long)State_stream.stream, NULL);
-    EXPECT_EQ(LZ4_freeStreamHC(State_stream.stream), 0);
+    Stream State_stream(0);       /* created using API. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
+    EXPECT_EQ(LZ4_freeStreamHC(State_stream.Get_Stream()), 0);
+    State_stream.Set_Stream(NULL);
 }
 
 /*********************************************
  * "End" of LZ4_freeStreamHC Tests
+ *********************************************/
+
+#ifdef AOCL_LZ4HC_OPT
+/*********************************************
+ * "Begin" of AOCL_LZ4_freeStreamHC Tests
+ *********************************************/
+
+TEST(LZ4HC_AOCL_LZ4_freeStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_freeStreamHC_common_1) // NULL_ptr
+{
+    EXPECT_EQ(AOCL_LZ4_freeStreamHC(NULL), 0);
+}
+
+TEST(LZ4HC_AOCL_LZ4_freeStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_freeStreamHC_common_2) // free_legitimate_stream
+{
+    AOCL_Stream State_stream(0);       /* created using API. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
+    EXPECT_EQ(AOCL_LZ4_freeStreamHC(State_stream.Get_Stream()), 0);
+    State_stream.Set_Stream(NULL);
+}
+#endif
+
+/*********************************************
+ * "End" of AOCL_LZ4_freeStreamHC Tests
  *********************************************/
 
 
@@ -525,11 +823,11 @@ TEST(LZ4HC_LZ4_freeStreamHC, AOCL_Compression_lz4hc_LZ4_freeStreamHC_common_2) /
 
 TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_common_1) // Compression_level_less_than_minimum
 {
-    Stream State_stream(1);
-    ASSERT_NE((long long)State_stream.stream, NULL);
+    Stream State_stream(1);       /* created using malloc. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
     int compressionLevel = -1;
 
-    LZ4_resetStreamHC_fast(State_stream.stream, compressionLevel);
+    LZ4_resetStreamHC_fast(State_stream.Get_Stream(), compressionLevel);
     EXPECT_EQ(State_stream.get_stream_Internal_dirty(), 0);
     EXPECT_EQ(State_stream.get_stream_Internal_base(), nullptr);
     EXPECT_EQ(State_stream.get_stream_Internal_dictCtx(), nullptr);
@@ -538,10 +836,10 @@ TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast
 
 TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_common_2) // Compression_level_greater_than_maximum
 {
-    Stream State_stream(1);
-    ASSERT_NE((long long)State_stream.stream, NULL);
+    Stream State_stream(1);       /* created using malloc. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
     int compressionLevel = 13;
-    LZ4_resetStreamHC_fast(State_stream.stream, compressionLevel);
+    LZ4_resetStreamHC_fast(State_stream.Get_Stream(), compressionLevel);
     EXPECT_EQ(State_stream.get_stream_Internal_dirty(), 0);
     EXPECT_EQ(State_stream.get_stream_Internal_base(), nullptr);
     EXPECT_EQ(State_stream.get_stream_Internal_dictCtx(), nullptr);
@@ -550,10 +848,10 @@ TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast
 
 TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_common_3) // Legitimate_ptr
 {
-    Stream State_stream(1);
-    ASSERT_NE((long long)State_stream.stream, NULL);
+    Stream State_stream(1);       /* created using malloc. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
     int compressionLevel = 9;
-    LZ4_resetStreamHC_fast(State_stream.stream, compressionLevel);
+    LZ4_resetStreamHC_fast(State_stream.Get_Stream(), compressionLevel);
     EXPECT_EQ(State_stream.get_stream_Internal_dirty(), 0);
     EXPECT_EQ(State_stream.get_stream_Internal_base(), nullptr);
     EXPECT_EQ(State_stream.get_stream_Internal_dictCtx(), nullptr);
@@ -562,10 +860,10 @@ TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast
 
 TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_common_4) // LZ4_createStreamHC
 {
-    Stream State_stream(0);
-    ASSERT_NE((long long)State_stream.stream, NULL);
+    Stream State_stream(0);       /* created using API. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
     int compressionLevel = 7;
-    LZ4_resetStreamHC_fast(State_stream.stream, compressionLevel);
+    LZ4_resetStreamHC_fast(State_stream.Get_Stream(), compressionLevel);
     EXPECT_EQ(State_stream.get_stream_Internal_dirty(), 0);
     EXPECT_EQ(State_stream.get_stream_Internal_base(), nullptr);
     EXPECT_EQ(State_stream.get_stream_Internal_dictCtx(), nullptr);
@@ -574,14 +872,93 @@ TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast
 
 TEST(LZ4HC_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_LZ4_resetStreamHC_fast_common_5) // input_NULL
 {
-    Stream State_stream;
-    LZ4_resetStreamHC_fast(State_stream.stream, 9);
-    EXPECT_EQ(State_stream.stream, nullptr);
+    Stream State_stream;       /* created NULL stream */
+    LZ4_resetStreamHC_fast(State_stream.Get_Stream(), 9);
+    EXPECT_EQ(State_stream.Get_Stream(), nullptr);
 }
 
 /*********************************************
  * "End" of LZ4_resetStream_fast Tests
  *********************************************/
+
+#ifdef AOCL_LZ4HC_OPT
+ /*********************************************
+  * "Begin" of AOCL_LZ4_resetStreamHC_fast Tests
+  *********************************************/
+
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_1) // Compression_level_less_than_minimum
+{
+    AOCL_Stream State_stream(1);       /* created using malloc. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
+    int compressionLevel = -1;
+
+    AOCL_LZ4_resetStreamHC_fast(State_stream.Get_Stream(), compressionLevel);
+    EXPECT_EQ(State_stream.get_stream_Internal_dirty(), 0);
+    EXPECT_EQ(State_stream.get_stream_Internal_base(), nullptr);
+    EXPECT_EQ(State_stream.get_stream_Internal_dictCtx(), nullptr);
+    EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 9);
+}
+
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_2) // Compression_level_greater_than_maximum
+{
+    AOCL_Stream State_stream(1);       /* created using malloc. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
+    int compressionLevel = 13;
+    AOCL_LZ4_resetStreamHC_fast(State_stream.Get_Stream(), compressionLevel);
+    EXPECT_EQ(State_stream.get_stream_Internal_dirty(), 0);
+    EXPECT_EQ(State_stream.get_stream_Internal_base(), nullptr);
+    EXPECT_EQ(State_stream.get_stream_Internal_dictCtx(), nullptr);
+    EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 12);
+}
+
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_3) // Legitimate_ptr
+{
+    AOCL_Stream State_stream(1);       /* created using malloc. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
+    int compressionLevel = 9;
+    AOCL_LZ4_resetStreamHC_fast(State_stream.Get_Stream(), compressionLevel);
+    EXPECT_EQ(State_stream.get_stream_Internal_dirty(), 0);
+    EXPECT_EQ(State_stream.get_stream_Internal_base(), nullptr);
+    EXPECT_EQ(State_stream.get_stream_Internal_dictCtx(), nullptr);
+    EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 9);
+}
+
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_4) // LZ4_createStreamHC
+{
+    AOCL_Stream State_stream(0);       /* created using API. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
+    int compressionLevel = 7;
+    AOCL_LZ4_resetStreamHC_fast(State_stream.Get_Stream(), compressionLevel);
+    EXPECT_EQ(State_stream.get_stream_Internal_dirty(), 0);
+    EXPECT_EQ(State_stream.get_stream_Internal_base(), nullptr);
+    EXPECT_EQ(State_stream.get_stream_Internal_dictCtx(), nullptr);
+    EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 7);
+}
+
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_5) // State_stream->internal_donotuse.dirty set to 1.
+{
+    AOCL_Stream State_stream(0);       /* created using API. */
+    ASSERT_NE((long long)State_stream.Get_Stream(), NULL);
+    State_stream.set_stream_Internal_dirty();
+    int compressionLevel = 7;
+    AOCL_LZ4_resetStreamHC_fast(State_stream.Get_Stream(), compressionLevel);
+    EXPECT_EQ(State_stream.get_stream_Internal_dirty(), 0);
+    EXPECT_EQ(State_stream.get_stream_Internal_base(), nullptr);
+    EXPECT_EQ(State_stream.get_stream_Internal_dictCtx(), nullptr);
+    EXPECT_EQ(State_stream.get_stream_Internal_compressionLevel(), 7);
+}
+
+TEST(LZ4HC_AOCL_LZ4_resetStreamHC_fast, AOCL_Compression_lz4hc_AOCL_LZ4_resetStreamHC_fast_common_6) // input_NULL
+{
+    AOCL_Stream State_stream;       /* created NULL stream. */
+    AOCL_LZ4_resetStreamHC_fast(State_stream.Get_Stream(), 9);
+    EXPECT_EQ(State_stream.Get_Stream(), nullptr);
+}
+
+/*********************************************
+ * "End" of AOCL_LZ4_resetStream_fast Tests
+ *********************************************/
+#endif
 
 /*********************************************
  * "Begin" of LZ4_loadDictHC Tests
@@ -593,7 +970,7 @@ protected:
 
     // For the function `LZ4_loadDictHC`, `stream` is a parameter.
     LZ4_streamHC_t *stream = NULL;
-    LZ4HC_CCtx_internal* ctxPtr;
+    LZ4HC_CCtx_internal* ctxPtr = NULL;
 
     // Initialization of stream variable takes place at start of each test case.
     void SetUp() override
@@ -621,14 +998,13 @@ protected:
 TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_1) // stream_NULL
 {
     char dict[11] = "helloWorld";
-    EXPECT_EQ(LZ4_loadDictHC(NULL, dict, 10), -1);
+    EXPECT_EQ(LZ4_loadDictHC(NULL, dict, 10), 0);
 }
 
-TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDict_common_2) // dictionary_NULL
+TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_2) // dictionary_NULL
 {
     int dictSize = 66000;
-    
-    EXPECT_EQ(LZ4_loadDictHC(stream, NULL, dictSize), -1);
+    EXPECT_EQ(LZ4_loadDictHC(stream, NULL, dictSize), 0);
 }
 
 TEST_F(LZ4HC_LZ4_loadDictHC, AOCL_Compression_lz4hc_LZ4_loadDictHC_common_3) // dictSize_<_64KB
@@ -719,33 +1095,33 @@ protected:
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_1) // statePtr_NULL
 {
-    setSrcSize(1024);
-    setDstSize(10000);
-    EXPECT_EQ(LZ4_compress_HC_continue(NULL, src, dst, srcSize, dstSize), -1);
+    setSrc(1024);
+    setDst(10000);
+    EXPECT_EQ(LZ4_compress_HC_continue(NULL, src, dst, srcSize, dstSize), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_2) // source_NULL
 {
-    setSrcSize(1024);
-    setDstSize(10000);
+    setSrc(1024);
+    setDst(10000);
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_continue(statePtr.stream, NULL, dst, srcSize, dstSize), -1);
+    EXPECT_EQ(LZ4_compress_HC_continue(statePtr.Get_Stream(), NULL, dst, srcSize, dstSize), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_3) // dest_NULL
 {
-    setSrcSize(1024);
-    setDstSize(10000);
+    setSrc(1024);
+    setDst(10000);
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_continue(statePtr.stream, src, NULL, srcSize, dstSize), -1);
+    EXPECT_EQ(LZ4_compress_HC_continue(statePtr.Get_Stream(), src, NULL, srcSize, dstSize), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_4) // input_sz1
 {
-    setSrcSize(1024);
-    setDstSize(10000);
+    setSrc(1024);
+    setDst(10000);
     Stream statePtr(0);
-    int compressedLen = LZ4_compress_HC_continue(statePtr.stream, src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -753,10 +1129,10 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_5) // input_sz2
 {
-    setSrcSize(5120);
-    setDstSize(10000);
+    setSrc(5120);
+    setDst(10000);
     Stream statePtr(0);
-    int compressedLen = LZ4_compress_HC_continue(statePtr.stream, src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -764,8 +1140,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_6) // prefix_mode_1
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     Stream statePtr(0);
 
     int dictSize = 100;
@@ -777,11 +1153,11 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
         dict[i] = i % 255;
     }
     
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     // This test case is to cover the condition where
     // dictEnd == (const BYTE*)source
     // And dict size is less than 64kb
-    int compressedLen = LZ4_compress_HC_continue(statePtr.stream, &dict[100], dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), &dict[100], dst, srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[100], srcSize, dst, compressedLen));
@@ -789,8 +1165,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_7) // prefix_mode_2
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     Stream statePtr(0);
 
     const int dictSize = 64 * 1024;
@@ -801,14 +1177,14 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
         dict[i] = i % 255;
     }
     memcpy(&dict[dictSize],src,srcSize);
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
-    set_statePtr_dictCtx(statePtr.stream);
-    set_ptr_to_Internal_dictCtx(statePtr.stream);
-    memcpy(d, statePtr.stream, SizeOf_LZ4HC_CCtx_internal());
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
+    set_statePtr_dictCtx(statePtr.Get_Stream());
+    set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
+    memcpy(d, statePtr.Get_Stream(), SizeOf_LZ4HC_CCtx_internal());
     // This test case is to cover the condition where
     // dictEnd == (const BYTE*)source
     // And dict size is equal to 64kb
-    int compressedLen = LZ4_compress_HC_continue(statePtr.stream, &dict[dictSize], dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), &dict[dictSize], dst, srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[dictSize], srcSize, dst, compressedLen));
@@ -819,8 +1195,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_8) // using_LoadDictHC_less_64kb
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     const int dictSize = 100;
     char dict[dictSize];
     Stream statePtr(0);
@@ -830,9 +1206,9 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue(statePtr.stream, src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -840,8 +1216,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_9) // using_LoadDictHC_64kb
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     const int dictSize = 64 * 1024;
     char dict[dictSize];
     Stream statePtr(0);
@@ -851,9 +1227,9 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue(statePtr.stream, src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -861,8 +1237,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_10) // external_dictionary_mode
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     const int dictSize = 100;
     char dict[dictSize];
     Stream statePtr(0);
@@ -872,12 +1248,12 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
-    set_statePtr_dictCtx(statePtr.stream);
-    set_ptr_to_Internal_dictCtx(statePtr.stream);
-    memcpy(d, statePtr.stream, SizeOf_LZ4HC_CCtx_internal());
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
+    set_statePtr_dictCtx(statePtr.Get_Stream());
+    set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
+    memcpy(d, statePtr.Get_Stream(), SizeOf_LZ4HC_CCtx_internal());
     
-    int compressedLen = LZ4_compress_HC_continue(statePtr.stream, src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
     
     EXPECT_NE(compressedLen, 0);
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -887,8 +1263,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_11) // external_dictionary_mode_64kb_dict_size
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     Stream statePtr(0);
 
     const int dictSize = 64 * 1024;
@@ -898,12 +1274,12 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
-    set_statePtr_dictCtx(statePtr.stream);
-    set_ptr_to_Internal_dictCtx(statePtr.stream);
-    memcpy(d, statePtr.stream, SizeOf_LZ4HC_CCtx_internal());
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
+    set_statePtr_dictCtx(statePtr.Get_Stream());
+    set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
+    memcpy(d, statePtr.Get_Stream(), SizeOf_LZ4HC_CCtx_internal());
 
-    int compressedLen = LZ4_compress_HC_continue(statePtr.stream, src, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), src, dst, srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -913,21 +1289,21 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_12) // overlapping_source_dict
 {
-    setSrcSize(150);
-    setDstSize(200);
+    setSrc(150);
+    setDst(200);
     Stream statePtr(0);
 
     const int dictSize = 100;
-    char dict[200];
+    char dict[200] = {0};
     
     memcpy(dict, src, 100);
     for (int i = 150; i < 200; i++)
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, &dict[100], dictSize);
+    LZ4_loadDictHC(statePtr.Get_Stream(), &dict[100], dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue(statePtr.stream, dict, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), dict, dst, srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, dst, compressedLen));
@@ -935,23 +1311,23 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_co
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_common_13) // overlap_greater_than_64kb
 {
-    setSrcSize(150);
-    setDstSize(200);
+    setSrc(150);
+    setDst(200);
     Stream statePtr(0);
     const int dictSize = 65 * 1024;
-    char dict[150 + dictSize];
+    char dict[150 + dictSize] = {0};
     
     memcpy(dict, src, srcSize);
     for (int i = 150; i < dictSize; i++)
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, &dict[100], dictSize);
+    LZ4_loadDictHC(statePtr.Get_Stream(), &dict[100], dictSize);
 
     // initialise ctx pointer to statePtr->internal_donotuse
-    initialize_ctx_and_dictBase(statePtr.stream, (const LZ4_byte *)&dict[100]);
+    initialize_ctx_and_dictBase(statePtr.Get_Stream(), (const LZ4_byte *)&dict[100]);
     
-    int compressedLen = LZ4_compress_HC_continue(statePtr.stream, dict, dst, srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue(statePtr.Get_Stream(), dict, dst, srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, dst, compressedLen));
@@ -971,35 +1347,35 @@ class LZ4HC_LZ4_compress_HC_continue_destSize : public LZ4HC_LZ4_compress_HC_con
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_1) // statePtr_NULL
 {
-    setSrcSize(1024);
-    setDstSize(10000);
+    setSrc(1024);
+    setDst(10000);
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_continue_destSize(NULL, src, dst, &srcSize, dstSize), -1);
+    EXPECT_EQ(LZ4_compress_HC_continue_destSize(NULL, src, dst, &srcSize, dstSize), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_2) // source_NULL
 {
-    setSrcSize(1024);
-    setDstSize(10000);
+    setSrc(1024);
+    setDst(10000);
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_continue_destSize(statePtr.stream, NULL, dst, &srcSize, dstSize), -1);
+    EXPECT_EQ(LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), NULL, dst, &srcSize, dstSize), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_3) // dest_NULL
 {
-    setSrcSize(1024);
-    setDstSize(10000);
+    setSrc(1024);
+    setDst(10000);
     Stream statePtr(0);
-    EXPECT_EQ(LZ4_compress_HC_continue_destSize(statePtr.stream, src, NULL, &srcSize, dstSize), -1);
+    EXPECT_EQ(LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, NULL, &srcSize, dstSize), 0);
 }
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_4) // input_sz1
 {
-    setSrcSize(1024);
-    setDstSize(10000);
+    setSrc(1024);
+    setDst(10000);
     Stream statePtr(0);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -1007,11 +1383,11 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_5) // input_sz2
 {
-    setSrcSize(5120);
-    setDstSize(10000);
+    setSrc(5120);
+    setDst(10000);
     Stream statePtr(0);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -1019,8 +1395,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_6) // prefix_mode_1
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     Stream statePtr(0);
     const int dictSize = 100;
     char dict[200];
@@ -1031,11 +1407,11 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
         dict[i] = i % 255;
     }
     
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     // This test case is to cover the condition where
     // dictEnd == (const BYTE*)source
     // And dict size is less than 64kb
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, &dict[100], dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), &dict[100], dst, &srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[100], srcSize, dst, compressedLen));
@@ -1043,8 +1419,8 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_7) // prefix_mode_2
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     Stream statePtr(0);
     const int dictSize = 64 * 1024;
     char* dict = (char*)malloc((dictSize + srcSize) * sizeof(char));
@@ -1054,14 +1430,14 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
         dict[i] = i % 255;
     }
     memcpy(&dict[dictSize],src,srcSize);
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
-    set_statePtr_dictCtx(statePtr.stream);
-    set_ptr_to_Internal_dictCtx(statePtr.stream);
-    memcpy(d, statePtr.stream, SizeOf_LZ4HC_CCtx_internal());
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
+    set_statePtr_dictCtx(statePtr.Get_Stream());
+    set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
+    memcpy(d, statePtr.Get_Stream(), SizeOf_LZ4HC_CCtx_internal());
     // This test case is to cover the condition where
     // dictEnd == (const BYTE*)source
     // And dict size is equal to 64kb
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, &dict[dictSize], dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), &dict[dictSize], dst, &srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(&dict[dictSize], srcSize, dst, compressedLen));
@@ -1072,19 +1448,19 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_8) // using_LoadDictHC_less_64kb
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     Stream statePtr(0);
     const int dictSize = 100;
-    char dict[dictSize];
+    char dict[dictSize] = { 0 };
     //Initialize a dictionary.
     for (int i = 0; i < dictSize; i++)
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -1092,19 +1468,19 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_9) // using_LoadDictHC_64kb
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     Stream statePtr(0);
     const int dictSize = 64 * 1024;
-    char dict[dictSize];
+    char dict[dictSize] = { 0 };
     //Initialize a dictionary.
     for (int i = 0; i < dictSize; i++)
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -1112,23 +1488,23 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_10) // external_dictionary_mode
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     Stream statePtr(0);
 
     const int dictSize = 100;
-    char dict[dictSize];
+    char dict[dictSize] = { 0 };
     //Initialize a dictionary.
     for (int i = 0; i < dictSize; i++)
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
-    set_statePtr_dictCtx(statePtr.stream);
-    set_ptr_to_Internal_dictCtx(statePtr.stream);
-    memcpy(d, statePtr.stream, SizeOf_LZ4HC_CCtx_internal());
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
+    set_statePtr_dictCtx(statePtr.Get_Stream());
+    set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
+    memcpy(d, statePtr.Get_Stream(), SizeOf_LZ4HC_CCtx_internal());
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
     
     EXPECT_NE(compressedLen, 0);
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -1138,23 +1514,23 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_11) // external_dictionary_mode_64kb_dict_size
 {
-    setSrcSize(100);
-    setDstSize(150);
+    setSrc(100);
+    setDst(150);
     Stream statePtr(0);
 
     const int dictSize = 64 * 1024;
-    char dict[dictSize];
+    char dict[dictSize] = { 0 };
     //Initialize a dictionary.
     for (int i = 0; i < dictSize; i++)
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, dict, dictSize);
-    set_statePtr_dictCtx(statePtr.stream);
-    set_ptr_to_Internal_dictCtx(statePtr.stream);
-    memcpy(d, statePtr.stream, SizeOf_LZ4HC_CCtx_internal());
+    LZ4_loadDictHC(statePtr.Get_Stream(), dict, dictSize);
+    set_statePtr_dictCtx(statePtr.Get_Stream());
+    set_ptr_to_Internal_dictCtx(statePtr.Get_Stream());
+    memcpy(d, statePtr.Get_Stream(), SizeOf_LZ4HC_CCtx_internal());
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, src, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), src, dst, &srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(src, srcSize, dst, compressedLen));
@@ -1164,21 +1540,21 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_12) // overlapping_source_dict
 {
-    setSrcSize(150);
-    setDstSize(200);
+    setSrc(150);
+    setDst(200);
     Stream statePtr(0);
 
     const int dictSize = 100;
-    char dict[200];
+    char dict[200] = { 0 };
     
     memcpy(dict, src, 100);
     for (int i = 150; i < 200; i++)
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, &dict[100], dictSize);
+    LZ4_loadDictHC(statePtr.Get_Stream(), &dict[100], dictSize);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, dict, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), dict, dst, &srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, dst, compressedLen));
@@ -1186,22 +1562,22 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_13) // overlap_greater_than_64kb
 {
-    setSrcSize(150);
-    setDstSize(200);
+    setSrc(150);
+    setDst(200);
     Stream statePtr(0);
 
     const int dictSize = 65 * 1024;
-    char dict[150 + dictSize];
+    char dict[150 + dictSize] = { 0 };
     
     memcpy(dict, src, srcSize);
     for (int i = 150; i < dictSize; i++)
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, &dict[100], dictSize);
-    initialize_ctx_and_dictBase(statePtr.stream, (const LZ4_byte *)&dict[100]);
+    LZ4_loadDictHC(statePtr.Get_Stream(), &dict[100], dictSize);
+    initialize_ctx_and_dictBase(statePtr.Get_Stream(), (const LZ4_byte *)&dict[100]);
     
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, dict, dst, &srcSize, dstSize);
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), dict, dst, &srcSize, dstSize);
     EXPECT_NE(compressedLen, 0);
     
     EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(dict, srcSize, dst, compressedLen));
@@ -1209,25 +1585,25 @@ TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compr
 
 TEST_F(LZ4HC_LZ4_compress_HC_continue_destSize, AOCL_Compression_lz4hc_LZ4_compress_HC_continue_destSize_common_14) // dst < LZ4_compressBound(src)
 {
-    setSrcSize(150);
+    setSrc(150);
     Stream statePtr(0);
 
     int targetDstSize = LZ4_compressBound(srcSize);
-    setDstSize(targetDstSize * 0.75);
-    
+    setDst(targetDstSize * 0.75);
+
     const int dictSize = 65 * 1024;
-    char dict[150 + dictSize];
+    char dict[150 + dictSize] = {0};
     
     memcpy(dict, src, srcSize);
     for (int i = 150; i < dictSize; i++)
     {
         dict[i] = i % 255;
     }
-    LZ4_loadDictHC(statePtr.stream, &dict[100], dictSize);
-    initialize_ctx_and_dictBase(statePtr.stream, (const LZ4_byte *)&dict[100]);
+    LZ4_loadDictHC(statePtr.Get_Stream(), &dict[100], dictSize);
+    initialize_ctx_and_dictBase(statePtr.Get_Stream(), (const LZ4_byte *)&dict[100]);
     int previous_srcSize = srcSize;
 
-    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.stream, dict, dst, &srcSize, dstSize);  // srcSize will be updated to new value.
+    int compressedLen = LZ4_compress_HC_continue_destSize(statePtr.Get_Stream(), dict, dst, &srcSize, dstSize);  // srcSize will be updated to new value.
     EXPECT_NE(compressedLen, 0);
     EXPECT_NE(previous_srcSize, srcSize);
     
@@ -1251,8 +1627,8 @@ protected:
     
     LZ4_streamHC_t *stream = NULL;
     char *dict = NULL;
-    int dictSize;
-    LZ4HC_CCtx_internal *ctx;
+    int dictSize = 0;
+    LZ4HC_CCtx_internal *ctx = NULL;
     
     // Initialize a LZ4_streamHC ptr.
     void SetUp() override
@@ -1301,9 +1677,9 @@ protected:
     // Destructor function of `LLZ4_saveDictHC` class.
     ~LZ4HC_LZ4_saveDictHC()
     {
-        if (dict != NULL)
+        if (dict)
             free(dict);
-        if (stream != NULL)
+        if (stream)
             LZ4_freeStreamHC(stream);
     }
 };
@@ -1335,12 +1711,12 @@ TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_2) // 
 TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_3) // stream_NULL
 {
     char dict[11]="helloWorld";
-    EXPECT_EQ(LZ4_saveDictHC(NULL, dict, 10), -1);
+    EXPECT_EQ(LZ4_saveDictHC(NULL, dict, 10), 0);
 }
 
 TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_4) // dictionary_is_NULL_dictSize_not_zero
 {
-    EXPECT_EQ(LZ4_saveDictHC(stream, NULL, 3), -1);
+    EXPECT_EQ(LZ4_saveDictHC(stream, NULL, 3), 0);
 }
 
 TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_5) // dictionary_size_greater_than_parameter
@@ -1371,17 +1747,18 @@ TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_common_6) // 
  * "End" of LZ4_saveDictHC Tests
  *********************************************/
 
+#ifdef AOCL_LZ4HC_OPT
 /*********************************************
  * "Begin" of AOCL_LZ4HC_countBack Tests
  *********************************************/
 class LZ4HC_AOCL_LZ4HC_countBack : public AOCL_setup_lz4hc
 {
-    protected:
+protected:
     
-    LZ4_byte *ip;
-    LZ4_byte *match;
-    LZ4_byte *iMin;
-    LZ4_byte *mMin;
+    LZ4_byte* ip = NULL;;
+    LZ4_byte* match = NULL;
+    LZ4_byte *iMin = NULL;
+    LZ4_byte *mMin = NULL;
     
     // Initialize pointers.
     void SetUp() override
@@ -1414,9 +1791,9 @@ class LZ4HC_AOCL_LZ4HC_countBack : public AOCL_setup_lz4hc
     // Destructor function of `LZ4HC_AOCL_LZ4HC_countBack` class.
     ~LZ4HC_AOCL_LZ4HC_countBack()
     {
-        if (!ip)
+        if (ip)
             free(ip);
-        if (!match)
+        if (match)
             free(match);
     }
 };
@@ -1727,3 +2104,167 @@ TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_c
 /*********************************************
  * "End" of AOCL_LZ4HC_countBack Tests
  *********************************************/
+
+ /*********************************************
+  * "Begin" of AOCL_LZ4HC_insert Tests
+  *********************************************/
+
+class LZ4HC_AOCL_LZ4HC_Insert : public AOCL_setup_lz4hc
+{
+protected:
+    AOCL_LZ4_streamHC_t* const state = (AOCL_LZ4_streamHC_t*)malloc(sizeof(AOCL_LZ4_streamHC_t));
+    AOCL_LZ4HC_CCtx_internal* hc4 = NULL;
+
+    short compressionLevel = 6;
+
+    // Initialize pointers.
+    void SetUp() override
+    {
+        AOCL_LZ4_streamHC_t* const ctx = AOCL_LZ4_initStreamHC(state, sizeof(*ctx));
+        if (ctx != NULL) {
+            hc4 = &((AOCL_LZ4_streamHC_t*)state)->internal_donotuse;
+            AOCL_LZ4_resetStreamHC_fast((AOCL_LZ4_streamHC_t*)state, this->compressionLevel);
+        }
+    }
+
+
+    // Destructor function of `LZ4HC_AOCL_LZ4HC_insert` class.
+    ~LZ4HC_AOCL_LZ4HC_Insert()
+    {
+        free(state);
+    }
+};
+
+TEST_F(LZ4HC_AOCL_LZ4HC_Insert, AOCL_Compression_lz4hc_AOCL_LZ4HC_Insert_common_1)  
+{
+    
+    /* Test case to determine hashchain for particular hash value
+     * and check latest index matched string is accessed with hcHead. */
+    // level 6
+    int hash_chain_slot_sz = 16;
+    int hash_chain_max = 15;
+    
+    const char* str = "abcdlmnoabcdklmnabcdabcde";
+    LZ4_byte* src = (LZ4_byte*)str;
+
+    Test_AOCL_LZ4HC_init_internal(hc4, src);
+    /* Inserting the complete string uptill iHighLimit */
+    const LZ4_byte* iHighLimit = src + strlen(str) - 3;
+    Test_AOCL_LZ4HC_Insert(hc4, iHighLimit, hash_chain_max, hash_chain_slot_sz);
+
+    /* for sub-string "abcd", determining hashchain block and position in hashChain */
+    uint32_t hashIdx = LZ4HC_hashPtr(src+20);
+    size_t Hcbase = (size_t)hashIdx * hash_chain_slot_sz;
+    size_t hcHeadPos = hc4->chainTable[Hcbase];
+    EXPECT_EQ((uint16_t)hc4->chainTable[hcHeadPos], 20);
+
+    /* for sub-string "klmn", determining hashchain block and position in hashChain */
+    const char* src_2 = "klmn";
+    hashIdx = LZ4HC_hashPtr(src_2);
+    Hcbase = (size_t)hashIdx * hash_chain_slot_sz;
+    hcHeadPos = hc4->chainTable[Hcbase];
+    EXPECT_EQ((uint16_t)hc4->chainTable[hcHeadPos], 12);
+}
+
+TEST_F(LZ4HC_AOCL_LZ4HC_Insert, AOCL_Compression_lz4hc_AOCL_LZ4HC_Insert_common_2)
+{
+
+    /* Test case to determine hashchain for particular hash value
+     * and check latest index matched string in accessed with hcHead
+     * when the number of entries are greater than hash chain slot size. */
+    // level 7
+    int hash_chain_slot_sz = 32;
+    int hash_chain_max = 31;
+
+    const char* str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    LZ4_byte* src = (LZ4_byte*)str;
+
+    Test_AOCL_LZ4HC_init_internal(hc4, src);
+    /* Inserting the complete string uptill iHighLimit */
+    const LZ4_byte* iHighLimit = src + strlen(str) - 3;
+    Test_AOCL_LZ4HC_Insert(hc4, iHighLimit, hash_chain_max, hash_chain_slot_sz);
+
+    /* For string "aaaa", checking if hashchain is still accessible even after 31 entries into it.
+     * and Rotation is working correctly in hash Chain or not. */
+    uint32_t hashIdx = LZ4HC_hashPtr(src + 32);
+    size_t Hcbase = (size_t)hashIdx * hash_chain_slot_sz;
+    size_t hcHeadPos = hc4->chainTable[Hcbase];
+    EXPECT_EQ((uint16_t)hc4->chainTable[hcHeadPos], 32); 
+}
+
+/*********************************************
+  * "End" of AOCL_LZ4HC_insert Tests
+  *********************************************/
+
+/*****************************************************
+ * "Begin" of AOCL_LZ4HC_insertAndGetWiderMatch Tests
+ *****************************************************/
+
+class LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch : public LZ4HC_AOCL_LZ4HC_Insert
+{
+};
+
+TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4HC_InsertAndGetWiderMatch_common_1)   // Disabled PatternAnslysis
+{
+
+    /* Test case to determine hashchain for particular hash value
+     * and check latest index matched string in accessed with hcHead. */
+     // level 6
+    int hash_chain_slot_sz = 16;
+    int hash_chain_max = 15;
+
+    const char* str = "ABCDlmnoABCDMlmnABCDabcdeABCDMkbhlm";
+    LZ4_byte* src = (LZ4_byte*)str;
+    LZ4_byte* ip = src + 25;
+
+    Test_AOCL_LZ4HC_init_internal(hc4, src);
+    Test_AOCL_LZ4HC_Insert(hc4, src + 25, hash_chain_max, hash_chain_slot_sz); /* insert upto second occurence of sub-string "ABCDM" */
+
+    const LZ4_byte* ref = NULL;
+    const LZ4_byte* startpos = ip;
+    int longest = 3;
+
+    /* setting iHighLimit to ensure that pointer does not read memory beyond limit during byte comparison. */
+    const LZ4_byte* iHighLimit = src + strlen(str) - 3;
+
+    int result = Test_AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, ip, iHighLimit, longest, &ref, &startpos, 
+        32 /* maxNbAttempts */, 0 /* patternAnalysis */, 0 /*chainSwap*/, noDictCtx, favorCompressionRatio, hash_chain_max, hash_chain_slot_sz);
+    EXPECT_EQ(result, 5);             /* length of match */
+    EXPECT_EQ(ref, src + 8);          /* ref is match position */
+    EXPECT_EQ(startpos, src + 25);    /* startpos is the point in the string for which match is searched. */
+}
+
+TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4HC_InsertAndGetWiderMatch_common_2) // Enabled Pattern Analysis
+{
+
+    /* Test case to determine hashchain for particular hash value
+     * and check latest index matched string in accessed with hcHead. */
+     // level 6
+    int hash_chain_slot_sz = 16;
+    int hash_chain_max = 15;
+
+    const char* str = "aaaaaaaaaaaaaaaaaaaEDCBaaaaaaaaaaaa123";
+    LZ4_byte* src = (LZ4_byte*)str;
+    LZ4_byte* ip = (LZ4_byte*)str + 23;
+
+    Test_AOCL_LZ4HC_init_internal(hc4, src);
+    Test_AOCL_LZ4HC_Insert(hc4, src + 23, hash_chain_max, hash_chain_slot_sz); /* insert till the occurence of sub-string EDCA */
+
+    const LZ4_byte* ref = NULL;
+    const LZ4_byte* startpos = ip;
+    int longest = 3;
+
+    /* setting iHighLimit to ensure that pointer does not read memory beyond limit during byte comparison. */
+    const LZ4_byte *iHighLimit = src + strlen(str) - 3; 
+    
+    int result = Test_AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, ip, iHighLimit, longest, &ref, &startpos,
+        32 /* maxNbAttempts */, 1 /* patternAnalysis */, 0 /*chainSwap*/, noDictCtx, favorCompressionRatio, hash_chain_max, hash_chain_slot_sz);
+    EXPECT_EQ(result, 12);            /* length of match */
+    EXPECT_EQ(ref, src + 7);          /* ref is match position */
+    EXPECT_EQ(startpos, src + 23);    /*startpos is the point in the string for which match is searched. */
+}
+
+/*****************************************************
+ * "End" of AOCL_LZ4HC_insertAndGetWiderMatch Tests
+ *****************************************************/
+#endif

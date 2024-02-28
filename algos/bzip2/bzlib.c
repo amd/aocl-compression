@@ -29,8 +29,22 @@
      bzBuffToBuffDecompress.  Fixed.
 */
 
+#include "utils/utils.h"
 #include "bzlib_private.h"
 
+#ifdef AOCL_BZIP2_OPT
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+#else
+#define AOCL_SETUP_NATIVE()
+#endif
+
+static int setup_ok_bzip2 = 0; // flag to indicate status of dynamic dispatcher setup
 
 /*---------------------------------------------------*/
 /*--- Compression stuff                           ---*/
@@ -86,19 +100,21 @@ void BZ2_bz__AssertH__fail ( int errcode )
 }
 #endif
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-
 static Bool copy_input_until_stop ( EState* s );
 static Bool copy_output_until_stop ( EState* s );
+#ifdef AOCL_BZIP2_OPT
 static Bool AOCL_copy_input_until_stop ( EState* s );
 static Bool AOCL_copy_output_until_stop ( EState* s );
-static Bool AOCL_copy_output_until_stop_avx2 ( EState* s );
+#ifdef AOCL_BZIP2_AVX_OPT
+static Bool AOCL_copy_output_until_stop_avx ( EState* s );
+#endif /* AOCL_BZIP2_AVX_OPT */
+#endif
 
-Int32 (*AOCL_BZ2_decompress_fp) ( DState* ) = BZ2_decompress;
-Bool  (*AOCL_copy_input_until_stop_fp) ( EState* s) = copy_input_until_stop;
-Bool  (*AOCL_copy_output_until_stop_fp) ( EState* s) = copy_output_until_stop;
+ Int32 (*AOCL_BZ2_decompress_fp) ( DState* ) = BZ2_decompress;
+ Bool  (*AOCL_copy_input_until_stop_fp) ( EState* s) = copy_input_until_stop;
+ Bool  (*AOCL_copy_output_until_stop_fp) ( EState* s) = copy_output_until_stop;
 
-void aocl_register_decompress_fmv(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog)
+void aocl_register_decompress_fmv(int optOff, int optLevel)
 {
    if (optOff)
    {
@@ -108,18 +124,31 @@ void aocl_register_decompress_fmv(int optOff, int optLevel, size_t insize, size_
    {
       switch (optLevel)
       {
+         case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_BZIP2_OPT
+            AOCL_BZ2_decompress_fp = AOCL_BZ2_decompress;
+#else
+            AOCL_BZ2_decompress_fp = BZ2_decompress;
+#endif
+            break;
+#ifdef AOCL_BZIP2_OPT
          case 0://C version
          case 1://SSE version
          case 2://AVX version
          case 3://AVX2 version
          default://AVX512 and other versions
-            AOCL_BZ2_decompress_fp = AOCL_BZ2_decompress;
+             AOCL_BZ2_decompress_fp = AOCL_BZ2_decompress;
             break;
+#else
+         default:
+             AOCL_BZ2_decompress_fp = BZ2_decompress;
+             break;
+#endif
       }
    }
 }
 
-void aocl_register_copy_fmv(int optOff, int optLevel, size_t insize, size_t level, size_t windowLog)
+void aocl_register_copy_fmv(int optOff, int optLevel)
 {
    if (optOff)
    {
@@ -130,17 +159,45 @@ void aocl_register_copy_fmv(int optOff, int optLevel, size_t insize, size_t leve
    {
       switch (optLevel)
       {
+         case -1: // undecided. use defaults based on compiler flags
+#ifdef AOCL_BZIP2_AVX_OPT
+            AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
+            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop_avx;
+#elif defined(AOCL_BZIP2_OPT)
+            AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
+            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop;
+#else
+            AOCL_copy_input_until_stop_fp = copy_input_until_stop;
+            AOCL_copy_output_until_stop_fp = copy_output_until_stop;
+#endif
+            break;
+#ifdef AOCL_BZIP2_OPT
          case 0://C version
          case 1://SSE version
-         case 2://AVX version
             AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
             AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop;
             break;
+         case 2://AVX version
          case 3://AVX2 version
          default://AVX512 and other versions
+#ifdef AOCL_BZIP2_AVX_OPT
+             AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
+            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop_avx;
+#elif defined(AOCL_BZIP2_OPT)
             AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
-            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop_avx2;
+            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop;
+#else
+            AOCL_copy_input_until_stop_fp = copy_input_until_stop;
+            AOCL_copy_output_until_stop_fp = copy_output_until_stop;
+#endif
+            
             break;
+#else
+         default:
+             AOCL_copy_input_until_stop_fp = copy_input_until_stop;
+             AOCL_copy_output_until_stop_fp = copy_output_until_stop;
+             break;
+#endif
       }
    }
 }
@@ -152,13 +209,38 @@ BZ_EXTERN char * BZ_API(aocl_setup_bzip2)
                        size_t level,
                        size_t windowLog )
 {
-   aocl_register_decompress_fmv(optOff, optLevel, insize, level, windowLog);
-   aocl_register_copy_fmv(optOff, optLevel, insize, level, windowLog);
-   aocl_register_mainSimpleSort_fmv(optOff, optLevel, insize, level, windowLog);
+    AOCL_ENTER_CRITICAL(setup_bzip2)
+    if (!setup_ok_bzip2) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_decompress_fmv(optOff, optLevel);
+        aocl_register_copy_fmv(optOff, optLevel);
+        aocl_register_mainSimpleSort_fmv(optOff, optLevel);
+        setup_ok_bzip2 = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_bzip2)
    return NULL;
 }
 
+#ifdef AOCL_BZIP2_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_bzip2)
+    if (!setup_ok_bzip2) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_decompress_fmv(optOff, optLevel);
+        aocl_register_copy_fmv(optOff, optLevel);
+        aocl_register_mainSimpleSort_fmv(optOff, optLevel);
+        setup_ok_bzip2 = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_bzip2)
+}
 #endif
+
+BZ_EXTERN void BZ_API(aocl_destroy_bzip2) (void){
+    AOCL_ENTER_CRITICAL(setup_bzip2)
+    setup_ok_bzip2 = 0;
+    AOCL_EXIT_CRITICAL(setup_bzip2)
+}
 
 /*---------------------------------------------------*/
 static
@@ -482,10 +564,11 @@ Bool copy_output_until_stop ( EState* s )
 }
 
 #ifdef AOCL_BZIP2_OPT
-#ifdef AOCL_BZIP2_AVX2_OPT
+#ifdef AOCL_BZIP2_AVX_OPT
 #include <immintrin.h>
-__attribute__((__target__("avx2")))
+__attribute__((__target__("avx")))
 static inline void FastMemcopy64Bytes(UChar* dst, UChar* src) {
+   AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
    __m256i* dst1 = (__m256i*)dst;
    __m256i* src1 = (__m256i*)src;
    __m256i s1 = _mm256_lddqu_si256(src1);
@@ -504,7 +587,7 @@ static inline void memcpy_ (UChar* dst, UChar* src, UInt32 length) {
    memcpy(dst + fastLen, src + fastLen, length-fastLen);
 }
 
-static Bool AOCL_copy_output_until_stop_avx2 ( EState* s ) {
+static Bool AOCL_copy_output_until_stop_avx ( EState* s ) {
    Bool progress_out = False;
    UInt32 chars_to_copy = 0;
 
@@ -528,7 +611,7 @@ static Bool AOCL_copy_output_until_stop_avx2 ( EState* s ) {
    
    return progress_out;
 }
-#endif /* AOCL_BZIP2_AVX2_OPT */
+#endif /* AOCL_BZIP2_AVX_OPT */
 
 static Bool AOCL_copy_output_until_stop ( EState* s ) {
    Bool progress_out = False;
@@ -573,15 +656,7 @@ Bool handle_compress ( bz_stream* strm )
 
       if (s->state == BZ_S_OUTPUT) {
 #ifdef AOCL_BZIP2_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
          progress_out |= AOCL_copy_output_until_stop_fp ( s );
-#else
-#ifdef AOCL_BZIP2_AVX2_OPT
-         progress_out |= AOCL_copy_output_until_stop_avx2 ( s );
-#else
-         progress_out |= AOCL_copy_output_until_stop ( s );
-#endif
-#endif
 #else
          progress_out |= copy_output_until_stop ( s );
 #endif
@@ -598,11 +673,7 @@ Bool handle_compress ( bz_stream* strm )
 
       if (s->state == BZ_S_INPUT) {
 #ifdef AOCL_BZIP2_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
          progress_in |= AOCL_copy_input_until_stop_fp ( s );
-#else
-         progress_in |= AOCL_copy_input_until_stop ( s );
-#endif
 #else
          progress_in |= copy_input_until_stop ( s );
 #endif
@@ -631,6 +702,7 @@ Bool handle_compress ( bz_stream* strm )
 /*---------------------------------------------------*/
 int BZ_API(BZ2_bzCompress) ( bz_stream *strm, int action )
 {
+   AOCL_SETUP_NATIVE();
    Bool progress;
    EState* s;
    if (strm == NULL) return BZ_PARAM_ERROR;
@@ -731,6 +803,9 @@ int BZ_API(BZ2_bzDecompressInit)
    if (strm->bzfree == NULL) strm->bzfree = default_bzfree;
 
    s = BZALLOC( sizeof(DState) );
+#ifdef AOCL_UNIT_TEST
+   memset(s,0,sizeof(DState));
+#endif
    if (s == NULL) return BZ_MEM_ERROR;
    s->strm                  = strm;
    strm->state              = s;
@@ -1032,6 +1107,7 @@ Bool unRLE_obuf_to_output_SMALL ( DState* s )
 /*---------------------------------------------------*/
 int BZ_API(BZ2_bzDecompress) ( bz_stream *strm )
 {
+   AOCL_SETUP_NATIVE();
    Bool    corrupt;
    DState* s;
    if (strm == NULL) return BZ_PARAM_ERROR;
@@ -1065,11 +1141,7 @@ int BZ_API(BZ2_bzDecompress) ( bz_stream *strm )
       }
       if (s->state >= BZ_X_MAGIC_1) {
 #ifdef AOCL_BZIP2_OPT
-#ifdef AOCL_DYNAMIC_DISPATCHER
          Int32 r = AOCL_BZ2_decompress_fp(s);
-#else
-         Int32 r = AOCL_BZ2_decompress(s);
-#endif
 #else
          Int32 r = BZ2_decompress(s);
 #endif
@@ -1201,6 +1273,7 @@ void BZ_API(BZ2_bzWrite)
                void*   buf, 
                int     len )
 {
+   AOCL_SETUP_NATIVE();
    Int32 n, n2, ret;
    bzFile* bzf = (bzFile*)b;
 
@@ -1398,6 +1471,7 @@ int BZ_API(BZ2_bzRead)
              void*   buf, 
              int     len )
 {
+   AOCL_SETUP_NATIVE();
    Int32   n, ret;
    bzFile* bzf = (bzFile*)b;
 
@@ -1487,15 +1561,20 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
                            int           verbosity, 
                            int           workFactor )
 {
+   AOCL_SETUP_NATIVE();
    bz_stream strm;
+   LOG_UNFORMATTED(TRACE, logCtx, "Enter");
    int ret;
 
    if (dest == NULL || destLen == NULL || 
        source == NULL ||
        blockSize100k < 1 || blockSize100k > 9 ||
        verbosity < 0 || verbosity > 4 ||
-       workFactor < 0 || workFactor > 250) 
+       workFactor < 0 || workFactor > 250)
+   {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
       return BZ_PARAM_ERROR;
+   }
 
    if (workFactor == 0) workFactor = 30;
    strm.bzalloc = NULL;
@@ -1503,7 +1582,11 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
    strm.opaque = NULL;
    ret = BZ2_bzCompressInit ( &strm, blockSize100k, 
                               verbosity, workFactor );
-   if (ret != BZ_OK) return ret;
+   if (ret != BZ_OK)
+   {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
+      return ret;
+   }
 
    strm.next_in = source;
    strm.next_out = dest;
@@ -1517,14 +1600,17 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
    /* normal termination */
    *destLen -= strm.avail_out;   
    BZ2_bzCompressEnd ( &strm );
+   LOG_UNFORMATTED(INFO, logCtx, "Exit");
    return BZ_OK;
 
    output_overflow:
    BZ2_bzCompressEnd ( &strm );
+   LOG_UNFORMATTED(INFO, logCtx, "Exit");
    return BZ_OUTBUFF_FULL;
 
    errhandler:
    BZ2_bzCompressEnd ( &strm );
+   LOG_UNFORMATTED(INFO, logCtx, "Exit");
    return ret;
 }
 
@@ -1538,20 +1624,29 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)
                              int           small,
                              int           verbosity )
 {
+   AOCL_SETUP_NATIVE();
    bz_stream strm;
+   LOG_UNFORMATTED(TRACE, logCtx, "Enter");
    int ret;
 
    if (dest == NULL || destLen == NULL || 
        source == NULL ||
        (small != 0 && small != 1) ||
        verbosity < 0 || verbosity > 4) 
+       {
+          LOG_UNFORMATTED(INFO, logCtx, "Exit");
           return BZ_PARAM_ERROR;
+       }
 
    strm.bzalloc = NULL;
    strm.bzfree = NULL;
    strm.opaque = NULL;
    ret = BZ2_bzDecompressInit ( &strm, verbosity, small );
-   if (ret != BZ_OK) return ret;
+   if (ret != BZ_OK)
+   {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
+      return ret;
+   }
 
    strm.next_in = source;
    strm.next_out = dest;
@@ -1565,19 +1660,24 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)
    /* normal termination */
    *destLen -= strm.avail_out;
    BZ2_bzDecompressEnd ( &strm );
+   LOG_UNFORMATTED(INFO, logCtx, "Exit");
    return BZ_OK;
 
    output_overflow_or_eof:
    if (strm.avail_out > 0) {
       BZ2_bzDecompressEnd ( &strm );
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
       return BZ_UNEXPECTED_EOF;
    } else {
       BZ2_bzDecompressEnd ( &strm );
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
       return BZ_OUTBUFF_FULL;
    };      
 
    errhandler:
    BZ2_bzDecompressEnd ( &strm );
+   
+   LOG_UNFORMATTED(INFO, logCtx, "Exit");
    return ret; 
 }
 

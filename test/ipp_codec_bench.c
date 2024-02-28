@@ -45,203 +45,230 @@
 #include <string.h>
 #include "api/types.h"
 #include "api/aocl_compression.h"
-#include "utils/utils.h"
 #include "codec_bench.h"
 #include "algos/zlib/zlib.h"
 
+#ifdef AOCL_ENABLE_LOG_FEATURE
+#define LOG_LIBRARY_OPENED(algo, log_ctx, fn_name, lib_name)\
+            if (log_ctx.maxLevel)\
+            {\
+                Dl_info dl_info;\
+                dladdr(dlsym(hDL[algo], fn_name), &dl_info);\
+                LOG_FORMATTED(INFO, log_ctx,\
+                "Library [%s] opened from path: [%s]" , lib_name, dl_info.dli_fname);\
+            }
+#else
+#define LOG_LIBRARY_OPENED(algo, log_ctx, fn_name, lib_name)
+#endif /* AOCL_ENABLE_LOG_FEATURE */
+
 //Handle to IPP dynamic library
-VOID *hDL[AOCL_COMPRESSOR_ALGOS_NUM] = { NULL };
+AOCL_VOID *hDL[AOCL_COMPRESSOR_ALGOS_NUM] = { NULL };
 
 //Internal wrapper function declarations that make calls to IPP library APIs
-INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
-            aocl_compression_desc *aocl_codec_handle, VOID *hDL,
-            INTP *verifyRes);
-INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
-            aocl_compression_desc *aocl_codec_handle, VOID *hDL,
-            INTP *verifyRes);
-INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
-            aocl_compression_desc *aocl_codec_handle, VOID *hDL,
-            INTP *verifyRes);
-INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
-            aocl_compression_desc *aocl_codec_handle, VOID *hDL,
-            INTP *verifyRes);
+AOCL_INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
+            aocl_compression_desc *aocl_codec_handle, AOCL_VOID *hDL,
+            AOCL_INTP *verifyRes);
+AOCL_INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
+            aocl_compression_desc *aocl_codec_handle, AOCL_VOID *hDL,
+            AOCL_INTP *verifyRes);
+AOCL_INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
+            aocl_compression_desc *aocl_codec_handle, AOCL_VOID *hDL,
+            AOCL_INTP *verifyRes);
+AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
+            aocl_compression_desc *aocl_codec_handle, AOCL_VOID *hDL,
+            AOCL_INTP *verifyRes);
 
-INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
+AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
               aocl_compression_desc *aocl_codec_handle)
 { 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
-    
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
+    AOCL_CHAR ippDir[MAX_FILENAME_LEN] = {0};
+    AOCL_UINT32 ippDirLen = strlen(codec_bench_handle->ippDir);
+    if (ippDirLen > (MAX_FILENAME_LEN - 1)) { // cant fit name + '\0' in ippDir[]
+        LOG_FORMATTED(ERR, log_ctx,
+            "ippDir name longer than %d characters", (int)(MAX_FILENAME_LEN));
+        return ERR_CODEC_BENCH_ARGS;
+    }
+    else if ((ippDirLen == (MAX_FILENAME_LEN - 1)) && ippDir[ippDirLen - 1] != '/') { // cant fit name + '/' + '\0' in ippDir[]
+        LOG_FORMATTED(ERR, log_ctx,
+            "ippDir name with trailing slash longer than %d characters", (int)(MAX_FILENAME_LEN));
+        return ERR_CODEC_BENCH_ARGS;
+    }
+
+    strncpy(ippDir, codec_bench_handle->ippDir, MAX_FILENAME_LEN);
+
+    if(!(ippDirLen == 0 || (ippDirLen < (MAX_FILENAME_LEN-1) && ippDir[ippDirLen-1] == '/' ))) // add trailing '/' to dir name if missing
+    {
+        ippDir[ippDirLen] = '/';
+        ippDir[ippDirLen+1] = '\0';
+    }
+
     switch (codec_bench_handle->codec_method)
     {
         case LZ4:
         case LZ4HC:
-            hDL[LZ4] = hDL[LZ4HC] =
-			    dlopen("liblz4.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "liblz4.so");
+                hDL[LZ4] = hDL[LZ4HC] =
+			        dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[LZ4] == NULL)
             {
-                LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [liblz4.so]:[%s]",
                 dlerror());
-                LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
-                return -2;
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            if (aocl_codec_handle->printDebugLogs)
-            {
-                Dl_info dl_info;
-                dladdr(dlsym(hDL[LZ4], "LZ4_decompress_safe"), &dl_info);
-                LOG_FORMATTED(INFO, aocl_codec_handle->printDebugLogs,
-                "Library [liblz4.so] opened from path: [%s]",
-                dl_info.dli_fname);
-            }
+            LOG_LIBRARY_OPENED(LZ4, log_ctx, "LZ4_decompress_safe", "liblz4.so")
 #endif
             break;
         case ZLIB:
-            hDL[ZLIB] = dlopen("libz.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "libz.so");
+                hDL[ZLIB] = dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[ZLIB] == NULL)
             {
-                LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [libz.so]:[%s]", dlerror());
-                LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
-                return -2;
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            if (aocl_codec_handle->printDebugLogs)
-            {
-                Dl_info dl_info;
-                dladdr(dlsym(hDL[ZLIB], "uncompress"), &dl_info);
-                LOG_FORMATTED(INFO, aocl_codec_handle->printDebugLogs,
-                "Library [libz.so] opened from path: [%s]", dl_info.dli_fname);
-            }
+            LOG_LIBRARY_OPENED(ZLIB, log_ctx, "uncompress", "libz.so")
 #endif
             break;
         case BZIP2:
-            hDL[BZIP2] = dlopen("libbz2.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "libbz2.so");
+                hDL[BZIP2] = dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[BZIP2] == NULL)
             {
-                LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [libbz2.so]:[%s]", dlerror());
-                LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
-                return -2;
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            if (aocl_codec_handle->printDebugLogs)
-            {
-                Dl_info dl_info;
-                dladdr(dlsym(hDL[BZIP2], "BZ2_bzBuffToBuffDecompress"), &dl_info);
-                LOG_FORMATTED(INFO, aocl_codec_handle->printDebugLogs,
-                "Library [libbz2.so] opened from path: [%s]", dl_info.dli_fname);
-            }
+            LOG_LIBRARY_OPENED(BZIP2, log_ctx, "BZ2_bzBuffToBuffDecompress", "libbz2.so")
 #endif
             break;
         case LZMA:
         case SNAPPY:
         case ZSTD:
-            LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+            LOG_UNFORMATTED(ERR, log_ctx,
             "Only supported compression methods are: LZ4, LZ4HC, ZLIB and BZIP2");
-            LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
-            return -1;
+            LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+            return ERR_CODEC_BENCH_ARGS;
             break;
         case -1:
-            hDL[LZ4] = hDL[LZ4HC] = 
-                dlopen("liblz4.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "liblz4.so");
+                hDL[LZ4] = hDL[LZ4HC] = 
+                    dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[LZ4] == NULL)
             {
-                LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [liblz4.so]:[%s]",
                 dlerror());
-                LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
-                return -2;
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            if (aocl_codec_handle->printDebugLogs)
-            {
-                Dl_info dl_info;
-                dladdr(dlsym(hDL[LZ4], "LZ4_decompress_safe"), &dl_info);
-                LOG_FORMATTED(INFO, aocl_codec_handle->printDebugLogs,
-                "Library [liblz4.so] opened from path: [%s]",
-                dl_info.dli_fname);
-            }
+            LOG_LIBRARY_OPENED(LZ4, log_ctx, "LZ4_decompress_safe", "liblz4.so")
 #endif
-            hDL[ZLIB] = dlopen("libz.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "libz.so");
+                hDL[ZLIB] = dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[ZLIB] == NULL)
             {
-                LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [libz.so]:[%s]", dlerror());
-                LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
-                return -2;
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            if (aocl_codec_handle->printDebugLogs)
-            {
-                Dl_info dl_info;
-                dladdr(dlsym(hDL[ZLIB], "uncompress"), &dl_info);
-                LOG_FORMATTED(INFO, aocl_codec_handle->printDebugLogs,
-                "Library [libz.so] opened from path: [%s]", dl_info.dli_fname);
-            }
+            LOG_LIBRARY_OPENED(ZLIB, log_ctx, "uncompress", "libz.so")
 #endif
-            hDL[BZIP2] = dlopen("libbz2.so", RTLD_NOW | RTLD_DEEPBIND);
+            {
+                AOCL_CHAR ippFullPath[MAX_FILENAME_LEN+10] = {0};
+                strcpy(ippFullPath, ippDir);
+                strcat(ippFullPath, "libbz2.so");
+                hDL[BZIP2] = dlopen(ippFullPath, RTLD_NOW | RTLD_DEEPBIND);
+            }
             if (hDL[BZIP2] == NULL)
             {
-                LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+                LOG_FORMATTED(ERR, log_ctx,
                 "Error in opening dynamic library [libbz2.so]:[%s]", dlerror());
-                LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
-                return -2;
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_METHOD;
             }
 #ifdef _GNU_SOURCE
-            if (aocl_codec_handle->printDebugLogs)
-            {
-                Dl_info dl_info;
-                dladdr(dlsym(hDL[BZIP2], "BZ2_bzBuffToBuffDecompress"), &dl_info);
-                LOG_FORMATTED(INFO, aocl_codec_handle->printDebugLogs,
-                "Library [libbz2.so] opened from path: [%s]", dl_info.dli_fname);
-            }
+            LOG_LIBRARY_OPENED(BZIP2, log_ctx, "BZ2_bzBuffToBuffDecompress", "libbz2.so")
 #endif
             break;
         default:
-            LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+            LOG_UNFORMATTED(ERR, log_ctx,
             "Only supported compression methods are: LZ4, LZ4HC, ZLIB and BZIP2");
-            LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
-            return -1;
+            LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+            return ERR_CODEC_BENCH_ARGS;
             break;
     }
     
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return 0;
 }
 
 
-INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
-                  aocl_compression_desc *aocl_codec_handle, VOID *hDL,
-                  INTP *verifyRes)
+AOCL_INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
+                  aocl_compression_desc *aocl_codec_handle, AOCL_VOID *hDL,
+                  AOCL_INTP *verifyRes)
 {
-    INT64 resultComp = 0;
-    INT64 resultDecomp = 0;
-    UINTP inSize, file_size;
-    INTP k;
+    AOCL_INT64 resultComp = 0;
+    AOCL_INT64 resultDecomp = 0;
+    AOCL_UINTP inSize, file_size;
+    AOCL_INTP k;
 #ifdef WINDOWS_
     timer clkTick;
 #endif
     timeVal startTime, endTime;
     FILE *inFp = codec_bench_handle->fp;
-    INT64 (*fCompDL) (CHAR *, CHAR *, UINTP, UINTP);
-    INT64 (*fDecompDL) (CHAR *, CHAR *, UINTP, UINTP);
+    AOCL_INT64 (*fCompDL) (AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP, AOCL_UINTP);
+    AOCL_INT64 (*fDecompDL) (AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP, AOCL_UINTP);
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
-    fCompDL = (INT64 (*)(CHAR *, CHAR *, UINTP,  UINTP))(uintptr_t)dlsym(hDL, "LZ4_compress_default");
-    fDecompDL = (INT64 (*)(CHAR *, CHAR *, UINTP,  UINTP))(uintptr_t)dlsym(hDL, "LZ4_decompress_safe");
+    fCompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP,  AOCL_UINTP))(uintptr_t)dlsym(hDL, "LZ4_compress_default");
+    fDecompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP,  AOCL_UINTP))(uintptr_t)dlsym(hDL, "LZ4_decompress_safe");
     if (fCompDL == NULL || fDecompDL == NULL)
     {
-        LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_FORMATTED(ERR, log_ctx,
         "Error in loading symbols from dynamic library: [%s]", dlerror());
-        return -2;
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        return ERR_CODEC_BENCH_METHOD;
     }
 #ifdef WINDOWS_
     initTimer(clkTick);
 #endif
     for (k = 0; k < codec_bench_handle->iterations; k++)
     {
+        AOCL_UINT64 temp_cBestTime = 0;
+        AOCL_UINT64 temp_dBestTime = 0;
         inSize = codec_bench_handle->inSize;
         file_size = codec_bench_handle->file_size;
         while (inSize)
@@ -252,7 +279,7 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_handle->inSize = inSize;
             aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
-            aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->outBuf = codec_bench_handle->outPtr;
             getTime(startTime);
             resultComp = fCompDL(aocl_codec_handle->inBuf,
                                  aocl_codec_handle->outBuf,
@@ -265,12 +292,15 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
                                         aocl_codec_handle->cTime;
 
             if (resultComp <= 0)
-                return -1;
+            {
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_ARGS;
+            }
 
             //decompress
             aocl_codec_handle->inSize = resultComp;
             aocl_codec_handle->outSize = inSize;
-            aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->inBuf = codec_bench_handle->outPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
             getTime(startTime);
             resultDecomp = fDecompDL(aocl_codec_handle->inBuf,
@@ -284,7 +314,10 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
                                         aocl_codec_handle->dTime;
 
             if (resultDecomp <= 0)
-                return -1;
+            {
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_ARGS;
+            }
 
             if (codec_bench_handle->verify)
             {
@@ -292,7 +325,8 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
                                     codec_bench_handle->decompPtr, inSize);
                 if (*verifyRes != 0)
                 {
-                    return -3;
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                    return ERR_CODEC_BENCH_FILE_IO;
                 }
             }
             if (codec_bench_handle->print_stats)
@@ -305,63 +339,63 @@ INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
                     aocl_codec_handle->dTime;
                 codec_bench_handle->dSize +=
                     aocl_codec_handle->dSize;
-                codec_bench_handle->cBestTime = 
-                    (codec_bench_handle->cBestTime == 0) ? 
-                    aocl_codec_handle->cTime :
-                    (codec_bench_handle->cBestTime > 
-                     aocl_codec_handle->cTime) ?
-                    aocl_codec_handle->cTime : 
-                    codec_bench_handle->cBestTime;
-                codec_bench_handle->dBestTime = 
-                    (codec_bench_handle->dBestTime == 0) ? 
-                    aocl_codec_handle->dTime :
-                    (codec_bench_handle->dBestTime > 
-                     aocl_codec_handle->dTime) ?
-                    aocl_codec_handle->dTime : 
-                    codec_bench_handle->dBestTime;
+                
+                temp_cBestTime += aocl_codec_handle->cTime;
+                temp_dBestTime += aocl_codec_handle->dTime;
             }
             file_size -= inSize;
             inSize = (file_size > inSize) ? inSize : file_size;
         }
         rewind(inFp);
+
+        if (codec_bench_handle->print_stats)
+        {
+            codec_bench_handle->cBestTime = temp_cBestTime < codec_bench_handle->cBestTime ?
+                temp_cBestTime : codec_bench_handle->cBestTime;
+            codec_bench_handle->dBestTime = temp_dBestTime < codec_bench_handle->dBestTime ?
+                temp_dBestTime : codec_bench_handle->dBestTime;
+        }
     }
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 }
 
-INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
-                    aocl_compression_desc *aocl_codec_handle, VOID *hDL,
-                    INTP *verifyRes)
+AOCL_INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
+                    aocl_compression_desc *aocl_codec_handle, AOCL_VOID *hDL,
+                    AOCL_INTP *verifyRes)
 {
-    INT64 resultComp = 0;
-    INT64 resultDecomp = 0;
-    UINTP inSize, file_size;
-    INTP k;
+    AOCL_INT64 resultComp = 0;
+    AOCL_INT64 resultDecomp = 0;
+    AOCL_UINTP inSize, file_size;
+    AOCL_INTP k;
 #ifdef WINDOWS_
     timer clkTick;
 #endif
     timeVal startTime, endTime;
     FILE *inFp = codec_bench_handle->fp;
-    INT64 (*fCompDL) (CHAR *, CHAR *, UINTP, UINTP, UINTP);
-    INT64 (*fDecompDL) (CHAR *, CHAR *, UINTP, UINTP);
+    AOCL_INT64 (*fCompDL) (AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP, AOCL_UINTP, AOCL_UINTP);
+    AOCL_INT64 (*fDecompDL) (AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP, AOCL_UINTP);
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
-    fCompDL = (INT64 (*)(CHAR *, CHAR *, UINTP,  UINTP,  UINTP))(uintptr_t)dlsym(hDL, "LZ4_compress_HC");
-    fDecompDL = (INT64 (*)(CHAR *, CHAR *, UINTP,  UINTP))(uintptr_t)dlsym(hDL, "LZ4_decompress_safe");
+    fCompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP,  AOCL_UINTP,  AOCL_UINTP))(uintptr_t)dlsym(hDL, "LZ4_compress_HC");
+    fDecompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_CHAR *, AOCL_UINTP,  AOCL_UINTP))(uintptr_t)dlsym(hDL, "LZ4_decompress_safe");
     if (fCompDL == NULL || fDecompDL == NULL)
     {
-        LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_FORMATTED(ERR, log_ctx,
         "Error in loading symbols from dynamic library: [%s]", dlerror());
-        return -2;
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        return ERR_CODEC_BENCH_METHOD;
     }
 #ifdef WINDOWS_
     initTimer(clkTick);
 #endif
     for (k = 0; k < codec_bench_handle->iterations; k++)
     {
+        AOCL_UINT64 temp_cBestTime = 0;
+        AOCL_UINT64 temp_dBestTime = 0;
         inSize = codec_bench_handle->inSize;
         file_size = codec_bench_handle->file_size;
         while (inSize)
@@ -372,7 +406,7 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_handle->inSize = inSize;
             aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
-            aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->outBuf = codec_bench_handle->outPtr;
             getTime(startTime);
             resultComp = fCompDL(aocl_codec_handle->inBuf,
                                  aocl_codec_handle->outBuf,
@@ -386,12 +420,15 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
                                         aocl_codec_handle->cTime;
 
             if (resultComp <= 0)
-                return -1;
+            {
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_ARGS;
+            }
 
             //decompress
             aocl_codec_handle->inSize = resultComp;
             aocl_codec_handle->outSize = inSize;
-            aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->inBuf = codec_bench_handle->outPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
             getTime(startTime);
             resultDecomp = fDecompDL(aocl_codec_handle->inBuf,
@@ -405,7 +442,10 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
                                         aocl_codec_handle->dTime;
 
             if (resultDecomp <= 0)
-                return -1;
+            {
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_ARGS;
+            }
 
             if (codec_bench_handle->verify)
             {
@@ -413,7 +453,8 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
                                     codec_bench_handle->decompPtr, inSize);
                 if (*verifyRes != 0)
                 {
-                    return -3;
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                    return ERR_CODEC_BENCH_FILE_IO;
                 }
             }
             if (codec_bench_handle->print_stats)
@@ -426,63 +467,63 @@ INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
                     aocl_codec_handle->dTime;
                 codec_bench_handle->dSize +=
                     aocl_codec_handle->dSize;
-                codec_bench_handle->cBestTime = 
-                    (codec_bench_handle->cBestTime == 0) ? 
-                    aocl_codec_handle->cTime :
-                    (codec_bench_handle->cBestTime > 
-                     aocl_codec_handle->cTime) ?
-                    aocl_codec_handle->cTime : 
-                    codec_bench_handle->cBestTime;
-                codec_bench_handle->dBestTime = 
-                    (codec_bench_handle->dBestTime == 0) ? 
-                    aocl_codec_handle->dTime :
-                    (codec_bench_handle->dBestTime > 
-                     aocl_codec_handle->dTime) ?
-                    aocl_codec_handle->dTime : 
-                    codec_bench_handle->dBestTime;
+                
+                temp_cBestTime += aocl_codec_handle->cTime;
+                temp_dBestTime += aocl_codec_handle->dTime;
             }
             file_size -= inSize;
             inSize = (file_size > inSize) ? inSize : file_size;
         }
         rewind(inFp);
+
+        if (codec_bench_handle->print_stats)
+        {
+            codec_bench_handle->cBestTime = temp_cBestTime < codec_bench_handle->cBestTime ?
+                temp_cBestTime : codec_bench_handle->cBestTime;
+            codec_bench_handle->dBestTime = temp_dBestTime < codec_bench_handle->dBestTime ?
+                temp_dBestTime : codec_bench_handle->dBestTime;
+        }
     }
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 }
 
-INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
-                   aocl_compression_desc *aocl_codec_handle, VOID *hDL,
-                   INTP *verifyRes)
+AOCL_INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
+                   aocl_compression_desc *aocl_codec_handle, AOCL_VOID *hDL,
+                   AOCL_INTP *verifyRes)
 {
-    INT64 resultComp = 0;
-    INT64 resultDecomp = 0;
-    UINTP inSize, file_size;
-    INTP k, ret;
+    AOCL_INT64 resultComp = 0;
+    AOCL_INT64 resultDecomp = 0;
+    AOCL_UINTP inSize, file_size;
+    AOCL_INTP k, ret;
 #ifdef WINDOWS_
     timer clkTick;
 #endif
     timeVal startTime, endTime;
     FILE *inFp = codec_bench_handle->fp;
-    INT64 (*fCompDL) (UINT8 *, uLongf *, UINT8 *, UINTP, UINTP);
-    INT64 (*fDecompDL) (UINT8 *, uLongf *, UINT8 *, UINTP);
+    AOCL_INT64 (*fCompDL) (AOCL_UINT8 *, uLongf *, AOCL_UINT8 *, AOCL_UINTP, AOCL_UINTP);
+    AOCL_INT64 (*fDecompDL) (AOCL_UINT8 *, uLongf *, AOCL_UINT8 *, AOCL_UINTP);
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
-    fCompDL = (INT64 (*)(UINT8 *, uLongf *, UINT8 *, UINTP,  UINTP))(uintptr_t)dlsym(hDL, "compress2");
-    fDecompDL = (INT64 (*)(UINT8 *, uLongf *, UINT8 *, UINTP))(uintptr_t)dlsym(hDL, "uncompress");
+    fCompDL = (AOCL_INT64 (*)(AOCL_UINT8 *, uLongf *, AOCL_UINT8 *, AOCL_UINTP,  AOCL_UINTP))(uintptr_t)dlsym(hDL, "compress2");
+    fDecompDL = (AOCL_INT64 (*)(AOCL_UINT8 *, uLongf *, AOCL_UINT8 *, AOCL_UINTP))(uintptr_t)dlsym(hDL, "uncompress");
     if (fCompDL == NULL || fDecompDL == NULL)
     {
-        LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_FORMATTED(ERR, log_ctx,
         "Error in loading symbols from dynamic library: [%s]", dlerror());
-        return -2;
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        return ERR_CODEC_BENCH_METHOD;
     }
 #ifdef WINDOWS_
     initTimer(clkTick);
 #endif
     for (k = 0; k < codec_bench_handle->iterations; k++)
-    {
+    {    
+        AOCL_UINT64 temp_cBestTime = 0;
+        AOCL_UINT64 temp_dBestTime = 0;
         inSize = codec_bench_handle->inSize;
         file_size = codec_bench_handle->file_size;
         while (inSize)
@@ -493,13 +534,13 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_handle->inSize = inSize;
             aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
-            aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->outBuf = codec_bench_handle->outPtr;
             getTime(startTime);
-            ret = fCompDL((UINT8 *)aocl_codec_handle->outBuf,
+            ret = fCompDL((AOCL_UINT8 *)aocl_codec_handle->outBuf,
                           (uLongf *)&aocl_codec_handle->outSize,
-                          (UINT8 *)aocl_codec_handle->inBuf,
-                          (UINTP)aocl_codec_handle->inSize,
-                          (UINTP)aocl_codec_handle->level);
+                          (AOCL_UINT8 *)aocl_codec_handle->inBuf,
+                          (AOCL_UINTP)aocl_codec_handle->inSize,
+                          (AOCL_UINTP)aocl_codec_handle->level);
             getTime(endTime);
             aocl_codec_handle->cSize = resultComp = aocl_codec_handle->outSize;
             aocl_codec_handle->cTime = diffTime(clkTick, startTime, endTime);
@@ -507,17 +548,20 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
                                         aocl_codec_handle->cTime;
 
             if (ret != Z_OK)
-                return -1;
+            {
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_ARGS;
+            }
 
             //decompress
             aocl_codec_handle->inSize = resultComp;
             aocl_codec_handle->outSize = inSize;
-            aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->inBuf = codec_bench_handle->outPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
             getTime(startTime);
-            ret = fDecompDL((UINT8 *)aocl_codec_handle->outBuf,
+            ret = fDecompDL((AOCL_UINT8 *)aocl_codec_handle->outBuf,
                             (uLongf *)&aocl_codec_handle->outSize,
-                            (UINT8 *)aocl_codec_handle->inBuf,
+                            (AOCL_UINT8 *)aocl_codec_handle->inBuf,
                             aocl_codec_handle->inSize);
             getTime(endTime);
             aocl_codec_handle->dSize = resultDecomp = aocl_codec_handle->outSize;
@@ -526,7 +570,7 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
                                         aocl_codec_handle->dTime;
 
             if (ret != Z_OK)
-                return -1;
+                return ERR_CODEC_BENCH_ARGS;
 
             if (codec_bench_handle->verify)
             {
@@ -534,7 +578,8 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
                                     codec_bench_handle->decompPtr, inSize);
                 if (*verifyRes != 0)
                 {
-                    return -3;
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                    return ERR_CODEC_BENCH_FILE_IO;
                 }
             }
             if (codec_bench_handle->print_stats)
@@ -547,63 +592,63 @@ INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
                     aocl_codec_handle->dTime;
                 codec_bench_handle->dSize +=
                     aocl_codec_handle->dSize;
-                codec_bench_handle->cBestTime = 
-                    (codec_bench_handle->cBestTime == 0) ? 
-                    aocl_codec_handle->cTime :
-                    (codec_bench_handle->cBestTime > 
-                     aocl_codec_handle->cTime) ?
-                    aocl_codec_handle->cTime : 
-                    codec_bench_handle->cBestTime;
-                codec_bench_handle->dBestTime = 
-                    (codec_bench_handle->dBestTime == 0) ? 
-                    aocl_codec_handle->dTime :
-                    (codec_bench_handle->dBestTime > 
-                     aocl_codec_handle->dTime) ?
-                    aocl_codec_handle->dTime : 
-                    codec_bench_handle->dBestTime;
+                
+                temp_cBestTime += aocl_codec_handle->cTime;
+                temp_dBestTime += aocl_codec_handle->dTime;
             }
             file_size -= inSize;
             inSize = (file_size > inSize) ? inSize : file_size;
         }
         rewind(inFp);
+
+        if (codec_bench_handle->print_stats)
+        {
+            codec_bench_handle->cBestTime = temp_cBestTime < codec_bench_handle->cBestTime ?
+                temp_cBestTime : codec_bench_handle->cBestTime;
+            codec_bench_handle->dBestTime = temp_dBestTime < codec_bench_handle->dBestTime ?
+                temp_dBestTime : codec_bench_handle->dBestTime;
+        }
     }
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 }
 
-INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
-                   aocl_compression_desc *aocl_codec_handle, VOID *hDL,
-                   INTP *verifyRes)
+AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
+                   aocl_compression_desc *aocl_codec_handle, AOCL_VOID *hDL,
+                   AOCL_INTP *verifyRes)
 {
-    INT64 resultComp = 0;
-    INT64 resultDecomp = 0;
-    UINTP inSize, file_size;
-    INTP k, ret;
+    AOCL_INT64 resultComp = 0;
+    AOCL_INT64 resultDecomp = 0;
+    AOCL_UINTP inSize, file_size;
+    AOCL_INTP k, ret;
 #ifdef WINDOWS_
     timer clkTick;
 #endif
     timeVal startTime, endTime;
     FILE *inFp = codec_bench_handle->fp;
-    INT64 (*fCompDL) (CHAR *, UINT32 *, CHAR *, UINT32, UINT32, UINT32, UINT32);
-    INT64 (*fDecompDL) (CHAR *, UINT32 *, CHAR *, UINT32, UINT32, UINT32);
+    AOCL_INT64 (*fCompDL) (AOCL_CHAR *, AOCL_UINT32 *, AOCL_CHAR *, AOCL_UINT32, AOCL_UINT32, AOCL_UINT32, AOCL_UINT32);
+    AOCL_INT64 (*fDecompDL) (AOCL_CHAR *, AOCL_UINT32 *, AOCL_CHAR *, AOCL_UINT32, AOCL_UINT32, AOCL_UINT32);
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
-    fCompDL = (INT64 (*)(CHAR *, UINT32 *, CHAR *, UINT32,  UINT32,  UINT32,  UINT32))(uintptr_t)dlsym(hDL, "BZ2_bzBuffToBuffCompress");
-    fDecompDL = (INT64 (*)(CHAR *, UINT32 *, CHAR *, UINT32,  UINT32,  UINT32))(uintptr_t)dlsym(hDL, "BZ2_bzBuffToBuffDecompress");
+    fCompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_UINT32 *, AOCL_CHAR *, AOCL_UINT32,  AOCL_UINT32,  AOCL_UINT32,  AOCL_UINT32))(uintptr_t)dlsym(hDL, "BZ2_bzBuffToBuffCompress");
+    fDecompDL = (AOCL_INT64 (*)(AOCL_CHAR *, AOCL_UINT32 *, AOCL_CHAR *, AOCL_UINT32,  AOCL_UINT32,  AOCL_UINT32))(uintptr_t)dlsym(hDL, "BZ2_bzBuffToBuffDecompress");
     if (fCompDL == NULL || fDecompDL == NULL)
     {
-        LOG_FORMATTED(ERR, aocl_codec_handle->printDebugLogs,
+        LOG_FORMATTED(ERR, log_ctx,
         "Error in loading symbols from dynamic library: [%s]", dlerror());
-        return -2;
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        return ERR_CODEC_BENCH_METHOD;
     }
 #ifdef WINDOWS_
     initTimer(clkTick);
 #endif
     for (k = 0; k < codec_bench_handle->iterations; k++)
     {
+        AOCL_UINT64 temp_cBestTime = 0;
+        AOCL_UINT64 temp_dBestTime = 0;
         inSize = codec_bench_handle->inSize;
         file_size = codec_bench_handle->file_size;
         while (inSize)
@@ -614,13 +659,13 @@ INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_codec_handle->inSize = inSize;
             aocl_codec_handle->outSize = codec_bench_handle->outSize;
             aocl_codec_handle->inBuf = codec_bench_handle->inPtr;
-            aocl_codec_handle->outBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->outBuf = codec_bench_handle->outPtr;
             getTime(startTime);
-            ret = fCompDL((CHAR *)aocl_codec_handle->outBuf,
-                          (UINT32 *)&aocl_codec_handle->outSize,
-                          (CHAR *)aocl_codec_handle->inBuf,
-                          (UINT32)aocl_codec_handle->inSize,
-                          (INT32)aocl_codec_handle->level, 0, 0);
+            ret = fCompDL((AOCL_CHAR *)aocl_codec_handle->outBuf,
+                          (AOCL_UINT32 *)&aocl_codec_handle->outSize,
+                          (AOCL_CHAR *)aocl_codec_handle->inBuf,
+                          (AOCL_UINT32)aocl_codec_handle->inSize,
+                          (AOCL_INT32)aocl_codec_handle->level, 0, 0);
             getTime(endTime);
             aocl_codec_handle->cSize = resultComp = aocl_codec_handle->outSize;
             aocl_codec_handle->cTime = diffTime(clkTick, startTime, endTime);
@@ -628,18 +673,21 @@ INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
                                         aocl_codec_handle->cTime;
 
             if (ret != Z_OK)
-                return -1;
+            {
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_ARGS;
+            }
 
             //decompress
             aocl_codec_handle->inSize = resultComp;
             aocl_codec_handle->outSize = inSize;
-            aocl_codec_handle->inBuf = codec_bench_handle->compPtr;
+            aocl_codec_handle->inBuf = codec_bench_handle->outPtr;
             aocl_codec_handle->outBuf = codec_bench_handle->decompPtr;
             getTime(startTime);
-            ret = fDecompDL((CHAR *)aocl_codec_handle->outBuf,
-                            (UINT32 *)&aocl_codec_handle->outSize,
-                            (CHAR *)aocl_codec_handle->inBuf,
-                            (UINT32)aocl_codec_handle->inSize, 0, 0);
+            ret = fDecompDL((AOCL_CHAR *)aocl_codec_handle->outBuf,
+                            (AOCL_UINT32 *)&aocl_codec_handle->outSize,
+                            (AOCL_CHAR *)aocl_codec_handle->inBuf,
+                            (AOCL_UINT32)aocl_codec_handle->inSize, 0, 0);
             getTime(endTime);
             aocl_codec_handle->dSize = resultDecomp = aocl_codec_handle->outSize;
             aocl_codec_handle->dTime = diffTime(clkTick, startTime, endTime);
@@ -647,7 +695,10 @@ INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
                                         aocl_codec_handle->dTime;
 
             if (ret != Z_OK)
-                return -1;
+            {
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_ARGS;
+            }
 
             if (codec_bench_handle->verify)
             {
@@ -655,7 +706,8 @@ INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
                                     codec_bench_handle->decompPtr, inSize);
                 if (*verifyRes != 0)
                 {
-                    return -3;
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                    return ERR_CODEC_BENCH_FILE_IO;
                 }
             }
             if (codec_bench_handle->print_stats)
@@ -668,39 +720,36 @@ INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
                     aocl_codec_handle->dTime;
                 codec_bench_handle->dSize +=
                     aocl_codec_handle->dSize;
-                codec_bench_handle->cBestTime = 
-                    (codec_bench_handle->cBestTime == 0) ? 
-                    aocl_codec_handle->cTime :
-                    (codec_bench_handle->cBestTime > 
-                     aocl_codec_handle->cTime) ?
-                    aocl_codec_handle->cTime : 
-                    codec_bench_handle->cBestTime;
-                codec_bench_handle->dBestTime = 
-                    (codec_bench_handle->dBestTime == 0) ? 
-                    aocl_codec_handle->dTime :
-                    (codec_bench_handle->dBestTime > 
-                     aocl_codec_handle->dTime) ?
-                    aocl_codec_handle->dTime : 
-                    codec_bench_handle->dBestTime;
+
+                temp_cBestTime += aocl_codec_handle->cTime;
+                temp_dBestTime += aocl_codec_handle->dTime;
             }
             file_size -= inSize;
             inSize = (file_size > inSize) ? inSize : file_size;
         }
         rewind(inFp);
+
+        if (codec_bench_handle->print_stats)
+        {
+            codec_bench_handle->cBestTime = temp_cBestTime < codec_bench_handle->cBestTime ?
+                temp_cBestTime : codec_bench_handle->cBestTime;
+            codec_bench_handle->dBestTime = temp_dBestTime < codec_bench_handle->dBestTime ?
+                temp_dBestTime : codec_bench_handle->dBestTime;
+        }
     }
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 }
 
-INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
+AOCL_INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
               aocl_compression_desc *aocl_codec_handle)
 {
     aocl_compression_type i; 
-    INTP l, verifyRes, ret;
+    AOCL_INTP l, verifyRes, ret;
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
     aocl_codec_handle->memLimit = codec_bench_handle->mem_limit;
 
@@ -725,74 +774,75 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
                 codec_bench_handle->cSize = 0;
                 codec_bench_handle->dTime = 0;
                 codec_bench_handle->dSize = 0;
-                codec_bench_handle->cBestTime = 0;
-                codec_bench_handle->dBestTime = 0;
+                codec_bench_handle->cBestTime = UINT64_MAX;
+                codec_bench_handle->dBestTime = UINT64_MAX;
                 aocl_codec_handle->level = l;
 
-        switch (i)
-        {
-            case LZ4:
-                ret = ipp_lz4_run(codec_bench_handle,
-                                  aocl_codec_handle, hDL[i],
-                                  &verifyRes);
-                break;
-            case LZ4HC:
-                ret = ipp_lz4hc_run(codec_bench_handle,
-                                    aocl_codec_handle, hDL[i],
-                                    &verifyRes);
-                break;
-            case ZLIB:
-                ret = ipp_zlib_run(codec_bench_handle,
-                                   aocl_codec_handle, hDL[i],
-                                   &verifyRes);
-                break;
-            case BZIP2:
-                ret = ipp_bzip2_run(codec_bench_handle,
-                                   aocl_codec_handle, hDL[i],
-                                   &verifyRes);
-                break;
-            default:
-                return -2;
-
-        }
-        
-        if (ret != 0 && ret != -3)
-        {
-            LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
-                "Error in executing the dynamic library");
-            return -1;
-        }
-
-            if (codec_bench_handle->verify)
-            {
-                if (verifyRes != 0)
+                switch (i)
                 {
-                    printf("IPP [%s-%ld] [Filename:%s] verification: failed\n",
-                           codec_list[i].codec_name,
-                           l, codec_bench_handle->fName);
-                    return -1;
-                }
-            else
-            {
-                printf("IPP [%s-%ld] [Filename:%s] verification: passed\n",
-                        codec_list[i].codec_name,
-                        l, codec_bench_handle->fName);
-            }
+                    case LZ4:
+                        ret = ipp_lz4_run(codec_bench_handle,
+                                        aocl_codec_handle, hDL[i],
+                                        &verifyRes);
+                        break;
+                    case LZ4HC:
+                        ret = ipp_lz4hc_run(codec_bench_handle,
+                                            aocl_codec_handle, hDL[i],
+                                            &verifyRes);
+                        break;
+                    case ZLIB:
+                        ret = ipp_zlib_run(codec_bench_handle,
+                                        aocl_codec_handle, hDL[i],
+                                        &verifyRes);
+                        break;
+                    case BZIP2:
+                        ret = ipp_bzip2_run(codec_bench_handle,
+                                        aocl_codec_handle, hDL[i],
+                                        &verifyRes);
+                        break;
+                    default:
+                        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                        return ERR_CODEC_BENCH_METHOD;
 
+                }
+                
+                if (ret != 0 && ret != -3)
+                {
+                    LOG_UNFORMATTED(ERR, log_ctx,
+                        "Error in executing the dynamic library");
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                    return ERR_CODEC_BENCH_ARGS;
+                }
+
+                if (codec_bench_handle->verify)
+                {
+                    if (verifyRes != 0)
+                    {
+                        printf("IPP [%s-%ld] [Filename:%s] verification: failed\n",
+                               codec_list[i].codec_name,
+                               l, codec_bench_handle->fName);
+                        return ERR_CODEC_BENCH_ARGS;
+                    }
+                    else
+                    {
+                        printf("IPP [%s-%ld] [Filename:%s] verification: passed\n",
+                               codec_list[i].codec_name,
+                               l, codec_bench_handle->fName);
+                    }
                 }
                 if (codec_bench_handle->print_stats)
                 {
-                    codec_bench_handle->cSpeed = (codec_bench_handle->inSize * 
+                    codec_bench_handle->cSpeed = (codec_bench_handle->file_size * 
                         codec_bench_handle->iterations * 1000.0) / 
                         codec_bench_handle->cTime;
-                    codec_bench_handle->dSpeed = (codec_bench_handle->inSize * 
-                        codec_bench_handle->iterations * 1000.0) / 
+                    codec_bench_handle->dSpeed = (codec_bench_handle->file_size *
+                        codec_bench_handle->iterations * 1000.0) /
                         codec_bench_handle->dTime;
                     codec_bench_handle->cBestSpeed = 
-                        (codec_bench_handle->inSize * 1000.0) / 
+                        (codec_bench_handle->file_size * 1000.0) / 
                         codec_bench_handle->cBestTime;
                     codec_bench_handle->dBestSpeed = 
-                        (codec_bench_handle->inSize * 1000.0) / 
+                        (codec_bench_handle->file_size * 1000.0) / 
                         codec_bench_handle->dBestTime;
                     printf("IPP [%s-%ld] [Filename:%s] -------------------------------------\n",
                            codec_list[i].codec_name,
@@ -814,15 +864,15 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
                     printf("Ratio:               %.2f\n",
                            (((codec_bench_handle->cSize*100.0)/
                            codec_bench_handle->iterations)/
-                           codec_bench_handle->inSize));
+                           codec_bench_handle->file_size));
                 }
             }
         }
     }
     else
     {
-        INTP def_level = aocl_codec_handle->level;
-        INTP lower_level, upper_level;
+        AOCL_INTP def_level = aocl_codec_handle->level;
+        AOCL_INTP lower_level, upper_level;
 
         if (def_level == UNINIT_LEVEL)
         {
@@ -845,45 +895,47 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
             codec_bench_handle->cSize = 0;
             codec_bench_handle->dTime = 0;
             codec_bench_handle->dSize = 0;
-            codec_bench_handle->cBestTime = 0;
-            codec_bench_handle->dBestTime = 0;
+            codec_bench_handle->cBestTime = UINT64_MAX;
+            codec_bench_handle->dBestTime = UINT64_MAX;
             aocl_codec_handle->level = l;
 
-        switch (codec_bench_handle->codec_method)
-        {
-            case LZ4:
-                ret = ipp_lz4_run(codec_bench_handle,
-                                  aocl_codec_handle,
-                                  hDL[codec_bench_handle->codec_method],
-                                  &verifyRes);
-                break;
-            case LZ4HC:
-                ret = ipp_lz4hc_run(codec_bench_handle,
+            switch (codec_bench_handle->codec_method)
+            {
+                case LZ4:
+                    ret = ipp_lz4_run(codec_bench_handle,
                                     aocl_codec_handle,
                                     hDL[codec_bench_handle->codec_method],
                                     &verifyRes);
-                break;
-            case ZLIB:
-                ret = ipp_zlib_run(codec_bench_handle,
-                                   aocl_codec_handle,
-                                   hDL[codec_bench_handle->codec_method],
-                                   &verifyRes);
-                break;
-            case BZIP2:
-                ret = ipp_bzip2_run(codec_bench_handle,
-                                   aocl_codec_handle, hDL[codec_bench_handle->codec_method],
-                                   &verifyRes);
-                break;
-            default:
-                return -2;
-        }
+                    break;
+                case LZ4HC:
+                    ret = ipp_lz4hc_run(codec_bench_handle,
+                                        aocl_codec_handle,
+                                        hDL[codec_bench_handle->codec_method],
+                                        &verifyRes);
+                    break;
+                case ZLIB:
+                    ret = ipp_zlib_run(codec_bench_handle,
+                                    aocl_codec_handle,
+                                    hDL[codec_bench_handle->codec_method],
+                                    &verifyRes);
+                    break;
+                case BZIP2:
+                    ret = ipp_bzip2_run(codec_bench_handle,
+                                    aocl_codec_handle, hDL[codec_bench_handle->codec_method],
+                                    &verifyRes);
+                    break;
+                default:
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                    return ERR_CODEC_BENCH_METHOD;
+            }
 
-        if (ret != 0 && ret != -3)
-        {
-            LOG_UNFORMATTED(ERR, aocl_codec_handle->printDebugLogs,
-                "Error in executing the dynamic library");
-            return -1;
-        }
+            if (ret != 0 && ret != -3)
+            {
+                LOG_UNFORMATTED(ERR, log_ctx,
+                    "Error in executing the dynamic library");
+                LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                return ERR_CODEC_BENCH_ARGS;
+            }
 
             if (codec_bench_handle->verify)
             {
@@ -893,7 +945,8 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
                             codec_list[codec_bench_handle->codec_method].codec_name,
                             aocl_codec_handle->level,
                             codec_bench_handle->fName);
-                    return -1;
+                    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+                    return ERR_CODEC_BENCH_ARGS;
                 }
                 else
                 {
@@ -906,15 +959,15 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
             }
             if (codec_bench_handle->print_stats)
             {        
-                codec_bench_handle->cSpeed = (codec_bench_handle->inSize * 
+                codec_bench_handle->cSpeed = (codec_bench_handle->file_size * 
                     codec_bench_handle->iterations * 1000.0) /
                     codec_bench_handle->cTime;
-                codec_bench_handle->dSpeed = (codec_bench_handle->inSize * 
+                codec_bench_handle->dSpeed = (codec_bench_handle->file_size * 
                     codec_bench_handle->iterations * 1000.0) /
                     codec_bench_handle->dTime;
-                codec_bench_handle->cBestSpeed = (codec_bench_handle->inSize * 
+                codec_bench_handle->cBestSpeed = (codec_bench_handle->file_size * 
                     1000.0) / codec_bench_handle->cBestTime;
-                codec_bench_handle->dBestSpeed = (codec_bench_handle->inSize * 
+                codec_bench_handle->dBestSpeed = (codec_bench_handle->file_size * 
                     1000.0) / codec_bench_handle->dBestTime;
                 printf("IPP [%s-%ld] [Filename:%s] -------------------------------------\n",
                         codec_list[codec_bench_handle->codec_method].codec_name,
@@ -936,33 +989,33 @@ INT64 ipp_run(aocl_codec_bench_info *codec_bench_handle,
                 printf("Ratio:               %.2f\n",
                         (((codec_bench_handle->cSize*100.0)/
                         codec_bench_handle->iterations)/
-                        codec_bench_handle->inSize));
+                        codec_bench_handle->file_size));
             }
         }
     }
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 }
 
-INTP ipp_destroy(aocl_compression_desc *aocl_codec_handle)
+AOCL_INTP ipp_destroy(aocl_compression_desc *aocl_codec_handle)
 {
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
     for (aocl_compression_type i = LZ4; i < AOCL_COMPRESSOR_ALGOS_NUM; i++)
     {
         if (hDL[i])
             dlclose(hDL[i]);
     }
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return 0;
 }
 
-INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
+AOCL_INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
                   aocl_codec_bench_info *codec_bench_handle)
 {
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Enter");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
-    INT64 ret = 0;
+    AOCL_INT64 ret = 0;
     
     ret = ipp_setup(codec_bench_handle, aocl_codec_handle);
     if (ret != 0)
@@ -974,11 +1027,12 @@ INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
 
     ipp_destroy(aocl_codec_handle);
 
-    LOG_UNFORMATTED(TRACE, aocl_codec_handle->printDebugLogs, "Exit");
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 
     return 0;
 
 error_exit:
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return ret;
 }
 

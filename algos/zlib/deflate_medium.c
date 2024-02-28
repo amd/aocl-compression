@@ -5,9 +5,14 @@
  * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
+#include "utils/utils.h"
 #include "aocl_zlib_x86.h"
+#include "aocl_zlib_setup.h"
 
 #ifdef AOCL_ZLIB_OPT
+ /* Flag to choose code paths based on dynamic dispatcher settings */
+static int zlibOptLevel = 0; // default, use reference code paths
+
 struct match {
     uInt    match_start;
     uInt    match_length;
@@ -99,9 +104,10 @@ static void aocl_insert_match_v1(deflate_state *s, struct match match)
     }
 }
 
+#ifdef AOCL_ZLIB_AVX_OPT
 /* It will insert the matches strings into the hash table based on match length 
 It uses INSERT_HASH_CRC optimized function */
-__attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
+__attribute__((__target__("avx"))) // uses AVX intrinsics
 static void aocl_insert_match_v2(deflate_state *s, struct match match)
 {
 
@@ -154,6 +160,7 @@ static void aocl_insert_match_v2(deflate_state *s, struct match match)
         */
     }
 }
+#endif
 
 /* It basically finds the longest match moving backwards in the window in order to 
 find better match than the current match */
@@ -291,7 +298,7 @@ local block_state aocl_deflate_medium_v1(deflate_state *s, int flush)
                  * of window index 0 (in particular we have to avoid a match
                  * of the string with itself at the start of the input file).
                  */
-                current_match.match_length = longest_match_x86 (s, hash_head);
+                current_match.match_length = longest_match_x86(s, hash_head);
                 current_match.match_start = s->match_start;
                 if (current_match.match_length < MIN_MATCH)
                     current_match.match_length = 1;
@@ -326,7 +333,7 @@ local block_state aocl_deflate_medium_v1(deflate_state *s, int flush)
                  * of window index 0 (in particular we have to avoid a match
                  * of the string with itself at the start of the input file).
                  */
-                next_match.match_length = longest_match_x86 (s, hash_head);
+                next_match.match_length = longest_match_x86(s, hash_head);
                 next_match.match_start = s->match_start;
                 if (next_match.match_start >= next_match.strstart)
                     /* this can happen due to some restarts */
@@ -361,12 +368,13 @@ local block_state aocl_deflate_medium_v1(deflate_state *s, int flush)
         FLUSH_BLOCK(s, 1);
         return finish_done;
     }
-    if (s->last_lit)
+    if (s->sym_next)
         FLUSH_BLOCK(s, 0);
     return block_done;
 }
 
-__attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
+#ifdef AOCL_ZLIB_AVX_OPT
+__attribute__((__target__("avx"))) // uses AVX intrinsics
 local block_state aocl_deflate_medium_v2(deflate_state *s, int flush)
 {
     struct match current_match, next_match;
@@ -426,7 +434,7 @@ local block_state aocl_deflate_medium_v2(deflate_state *s, int flush)
                  * of window index 0 (in particular we have to avoid a match
                  * of the string with itself at the start of the input file).
                  */
-                current_match.match_length = longest_match_x86 (s, hash_head);
+                current_match.match_length = longest_match_x86(s, hash_head);
                 current_match.match_start = s->match_start;
                 if (current_match.match_length < MIN_MATCH)
                     current_match.match_length = 1;
@@ -461,7 +469,7 @@ local block_state aocl_deflate_medium_v2(deflate_state *s, int flush)
                  * of window index 0 (in particular we have to avoid a match
                  * of the string with itself at the start of the input file).
                  */
-                next_match.match_length = longest_match_x86 (s, hash_head);
+                next_match.match_length = longest_match_x86(s, hash_head);
                 next_match.match_start = s->match_start;
                 if (next_match.match_start >= next_match.strstart)
                     /* this can happen due to some restarts */
@@ -496,22 +504,26 @@ local block_state aocl_deflate_medium_v2(deflate_state *s, int flush)
         FLUSH_BLOCK(s, 1);
         return finish_done;
     }
-    if (s->last_lit)
+    if (s->sym_next)
         FLUSH_BLOCK(s, 0);
     return block_done;
 }
+#endif
 
 block_state ZLIB_INTERNAL deflate_medium(deflate_state *s, int flush)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
+#ifdef AOCL_ZLIB_AVX_OPT
     if(LIKELY(zlibOptLevel > 1))
         return aocl_deflate_medium_v2(s, flush);
     else
         return aocl_deflate_medium_v1(s, flush);
-#elif defined(AOCL_ZLIB_AVX_OPT)
-    return aocl_deflate_medium_v2(s, flush);
 #else
     return aocl_deflate_medium_v1(s, flush);
-#endif /* AOCL_DYNAMIC_DISPATCHER */
+#endif
+}
+
+void ZLIB_INTERNAL aocl_register_deflate_medium(int optOff, int optLevel)
+{
+    zlibOptLevel = optLevel;
 }
 #endif /* AOCL_ZLIB_OPT */

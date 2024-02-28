@@ -26,12 +26,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "utils/utils.h"
 #include <immintrin.h>
 #include <stdint.h>
 #include "zutil.h"
-#ifdef AOCL_ZLIB_UNIT_TEST
-#include "aocl_zlib_test.h"
-#endif /* AOCL_ZLIB_UNIT_TEST */
+
+#ifdef AOCL_ZLIB_OPT
+#include "aocl_zlib_setup.h"
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+
+static int setup_ok_zlib_adler = 0; // flag to indicate status of dynamic dispatcher setup
 
 /* Largest prime smaller than 65536 */
 #define BASE 65521U
@@ -45,7 +55,6 @@
 #define DO4(buf,i)  DO2(buf,i); DO2(buf,i+2);
 #define DO8(buf)  DO4(buf,0); DO4(buf,4);
 
-#ifdef AOCL_ZLIB_OPT
 #define DO4_C(buf,i)  DO2(buf,i); DO2(buf,i+2);
 #define DO8_C(buf,i)  DO4_C(buf,i); DO4_C(buf,i+4);
 #define DO16(buf)   DO8_C(buf,0); DO8_C(buf,8);
@@ -53,15 +62,13 @@
 #define MOD(a) a %= BASE
 #define MOD28(a) a %= BASE
 #define MOD63(a) a %= BASE
-#endif /* AOCL_ZLIB_OPT */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
 /* Function pointer holding the optimized variant as per the detected CPU
  * features */
 static uint32_t (*adler32_x86_fp)(uint32_t adler, const Bytef* buf, z_size_t len) =
 (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
-#endif
 
+#ifdef AOCL_ZLIB_AVX_OPT
 // This function separation prevents compiler from generating VZEROUPPER instruction
 // because of transition from VEX to Non-VEX code resulting in performance drop
 static inline uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_t len)
@@ -89,10 +96,10 @@ static inline uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_
     return sum_A | (sum_B << 16);
 }
 
-#ifdef AOCL_ZLIB_AVX_OPT
 __attribute__((__target__("avx"))) // uses SSSE3 intrinsics
 static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_t len)
 {
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     uint32_t sum_A = adler & 0xffff;
     uint32_t sum_B = adler >> 16;
 
@@ -186,6 +193,7 @@ static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_
 __attribute__((__target__("avx2")))
 static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size_t len)
 {
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     uint32_t sum_A = adler & 0xffff;
     uint32_t sum_B = adler >> 16;
 
@@ -253,25 +261,16 @@ static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size
 }
 #endif /* AOCL_ZLIB_AVX2_OPT && USE_AOCL_ADLER32_AVX2 */
 
-#ifdef AOCL_ZLIB_OPT
-/* This function intercepts non optimized code path and orchestrate 
- * optimized code flow path */
-uint32_t ZLIB_INTERNAL adler32_x86(uint32_t sum_A, const Bytef *buf, z_size_t len)
+uint32_t ZLIB_INTERNAL adler32_x86_internal(uint32_t sum_A, const Bytef* buf, z_size_t len)
 {
     unsigned long sum_B;
-#if !defined(AOCL_DYNAMIC_DISPATCHER) && !defined(AOCL_ZLIB_AVX_OPT)
+#if !defined(AOCL_ZLIB_AVX_OPT)
     unsigned n;
 #endif
 
     if (buf && len >= 32)
     {
-#ifdef AOCL_DYNAMIC_DISPATCHER
         return adler32_x86_fp(sum_A, buf, len);
-#elif defined(AOCL_ZLIB_AVX2_OPT) && defined(USE_AOCL_ADLER32_AVX2)
-        return adler32_x86_avx2(sum_A, buf, len);
-#elif defined(AOCL_ZLIB_AVX_OPT)
-        return adler32_x86_avx(sum_A, buf, len);
-#endif
     }
 
     /* split Adler-32 into component sums */
@@ -308,7 +307,7 @@ uint32_t ZLIB_INTERNAL adler32_x86(uint32_t sum_A, const Bytef *buf, z_size_t le
         return sum_A | (sum_B << 16);
     }
 
-#if !defined(AOCL_DYNAMIC_DISPATCHER) && !defined(AOCL_ZLIB_AVX_OPT)
+#if !defined(AOCL_ZLIB_AVX_OPT)
     /* do length NMAX blocks -- requires just one modulo operation */
     while (len >= NMAX)
     {
@@ -345,15 +344,12 @@ uint32_t ZLIB_INTERNAL adler32_x86(uint32_t sum_A, const Bytef *buf, z_size_t le
     /* return recombined sums */
     return sum_A | (sum_B << 16);
 }
-#endif /* AOCL_ZLIB_OPT */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-void aocl_setup_adler32_fmv(int optOff, int optLevel,
-                            int insize, int level, int windowLog)
+static inline void aocl_setup_adler32_fmv(int optOff, int optLevel)
 {
-    if (UNLIKELY(optOff==1))
+    if (UNLIKELY(optOff == 1))
     {
-        adler32_x86_fp = (uint32_t (*)(uint32_t, const Bytef *, z_size_t))adler32;
+        adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
     }
     else
     {
@@ -361,27 +357,67 @@ void aocl_setup_adler32_fmv(int optOff, int optLevel,
         {
         case 0://C version
         case 1://SSE version
-            adler32_x86_fp = (uint32_t (*)(uint32_t, const Bytef *, z_size_t))adler32;
+            adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
             break;
         case 2://AVX version
+#ifdef AOCL_ZLIB_AVX_OPT
             adler32_x86_fp = adler32_x86_avx;
+#else
+            adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
+#endif
             break;
+        case -1: // undecided. use defaults based on compiler flags
         case 3://AVX2 version
         default://AVX512 and other versions
 #if defined(AOCL_ZLIB_AVX2_OPT) && defined(USE_AOCL_ADLER32_AVX2)
             adler32_x86_fp = adler32_x86_avx2;
-#else
+#elif defined(AOCL_ZLIB_AVX_OPT)
             adler32_x86_fp = adler32_x86_avx;
+#else
+            adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
 #endif
             break;
         }
     }
 }
-#endif
 
-#ifdef AOCL_ZLIB_UNIT_TEST
-uint32_t ZEXPORT Test_adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len)
-{
-    return adler32_x86(adler, buf, len);
+void ZLIB_INTERNAL aocl_setup_adler32(int optOff, int optLevel){
+    AOCL_ENTER_CRITICAL(setup_zlib_adler)
+    if (!setup_ok_zlib_adler) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_setup_adler32_fmv(optOff, optLevel);
+        setup_ok_zlib_adler = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_adler)
 }
-#endif /* AOCL_ZLIB_UNIT_TEST */
+
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_adler)
+    if (!setup_ok_zlib_adler) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_setup_adler32_fmv(optOff, optLevel);
+        setup_ok_zlib_adler = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_adler)
+}
+
+void ZLIB_INTERNAL aocl_destroy_adler32(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_adler)
+    setup_ok_zlib_adler = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib_adler)
+}
+
+#endif /* AOCL_ZLIB_OPT */
+
+/* This function intercepts non optimized code path and orchestrate
+ * optimized code flow path */
+uint32_t ZEXPORT adler32_x86(uint32_t sum_A, const Bytef* buf, z_size_t len)
+{
+#ifdef AOCL_ZLIB_OPT
+    AOCL_SETUP_NATIVE();
+    return adler32_x86_internal(sum_A, buf, len);
+#else
+    return adler32(sum_A, buf, len);
+#endif /* AOCL_ZLIB_OPT */
+}

@@ -1,6 +1,7 @@
 /*
  * Copyright 2011 Martin Gieseking <martin.gieseking@uos.de>.
- *
+ * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -32,6 +33,21 @@
 
 #ifndef THIRD_PARTY_SNAPPY_OPENSOURCE_SNAPPY_C_H_
 #define THIRD_PARTY_SNAPPY_OPENSOURCE_SNAPPY_C_H_
+
+#ifndef SNAPPYLIB_VISIBILITY
+#  if defined(__GNUC__) && (__GNUC__ >= 4)
+#    define SNAPPYLIB_VISIBILITY __attribute__ ((visibility ("default")))
+#  else
+#    define SNAPPYLIB_VISIBILITY
+#  endif
+#endif
+#if defined(SNAPPY_DLL_EXPORT) && (SNAPPY_DLL_EXPORT==1)
+#  define SNAPPYLIB_API __declspec(dllexport) SNAPPYLIB_VISIBILITY
+#elif defined(SNAPPY_DLL_IMPORT) && (SNAPPY_DLL_IMPORT==1)
+#  define SNAPPYLIB_API __declspec(dllimport) SNAPPYLIB_VISIBILITY /* It isn't required but allows to generate better code, saving a function pointer load from the IAT and an indirect jump.*/
+#else
+#  define SNAPPYLIB_API SNAPPYLIB_VISIBILITY
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,7 +84,7 @@ typedef enum {
  *   }
  *   free(output);
  */
-snappy_status snappy_compress(const char* input,
+SNAPPYLIB_API snappy_status snappy_compress(const char* input,
                               size_t input_length,
                               char* compressed,
                               size_t* compressed_length);
@@ -100,7 +116,7 @@ snappy_status snappy_compress(const char* input,
  *   }
  *   free(output);
  */
-snappy_status snappy_uncompress(const char* compressed,
+SNAPPYLIB_API snappy_status snappy_uncompress(const char* compressed,
                                 size_t compressed_length,
                                 char* uncompressed,
                                 size_t* uncompressed_length);
@@ -109,7 +125,7 @@ snappy_status snappy_uncompress(const char* compressed,
  * Returns the maximal size of the compressed representation of
  * input data that is "source_length" bytes in length.
  */
-size_t snappy_max_compressed_length(size_t source_length);
+SNAPPYLIB_API size_t snappy_max_compressed_length(size_t source_length);
 
 /*
  * REQUIRES: "compressed[]" was produced by snappy_compress()
@@ -117,7 +133,7 @@ size_t snappy_max_compressed_length(size_t source_length);
  * *result normally. Returns SNAPPY_INVALID_INPUT on parsing error.
  * This operation takes O(1) time.
  */
-snappy_status snappy_uncompressed_length(const char* compressed,
+SNAPPYLIB_API snappy_status snappy_uncompressed_length(const char* compressed,
                                          size_t compressed_length,
                                          size_t* result);
 
@@ -128,7 +144,7 @@ snappy_status snappy_uncompressed_length(const char* compressed,
  * Takes time proportional to compressed_length, but is usually at least a
  * factor of four faster than actual decompression.
  */
-snappy_status snappy_validate_compressed_buffer(const char* compressed,
+SNAPPYLIB_API snappy_status snappy_validate_compressed_buffer(const char* compressed,
                                                 size_t compressed_length);
 
 #ifdef __cplusplus

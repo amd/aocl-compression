@@ -26,17 +26,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "utils/utils.h"
 #include <immintrin.h>
 #include <stdint.h>
 #include "deflate.h"
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-/* Function pointer holding the optimized variant as per the detected CPU 
- * features */
-static void (*slide_hash_fp)(deflate_state* s);
-#endif
-
 #ifdef AOCL_ZLIB_OPT
+#include "aocl_zlib_setup.h"
+
+static int setup_ok_zlib_slide = 0; // flag to indicate status of dynamic dispatcher setup
+
 static inline void slide_hash_c_opt(deflate_state *s)
 {
     const uInt wsize = s->w_size;
@@ -48,20 +47,23 @@ static inline void slide_hash_c_opt(deflate_state *s)
         Pos t = (Pos)wsize;
         *hc++ = (Pos)(v >= t ? v-t: 0);
     }
-#ifndef FASTEST
     Pos *pc = s->prev;
     for (uInt j = 0; j < wsize; j++) {
         Pos v = *pc;
         Pos t = (Pos)wsize;
         *pc++ = (Pos)(v >= t ? v-t: 0);
     }
-#endif
 }
+
+/* Function pointer holding the optimized variant as per the detected CPU 
+ * features */
+static void (*slide_hash_fp)(deflate_state* s) = slide_hash_c_opt;
 
 #ifdef AOCL_ZLIB_AVX2_OPT
 __attribute__((__target__("avx2")))
 static inline void slide_hash_avx2(deflate_state *s)
 {
+    AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     Pos *hc;
     uint16_t wsz = (uint16_t)s->w_size;
     uInt hchnsz = s->hash_size;
@@ -75,7 +77,6 @@ static inline void slide_hash_avx2(deflate_state *s)
         _mm256_storeu_si256((__m256i *)hc, hres);
         hc += 16;
     }
-#ifndef FASTEST
     Pos *pc = s->prev;
     for(;wsz > 0;wsz -= 16) {
         __m256i pres, pval;
@@ -84,7 +85,6 @@ static inline void slide_hash_avx2(deflate_state *s)
         _mm256_storeu_si256((__m256i *)pc, pres); 
         pc += 16;
     }
-#endif
 }
 #endif /* AOCL_ZLIB_AVX2_OPT */
 
@@ -92,23 +92,14 @@ static inline void slide_hash_avx2(deflate_state *s)
  * optimized code flow path */
 void ZLIB_INTERNAL slide_hash_x86(deflate_state *s)
 {
-#ifdef AOCL_DYNAMIC_DISPATCHER
     slide_hash_fp(s);
-#elif defined(AOCL_ZLIB_AVX2_OPT)
-    slide_hash_avx2(s);
-#else
-    slide_hash_c_opt(s);
-#endif
 }
-#endif /* AOCL_ZLIB_OPT */
 
-#ifdef AOCL_DYNAMIC_DISPATCHER
-void aocl_register_slide_hash_fmv(int optOff, int optLevel,
-                                  void (*slide_hash_c_fp)(deflate_state* s))
+void aocl_register_slide_hash_fmv(int optOff, int optLevel)
 {
-    if (UNLIKELY(optOff==1))
+    if (UNLIKELY(optOff == 1))
     {
-        slide_hash_fp = slide_hash_c_fp;
+        slide_hash_fp = slide_hash_c_opt;
     }
     else
     {
@@ -119,11 +110,33 @@ void aocl_register_slide_hash_fmv(int optOff, int optLevel,
         case 2://AVX version
             slide_hash_fp = slide_hash_c_opt;
             break;
+        case -1: // undecided. use defaults based on compiler flags
         case 3://AVX2 version
         default://AVX512 and other versions
+#ifdef AOCL_ZLIB_AVX2_OPT
             slide_hash_fp = slide_hash_avx2;
+#else
+            slide_hash_fp = slide_hash_c_opt;
+#endif
             break;
         }
     }
 }
-#endif
+
+void ZLIB_INTERNAL aocl_register_slide_hash(int optOff, int optLevel){
+    AOCL_ENTER_CRITICAL(setup_zlib_slide)
+    if (!setup_ok_zlib_slide) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_slide_hash_fmv(optOff, optLevel);
+        setup_ok_zlib_slide = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_slide)
+}
+
+void ZLIB_INTERNAL aocl_destroy_slide_hash(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_slide)
+    setup_ok_zlib_slide = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib_slide)
+}
+
+#endif /* AOCL_ZLIB_OPT */
