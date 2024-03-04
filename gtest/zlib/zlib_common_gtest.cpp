@@ -263,9 +263,49 @@ TEST_P(AOCL_Compression_zlib, uncompress_common)
   EXPECT_TRUE(cmpr(source.data(), (char *)uncompressed, source.size()));
 }
 
-TEST(AOCL_Compression_zlib, adler32_z_common)
+// common boundary test case for checksum APIs to minimize memory footprint while running in parallel
+TEST(AOCL_Compression_zlib, checksum_boundary_common)
 {
   size_t len = UINT32_MAX;
+  Bytef *buf = (Bytef *)malloc(len);
+  for (size_t i = 0; i < len; i++)
+  {
+    buf[len - i - 1] = i % 255;
+  }
+  uLong adler = 0xFFFFFFFF;
+
+  len = 5552;
+  EXPECT_EQ(adler32_z(adler, buf, len), 3013531973);  // AOCL_Compression_zlib_adler32_z_common_6
+  EXPECT_EQ(adler32(adler, buf, len), 3013531973);  // AOCL_Compression_zlib_adler32_common_6
+
+  len = 0;
+  EXPECT_EQ(adler32_z(adler, buf, len), 917518);
+  EXPECT_EQ(adler32(adler, buf, len), 917518);
+
+  len = UINT32_MAX;
+  EXPECT_EQ(adler32_z(adler, buf, len), 365981486);
+  EXPECT_EQ(adler32(adler, buf, len), 365981486);
+  EXPECT_EQ(crc32_z(7, buf, len), 7);
+  EXPECT_EQ(crc32(7, buf, len), 7);
+  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
+  
+  EXPECT_EQ(adler32_combine(adler32(1, buf, 255), adler32(1, buf + 255, 1000), 1000), adler32(1, buf, 1255));
+
+  EXPECT_EQ(crc32_combine(crc32(0, buf, 255), crc32(0, buf + 255, 1000), 1000), crc32(0, buf, 1255));
+
+  EXPECT_EQ(crc32_combine_op(crc32(0, buf, 255), crc32(0, buf + 255, 1000), crc32_combine_gen(1000)), crc32_combine(crc32(0, buf, 255), crc32(0, buf + 255, 1000), 1000));
+
+  EXPECT_EQ(crc32(7, buf, 100000), 2630052870);  // AOCL_Compression_zlib_crc32_common_2
+  EXPECT_EQ(crc32_z(7, buf, 100000), 2630052870);  // AOCL_Compression_zlib_crc32_z_common_2
+
+  free(buf);
+  buf = nullptr;
+
+}
+
+TEST(AOCL_Compression_zlib, adler32_z_common)
+{
+  size_t len = 19;
   Bytef *buf = (Bytef *)malloc(len);
   for (size_t i = 0; i < len; i++)
   {
@@ -274,7 +314,7 @@ TEST(AOCL_Compression_zlib, adler32_z_common)
 
   uLong adler = 1 << 16;
   len = 10;
-  EXPECT_EQ(adler32_z(adler, buf, len), 904792511); // AOCL_Compression_zlib_adler32_z_common_1
+  EXPECT_EQ(adler32_z(adler, buf, len), 54132871); // AOCL_Compression_zlib_adler32_z_common_1
 
   adler = 0;
   len = 10;
@@ -282,22 +322,13 @@ TEST(AOCL_Compression_zlib, adler32_z_common)
 
   adler = ((uLong)1L << 31) - 1;
   len = 1;
-  EXPECT_EQ(adler32_z(adler, buf, len), 2164982028);  // AOCL_Compression_zlib_adler32_z_common_3
+  EXPECT_EQ(adler32_z(adler, buf, len), 2149515296);  // AOCL_Compression_zlib_adler32_z_common_3
 
   len = 10;
-  EXPECT_EQ(adler32_z(adler, buf, len), 3061320141);  // AOCL_Compression_zlib_adler32_z_common_4
+  EXPECT_EQ(adler32_z(adler, buf, len), 2210660501);  // AOCL_Compression_zlib_adler32_z_common_4
 
   len = 19;
-  EXPECT_EQ(adler32_z(adler, buf, len), 958927421); // AOCL_Compression_zlib_adler32_z_common_5
-
-  len = 5552;
-  EXPECT_EQ(adler32_z(adler, buf, len), 866048325);  // AOCL_Compression_zlib_adler32_z_common_6
-
-  len = 0;
-  EXPECT_EQ(adler32_z(adler, buf, len), 2147418126);
-
-  len = UINT32_MAX;
-  EXPECT_EQ(adler32_z(adler, buf, len), 2512482094);
+  EXPECT_EQ(adler32_z(adler, buf, len), 2314272953); // AOCL_Compression_zlib_adler32_z_common_5
 
   free(buf);
   buf = nullptr;
@@ -305,7 +336,7 @@ TEST(AOCL_Compression_zlib, adler32_z_common)
 
 TEST(AOCL_Compression_zlib, adler32_common)
 {
-  size_t len = UINT32_MAX;
+  size_t len = 19;
   Bytef *buf = (Bytef *)malloc(len);
   for (size_t i = 0; i < len; i++)
   {
@@ -314,7 +345,7 @@ TEST(AOCL_Compression_zlib, adler32_common)
 
   uLong adler = 1 << 16;
   len = 10;
-  EXPECT_EQ(adler32(adler, buf, len), 904792511); // AOCL_Compression_zlib_adler32_common_1
+  EXPECT_EQ(adler32(adler, buf, len), 54132871); // AOCL_Compression_zlib_adler32_common_1
 
   adler = 0;
   len = 10;
@@ -322,22 +353,13 @@ TEST(AOCL_Compression_zlib, adler32_common)
 
   adler = ((uLong)1L << 31) - 1;
   len = 1;
-  EXPECT_EQ(adler32(adler, buf, len), 2164982028);  // AOCL_Compression_zlib_adler32_common_3
+  EXPECT_EQ(adler32(adler, buf, len), 2149515296);  // AOCL_Compression_zlib_adler32_common_3
 
   len = 10;
-  EXPECT_EQ(adler32(adler, buf, len), 3061320141);  // AOCL_Compression_zlib_adler32_common_4
+  EXPECT_EQ(adler32(adler, buf, len), 2210660501);  // AOCL_Compression_zlib_adler32_common_4
 
   len = 19;
-  EXPECT_EQ(adler32(adler, buf, len), 958927421); // AOCL_Compression_zlib_adler32_common_5
-
-  len = 5552;
-  EXPECT_EQ(adler32(adler, buf, len), 866048325);  // AOCL_Compression_zlib_adler32_common_6
-
-  len = 0;
-  EXPECT_EQ(adler32(adler, buf, len), 2147418126);
-
-  len = UINT32_MAX;
-  EXPECT_EQ(adler32(adler, buf, len), 2512482094);
+  EXPECT_EQ(adler32(adler, buf, len), 2314272953); // AOCL_Compression_zlib_adler32_common_5
 
   free(buf);
   buf = nullptr;
@@ -348,36 +370,12 @@ TEST(AOCL_Compression_zlib, adler32_combine_common)
   EXPECT_EQ(adler32_combine( 1, 0, 30), 0); // AOCL_Compression_zlib_adler32_combine_common_1
   EXPECT_EQ(adler32_combine( 1 << 31, 1 << 30, 1 << 30), 4291100656); // AOCL_Compression_zlib_adler32_combine_common_2
   EXPECT_EQ(adler32_combine( 1 << 31, 1 << 30, -1), 0xffffffffUL);
-
-  size_t len = UINT32_MAX;
-  Bytef *buf = (Bytef *)malloc(len);
-  for (size_t i = 0; i < len; i++)
-  {
-    buf[len - i - 1] = i % 255;
-  }
-
-  EXPECT_EQ(adler32_combine(adler32(1, buf, 255), adler32(1, buf + 255, 1000), 1000), adler32(1, buf, 1255));
-
-  free(buf);
-  buf = nullptr;
 }
 
 TEST(AOCL_Compression_zlib, crc32_combine_common)
 {
   EXPECT_EQ(crc32_combine(1, 0, 30), 1012982536); // AOCL_Compression_zlib_crc32_combine_common_1
   EXPECT_EQ(crc32_combine( 1 << 30, 1 << 29, 1 << 28), 1114707486); // AOCL_Compression_zlib_crc32_combine_common_2
-
-  size_t len = UINT32_MAX;
-  Bytef *buf = (Bytef *)malloc(len);
-  for (size_t i = 0; i < len; i++)
-  {
-    buf[len - i - 1] = i % 255;
-  }
-
-  EXPECT_EQ(crc32_combine(crc32(0, buf, 255), crc32(0, buf + 255, 1000), 1000), crc32(0, buf, 1255));
-
-  free(buf);
-  buf = nullptr;
 }
 
 TEST(AOCL_Compression_zlib, crc32_combine_gen_common)
@@ -392,22 +390,11 @@ TEST(AOCL_Compression_zlib, crc32_combine_op_common)
 {
   EXPECT_EQ(crc32_combine_op(1, 1, 1), 2852767882);
   EXPECT_EQ(crc32_combine_op(-1, -1, -1), 3246877207);
-  size_t len = UINT32_MAX;
-  Bytef *buf = (Bytef *)malloc(len);
-  for (size_t i = 0; i < len; i++)
-  {
-    buf[len - i - 1] = i % 255;
-  }
-
-  EXPECT_EQ(crc32_combine_op(crc32(0, buf, 255), crc32(0, buf + 255, 1000), crc32_combine_gen(1000)), crc32_combine(crc32(0, buf, 255), crc32(0, buf + 255, 1000), 1000));
-
-  free(buf);
-  buf = nullptr;
 }
 
 TEST(AOCL_Compression_zlib, crc32_common)
 {
-  z_size_t len = UINT32_MAX;
+  z_size_t len = 1;
   Bytef *c = (Bytef *)malloc(len);
 
   for (z_size_t i = 0; i < len; i++)
@@ -416,8 +403,6 @@ TEST(AOCL_Compression_zlib, crc32_common)
   }
 
   EXPECT_EQ(crc32(1, NULL, 1), 0);  // AOCL_Compression_zlib_crc32_common_1
-  EXPECT_EQ(crc32(7, c, 100000), 1142422866);  // AOCL_Compression_zlib_crc32_common_2
-  EXPECT_EQ(crc32(7, c, len), 7);
   EXPECT_EQ(crc32(1, c, 0), 1);
 
   free(c);
@@ -426,7 +411,7 @@ TEST(AOCL_Compression_zlib, crc32_common)
 
 TEST(AOCL_Compression_zlib, crc32_z_common)
 {
-  z_size_t len = UINT32_MAX;
+  z_size_t len = 1;
   Bytef *c = (Bytef *)malloc(len);
 
   for (z_size_t i = 0; i < len; i++)
@@ -435,8 +420,6 @@ TEST(AOCL_Compression_zlib, crc32_z_common)
   }
 
   EXPECT_EQ(crc32_z(1, NULL, 1), 0);  // AOCL_Compression_zlib_crc32_z_common_1
-  EXPECT_EQ(crc32_z(7, c, 100000), 1142422866);  // AOCL_Compression_zlib_crc32_z_common_2
-  EXPECT_EQ(crc32_z(7, c, len), 7);
   EXPECT_EQ(crc32_z(1, c, 0), 1);
 
   free(c);
@@ -462,7 +445,7 @@ TEST(AOCL_Compression_zlib, zError_common)
 
 TEST_P(AOCL_Compression_zlib, adler32_x86_common)
 {
-  size_t len = UINT32_MAX;
+  size_t len = 5552;
   Bytef *buf = (Bytef *)malloc(len);
   for (size_t i = 0; i < len; i++)
   {
@@ -504,9 +487,10 @@ TEST_P(AOCL_Compression_zlib, adler32_x86_common)
 
   len = 0;
   EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
-
-  len = UINT32_MAX;
-  EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
+  //This test case is moved to non-parameterized test to save runtime memory consumption
+  //Non parameterized test will run only default optimized path
+  //len = UINT32_MAX;
+  //EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
 
   free(buf);
   buf = nullptr;
@@ -863,8 +847,3 @@ TEST_F(ZLIB_AOCL_send_bits, AOCL_Compression_zlib_AOCL_send_bits_common_3)
     EXPECT_EQ(state->bi_valid, 8);
 }
 #endif /* AOCL_ZLIB_OPT && AOCL_INTERNAL_TEST */
-
-INSTANTIATE_TEST_SUITE_P(
-    AOCL_Compression_zlib_Parameterized_Tests, AOCL_Compression_zlib,
-    ::testing::ValuesIn(get_supported_optlevels())
-);

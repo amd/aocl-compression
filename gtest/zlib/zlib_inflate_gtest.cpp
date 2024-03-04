@@ -672,6 +672,7 @@ TEST_P(AOCL_Compression_zlib, inflate_adler32_1)
     EXPECT_TRUE(memcmp(uncomp, orig, MIN(strm.total_out, strlen(orig))) == 0);
 }
 
+// This will generate parameterized tests for all the cpp files
 INSTANTIATE_TEST_SUITE_P(
     AOCL_Compression_zlib_Parameterized_Tests, AOCL_Compression_zlib,
     ::testing::ValuesIn(get_supported_optlevels())

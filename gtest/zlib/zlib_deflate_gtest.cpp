@@ -756,10 +756,17 @@ TEST_P(AOCL_Compression_zlib, deflate_large_buffers)
 
 #if defined(AOCL_ZLIB_DEFLATE_FAST_MODE) && defined(AOCL_INTERNAL_TEST)
 #define MAX_SEARCH_DIST 32768 // refer deflate_quick.c
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern z_const unsigned quick_dist_codes[MAX_SEARCH_DIST];
 extern z_const ct_data static_dtree[D_CODES];
 extern const int extra_dbits[D_CODES];
 extern const int base_dist[D_CODES];
+#ifdef __cplusplus
+}
+#endif
 
 TEST(AOCL_Compression_zlib, deflate_quick_dist_code_verify)
 {
@@ -772,9 +779,3 @@ TEST(AOCL_Compression_zlib, deflate_quick_dist_code_verify)
   }
 }
 #endif /* AOCL_ZLIB_DEFLATE_FAST_MODE && AOCL_INTERNAL_TEST */
-
-
-INSTANTIATE_TEST_SUITE_P(
-    AOCL_Compression_zlib_Parameterized_Tests, AOCL_Compression_zlib,
-    ::testing::ValuesIn(get_supported_optlevels())
-);

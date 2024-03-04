@@ -46,7 +46,13 @@
 #include "algos/zlib/zutil.h"
 #include "algos/zlib/inftrees.h"
 #include "algos/zlib/inflate.h"
-#include "algos/zlib/deflate.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include "algos/zlib/deflate.h" // header file is internal to zlib module
+#ifdef __cplusplus
+}
+#endif
 #include "algos/zlib/aocl_send_bits.h"
 #include "api/aocl_compression.h"
 #include "gtest/gtest.h"
