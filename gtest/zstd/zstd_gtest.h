@@ -159,7 +159,9 @@ public:
 };
 
 enum class ZSTD_Compress_API {
-    compress, compress_advanced, compress2, compress_cctx, compress_stream2_continue, compress_stream2_end, compress_stream2_flush, compress_stream_continue, compress_stream_end, compress_stream_flush
+    compress, compress_advanced, compress2, compress_cctx, compress_stream2_continue, compress_stream2_end,
+    compress_stream2_flush, compress_stream_continue, compress_stream_end, compress_stream_flush,
+    compress_sequence
 };
 
 enum class ZSTD_Decompress_API {
@@ -278,9 +280,11 @@ public:
     void compress_src_null_srcsize_0_dstsize_0(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel);
     void compress_level_lt_min(ZSTD_Compress_API api, ZSTD_CCtx* cctx);
     void compress_level_gt_max(ZSTD_Compress_API api, ZSTD_CCtx* cctx);
+    void compress_cctx_null(ZSTD_Compress_API api);
 
 private:
-    size_t run_compress(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+    size_t run_compress(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel, void* dst, size_t dstCapacity,
+        const void* src, size_t srcSize);
 };
 
 typedef size_t(*ZSTD_estimateSize_fp)(int);
@@ -353,7 +357,6 @@ unsigned long long Test_ZSTD_decompressBound(const void* src, size_t srcLen);
 size_t Test_ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
 size_t Test_ZSTD_frameHeaderSize(const void* src, size_t srcSize);
 unsigned long long Test_ZSTD_getFrameContentSize(const void* src, size_t srcSize);
-size_t Test_ZSTD_CCtx_setParams(ZSTD_CCtx* cctx, ZSTD_parameters params);
 size_t Test_ZSTD_compress2(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 size_t Test_ZSTD_compress_advanced(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity,
     const void* src, size_t srcSize, const void* dict, size_t dictSize, ZSTD_parameters params);
@@ -379,6 +382,13 @@ size_t Test_ZSTD_CCtx_getParameter(const ZSTD_CCtx* cctx, ZSTD_cParameter param,
 size_t Test_ZSTD_CCtx_setParameter(ZSTD_CCtx* cctx, ZSTD_cParameter param, int value);
 size_t Test_ZSTD_DCtx_getParameter(ZSTD_DCtx* dctx, ZSTD_dParameter param, int* value);
 size_t Test_ZSTD_DCtx_setParameter(ZSTD_DCtx* dctx, ZSTD_dParameter param, int value);
-
+size_t Test_ZSTD_CCtx_setParams(ZSTD_CCtx* cctx, ZSTD_parameters params);
+size_t Test_ZSTD_CCtx_reset(ZSTD_CCtx* cctx, ZSTD_ResetDirective reset);
+size_t Test_ZSTD_DCtx_reset(ZSTD_DCtx* dctx, ZSTD_ResetDirective reset);
+size_t Test_ZSTD_generateSequences(ZSTD_CCtx* zc, ZSTD_Sequence* outSeqs,
+    size_t outSeqsSize, const void* src, size_t srcSize);
+size_t Test_ZSTD_compressSequences(ZSTD_CCtx* cctx, void* dst, size_t dstSize,
+    const ZSTD_Sequence* inSeqs, size_t inSeqsSize, const void* src, size_t srcSize);
+    
 #define CHECK_PASS_ZSTD(foo) EXPECT_FALSE(Test_ZSTD_isError(foo));
 #define CHECK_FAIL_ZSTD(foo) EXPECT_TRUE(Test_ZSTD_isError(foo));

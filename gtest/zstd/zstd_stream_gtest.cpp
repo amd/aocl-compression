@@ -150,6 +150,22 @@ size_t Test_ZSTD_sizeof_DStream(const ZSTD_DStream* zds) {
     return ZSTD_sizeof_DStream(zds);
 }
 
+size_t Test_ZSTD_decompressBegin(ZSTD_DCtx* dctx) {
+    return ZSTD_decompressBegin(dctx);
+}
+
+size_t Test_ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize) {
+    return ZSTD_decompressContinue(dctx, dst, dstCapacity, src, srcSize);
+}
+
+size_t Test_ZSTD_nextSrcSizeToDecompress(ZSTD_DCtx* dctx) {
+    return ZSTD_nextSrcSizeToDecompress(dctx);
+}
+
+size_t Test_ZSTD_CCtx_setPledgedSrcSize(ZSTD_CCtx* cctx, unsigned long long pledgedSrcSize) {
+    return ZSTD_CCtx_setPledgedSrcSize(cctx, pledgedSrcSize);
+}
+
 // Insert a valid zstd frame via streaming mode
 size_t insert_frame_via_stream(void* dst, size_t dstCapacity, const void* src, size_t srcSize) {
     //create stream object
@@ -2044,4 +2060,239 @@ TEST_F(ZSTD_ZSTD_DStreamOutSize, AOCL_Compression_zstd_ZSTD_DStreamOutSize_pass_
 }
 /*********************************************
  * End of ZSTD_ZSTD_DStreamOutSize
+ *********************************************/
+
+/***********************************************
+ * Begin of ZSTD_ZSTD_decompressBegin
+ *********************************************/
+TEST(ZSTD_ZSTD_decompressBegin, AOCL_Compression_zstd_ZSTD_decompressBegin_fail_common_1) // dctx is null
+{
+    size_t ret = Test_ZSTD_decompressBegin(NULL);
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
+// other cases tested as part of decompressContinue
+/*********************************************
+ * End of ZSTD_ZSTD_decompressBegin
+ *********************************************/
+
+/***********************************************
+ * Begin of ZSTD_ZSTD_nextSrcSizeToDecompress
+ *********************************************/
+TEST(ZSTD_ZSTD_nextSrcSizeToDecompress, AOCL_Compression_zstd_ZSTD_nextSrcSizeToDecompress_fail_common_1) // dctx is null
+{
+    size_t ret = Test_ZSTD_nextSrcSizeToDecompress(NULL);
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
+// other cases tested as part of decompressContinue
+/*********************************************
+ * End of ZSTD_ZSTD_nextSrcSizeToDecompress
+ *********************************************/
+
+/***********************************************
+ * Begin of ZSTD_ZSTD_decompressContinue
+ *********************************************/
+class ZSTD_ZSTD_decompressContinue : public ZSTD_ZSTD_decompress_base {
+public:
+    ZSTD_ZSTD_decompressContinue()
+    {
+        dctx = ZSTD_createDCtx();
+    }
+
+    ~ZSTD_ZSTD_decompressContinue()
+    {
+        if (dctx)
+            ZSTD_freeDCtx(dctx);
+    }
+
+    size_t buffer_less_streaming_pass() {
+        CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin(dctx));
+        size_t curCprLen = 0;
+        size_t curDprLen = 0;
+        while (curCprLen < srcLen) {
+            size_t const srcSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+            size_t const dprSize = Test_ZSTD_decompressContinue(dctx, output + curDprLen, outLen - curDprLen, src + curCprLen, srcSize);
+            CHECK_PASS_ZSTD(dprSize);
+            curDprLen += dprSize;
+            curCprLen += srcSize;
+        }
+        EXPECT_EQ(Test_ZSTD_nextSrcSizeToDecompress(dctx), 0); // frame fully decoded
+        EXPECT_EQ(curCprLen, srcLen); // compressed data fully read
+        return curDprLen;
+    }
+
+    void buffer_less_streaming_multi_frame_iter(size_t& curCprLen, size_t& curDprLen) {
+        CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin(dctx));
+        while (curCprLen < srcLen) {
+            size_t const srcSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+            if (srcSize == 0)
+                break; // frame fully decoded
+            size_t const dprSize = Test_ZSTD_decompressContinue(dctx, output + curDprLen, outLen - curDprLen, src + curCprLen, srcSize);
+            CHECK_PASS_ZSTD(dprSize);
+            curDprLen += dprSize;
+            curCprLen += srcSize;
+        }
+    }
+
+    size_t buffer_less_streaming_multi_frame_pass() {
+        size_t curCprLen = 0;
+        size_t curDprLen = 0;
+        while (curCprLen < srcLen) {
+            CHECK_PASS_ZSTD(Test_ZSTD_DCtx_reset(dctx, ZSTD_reset_session_only)); //ZSTD_reset_session_and_parameters
+            buffer_less_streaming_multi_frame_iter(curCprLen, curDprLen);
+        }
+        EXPECT_EQ(curCprLen, srcLen); // compressed data fully read
+        return curDprLen;
+    }
+
+    ZSTD_DCtx* dctx = NULL;
+};
+
+TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_pass_common_1) //zstd frame
+{
+    create_frame();
+    size_t curDprLen = buffer_less_streaming_pass();
+    validate_decompress(original, origLen, output, curDprLen);
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_pass_common_2) //skippable frame
+{
+    create_frame_skippable(rand() % 15);
+    buffer_less_streaming_pass();
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_pass_common_3) //multiple frames
+{
+    size_t srcWritten = create_frames_multiple();
+    size_t curDprLen = buffer_less_streaming_multi_frame_pass();
+    validate_decompress(original, srcWritten, output, curDprLen);
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_fail_common_4) //src is null
+{
+    create_frame();
+    CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin(dctx));
+    size_t const srcSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+    size_t const dprSize = Test_ZSTD_decompressContinue(dctx, output, outLen, NULL, srcSize);
+    EXPECT_EQ(dprSize, ERROR(srcSize_wrong));
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_fail_common_5) //dst is null
+{
+    create_frame();
+    CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin(dctx));
+    size_t const srcSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+    size_t const dprSize = Test_ZSTD_decompressContinue(dctx, NULL, outLen, src, srcSize);
+    EXPECT_EQ(dprSize, ERROR(dstBuffer_null));
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_pass_common_6) //dstCapacity is 0
+{
+    create_frame();
+    CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin(dctx));
+    size_t const srcSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+    size_t const dprSize = Test_ZSTD_decompressContinue(dctx, output, 0, src, srcSize);
+    EXPECT_EQ(dprSize, 0);
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_fail_common_7) //srcSize is 0
+{
+    create_frame();
+    CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin(dctx));
+    size_t const dprSize = Test_ZSTD_decompressContinue(dctx, output, outLen, src, 0);
+    EXPECT_EQ(dprSize, ERROR(srcSize_wrong));
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_fail_common_8) //src is null and srcSize is 0
+{
+    create_frame();
+    CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin(dctx));
+    size_t const dprSize = Test_ZSTD_decompressContinue(dctx, output, outLen, NULL, 0);
+    EXPECT_EQ(dprSize, ERROR(srcSize_wrong));
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_fail_common_9) //dctx is null
+{
+    create_frame();
+    size_t const srcSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+    size_t const dprSize = Test_ZSTD_decompressContinue(NULL, output, outLen, src, srcSize);
+    EXPECT_EQ(dprSize, ERROR(GENERIC));
+}
+/*********************************************
+ * End of ZSTD_ZSTD_decompressContinue
+ *********************************************/
+
+/***********************************************
+ * Begin of ZSTD_ZSTD_CCtx_setPledgedSrcSize
+ *********************************************/
+class ZSTD_ZSTD_CCtx_setPledgedSrcSize : public ZSTD_compress_stream_base {
+public:
+    ZSTD_ZSTD_CCtx_setPledgedSrcSize()
+    {
+        d = new TestLoad_2(800);
+    }
+
+    ~ZSTD_ZSTD_CCtx_setPledgedSrcSize()
+    {
+        if (d)
+            delete d;
+    }
+    
+    size_t compress_one_pass(size_t inSize) {
+        size_t ret;
+        buffOut.dst = d->getCompressedBuff();
+        buffOut.size = d->getCompressedSize();
+        buffOut.pos = 0;
+        buffIn.src = d->getOrigData();
+        buffIn.size = inSize;
+        buffIn.pos = 0;
+        ret = ZSTD_compressStream(g_cstream, &buffOut, &buffIn);
+        if (ZSTD_isError(ret))
+            return ret;
+        return ZSTD_endStream(g_cstream, &buffOut);
+    }
+
+    TestLoad_2* d;
+};
+
+TEST_F(ZSTD_ZSTD_CCtx_setPledgedSrcSize, AOCL_Compression_zstd_ZSTD_CCtx_setPledgedSrcSize_pass_common_1) // inSize == pledgedSrcSize
+{
+    size_t const pledgedSrcSize = d->getOrigSize();
+    CHECK_PASS_ZSTD(Test_ZSTD_CCtx_setPledgedSrcSize(g_cstream, pledgedSrcSize));
+    size_t ret = compress_one_pass(pledgedSrcSize);
+    CHECK_PASS_ZSTD(ret);
+    EXPECT_EQ(buffIn.pos, buffIn.size); // all input consumed
+}
+
+TEST_F(ZSTD_ZSTD_CCtx_setPledgedSrcSize, AOCL_Compression_zstd_ZSTD_CCtx_setPledgedSrcSize_fail_common_2) // inSize < pledgedSrcSize
+{
+    size_t const pledgedSrcSize = d->getOrigSize();
+    CHECK_PASS_ZSTD(Test_ZSTD_CCtx_setPledgedSrcSize(g_cstream, pledgedSrcSize));
+    size_t ret = compress_one_pass(pledgedSrcSize - 1);
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
+}
+
+TEST_F(ZSTD_ZSTD_CCtx_setPledgedSrcSize, AOCL_Compression_zstd_ZSTD_CCtx_setPledgedSrcSize_fail_common_3) // inSize > pledgedSrcSize
+{
+    size_t const pledgedSrcSize = d->getOrigSize();
+    CHECK_PASS_ZSTD(Test_ZSTD_CCtx_setPledgedSrcSize(g_cstream, pledgedSrcSize - 1));
+    size_t ret = compress_one_pass(pledgedSrcSize);
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
+}
+
+TEST_F(ZSTD_ZSTD_CCtx_setPledgedSrcSize, AOCL_Compression_zstd_ZSTD_CCtx_setPledgedSrcSize_fail_common_4) // cctx is null
+{
+    size_t const pledgedSrcSize = d->getOrigSize();
+    size_t ret = Test_ZSTD_CCtx_setPledgedSrcSize(NULL, pledgedSrcSize);
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
+
+TEST_F(ZSTD_ZSTD_CCtx_setPledgedSrcSize, AOCL_Compression_zstd_ZSTD_CCtx_setPledgedSrcSize_fail_common_5) // streamStage != zcss_init
+{
+    size_t const pledgedSrcSize = d->getOrigSize();
+    g_cstream->streamStage = zcss_flush; // != zcss_init
+    size_t ret = Test_ZSTD_CCtx_setPledgedSrcSize(g_cstream, pledgedSrcSize);
+    EXPECT_EQ(ret, ERROR(stage_wrong));
+}
+/*********************************************
+ * End of ZSTD_ZSTD_CCtx_setPledgedSrcSize
  *********************************************/

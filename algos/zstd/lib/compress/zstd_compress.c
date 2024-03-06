@@ -781,6 +781,13 @@ size_t ZSTD_CCtx_setParameter(ZSTD_CCtx* cctx, ZSTD_cParameter param, int value)
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_CCtx_setParameter (%i, %i)", (int)param, value);
     DEBUGLOG(4, "ZSTD_CCtx_setParameter (%i, %i)", (int)param, value);
+    if (cctx == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return ERROR(GENERIC);
+    }
+
     if (cctx->streamStage != zcss_init) {
         if (ZSTD_isUpdateAuthorized(param)) {
             cctx->cParamsChanged = 1;
@@ -1330,6 +1337,10 @@ size_t ZSTD_CCtx_setParams(ZSTD_CCtx* cctx, ZSTD_parameters params)
 
 size_t ZSTD_CCtx_setPledgedSrcSize(ZSTD_CCtx* cctx, unsigned long long pledgedSrcSize)
 {
+    if (cctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_CCtx_setPledgedSrcSize to %llu bytes", pledgedSrcSize);
     DEBUGLOG(4, "ZSTD_CCtx_setPledgedSrcSize to %llu bytes", pledgedSrcSize);
     RETURN_ERROR_IF(cctx->streamStage != zcss_init, stage_wrong,
@@ -3560,6 +3571,11 @@ size_t ZSTD_sequenceBound(size_t srcSize) {
 size_t ZSTD_generateSequences(ZSTD_CCtx* zc, ZSTD_Sequence* outSeqs,
                               size_t outSeqsSize, const void* src, size_t srcSize)
 {
+    if (zc == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     const size_t dstCapacity = ZSTD_compressBound(srcSize);
     void* dst = ZSTD_customMalloc(dstCapacity, ZSTD_defaultCMem);
     SeqCollector seqCollector;
@@ -6952,6 +6968,10 @@ ZSTD_copySequencesToSeqStoreNoBlockDelim(ZSTD_CCtx* cctx, ZSTD_sequencePosition*
                                    const ZSTD_Sequence* const inSeqs, size_t inSeqsSize,
                                    const void* src, size_t blockSize, ZSTD_paramSwitch_e externalRepSearch)
 {
+    if (inSeqs == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid inSeqs");
+        return ERROR(GENERIC);
+    }
     U32 idx = seqPos->idx;
     U32 startPosInSequence = seqPos->posInSequence;
     U32 endPosInSequence = seqPos->posInSequence + (U32)blockSize;
@@ -7269,6 +7289,20 @@ size_t ZSTD_compressSequences(ZSTD_CCtx* cctx,
                               const void* src, size_t srcSize)
 {
     AOCL_SETUP_NATIVE();
+    if (cctx == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
+    if (inSeqsSize > 0 && src == NULL && srcSize > 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
+        return ERROR(srcSize_wrong);
+    }
+    if (dst == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dst");
+        return ERROR(dstSize_tooSmall);
+    }
     BYTE* op = (BYTE*)dst;
     size_t cSize = 0;
     size_t compressedBlocksSize = 0;
@@ -7281,6 +7315,7 @@ size_t ZSTD_compressSequences(ZSTD_CCtx* cctx,
     FORWARD_IF_ERROR(ZSTD_CCtx_init_compressStream2(cctx, ZSTD_e_end, srcSize), "CCtx initialization failed");
     /* Begin writing output, starting with frame header */
     frameHeaderSize = ZSTD_writeFrameHeader(op, dstCapacity, &cctx->appliedParams, srcSize, cctx->dictID);
+    FORWARD_IF_ERROR(frameHeaderSize, "Failed to write frame header");
     op += frameHeaderSize;
     dstCapacity -= frameHeaderSize;
     cSize += frameHeaderSize;
@@ -7516,6 +7551,11 @@ void ZSTD_registerSequenceProducer(
     ZSTD_CCtx* zc, void* mState,
     ZSTD_sequenceProducer_F* mFinder
 ) {
+    if (zc == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return;
+    }
     if (mFinder != NULL) {
         ZSTD_externalMatchCtx emctx;
         emctx.mState = mState;

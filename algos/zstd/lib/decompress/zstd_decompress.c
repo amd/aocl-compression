@@ -1470,7 +1470,13 @@ size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t sr
 *   Advanced Streaming Decompression API
 *   Bufferless and synchronous
 ****************************************/
-size_t ZSTD_nextSrcSizeToDecompress(ZSTD_DCtx* dctx) { return dctx->expected; }
+size_t ZSTD_nextSrcSizeToDecompress(ZSTD_DCtx* dctx) { 
+    if (dctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dctx");
+        return ERROR(GENERIC);
+    }
+    return dctx->expected; 
+}
 
 /**
  * Similar to ZSTD_nextSrcSizeToDecompress(), but when a block input can be streamed, we
@@ -1523,6 +1529,10 @@ static int ZSTD_isSkipFrame(ZSTD_DCtx* dctx) { return dctx->stage == ZSTDds_skip
  *            or an error code, which can be tested using ZSTD_isError() */
 size_t ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {
+    if (dctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dctx");
+        return ERROR(GENERIC);
+    }
     if (src == NULL && srcSize > 0) {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
         return ERROR(srcSize_wrong);
@@ -1819,6 +1829,10 @@ static size_t ZSTD_decompress_insertDictionary(ZSTD_DCtx* dctx, const void* dict
 size_t ZSTD_decompressBegin(ZSTD_DCtx* dctx)
 {
     AOCL_SETUP_NATIVE();
+    if (dctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dctx");
+        return ERROR(GENERIC);
+    }
     assert(dctx != NULL);
 #if ZSTD_TRACE
     dctx->traceCtx = (ZSTD_trace_decompress_begin != NULL) ? ZSTD_trace_decompress_begin(dctx) : 0;
@@ -2165,6 +2179,11 @@ size_t ZSTD_DCtx_getParameter(ZSTD_DCtx* dctx, ZSTD_dParameter param, int* value
 
 size_t ZSTD_DCtx_setParameter(ZSTD_DCtx* dctx, ZSTD_dParameter dParam, int value)
 {
+    if (dctx == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dctx");
+        return ERROR(GENERIC);
+    }
     RETURN_ERROR_IF(dctx->streamStage != zdss_init, stage_wrong, "");
     switch(dParam) {
         case ZSTD_d_windowLogMax:

@@ -190,6 +190,11 @@ size_t Test_ZSTD_sizeof_DCtx(const ZSTD_DCtx* dctx) {
     return ZSTD_sizeof_DCtx(dctx);
 }
 
+void Test_ZSTD_registerSequenceProducer(ZSTD_CCtx* cctx,
+  void* sequenceProducerState, ZSTD_sequenceProducer_F* sequenceProducer){
+    ZSTD_registerSequenceProducer(cctx, sequenceProducerState, sequenceProducer);
+}
+
 /*********************************************
 * Begin of ZSTD_ZSTD_createCCtx
 *********************************************/
@@ -487,6 +492,11 @@ TEST_F(ZSTD_ZSTD_CCtx_setParameter, AOCL_Compression_zstd_ZSTD_CCtx_setParameter
     ret = Test_ZSTD_CCtx_setParameter(cctx, ZSTD_c_windowLog, get_cparam_above_upper(ZSTD_c_windowLog));
     EXPECT_EQ(ret, ERROR(parameter_outOfBound));
 }
+
+TEST_F(ZSTD_ZSTD_CCtx_setParameter, AOCL_Compression_zstd_ZSTD_CCtx_setParameter_fail_common_5) { // cctx is null
+    size_t ret = Test_ZSTD_CCtx_setParameter(NULL, ZSTD_c_compressionLevel, get_cparam_within_bounds(ZSTD_c_compressionLevel));
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
 /*********************************************
  * End of ZSTD_ZSTD_CCtx_setParameter
  *********************************************/
@@ -537,6 +547,11 @@ TEST_F(ZSTD_ZSTD_DCtx_setParameter, AOCL_Compression_zstd_ZSTD_DCtx_setParameter
     EXPECT_EQ(ret, ERROR(parameter_outOfBound));
     ret = Test_ZSTD_DCtx_setParameter(dctx, ZSTD_d_windowLogMax, get_dparam_above_upper(ZSTD_d_windowLogMax));
     EXPECT_EQ(ret, ERROR(parameter_outOfBound));
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_setParameter, AOCL_Compression_zstd_ZSTD_DCtx_setParameter_fail_common_5) { // dctx is null
+    size_t ret = Test_ZSTD_DCtx_setParameter(NULL, ZSTD_d_windowLogMax, get_dparam_within_bounds(ZSTD_d_windowLogMax));
+    EXPECT_EQ(ret, ERROR(GENERIC));
 }
 /*********************************************
  * End of ZSTD_ZSTD_DCtx_setParameter
@@ -1706,58 +1721,7 @@ public:
         return cctx;
     }
 
-    void compress_cctx_null(ZSTD_Compress_API api) { // compress cctx null
-        TestLoad_2 d(800);
-        ZSTD_parameters zparams;
-        zparams = Test_ZSTD_getParams(ZSTD_CLEVEL_DEFAULT, d.getOrigSize(), 0);
-        size_t outLen = run_compress(api, NULL, &zparams, d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize());
-        EXPECT_EQ(outLen, ERROR(GENERIC));
-    }
-
-    void compress_outofbound_params(ZSTD_Compress_API api) { // out of bound params
-        TestLoad_2 d(800);
-        ZSTD_parameters zparams;
-        zparams = Test_ZSTD_getParams(ZSTD_CLEVEL_DEFAULT, d.getOrigSize(), 0);
-        ZSTD_compressionParameters cPar; // set out of bound params
-        cPar.windowLog    = get_cparam_above_upper(ZSTD_c_windowLog);
-        cPar.chainLog     = get_cparam_above_upper(ZSTD_c_chainLog);
-        cPar.hashLog      = get_cparam_above_upper(ZSTD_c_hashLog);
-        cPar.searchLog    = get_cparam_above_upper(ZSTD_c_searchLog);
-        cPar.minMatch     = get_cparam_above_upper(ZSTD_c_minMatch);
-        cPar.targetLength = get_cparam_above_upper(ZSTD_c_targetLength);
-        zparams.cParams = cPar;
-
-        size_t outLen = run_compress(api, getCtx(), &zparams, d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize());
-        EXPECT_EQ(outLen, ERROR(parameter_outOfBound));
-    }
-
 private:
-    size_t run_compress(ZSTD_Compress_API api, ZSTD_CCtx* cctx, ZSTD_parameters* zparams, void* dst, size_t dstCapacity, const void* src, size_t srcSize) {
-        size_t res = 0;
-        switch (api) {
-        case ZSTD_Compress_API::compress_advanced:
-        {
-            res = Test_ZSTD_compress_advanced(cctx, dst, dstCapacity, src, srcSize, NULL, 0, *zparams);
-            break;
-        }
-        case ZSTD_Compress_API::compress2:
-        {
-            res = Test_ZSTD_CCtx_setParams(cctx, *zparams);
-            if (!Test_ZSTD_isError(res))
-                res = Test_ZSTD_compress2(cctx, dst, dstCapacity, src, srcSize);
-            break;
-        }
-        case ZSTD_Compress_API::compress_cctx:
-        {
-            res = ZSTD_compressCCtx(cctx, dst, dstCapacity, src, srcSize, ZSTD_CLEVEL_DEFAULT);
-            break;
-        }
-        default:
-            break;
-        }
-        return res;
-    }
-
     ZSTD_CCtx* cctx;
 };
 
@@ -1992,11 +1956,6 @@ TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_zstd_ZSTD_compress2_fail_common_9)
 
 TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_zstd_ZSTD_compress2_fail_common_10)
 {
-    compress_outofbound_params(ZSTD_Compress_API::compress2);
-}
-
-TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_zstd_ZSTD_compress2_fail_common_11)
-{
     compress_src_null_srcsize_0_dstsize_0(ZSTD_Compress_API::compress2, getCtx(), ZSTD_CLEVEL_DEFAULT);
 }
 /*********************************************
@@ -2006,7 +1965,26 @@ TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_zstd_ZSTD_compress2_fail_common_11)
 /*********************************************
 * Begin of ZSTD_ZSTD_compress_advanced
 *********************************************/
-class ZSTD_ZSTD_compressed_advanced : public ZSTD_with_cctx {};
+class ZSTD_ZSTD_compressed_advanced : public ZSTD_with_cctx {
+public:
+    void compress_outofbound_params(ZSTD_Compress_API api, ZSTD_CCtx* cctx) { // out of bound params
+        TestLoad_2 d(800);
+        ZSTD_parameters zparams;
+        zparams = Test_ZSTD_getParams(ZSTD_CLEVEL_DEFAULT, d.getOrigSize(), 0);
+        ZSTD_compressionParameters cPar; // set out of bound params
+        cPar.windowLog = get_cparam_above_upper(ZSTD_c_windowLog);
+        cPar.chainLog = get_cparam_above_upper(ZSTD_c_chainLog);
+        cPar.hashLog = get_cparam_above_upper(ZSTD_c_hashLog);
+        cPar.searchLog = get_cparam_above_upper(ZSTD_c_searchLog);
+        cPar.minMatch = get_cparam_above_upper(ZSTD_c_minMatch);
+        cPar.targetLength = get_cparam_above_upper(ZSTD_c_targetLength);
+        zparams.cParams = cPar;
+
+        size_t outLen = Test_ZSTD_compress_advanced(cctx, d.getCompressedBuff(), d.getCompressedSize(),
+            d.getOrigData(), d.getOrigSize(), NULL, 0, zparams);
+        EXPECT_EQ(outLen, ERROR(parameter_outOfBound));
+    }
+};
 
 TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_pass_common_1)
 {
@@ -2055,7 +2033,7 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
 
 TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_fail_common_10)
 {
-    compress_outofbound_params(ZSTD_Compress_API::compress_advanced);
+    compress_outofbound_params(ZSTD_Compress_API::compress_advanced, getCtx());
 }
 
 TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_fail_common_11)
@@ -2082,4 +2060,308 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
 #endif
 /*********************************************
  * End of ZSTD_ZSTD_compress_advanced
+ *********************************************/
+
+/***********************************************
+ * Begin of ZSTD_ZSTD_generateSequences
+ ***********************************************/
+class ZSTD_ZSTD_generateSequences : public ZSTD_with_cctx {};
+
+TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_pass_common_1)
+{
+    compress_all_levels(ZSTD_Compress_API::compress_sequence, getCtx());
+}
+
+TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_fail_common_2)
+{
+    compress_src_null(ZSTD_Compress_API::compress_sequence, getCtx(), ZSTD_CLEVEL_DEFAULT);
+}
+
+TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_fail_common_3)
+{
+    compress_dst_null(ZSTD_Compress_API::compress_sequence, getCtx(), ZSTD_CLEVEL_DEFAULT);
+}
+
+TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_fail_common_4)
+{
+    compress_insufficient_dstCapacity(ZSTD_Compress_API::compress_sequence, getCtx(), ZSTD_CLEVEL_DEFAULT);
+}
+
+TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_pass_common_5)
+{
+    compress_srcsize_0(ZSTD_Compress_API::compress_sequence, getCtx(), ZSTD_CLEVEL_DEFAULT);
+}
+
+TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_pass_common_6)
+{
+    compress_src_null_srcsize_0(ZSTD_Compress_API::compress_sequence, getCtx(), ZSTD_CLEVEL_DEFAULT);
+}
+
+TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_pass_common_7)
+{
+    compress_level_lt_min(ZSTD_Compress_API::compress_sequence, getCtx());
+}
+
+TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_pass_common_8)
+{
+    compress_level_gt_max(ZSTD_Compress_API::compress_sequence, getCtx());
+}
+
+TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_fail_common_9)
+{
+    compress_src_null_srcsize_0_dstsize_0(ZSTD_Compress_API::compress_sequence, getCtx(), ZSTD_CLEVEL_DEFAULT);
+}
+
+TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_fail_common_10)
+{
+    compress_cctx_null(ZSTD_Compress_API::compress_sequence);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_generateSequences
+ *********************************************/
+
+/***********************************************
+ * Begin of ZSTD_ZSTD_compressSequences
+ ***********************************************/
+class ZSTD_ZSTD_compressSequences : public ZSTD_with_cctx {
+public:
+    ZSTD_ZSTD_compressSequences() 
+    {
+        sequences = NULL;
+    }
+
+    ~ZSTD_ZSTD_compressSequences() 
+    {
+        if (sequences)
+            free(sequences);
+    }
+
+    void alloc_sequences(size_t sequencesCnt) 
+    {
+        if (sequencesCnt > 0) {
+            sequences = (ZSTD_Sequence*)malloc(sizeof(ZSTD_Sequence) * sequencesCnt);
+            memset(sequences, 0, sizeof(ZSTD_Sequence) * sequencesCnt);
+        }
+    }
+
+    size_t generate_sequences(ZSTD_CCtx* cctx, const void* src, size_t srcSize)
+    {
+        ZSTD_parameters zparams;
+        zparams = Test_ZSTD_getParams(ZSTD_CLEVEL_DEFAULT, srcSize, 0);
+        zparams.fParams.contentSizeFlag = 1;
+        CHECK_PASS_ZSTD(Test_ZSTD_CCtx_setParams(cctx, zparams));
+        size_t outSeqsSize = srcSize;
+        sequences = (ZSTD_Sequence*)malloc(srcSize * sizeof(ZSTD_Sequence));
+        outSeqsSize = Test_ZSTD_generateSequences(cctx, sequences, outSeqsSize, src, srcSize);
+        CHECK_PASS_ZSTD(outSeqsSize);
+        CHECK_PASS_ZSTD(Test_ZSTD_CCtx_reset(cctx, ZSTD_reset_session_and_parameters));
+        CHECK_PASS_ZSTD(Test_ZSTD_CCtx_setParameter(cctx, ZSTD_c_blockDelimiters, ZSTD_sf_explicitBlockDelimiters));
+        return outSeqsSize;
+    }
+
+    ZSTD_Sequence* sequences;
+};
+
+TEST_F(ZSTD_ZSTD_compressSequences, AOCL_Compression_zstd_ZSTD_compressSequences_pass_common_1) // number of sequences = 0
+{
+    alloc_sequences(1);
+    TestLoad_2 d(800);
+    size_t ret = Test_ZSTD_compressSequences(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), sequences, 0, d.getOrigData(), d.getOrigSize());
+    CHECK_PASS_ZSTD(ret);
+}
+
+TEST_F(ZSTD_ZSTD_compressSequences, AOCL_Compression_zstd_ZSTD_compressSequences_fail_common_2) // sequences is null
+{
+    size_t sequencesCnt = 1;
+    TestLoad_2 d(800);
+    size_t ret = Test_ZSTD_compressSequences(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), NULL, sequencesCnt, d.getOrigData(), d.getOrigSize());
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
+
+TEST_F(ZSTD_ZSTD_compressSequences, AOCL_Compression_zstd_ZSTD_compressSequences_fail_common_3) // sequences is null and number of sequences = 0
+{
+    TestLoad_2 d(800);
+    size_t ret = Test_ZSTD_compressSequences(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), NULL, 0, d.getOrigData(), d.getOrigSize());
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
+
+TEST_F(ZSTD_ZSTD_compressSequences, AOCL_Compression_zstd_ZSTD_compressSequences_fail_common_4) // src is null
+{
+    TestLoad_2 d(800);
+    size_t sequencesCnt = generate_sequences(getCtx(), d.getOrigData(), d.getOrigSize());
+    size_t ret = Test_ZSTD_compressSequences(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), sequences, sequencesCnt, NULL, d.getOrigSize());
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
+}
+
+TEST_F(ZSTD_ZSTD_compressSequences, AOCL_Compression_zstd_ZSTD_compressSequences_fail_common_5) // dst is null
+{
+    TestLoad_2 d(800);
+    size_t sequencesCnt = generate_sequences(getCtx(), d.getOrigData(), d.getOrigSize());
+    size_t ret = Test_ZSTD_compressSequences(getCtx(), NULL, d.getCompressedSize(), sequences, sequencesCnt, d.getOrigData(), d.getOrigSize());
+    EXPECT_EQ(ret, ERROR(dstSize_tooSmall));
+}
+
+TEST_F(ZSTD_ZSTD_compressSequences, AOCL_Compression_zstd_ZSTD_compressSequences_fail_common_6) // insufficient dst capacity
+{
+    TestLoad_2 d(800, 80);
+    size_t sequencesCnt = generate_sequences(getCtx(), d.getOrigData(), d.getOrigSize());
+    size_t ret = Test_ZSTD_compressSequences(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), sequences, sequencesCnt, d.getOrigData(), d.getOrigSize());
+    EXPECT_EQ(ret, ERROR(dstSize_tooSmall));
+}
+
+TEST_F(ZSTD_ZSTD_compressSequences, AOCL_Compression_zstd_ZSTD_compressSequences_pass_common_7) //src is null and srcSize = 0
+{
+    TestLoad_2 d(800);
+    size_t sequencesCnt = generate_sequences(getCtx(), d.getOrigData(), d.getOrigSize());
+    CHECK_PASS_ZSTD(Test_ZSTD_compressSequences(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), sequences, sequencesCnt, NULL, 0)); // valid. empty frame written.
+}
+
+TEST_F(ZSTD_ZSTD_compressSequences, AOCL_Compression_zstd_ZSTD_compressSequences_fail_common_8) //cctx is null
+{
+    TestLoad_2 d(800);
+    size_t sequencesCnt = generate_sequences(getCtx(), d.getOrigData(), d.getOrigSize());
+    size_t ret = Test_ZSTD_compressSequences(NULL, d.getCompressedBuff(), d.getCompressedSize(), sequences, sequencesCnt, d.getOrigData(), d.getOrigSize());
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
+
+TEST_F(ZSTD_ZSTD_compressSequences, AOCL_Compression_zstd_ZSTD_compressSequences_fail_common_9) //srcSize less than expected
+{
+    TestLoad_2 d(800);
+    size_t sequencesCnt = generate_sequences(getCtx(), d.getOrigData(), d.getOrigSize());
+    size_t ret = Test_ZSTD_compressSequences(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), sequences, sequencesCnt, d.getOrigData(), d.getOrigSize() - 1);
+    EXPECT_EQ(ret, ERROR(externalSequences_invalid));
+}
+
+TEST_F(ZSTD_ZSTD_compressSequences, AOCL_Compression_zstd_ZSTD_compressSequences_fail_common_10) //srcSize more than expected
+{
+    TestLoad_2 d(800);
+    size_t sequencesCnt = generate_sequences(getCtx(), d.getOrigData(), d.getOrigSize());
+    size_t ret = Test_ZSTD_compressSequences(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), sequences, sequencesCnt, d.getOrigData(), d.getOrigSize() + 1);
+    EXPECT_EQ(ret, ERROR(externalSequences_invalid));
+}
+//pass cases and different frames are covered as part of ZSTD_ZSTD_generateSequences
+/*********************************************
+ * End of ZSTD_ZSTD_compressSequences
+ *********************************************/
+
+/***********************************************
+ * Begin of ZSTD_ZSTD_registerSequenceProducer
+ ***********************************************/
+size_t ValidSequenceProducer(void* sequenceProducerState, ZSTD_Sequence* outSeqs, size_t outSeqsSize,
+  const void* src, size_t srcSize, const void* dict, size_t dictSize, int compressionLevel, size_t windowSize) {
+    ZSTD_CCtx* cctx = (ZSTD_CCtx*)sequenceProducerState;
+    ZSTD_parameters zparams;
+    zparams = Test_ZSTD_getParams(compressionLevel, srcSize, 0);
+    zparams.fParams.contentSizeFlag = 1;
+    if (cctx) {
+        CHECK_PASS_ZSTD(Test_ZSTD_CCtx_setParams(cctx, zparams));
+    }
+    memset(outSeqs, 0, outSeqsSize);
+    size_t res = Test_ZSTD_generateSequences(cctx, outSeqs, outSeqsSize, src, srcSize);
+    return res;
+}
+
+size_t DummySequenceProducer(void* sequenceProducerState, ZSTD_Sequence* outSeqs, size_t outSeqsSize,
+    const void* src, size_t srcSize, const void* dict, size_t dictSize, int compressionLevel, size_t windowSize) {
+    memset(outSeqs, 0, outSeqsSize);
+    return 0;
+}
+
+size_t ErrorSequenceProducer(void* sequenceProducerState, ZSTD_Sequence* outSeqs, size_t outSeqsSize,
+    const void* src, size_t srcSize, const void* dict, size_t dictSize, int compressionLevel, size_t windowSize) {
+    return ERROR(GENERIC);
+}
+
+class ZSTD_ZSTD_registerSequenceProducer : public ZSTD_with_cctx {
+public:
+    ZSTD_ZSTD_registerSequenceProducer() {
+        sps = Test_ZSTD_createCCtx();
+    }
+
+    ~ZSTD_ZSTD_registerSequenceProducer() {
+        Test_ZSTD_freeCCtx(sps);
+    }
+
+    ZSTD_CCtx* sps;
+};
+
+TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_pass_common_1) // valid custom sequence producer
+{
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, &ValidSequenceProducer); // register valid producer
+    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+
+    // compress and validate
+    TestLoad_2 d(800);
+    CHECK_PASS_ZSTD(ZSTD_CCtx_setParameter(getCtx(), ZSTD_c_enableSeqProducerFallback, 0));
+    size_t outLen = ZSTD_compress2(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize());
+    CHECK_PASS_ZSTD(outLen);
+    validate_compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, d.getCompressedSize());
+}
+
+TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_fail_common_2) // dummy custom sequence producer
+{
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, &DummySequenceProducer); // register sequence producer that does nothing
+    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+
+    // compress
+    TestLoad_2 d(800);
+    CHECK_PASS_ZSTD(ZSTD_CCtx_setParameter(getCtx(), ZSTD_c_enableSeqProducerFallback, 0));
+    CHECK_FAIL_ZSTD(ZSTD_compress2(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize()));
+}
+
+TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_pass_common_3) // dummy custom sequence producer with fallback
+{
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, &DummySequenceProducer); // register sequence producer that does nothing
+    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+
+    // compress and validate
+    TestLoad_2 d(800);
+    CHECK_PASS_ZSTD(ZSTD_CCtx_setParameter(getCtx(), ZSTD_c_enableSeqProducerFallback, 1)); // allow fallback to default producer
+    size_t outLen = ZSTD_compress2(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize());
+    CHECK_PASS_ZSTD(outLen);
+    validate_compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, d.getCompressedSize());
+}
+
+TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_fail_common_4) // error custom sequence producer
+{
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, &ErrorSequenceProducer); // register sequence producer that fails
+    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+
+    // compress
+    TestLoad_2 d(800);
+    CHECK_PASS_ZSTD(ZSTD_CCtx_setParameter(getCtx(), ZSTD_c_enableSeqProducerFallback, 0));
+    CHECK_FAIL_ZSTD(ZSTD_compress2(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize()));
+}
+
+TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_pass_common_5) // error custom sequence producer with fallback
+{
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, &ErrorSequenceProducer); // register sequence producer that does nothing
+    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+
+    // compress and validate
+    TestLoad_2 d(800);
+    CHECK_PASS_ZSTD(ZSTD_CCtx_setParameter(getCtx(), ZSTD_c_enableSeqProducerFallback, 1)); // allow fallback to default producer
+    size_t outLen = ZSTD_compress2(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize());
+    CHECK_PASS_ZSTD(outLen);
+    validate_compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, d.getCompressedSize());
+}
+
+TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_fail_common_6) // cctx is null
+{
+    Test_ZSTD_registerSequenceProducer(NULL, sps, &ValidSequenceProducer); // no feedback. testing for no crash.
+}
+
+TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_fail_common_7) // sequence producer is null
+{
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, NULL); // no feedback. testing for no crash.
+    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 0);
+}
+
+TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_fail_common_8) // sequence producer state is null
+{
+    Test_ZSTD_registerSequenceProducer(getCtx(), NULL, &ValidSequenceProducer); // no feedback. testing for no crash.
+    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_registerSequenceProducer
  *********************************************/
