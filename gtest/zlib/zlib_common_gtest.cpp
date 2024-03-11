@@ -847,3 +847,32 @@ TEST_F(ZLIB_AOCL_send_bits, AOCL_Compression_zlib_AOCL_send_bits_common_3)
     EXPECT_EQ(state->bi_valid, 8);
 }
 #endif /* AOCL_ZLIB_OPT && AOCL_INTERNAL_TEST */
+
+#ifdef AOCL_TEST_FUZZER
+
+void compress2_fuzz(vector<Bytef> dest,
+                    vector<Bytef> source,
+                    int level)
+{
+  uLong destLen = dest.size();
+  uLong srcLen = source.size();
+
+  compress2(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+}
+
+FUZZ_TEST(AOCL_Compression_zlib, compress2_fuzz)
+    .WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+                fuzztest::Arbitrary<vector<Bytef>>(),
+                fuzztest::InRange<int>(-1, 9));
+
+void uncompress_fuzz(vector<Bytef> dest,
+                    vector<Bytef> source)
+{
+  uLong destLen = dest.size();
+  uLong srcLen = source.size();
+
+  uncompress(dest.data(), &destLen, source.data(), srcLen);
+}
+FUZZ_TEST(AOCL_Compression_zlib, uncompress_fuzz);
+
+#endif /* AOCL_TEST_FUZZER */

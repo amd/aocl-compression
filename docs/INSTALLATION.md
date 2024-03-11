@@ -125,6 +125,7 @@ AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL |  Build with xz utils lzma APIs. Experiment
 AOCL_ENABLE_THREADS                 |  Enable multi-threaded compression and decompression using SMP based openMP threads (Disabled by default)
 TEST_COVERAGE_THIRD_PARTY           |  Enable third party test bench based CTest suite (Disabled by default)
 NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression for supported methods (Disabled by default)
+AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
 
 Running AOCL-Compression Test Bench On Linux
 --------------------------------------------
@@ -243,6 +244,26 @@ Following are a few sample commands that can be executed in the build directory 
  
  To run GTest test cases for a specific method<br>
  `ctest -R <METHOD_NAME_IN_CAPITALS>`
+
+Running fuzzer tests
+--------------------
+
+To list all the fuzz tests available for a method, use the following command:
+   `<METHOD_GTEST_EXECUTABLE> --list_fuzz_tests`
+   example: `zlib_gtest --list_fuzz_tests`
+
+Fuzzer test can be run in two modes:
+
+1. Unit test mode: Default operation mode of AOCL_TEST_FUZZER. Can be run as part of ctest. No sanitizer and coverage instrumentation.
+   `ctest -R <TestSuiteName>.<FuzzTestName>`
+2. Fuzzing mode: Enabled with cmake option FUZZTEST_FUZZING_MODE. Runs each fuzz test with sanitizer and coverage instrumentation
+
+   To run all fuzz tests for a specified duration, use the following command:
+   `<METHOD_GTEST_EXECUTABLE> --fuzz_for=<DURATION>`
+   example: `zlib_gtest --fuzz_for=60s`
+
+   To run a single fuzz test until a bug is found or until manually stopped:
+   `<METHOD_GTEST_EXECUTABLE> --fuzz=<TestSuiteName>.<FuzzTestName>`
 
 Running Performance Benchmarking
 --------------------------------

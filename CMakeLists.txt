@@ -83,6 +83,7 @@ option (AOCL_ENABLE_LOG_FEATURE "Enable logging support in library, for which lo
 option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression using SMP openMP threads (Disabled by default)" OFF)
 option (TEST_COVERAGE_THIRD_PARTY "Enable third party test bench based CTest suite (Disabled by default)" OFF)
 option (NATIVE_ENABLE_THREADS "Enable native multi-threaded compression for supported methods (Disabled by default)" OFF)
+option (AOCL_TEST_FUZZER "Enable AOCL Compression fuzzer (only on Linux with Clang compiler)" OFF)
 
 option (AOCL_EXCLUDE_BZIP2 "Exclude BZIP2 compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_LZ4 "Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)" OFF)
@@ -123,6 +124,14 @@ if(VALGRIND OR ASAN)
     set(AOCL_TEST_COVERAGE ON)
 endif()
 
+# validating google fuzz test environment
+if(AOCL_TEST_FUZZER)
+    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${CMAKE_C_COMPILER_ID} STREQUAL "Clang"))
+        set(AOCL_TEST_FUZZER OFF)
+        message(WARNING  "Target not supported. Fuzz tests are only supported on Linux OS with Clang compiler")
+    endif()
+endif()
+
 #CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=ON                                 : run coverage for aocl + third_party ctests
 #CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=OFF, TEST_COVERAGE_THIRD_PARTY=OFF : run coverage for aocl + third_party ctests
 #CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=OFF, TEST_COVERAGE_THIRD_PARTY=ON  : run coverage for third_party ctests only
@@ -134,6 +143,10 @@ endif()
 
 if(AOCL_TEST_COVERAGE)
     set(TEST_COVERAGE_THIRD_PARTY ON) # enable to maximize test coverage
+endif()
+
+if(AOCL_TEST_FUZZER)
+    set(AOCL_TEST_COVERAGE ON)
 endif()
 
 #list source files to be compiled for the library

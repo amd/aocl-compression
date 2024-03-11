@@ -41,6 +41,10 @@
 
 #include <string>
 
+#ifdef AOCL_TEST_FUZZER
+#include "fuzztest/fuzztest.h"
+#endif
+
 #include "utils/utils.h" // Note: include this before deflate.h
 #include "algos/zlib/zlib.h"
 #include "algos/zlib/zutil.h"

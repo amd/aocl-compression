@@ -30,7 +30,7 @@ include(FetchContent)
 FetchContent_Declare(
   googletest
   # Specify the commit you depend on and update it regularly.
-  URL https://github.com/google/googletest/archive/refs/tags/v1.13.0.zip
+  URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
@@ -40,6 +40,23 @@ if (NOT googletest_POPULATED)
   FetchContent_Populate(googletest)
   # Avoid installing gtest libs/headers by default
   add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+
+if(AOCL_TEST_FUZZER)
+    FetchContent_Declare(
+        googlefuzztest
+        QUIET
+        URL https://github.com/google/fuzztest/archive/6f4caf7abdd19a7f3b611789fa92a6be05b6c8f9.zip #commit 6f4caf7
+    )
+
+    FetchContent_GetProperties(googlefuzztest)
+    if (NOT googlefuzztest_POPULATED)
+    FetchContent_Populate(googlefuzztest)
+    # Avoid installing gtest libs/headers by default
+    add_subdirectory(${googlefuzztest_SOURCE_DIR} ${googlefuzztest_BINARY_DIR} EXCLUDE_FROM_ALL)
+    endif()
+
+    fuzztest_setup_fuzzing_flags()
 endif()
 
 set (GTEST_SRC_PATH ${CMAKE_SOURCE_DIR}/gtest)
@@ -141,7 +158,13 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             target_include_directories(${GTEST_CUR_EXE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}
                                                 PRIVATE ${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/common
                                                 PRIVATE ${CMAKE_SOURCE_DIR}/api)
-            target_link_libraries(${GTEST_CUR_EXE_NAME} ${lib_name} GTest::gtest_main)
+            if(AOCL_TEST_FUZZER)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_TEST_FUZZER")
+                target_link_libraries(${GTEST_CUR_EXE_NAME} PRIVATE ${lib_name})
+                link_fuzztest(${GTEST_CUR_EXE_NAME})
+            else()
+                target_link_libraries(${GTEST_CUR_EXE_NAME} ${lib_name} GTest::gtest_main)
+            endif()
             gtest_discover_tests(${GTEST_CUR_EXE_NAME})
         endif()
     endif()
