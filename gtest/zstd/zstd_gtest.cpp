@@ -198,6 +198,25 @@ size_t Test_ZSTD_decompressionMargin(void const* src, size_t srcSize) {
     return ZSTD_decompressionMargin(src, srcSize);
 }
 
+void* Test_ZSTD_custom_alloc_pass(void* opaque, size_t size) {
+    if (opaque)
+        *((int*)opaque) = 1;
+    return malloc(size);
+}
+
+void Test_ZSTD_custom_free_pass(void* opaque, void* address) {
+    if (opaque)
+        *((int*)opaque) = 0;
+    free(address);
+}
+
+void* Test_ZSTD_custom_alloc_fail(void* opaque, size_t size) {
+    return NULL;
+}
+
+void Test_ZSTD_custom_free_fail(void* opaque, void* address) {
+}
+
 bool zstd_check_uncompressed_equal_to_original(const char* src, size_t srcSize,
     const char* compressed, size_t compressedLen, ZSTD_decompress_fp decomp_fp)
 {
@@ -249,7 +268,7 @@ static int read_block(const char* start, const char* end, size_t& block_sz) {
 }
 
 /* Checks if a single ZSTD_frame is present */
-static bool is_valid_zstd_frame(char* compressed, unsigned compressedLen) {
+bool is_valid_zstd_frame(char* compressed, unsigned compressedLen) {
     char* cur = compressed;
     const char* end = compressed + compressedLen;
 
@@ -411,7 +430,7 @@ void ZSTD_ZSTD_compress_base::validate_compress(char* src, unsigned srcSize, cha
 }
 
 void ZSTD_ZSTD_compress_base::compress_all_levels(ZSTD_Compress_API api, ZSTD_CCtx* cctx) { // compress all supported levels
-    for (int cLevel = 1; cLevel <= 22; cLevel++) {
+    for (int cLevel = 0; cLevel <= 22; cLevel++) {
         TestLoad_2 d(8000);
         size_t outLen = run_compress(api, cctx, cLevel, d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize());
         validate_compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, d.getCompressedSize());

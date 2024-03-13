@@ -174,11 +174,11 @@ size_t Test_ZSTD_estimateDCtxSize(void) {
     return ZSTD_estimateDCtxSize();
 }
 
-ZSTD_CCtx* Test_ZSTD_initStaticCCtx(void* workspace, size_t workspaceSize){
+ZSTD_CCtx* Test_ZSTD_initStaticCCtx(void* workspace, size_t workspaceSize) {
     return ZSTD_initStaticCCtx(workspace, workspaceSize);
 }
 
-ZSTD_DCtx* Test_ZSTD_initStaticDCtx(void* workspace, size_t workspaceSize){
+ZSTD_DCtx* Test_ZSTD_initStaticDCtx(void* workspace, size_t workspaceSize) {
     return ZSTD_initStaticDCtx(workspace, workspaceSize);
 }
 
@@ -277,25 +277,6 @@ TEST(ZSTD_ZSTD_freeDCtx, AOCL_Compression_zstd_ZSTD_freeDCtx_fail_common_3) { //
 /*********************************************
 * Begin of ZSTD_ZSTD_createCCtx_advanced
 *********************************************/
-void* Test_ZSTD_custom_alloc_pass(void* opaque, size_t size) {
-    if (opaque)
-        *((int*)opaque) = 1;
-    return malloc(size);
-}
-
-void Test_ZSTD_custom_free_pass(void* opaque, void* address) {
-    if (opaque)
-        *((int*)opaque) = 0;
-    free(address);
-}
-
-void* Test_ZSTD_custom_alloc_fail(void* opaque, size_t size) {
-    return NULL;
-}
-
-void Test_ZSTD_custom_free_fail(void* opaque, void* address) {
-}
-
 TEST(ZSTD_ZSTD_createCCtx_advanced, AOCL_Compression_zstd_ZSTD_createCCtx_advanced_pass_common_1) { //custom allocator
     size_t memSet = 0;
     ZSTD_customMem cMem = { Test_ZSTD_custom_alloc_pass, Test_ZSTD_custom_free_pass, &memSet };

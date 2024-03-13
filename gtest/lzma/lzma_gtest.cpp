@@ -39,6 +39,7 @@
 #include <string>
 #include <climits>
 #include "gtest/gtest.h"
+#include "gtest/gtest_utils.h"
 
 #include "algos/lzma/Alloc.h"
 #include "algos/lzma/LzFind.h"
@@ -142,7 +143,6 @@ TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_mis
 
 TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_shortStr_common)
 {
-    unsigned lenLimit = 9;
     unsigned len = 0;
     Byte cur[] = "abcd1234";
     {
@@ -1814,55 +1814,51 @@ TEST(LZMA_isWriteEndMark, AOCL_Compression_lzma_LzmaEnc_IsWriteEndMark_common_1)
 /*
     Base class for allocating and filling up buffers used for compression/decompression tests
 */
+static size_t LZMA_compression_bound(size_t inSize)
+{
+    size_t outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
+    return outSize;
+}
+
 class LZMA_buffersBase {
 public:
     const ISzAlloc g_Alloc = { SzAlloc, SzFree };
     const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
 
+    virtual ~LZMA_buffersBase() {
+        //free buffers
+        if (dataGen)
+            delete dataGen; // free inPtr and compPtr
+        if (decompPtr) free(decompPtr);
+    }
+
 protected:
     void buffers_setup()
     {
-        //allocate buffers
-        outSize = compression_bound(inSize);
-        inPtr = (char*)allocMem(inSize, 1);
-        compPtr = (char*)allocMem(outSize, 0);
+        //allocate buffers and load input data
+        dataGen   = new gtest_data_gen_t(LZMA_compression_bound, inSize, gtest_data_gen_type::repeated);
+        outSize   = dataGen->getCompressedSize();
+        inPtr     = dataGen->getOrigBuff();
+        compPtr   = dataGen->getCompressedBuff();
         decompPtr = (char*)allocMem(inSize, 0);
         ASSERT_NE(inPtr, nullptr);
         ASSERT_NE(compPtr, nullptr);
         ASSERT_NE(decompPtr, nullptr);
-
-        //load input buffer
-        memset(inPtr, 0, inSize);
-        size_t cur = 0;
-        while (cur < inSize) { //fill buffer with repeating patterns
-            int randId = rand() % randomStrs.size(); //pick a string at random
-            int randLen = rand() % randomStrs[randId].size(); //select sub string length
-            if (cur + randLen >= inSize) break;
-
-            memcpy(inPtr + cur, randomStrs[randId].c_str(), randLen * sizeof(char));
-            cur += randLen;
-        }
     }
+
+    char* inPtr = nullptr, * compPtr = nullptr, * decompPtr = nullptr;
+    size_t inSize = 0;
+    size_t outSize = 0;
+    SizeT outLen;
+
+private:
+    gtest_data_gen_t* dataGen = nullptr;
 
     void* allocMem(size_t size, ptrdiff_t zeroInit)
     {
         void* bufPtr = (zeroInit == 0) ? calloc(1, size) : malloc(size);
         return bufPtr;
     }
-
-    size_t compression_bound(size_t inSize)
-    {
-        size_t outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
-        return outSize;
-    }
-
-    std::vector<std::string> randomStrs = { "qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890",
-        "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM", "!@#$%^&*()" };
-
-    char* inPtr = nullptr, * compPtr = nullptr, * decompPtr = nullptr;
-    size_t inSize = 0;
-    size_t outSize = 0;
-    SizeT outLen;
 };
 
 /*********************************************
@@ -1892,13 +1888,6 @@ protected:
         //setup buffers
         buffers_setup();
         headerSize = LZMA_PROPS_SIZE;
-    }
-
-    void TearDownEncode() {
-        //free buffers
-        if (inPtr) free(inPtr);
-        if (compPtr) free(compPtr);
-        if (decompPtr) free(decompPtr);
     }
 
     CLzmaEncProps props;
@@ -1931,11 +1920,6 @@ public:
     void SetUp() override {
         size_t inSize = GetParam();
         SetUpEncode(inSize);
-    }
-
-    void TearDown() override
-    {
-        TearDownEncode();
     }
 
     void setup_encoder() {
@@ -2013,11 +1997,6 @@ public:
     void SetUp() override {
         size_t inSize = GetParam();
         SetUpEncode(inSize);
-    }
-
-    void TearDown() override
-    {
-        TearDownEncode();
     }
 
     void init() {
@@ -2992,13 +2971,6 @@ protected:
         headerSize = LZMA_PROPS_SIZE;
     }
 
-    void TearDownBuffers() {
-        //free buffers
-        if (inPtr) free(inPtr);
-        if (compPtr) free(compPtr);
-        if (decompPtr) free(decompPtr);
-    }
-
     CLzmaEncProps props;
     size_t headerSize;
 };
@@ -3022,11 +2994,6 @@ public:
 
     void SetUp() override {
         SetUpBuffers();
-    }
-
-    void TearDown() override
-    {
-        TearDownBuffers();
     }
 
     void encode() {
@@ -3230,11 +3197,6 @@ class LZMA_decodeFile : public LZMA_decodeBase
 public:
     void SetUp() override {
         SetUpBuffers();
-    }
-
-    void TearDown() override
-    {
-        TearDownBuffers();
     }
 
     void encode() {
@@ -3473,13 +3435,6 @@ protected:
         buffers_setup();
     }
 
-    void TearDownEncode() {
-        //free buffers
-        if (inPtr) free(inPtr);
-        if (compPtr) free(compPtr);
-        if (decompPtr) free(decompPtr);
-    }
-
 private:
     int64_t decompress(char* inPtr, size_t inSize, char* outBuf, size_t outSize) {
         uint64_t memlimit = 1 << 25;
@@ -3514,13 +3469,6 @@ protected:
         inSize = 1024 * 1024; //1MB
         buffers_setup();
     }
-
-    void TearDownBuffers() {
-        //free buffers
-        if (inPtr) free(inPtr);
-        if (compPtr) free(compPtr);
-        if (decompPtr) free(decompPtr);
-    }
 };
 
 /*********************************************
@@ -3535,10 +3483,6 @@ class LZMA_XZ_encodeFile : public LZMA_XZ_encodeBase
 public:
     void SetUp() override {
         SetUpEncode();
-    }
-
-    void TearDown() override {
-        TearDownEncode();
     }
 
     void execute(uint32_t preset, lzma_check check) {
@@ -3680,11 +3624,6 @@ class LZMA_XZ_decodeFile : public LZMA_XZ_decodeBase
 public:
     void SetUp() override {
         SetUpBuffers();
-    }
-
-    void TearDown() override
-    {
-        TearDownBuffers();
     }
 
     size_t encode() {

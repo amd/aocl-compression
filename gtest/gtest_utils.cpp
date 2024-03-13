@@ -48,3 +48,6 @@ vector<DynamicDispatch> get_dynamic_dispatcher_flags()
     }
     return params;
 }
+
+const std::vector<std::string> gtest_data_gen_t::randomStrs({ "qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890",
+"QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM", "!@#$%^&*()" });

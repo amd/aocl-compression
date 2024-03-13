@@ -52,13 +52,12 @@
 #include <climits>
 #include <cstring>
 #include "gtest/gtest.h"
+#include "gtest/gtest_utils.h"
 
-#ifndef AOCL_EXCLUDE_ZSTD
 #define ZSTD_STATIC_LINKING_ONLY
 #include "algos/zstd/lib/zstd.h"
 #include "algos/zstd/lib/compress/zstd_lazy.h"
 #include "algos/zstd/lib/decompress/zstd_decompress_block.h"
-#endif
 
 #ifdef AOCL_ENABLE_THREADS
 #include "threads/threads.h"
@@ -81,91 +80,62 @@ public:
 
 class TestLoad_2
 {
-    //source buffer (original data which we intend to compress).
-    char* orig_data = NULL;
-    size_t orig_sz = 0;
-    //destination buffer (data obtained after compression).
-    char* compressed_data = NULL;
-    size_t compressed_sz = 0;
 
 public:
-    // Constructor functions, creates `sz` size of source data.
-    TestLoad_2(size_t sz)
+    TestLoad_2(size_t sz, gtest_data_gen_type type = gtest_data_gen_type::random)
     {
-        this->orig_sz = sz;
-        orig_data = (char*)malloc(sz);
-
-        // generating random data inside `orig_data` buffer.
-        for (size_t i = 0; i < sz; i++)
-        {
-            orig_data[i] = rand() % 255;
-        }
-
-        // Provides the maximum size that ZSTD compression may output in a "worst case".
-        compressed_sz = ZSTD_compressBound(sz);
-        compressed_data = (char*)malloc(compressed_sz);
+        data_gen = new gtest_data_gen_t(ZSTD_compressBound, sz, type);
     }
 
-    TestLoad_2(size_t inp_sz, size_t out_sz)
+    TestLoad_2(size_t inp_sz, size_t out_sz, gtest_data_gen_type type = gtest_data_gen_type::random)
     {
-        this->orig_sz = inp_sz;
-        orig_data = (char*)malloc(inp_sz);
-
-        // generating random data inside `orig_data` buffer.
-        for (size_t i = 0; i < inp_sz; i++)
-        {
-            orig_data[i] = rand() % 255;
-        }
-
-        compressed_sz = out_sz; // custom out_sz
-        compressed_data = (char*)malloc(compressed_sz);
+        data_gen = new gtest_data_gen_t(ZSTD_compressBound, inp_sz, out_sz, type);
     }
 
-    // Returns pointer to source buffer.
+    ~TestLoad_2() {
+        delete data_gen;
+    }
+
     char* getOrigData()
     {
-        return orig_data;
+        return data_gen->getOrigBuff();
     }
-    // Returns size of source buffer.
+
     size_t getOrigSize()
     {
-        return orig_sz;
+        return data_gen->getOrigSize();
     }
-    // Returns pointer to destination buffer (data obtained after compression).
+
     char* getCompressedBuff()
     {
-        return compressed_data;
+        return data_gen->getCompressedBuff();
     }
-    // Returns size of destination data.
+
     size_t getCompressedSize()
     {
-        return compressed_sz;
+        return data_gen->getCompressedSize();
     }
+
     // Fill dst buffer
     bool dstset(unsigned char val, char* start, char* end) {
-        if (start > end || start < compressed_data || end >(compressed_data + compressed_sz))
-            return false;
-        memset(start, val, end - start);
-        return true;
+        return data_gen->dstSet(val, start, end);
     }
-    // Destructor function.
-    ~TestLoad_2()
-    {
-        free(orig_data);
-        free(compressed_data);
-        orig_data = NULL;
-        compressed_data = NULL;
-    }
+private:
+    gtest_data_gen_t* data_gen = NULL;
 };
 
 enum class ZSTD_Compress_API {
     compress, compress_advanced, compress2, compress_cctx, compress_stream2_continue, compress_stream2_end,
     compress_stream2_flush, compress_stream_continue, compress_stream_end, compress_stream_flush,
-    compress_sequence
+    compress_sequence, compress_cdict, compress_cdict2, compress_dict
 };
 
 enum class ZSTD_Decompress_API {
-    decompress, decompress_dctx, decompress_stream
+    decompress, decompress_dctx, decompress_stream, decompress_ddict, decompress_dict
+};
+
+enum class ZSTD_loadDict_type {
+    byValue, byReference, advanced, refcdict, refprefix, refprefixAdv
 };
 
 class ZSTD_frame_creator
@@ -349,6 +319,11 @@ int get_cparam_within_bounds(ZSTD_cParameter param);
 int get_dparam_below_lower(ZSTD_dParameter param);
 int get_dparam_above_upper(ZSTD_dParameter param);
 int get_dparam_within_bounds(ZSTD_dParameter param);
+bool is_valid_zstd_frame(char* compressed, unsigned compressedLen);
+void* Test_ZSTD_custom_alloc_pass(void* opaque, size_t size);
+void Test_ZSTD_custom_free_pass(void* opaque, void* address);
+void* Test_ZSTD_custom_alloc_fail(void* opaque, size_t size);
+void Test_ZSTD_custom_free_fail(void* opaque, void* address);
 
 /* Commonly used wrapper functions */
 bool Test_ZSTD_isError(size_t len);
@@ -389,6 +364,11 @@ size_t Test_ZSTD_generateSequences(ZSTD_CCtx* zc, ZSTD_Sequence* outSeqs,
     size_t outSeqsSize, const void* src, size_t srcSize);
 size_t Test_ZSTD_compressSequences(ZSTD_CCtx* cctx, void* dst, size_t dstSize,
     const ZSTD_Sequence* inSeqs, size_t inSeqsSize, const void* src, size_t srcSize);
-    
+size_t Test_ZSTD_CCtxParams_init(ZSTD_CCtx_params* cctxParams, int compressionLevel);
+size_t Test_ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+size_t Test_ZSTD_estimateCCtxSize(int compressionLevel);
+ZSTD_CCtx* Test_ZSTD_initStaticCCtx(void* workspace, size_t workspaceSize);
+size_t Test_ZSTD_nextSrcSizeToDecompress(ZSTD_DCtx* dctx);
+
 #define CHECK_PASS_ZSTD(foo) EXPECT_FALSE(Test_ZSTD_isError(foo));
 #define CHECK_FAIL_ZSTD(foo) EXPECT_TRUE(Test_ZSTD_isError(foo));

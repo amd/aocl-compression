@@ -1455,6 +1455,10 @@ size_t ZSTD_CCtx_loadDictionary_advanced(
         ZSTD_dictLoadMethod_e dictLoadMethod,
         ZSTD_dictContentType_e dictContentType)
 {
+    if (cctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_CCtx_loadDictionary_advanced (size: %u)", (U32)dictSize);
     DEBUGLOG(4, "ZSTD_CCtx_loadDictionary_advanced (size: %u)", (U32)dictSize);
     RETURN_ERROR_IF(cctx->streamStage != zcss_init, stage_wrong,
@@ -1497,6 +1501,10 @@ size_t ZSTD_CCtx_loadDictionary(ZSTD_CCtx* cctx, const void* dict, size_t dictSi
 
 size_t ZSTD_CCtx_refCDict(ZSTD_CCtx* cctx, const ZSTD_CDict* cdict)
 {
+    if (cctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     RETURN_ERROR_IF(cctx->streamStage != zcss_init, stage_wrong,
                     "Can't ref a dict when ctx not in init stage.");
     /* Free the existing local cdict (if any) to save memory. */
@@ -1521,6 +1529,10 @@ size_t ZSTD_CCtx_refPrefix(ZSTD_CCtx* cctx, const void* prefix, size_t prefixSiz
 size_t ZSTD_CCtx_refPrefix_advanced(
         ZSTD_CCtx* cctx, const void* prefix, size_t prefixSize, ZSTD_dictContentType_e dictContentType)
 {
+    if (cctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     RETURN_ERROR_IF(cctx->streamStage != zcss_init, stage_wrong,
                     "Can't ref a prefix when ctx not in init stage.");
     ZSTD_clearAllDicts(cctx);
@@ -5445,6 +5457,16 @@ size_t ZSTD_compressEnd_public(ZSTD_CCtx* cctx,
                                void* dst, size_t dstCapacity,
                          const void* src, size_t srcSize)
 {
+    if (src == NULL && srcSize > 0) // src == NULL is a valid input when srcSize == 0. Empty frame is returned in this case.
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
+        return ERROR(srcSize_wrong);
+    }
+    if (dst == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dst");
+        return ERROR(dstSize_tooSmall);
+    }
     size_t endResult;
     size_t const cSize = ZSTD_compressContinue_internal(cctx,
                                 dst, dstCapacity, src, srcSize,
@@ -5744,6 +5766,11 @@ size_t ZSTD_compress_usingDict(ZSTD_CCtx* cctx,
                                int compressionLevel)
 {
     AOCL_SETUP_NATIVE();
+    if (cctx == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     {
         ZSTD_parameters const params = ZSTD_getParams_internal(compressionLevel, srcSize, dict ? dictSize : 0, ZSTD_cpm_noAttachDict);
         assert(params.fParams.contentSizeFlag == 1);
@@ -5841,6 +5868,8 @@ static size_t ZSTD_initCDict_internal(
                     ZSTD_dictContentType_e dictContentType,
                     ZSTD_CCtx_params params)
 {
+    if (cdict == NULL)
+        return ERROR(GENERIC);
     LOG_FORMATTED(INFO, logCtx, "ZSTD_initCDict_internal (dictContentType:%u)", (unsigned)dictContentType);
     DEBUGLOG(3, "ZSTD_initCDict_internal (dictContentType:%u)", (unsigned)dictContentType);
     assert(!ZSTD_checkCParams(params.cParams));
@@ -6186,6 +6215,11 @@ static size_t ZSTD_compress_usingCDict_internal(ZSTD_CCtx* cctx,
                                 const void* src, size_t srcSize,
                                 const ZSTD_CDict* cdict, ZSTD_frameParameters fParams)
 {
+    if (cctx == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
+        return ERROR(GENERIC);
+    }
     FORWARD_IF_ERROR(ZSTD_compressBegin_usingCDict_internal(cctx, cdict, fParams, srcSize), ""); /* will check if cdict != NULL */
     return ZSTD_compressEnd_public(cctx, dst, dstCapacity, src, srcSize);
 }

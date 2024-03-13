@@ -1147,6 +1147,11 @@ static size_t ZSTD_decompressMultiFrame(ZSTD_DCtx* dctx,
                                   const void* dict, size_t dictSize,
                                   const ZSTD_DDict* ddict)
 {   
+    if (dctx == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dctx");
+        return ERROR(GENERIC);
+    }
+
     if (src == NULL && srcSize > 0) {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid src");
         return ERROR(srcSize_wrong); //dst == NULL is allowed when src contains an empty frame and no output is expected
@@ -1328,7 +1333,7 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
     if (dst == NULL) {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid dst");
         LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-        return ERROR(GENERIC);
+        return ERROR(dstBuffer_null);
     }
     ret_status = aocl_setup_parallel_decompress_mt(&thread_group_handle, src_ptr, dst,
                                                    srcDataSz, dstCapacity, 0);
@@ -1906,7 +1911,7 @@ size_t ZSTD_decompressBegin_usingDDict(ZSTD_DCtx* dctx, const ZSTD_DDict* ddict)
  *  It can still be loaded, but as a content-only dictionary. */
 unsigned ZSTD_getDictID_fromDict(const void* dict, size_t dictSize)
 {
-    if (dictSize < 8) return 0;
+    if (dictSize < 8 || dict == NULL) return 0;
     if (MEM_readLE32(dict) != ZSTD_MAGIC_DICTIONARY) return 0;
     return MEM_readLE32((const char*)dict + ZSTD_FRAMEIDSIZE);
 }
@@ -1988,6 +1993,11 @@ size_t ZSTD_DCtx_loadDictionary_advanced(ZSTD_DCtx* dctx,
                                          ZSTD_dictLoadMethod_e dictLoadMethod,
                                          ZSTD_dictContentType_e dictContentType)
 {
+    if (dctx == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dctx");
+        return ERROR(GENERIC);
+    }
     RETURN_ERROR_IF(dctx->streamStage != zdss_init, stage_wrong, "");
     ZSTD_clearDict(dctx);
     if (dict && dictSize != 0) {
@@ -2066,6 +2076,11 @@ size_t ZSTD_resetDStream(ZSTD_DStream* dctx)
 
 size_t ZSTD_DCtx_refDDict(ZSTD_DCtx* dctx, const ZSTD_DDict* ddict)
 {
+    if (dctx == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dctx");
+        return ERROR(GENERIC);
+    }
     RETURN_ERROR_IF(dctx->streamStage != zdss_init, stage_wrong, "");
     ZSTD_clearDict(dctx);
     if (ddict) {
