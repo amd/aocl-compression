@@ -50,6 +50,10 @@
 
 #include "zstd_gtest.h"
 
+#ifdef AOCL_TEST_FUZZER
+#include "fuzztest/fuzztest.h"
+#endif
+
 // Test wrapper function for API ZSTD_versionNumber()
 unsigned Test_ZSTD_versionNumber()
 {
@@ -1931,4 +1935,49 @@ TEST(ZSTD_ZSTD_maxCLevel, AOCL_Compression_zstd_ZSTD_maxCLevel_pass_common_1) {
 }
 /*********************************************
  * End of ZSTD_ZSTD_maxCLevel
+ *********************************************/
+
+/*********************************************
+ * Begin fuzz tests for zstd
+ *********************************************/
+#ifdef AOCL_TEST_FUZZER
+#include <vector>
+
+void ZSTD_compress_advanced_fuzz(std::vector<char> dest,
+                                 std::vector<char> source,
+                                 std::vector<char> dict,
+                                 int level)
+{
+    size_t destLen = dest.size();
+    size_t srcLen = source.size();
+    size_t dictLen = dict.size();
+
+    ZSTD_CCtx* cctx = ZSTD_createCCtx();
+    ZSTD_parameters zparams = ZSTD_getParams(level, srcLen, dictLen);
+    zparams.fParams.contentSizeFlag = 1;
+    ZSTD_compress_advanced(cctx, dest.data(), destLen, source.data(), srcLen, dict.data(), dictLen, zparams);
+    if (cctx) ZSTD_freeCCtx(cctx);
+}
+
+FUZZ_TEST(AOCL_Compression_zstd, ZSTD_compress_advanced_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::InRange<int>(-1, 22));
+
+void ZSTD_decompressDCtx_fuzz(std::vector<char> dest,
+                              std::vector<char> source)
+{
+    size_t destLen = dest.size();
+    size_t srcLen = source.size();
+
+    ZSTD_DCtx* dctx = ZSTD_createDCtx();
+    ZSTD_decompressDCtx(dctx, dest.data(), destLen, source.data(), srcLen);
+    if (dctx) ZSTD_freeDCtx(dctx);
+}
+FUZZ_TEST(AOCL_Compression_zstd, ZSTD_decompressDCtx_fuzz);
+
+#endif /* AOCL_TEST_FUZZER */
+/*********************************************
+ * End fuzz tests for zstd
  *********************************************/

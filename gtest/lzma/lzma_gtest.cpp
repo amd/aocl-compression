@@ -47,6 +47,10 @@
 #include "algos/lzma/LzmaDec.h"
 #include "algos/common/aoclHashChain.h"
 
+#ifdef AOCL_TEST_FUZZER
+#include "fuzztest/fuzztest.h"
+#endif
+
 using namespace std;
 
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
@@ -3861,4 +3865,55 @@ TEST(LZMA_XZ_version, AOCL_Compression_lzma_lzma_version_string_common_1)
 #endif
 /*********************************************
  * End API tests for xz utils lzma
+ *********************************************/
+
+/*********************************************
+ * Begin fuzz tests for lzma
+ *********************************************/
+#ifdef AOCL_TEST_FUZZER
+#include <vector>
+
+void LzmaEncode_fuzz(std::vector<Byte> dest,
+                     std::vector<Byte> source,
+                     int level)
+{
+  if (dest.size() < LZMA_PROPS_SIZE) return;
+  
+  SizeT destLen = dest.size();
+  SizeT srcLen = source.size();
+
+  CLzmaEncProps encProps;
+  SizeT headerSize = LZMA_PROPS_SIZE;
+  SizeT outLen = destLen - LZMA_PROPS_SIZE;
+  LzmaEncProps_Init(&encProps);
+  encProps.level = level;
+
+  LzmaEncode(dest.data() + LZMA_PROPS_SIZE, &outLen, source.data(),
+              srcLen, &encProps, dest.data(), &headerSize, 0, NULL,
+              &g_Alloc, &g_Alloc);
+}
+
+FUZZ_TEST(AOCL_Compression_lzma, LzmaEncode_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<Byte>>(),
+                fuzztest::Arbitrary<std::vector<Byte>>(),
+                fuzztest::InRange<int>(0, 9));
+
+void LzmaDecode_fuzz(std::vector<Byte> dest,
+                     std::vector<Byte> source)
+{
+  if (source.size() < LZMA_PROPS_SIZE) return;
+
+  SizeT destLen = dest.size();
+  SizeT srcLen = source.size() - LZMA_PROPS_SIZE;
+
+  ELzmaStatus status;
+  LzmaDecode(dest.data(), &destLen, source.data() + LZMA_PROPS_SIZE,
+              &srcLen, source.data(), LZMA_PROPS_SIZE, LZMA_FINISH_END,
+              &status, &g_Alloc);
+}
+FUZZ_TEST(AOCL_Compression_lzma, LzmaDecode_fuzz);
+
+#endif /* AOCL_TEST_FUZZER */
+/*********************************************
+ * End fuzz tests for lzma
  *********************************************/
