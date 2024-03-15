@@ -42,6 +42,10 @@
 
 #include "algos/lz4/lz4.h"
 
+#ifdef AOCL_TEST_FUZZER
+#include "fuzztest/fuzztest.h"
+#endif
+
 using namespace std;
 
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
@@ -2572,3 +2576,30 @@ TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_pass_common_4)
 /*********************************************
  * "End" of AOCL_LZ4_hash5
  *********************************************/
+
+
+
+#ifdef AOCL_TEST_FUZZER
+
+void LZ4_compress_default_fuzz(vector<char> dest,
+                    vector<char> source)
+{
+  int destLen = dest.size();
+  int srcLen = source.size();
+
+  LZ4_compress_default((const char *)source.data(), dest.data(), srcLen, destLen);
+}
+
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_default_fuzz);
+
+void LZ4_decompress_safe_fuzz(vector<char> dest,
+                    vector<char> source)
+{
+  int destLen = dest.size();
+  int srcLen = source.size();
+
+  LZ4_decompress_safe(source.data(), dest.data(), srcLen, destLen);
+}
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_fuzz);
+
+#endif /* AOCL_TEST_FUZZER */

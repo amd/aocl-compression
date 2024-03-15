@@ -49,6 +49,10 @@
 #endif
 #include "algos/lz4/lz4hc.h"
 
+#ifdef AOCL_TEST_FUZZER
+#include "fuzztest/fuzztest.h"
+#endif
+
 using namespace std;
 
 /* read function to be called for Hash */
@@ -2635,3 +2639,22 @@ TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4H
  * "End" of AOCL_LZ4HC_insertAndGetWiderMatch Tests
  *****************************************************/
 #endif
+
+
+#ifdef AOCL_TEST_FUZZER
+
+void LZ4_compress_HC_fuzz(vector<char> dest,
+                    vector<char> source,
+                    int level)
+{
+  int destLen = dest.size();
+  int srcLen = source.size();
+
+  LZ4_compress_HC((const char*)source.data(), dest.data(), srcLen, destLen, level);
+}
+
+FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_fuzz)
+    .WithDomains(fuzztest::Arbitrary<vector<char>>(),
+                fuzztest::Arbitrary<vector<char>>(),
+                fuzztest::InRange<int>(-1, 12));
+#endif /* AOCL_TEST_FUZZER */
