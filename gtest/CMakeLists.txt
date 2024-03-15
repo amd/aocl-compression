@@ -63,6 +63,7 @@ set (GTEST_SRC_PATH ${CMAKE_SOURCE_DIR}/gtest)
 set (GTEST_UTILS_SRC_FILES ${GTEST_SRC_PATH}/utils/utils_gtest.cpp)
 set (GTEST_API_SRC_FILES ${GTEST_SRC_PATH}/api/api_gtest.cpp)
 set (GTEST_COMMON_SRC_FILES ${GTEST_SRC_PATH}/common/common_gtest.cpp)
+set (GTEST_UTILITY_SRC_FILES ${GTEST_SRC_PATH}/gtest_utils.cpp)
 if (AOCL_ENABLE_THREADS)
     set (GTEST_THREADS_SRC_FILES ${GTEST_SRC_PATH}/threads/threads_gtest.cpp)
 endif()
@@ -153,11 +154,12 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_INTERNAL_TEST")
             endif()
             # add target
-            add_executable(${GTEST_CUR_EXE_NAME} ${GTEST_CUR_SRC_FILES})
+            add_executable(${GTEST_CUR_EXE_NAME} ${GTEST_CUR_SRC_FILES} ${GTEST_UTILITY_SRC_FILES})
             set_target_properties(${GTEST_CUR_EXE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
             target_include_directories(${GTEST_CUR_EXE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}
                                                 PRIVATE ${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/common
-                                                PRIVATE ${CMAKE_SOURCE_DIR}/api)
+                                                PRIVATE ${CMAKE_SOURCE_DIR}/api
+                                                PRIVATE ${GTEST_SRC_PATH})
             if(AOCL_TEST_FUZZER)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_TEST_FUZZER")
                 target_link_libraries(${GTEST_CUR_EXE_NAME} PRIVATE ${lib_name})

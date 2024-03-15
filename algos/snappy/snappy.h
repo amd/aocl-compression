@@ -563,7 +563,7 @@ namespace snappy {
     static void Append32(std::string* s, uint32_t value);
  };
 
-/// @endcond DOXYGEN_SHOULD_SKIP_THIS
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
   // The size of a compression block. Note that many parts of the compression
   // code assumes that kBlockSize <= 65536; in particular, the hash table
