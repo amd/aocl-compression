@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -1480,3 +1480,37 @@ INSTANTIATE_TEST_SUITE_P(
 /*******************************************
  * "End" of Test cases                     
  *******************************************/
+
+/*********************************************
+ * Begin fuzz tests for snappy
+ *********************************************/
+#ifdef AOCL_TEST_FUZZER
+#include "fuzztest/fuzztest.h"
+
+void RawCompress_fuzz(vector<char> source)
+{
+    // dest should be at least the size MaxCompressedLength(srcSize), or else out of bound memory access error occurs.
+    vector<char> dest = vector<char>(MaxCompressedLength(source.size()));
+    // destLen stores the size of the compressed data
+    size_t destLen;
+    RawCompress(source.data(), source.size(), dest.data(), &destLen);
+}
+
+FUZZ_TEST(AOCL_Compression_snappy, RawCompress_fuzz);
+
+void RawUncompress_fuzz(vector<char> source)
+{
+    size_t result = 0;
+    if(!GetUncompressedLength(source.data(), source.size(), &result))
+        return;
+    // dest should be at least the size of the uncompressed length, or else out of bound memory access error occurs.
+    vector<char> dest(result);
+    RawUncompress(source.data(), source.size(), dest.data());
+}
+
+FUZZ_TEST(AOCL_Compression_snappy, RawUncompress_fuzz);
+
+#endif /* AOCL_TEST_FUZZER */
+/*********************************************
+ * End fuzz tests for snappy
+ *********************************************/

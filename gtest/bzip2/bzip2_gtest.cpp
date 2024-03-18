@@ -3213,3 +3213,38 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_pas
 /*********************************************
  * "End" of BZ2_bzReadGetUnused Tests
  ********************************************/
+
+/*********************************************
+ * Begin fuzz tests for bzip2
+ *********************************************/
+#ifdef AOCL_TEST_FUZZER
+#include "fuzztest/fuzztest.h"
+
+void BuffToBuffCompress_fuzz(std::vector<char> dest, std::vector<char> source, int level, int workFactor)
+{
+    unsigned int destLen = dest.size();
+    // Verbosity is set to 0 to avoid extensive logs
+    BZIP2_API::BuffToBuffCompress(dest.data(), &destLen, source.data(), source.size(), level, 0, workFactor);
+}
+
+FUZZ_TEST(AOCL_Compression_bzip2, BuffToBuffCompress_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::InRange<int>(1, 9),
+                fuzztest::InRange<int>(0, 250));
+
+void BuffToBuffDecompress_fuzz(std::vector<char> dest, std::vector<char> source, int small)
+{
+    unsigned int destSize = dest.size();
+    // Verbosity is set to 0 to avoid extensive logs
+    BZIP2_API::BuffToBuffDecompress(dest.data(), &destSize, source.data(), source.size(), small, 0);
+}
+FUZZ_TEST(AOCL_Compression_bzip2, BuffToBuffDecompress_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::InRange<int>(0, 1));
+
+#endif /* AOCL_TEST_FUZZER */
+/*********************************************
+ * End fuzz tests for bzip2
+ *********************************************/
