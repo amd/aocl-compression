@@ -120,7 +120,7 @@ static int setup_ok_zstd_encode = 0; // flag to indicate status of dynamic dispa
  * the overhead from block headers can make the compressed data larger
  * than the return value of ZSTD_compressBound().
  */
-size_t ZSTD_compressBound(size_t srcSize) {
+size_t ZSTD_compressBound_st(size_t srcSize) {
     size_t const r = ZSTD_COMPRESSBOUND(srcSize);
     if (r == 0) {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid srcSize");
@@ -129,6 +129,61 @@ size_t ZSTD_compressBound(size_t srcSize) {
     return r;
 }
 
+#ifdef AOCL_ENABLE_THREADS
+size_t ZSTD_compressBound_mt(size_t srcSize) {
+
+    size_t sz1 = ZSTD_compressBound_st(srcSize);
+    if (sz1 == ERROR(srcSize_wrong))
+        return sz1;
+
+    AOCL_UINT32 window_factor = ZSTD_GET_WINDOW_FACTOR(srcSize);
+    AOCL_UINT32 winLog = 0;
+    size_t sz2 = 0, szMax = 0;
+    
+    /* NOTE: compressBound is not an increasing function. 
+     *  compressBound with ZSTD_WINDOWLOG_MIN as winLog is NOT always the maximum upper bound.
+     *  Hence, need to test with winLog in the range [ZSTD_WINDOWLOG_MIN, ZSTD_WINDOWLOG_MAX)
+     *  to get the maximum upper bound. */
+    for(winLog = ZSTD_WINDOWLOG_MIN; winLog < ZSTD_WINDOWLOG_MAX; ++winLog) {
+        if (((size_t)(1u << winLog) * window_factor) > INT_MAX)
+            break;
+        COMPRESS_BOUND_MT(srcSize, ZSTD_compressBound_st, 1u << winLog, window_factor, sz1, sz2, ERROR(srcSize_wrong))
+        if(ZSTD_isError(sz2)) return sz2;
+        szMax = (sz2 > szMax)? sz2 : szMax;
+    }
+    return ((szMax > sz1)? szMax : sz1);
+}
+#endif
+
+size_t AOCL_ZSTD_compressBound(size_t srcSize, ZSTD_parameters params) {
+
+#ifdef AOCL_ENABLE_THREADS
+    size_t sz1 = ZSTD_compressBound_st(srcSize);
+    if (sz1 == ERROR(srcSize_wrong))
+        return sz1;
+
+    size_t sz2 = 0;
+    AOCL_INT32 window_len = 1U << params.cParams.windowLog;
+    AOCL_UINT32 window_factor = ZSTD_GET_WINDOW_FACTOR(srcSize);
+    if (((size_t)(window_len) * window_factor) > INT_MAX) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        return ERROR(GENERIC);
+    }
+    COMPRESS_BOUND_MT(srcSize, ZSTD_compressBound_st, window_len, window_factor, sz1, sz2, ERROR(srcSize_wrong))
+    if(ZSTD_isError(sz2)) return sz2;
+    return ((sz2 > sz1) ? sz2 : sz1);
+#else
+    return ZSTD_compressBound(srcSize);
+#endif
+
+}
+
+static size_t (*ZSTD_compressBound_fp)(size_t srcSize) = ZSTD_compressBound_st;
+
+size_t ZSTD_compressBound(size_t srcSize) {
+    AOCL_SETUP_NATIVE();
+    return ZSTD_compressBound_fp(srcSize);
+}
 
 /*-*************************************
 *  Context memory management
@@ -5519,6 +5574,16 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
     FORWARD_IF_ERROR(ZSTD_checkCParams(params.cParams), "");
 
 #ifdef AOCL_ENABLE_THREADS //Threaded
+
+    size_t cprBound = AOCL_ZSTD_compressBound(srcSize, params);
+    if(ZSTD_isError(cprBound)) {
+        LOG_UNFORMATTED(ERR, logCtx, "AOCL_ZSTD_compressBound failed");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return cprBound;
+    }
+    if(dstCapacity < cprBound)
+        RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(ERROR(dstSize_tooSmall))
+    
     size_t result = 0;
     aocl_thread_group_t thread_group_handle;
     aocl_thread_info_t cur_thread_info;
@@ -7579,20 +7644,12 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
         //Unoptimized C version
         aoclOptFlag = 0;
         AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
+        ZSTD_compressBound_fp = ZSTD_compressBound_st;
     }
     else
     {
         switch (optLevel)
         {
-            case -1: // undecided. use defaults based on compiler flags
-#ifdef AOCL_ZSTD_OPT
-                aoclOptFlag = 1;
-                AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
-#else
-                aoclOptFlag = 0;
-                AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
-#endif
-                break;
             case 0://Optimized C version
             case 1://SSE version
             case 2://AVX version
@@ -7601,14 +7658,21 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
 #ifdef AOCL_ZSTD_OPT
                 aoclOptFlag = 1;
                 AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
+#ifdef AOCL_ENABLE_THREADS
+                ZSTD_compressBound_fp = ZSTD_compressBound_mt;
+#else
+                ZSTD_compressBound_fp = ZSTD_compressBound_st;
+#endif /* AOCL_ENABLE_THREADS */
 #else
                 aoclOptFlag = 0;
                 AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
+                ZSTD_compressBound_fp = ZSTD_compressBound_st;
 #endif /* AOCL_ZSTD_OPT */
                 break;
         }
     }
 }
+
 /* AOCL-Compression setup API for invoking Dynamic dispatcher for compression
 * */
 char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,

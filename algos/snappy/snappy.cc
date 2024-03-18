@@ -157,7 +157,7 @@ static inline uint32_t HashBytes(uint32_t bytes, int shift) {
   return (bytes * kMul) >> shift;
 }
 
-size_t MaxCompressedLength(size_t source_bytes) {
+size_t MaxCompressedLength_st(size_t source_bytes) {
   // Compressed data can be defined as:
   //    compressed := item* literal*
   //    item       := literal* copy
@@ -179,6 +179,23 @@ size_t MaxCompressedLength(size_t source_bytes) {
   //
   // This last factor dominates the blowup, so the final estimate is:
   return 32 + source_bytes + source_bytes / 6;
+}
+
+#ifdef AOCL_ENABLE_THREADS
+size_t MaxCompressedLength_mt(size_t source_bytes) {
+
+    size_t sz1 = MaxCompressedLength_st(source_bytes);
+    size_t sz2 = 0;
+    COMPRESS_BOUND_MT(source_bytes, MaxCompressedLength_st, (AOCL_INT32)kBlockSize, WINDOW_FACTOR, sz1, sz2, 0)
+    return sz2;
+}
+#endif
+
+static size_t (*MaxCompressedLength_fp)(size_t source_bytes) = MaxCompressedLength_st;
+
+size_t MaxCompressedLength(size_t source_bytes) {
+    AOCL_SETUP_NATIVE();
+    return MaxCompressedLength_fp(source_bytes);
 }
 
 namespace {
@@ -3061,6 +3078,7 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
         //C version
         SNAPPY_compress_fragment_fp    = internal::CompressFragment;
         SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress;
+        MaxCompressedLength_fp         = MaxCompressedLength_st;
 #ifdef AOCL_ENABLE_THREADS
         SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
 #endif
@@ -3104,6 +3122,9 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
 #ifdef AOCL_ENABLE_THREADS
             SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
             InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
+            MaxCompressedLength_fp = MaxCompressedLength_mt;
+#else
+            MaxCompressedLength_fp = MaxCompressedLength_st;
 #endif
             SET_FP_TO_WITH_C
             break;
@@ -3115,6 +3136,9 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
             SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
             InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_avx>;
             InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_avx>;
+            MaxCompressedLength_fp = MaxCompressedLength_mt;
+#else
+            MaxCompressedLength_fp = MaxCompressedLength_st;
 #endif
             SET_FP_TO_WITH_AVX
             InternalUncompressAOCLArray_fp = InternalUncompress<AOCL_SnappyArrayWriter_AVX, with_avx>;
@@ -3124,6 +3148,9 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
 #ifdef AOCL_ENABLE_THREADS
             SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
             InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
+            MaxCompressedLength_fp = MaxCompressedLength_mt;
+#else
+            MaxCompressedLength_fp = MaxCompressedLength_st;
 #endif
             SET_FP_TO_WITH_C
 #endif
@@ -3139,6 +3166,9 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
             SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
             InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_bmi_avx>;
             InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_bmi_avx>;
+            MaxCompressedLength_fp = MaxCompressedLength_mt;
+#else
+            MaxCompressedLength_fp = MaxCompressedLength_st;
 #endif
             SET_FP_TO_WITH_BMI_AVX
             InternalUncompressAOCLArray_fp = InternalUncompress<AOCL_SnappyArrayWriter_AVX, with_bmi_avx>;
@@ -3147,6 +3177,9 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
             SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
             InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_avx>;
             InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_avx>;
+            MaxCompressedLength_fp = MaxCompressedLength_mt;
+#else
+            MaxCompressedLength_fp = MaxCompressedLength_st;
 #endif
             SET_FP_TO_WITH_AVX
             InternalUncompressAOCLArray_fp = InternalUncompress<AOCL_SnappyArrayWriter_AVX, with_avx>;
@@ -3157,6 +3190,9 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
 #ifdef AOCL_ENABLE_THREADS
             SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
             InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
+            MaxCompressedLength_fp = MaxCompressedLength_mt;
+#else
+            MaxCompressedLength_fp = MaxCompressedLength_st;
 #endif
             SET_FP_TO_WITH_C
 #endif

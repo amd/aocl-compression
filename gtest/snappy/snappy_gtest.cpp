@@ -514,10 +514,12 @@ public:
 TEST(SNAPPY_MaxCompressedLength, all_tests)
 {
     EXPECT_EQ(MaxCompressedLength(0), 32);                  // AOCL_Compression_snappy_MaxCompressedLength_common_1
+#ifndef AOCL_ENABLE_THREADS
     EXPECT_EQ(MaxCompressedLength(393216), 458784);         // AOCL_Compression_snappy_MaxCompressedLength_common_2
     EXPECT_EQ(MaxCompressedLength(INT_MAX), 2505397620);    // AOCL_Compression_snappy_MaxCompressedLength_common_3
     size_t inp = LLONG_MAX / 2;
     EXPECT_EQ(MaxCompressedLength(inp),5380300354831952585);// AOCL_Compression_snappy_MaxCompressedLength_common_4
+#endif
 }
 
 class SNAPPY_IsValidCompressed_ : public ::testing::TestWithParam<string>

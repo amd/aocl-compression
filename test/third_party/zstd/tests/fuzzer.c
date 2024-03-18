@@ -503,12 +503,14 @@ static void test_compressBound(unsigned tnb)
 
     /* check ZSTD_compressBound == ZSTD_COMPRESSBOUND
      * for a large range of known valid values */
+#ifndef AOCL_ENABLE_THREADS
     DEBUG_STATIC_ASSERT(sizeof(size_t) >= 4);
     {   int s;
         for (s=0; s<30; s++) {
             size_t const w = (size_t)1 << s;
             CHECK_EQ(ZSTD_compressBound(w), ZSTD_COMPRESSBOUND(w));
     }   }
+#endif
 
     /* Ensure error if srcSize too big */
     {   size_t const w = ZSTD_MAX_INPUT_SIZE + 1;

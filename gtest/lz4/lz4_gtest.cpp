@@ -94,6 +94,22 @@ public:
         compressed_sz = LZ4_compressBound(sz);
         compressed_data = (char *)malloc(compressed_sz);
     }
+
+    TestLoad(int inp_sz, int out_sz)
+    {
+        this->orig_sz = inp_sz;
+        orig_data = (char*)malloc(inp_sz);
+
+        // generating random data inside `orig_data` buffer.
+        for (int i = 0; i < inp_sz; i++)
+        {
+            orig_data[i] = rand() % 255;
+        }
+
+        compressed_sz = out_sz; // custom out_sz
+        compressed_data = (char*)malloc(compressed_sz);
+    }
+
     // Returns pointer to source buffer.
     char *getOrigData()
     {
@@ -208,9 +224,9 @@ TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_pass
 
 TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail_common_4) // compressFail_dst_size_not_enough
 {
-    TestLoad d(800);
+    TestLoad d(800, 400 /* dst_size */);
 
-    int outLen = LZ4_compress_default(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(), d.getOrigSize()/20);
+    int outLen = LZ4_compress_default(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize());
     EXPECT_EQ(outLen, 0);
     EXPECT_FALSE(check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
 }
@@ -259,6 +275,28 @@ TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail
     EXPECT_EQ(LZ4_compress_default(d.getOrigData(), d.getCompressedBuff(), srcLen, dstLen), 0);
 
 }
+
+#ifdef AOCL_ENABLE_THREADS
+
+TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_pass_common_9) // pass_case_mt
+{
+    TestLoad d(8*64*1024);
+
+    int outLen = LZ4_compress_default(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize());
+    EXPECT_NE(outLen, 0);
+    EXPECT_TRUE(check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
+}
+
+TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail_common_10) // dstCapacity_inadequate_mt
+{
+    int srcLen = 16*64*1024;
+    TestLoad d(srcLen, srcLen/2 /* dst_size */);
+
+    int outLen = LZ4_compress_default(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize());
+    EXPECT_EQ(outLen, 0);
+}
+
+#endif
 
 INSTANTIATE_TEST_SUITE_P(
     LZ4,
@@ -424,6 +462,27 @@ TEST_P(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_pass_commo
     EXPECT_EQ(0, memcmp(output, original, orig_len));
 }
 
+#ifdef AOCL_ENABLE_THREADS
+TEST_P(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_pass_common_11) // successfull_decompression_mt
+{
+    int orig_len = 8*64*1024;
+    setOrigSz(orig_len);
+    setDstSz(orig_len);
+    int decLen = LZ4_decompress_safe(src, output, srcLen, outLen);
+    ASSERT_EQ(origLen, decLen);
+    EXPECT_EQ(0, memcmp(output, original, origLen));
+}
+
+TEST_P(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_fail_common_12) // dstCapacity_inadequate_mt
+{
+    int orig_len = 8*64*1024;
+    setOrigSz(orig_len);
+    setDstSz(orig_len/20);
+    int decLen = LZ4_decompress_safe(src, output, srcLen, outLen);
+    EXPECT_LT(decLen, 0);
+}
+#endif
+
 INSTANTIATE_TEST_SUITE_P(
     LZ4,
     LLZ4_decompress_safe,
@@ -460,8 +519,8 @@ TEST_P(LLZ4_decompress_safe_curated_input, AOCL_Compression_lz4_LZ4_decompress_s
 {
     const int origLen = 100;
     char orig[origLen];
-    char dst[100];
-    int dstCapacity = 100;
+    int dstCapacity = LZ4_compressBound(origLen);
+    char dst[dstCapacity];
 
     for (int i = 0; i < 100; i++)
         orig[i] = 'a';
@@ -848,9 +907,9 @@ TEST_P(LZ4_compress_fast_test, AOCL_Compression_lz4_LZ4_compress_fast_pass_commo
 
 TEST_P(LZ4_compress_fast_test, AOCL_Compression_lz4_LZ4_compress_fast_fail_common_4) // OutLen_small
 {
-    TestLoad d(800);
+    TestLoad d(800, 400 /* dst_size */);
 
-    EXPECT_EQ(LZ4_compress_fast(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(), d.getOrigSize()/260, 1), 0);
+    EXPECT_EQ(LZ4_compress_fast(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize(), 1), 0);
 }
 
 TEST_P(LZ4_compress_fast_test, AOCL_Compression_lz4_LZ4_compress_fast_pass_common_5) // acc_greater_MAX
@@ -1068,7 +1127,7 @@ TEST_P(LLZ4_decompress_safe_partial, AOCL_Compression_lz4_LZ4_decompress_safe_pa
 {
     setOrigSz(1);
     setDstSz(10);
-    srcLen = LZ4_compress_default(original, src, origLen, srcLen);
+    // srcLen : compressed bytes
 
     EXPECT_EQ(srcLen, 2);
     EXPECT_EQ(LZ4_decompress_safe_partial(src, output, srcLen, outLen, outLen), 1);

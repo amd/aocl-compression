@@ -24,7 +24,7 @@ int main (int argc, char **argv)
     FILE *inFp = NULL;
     int file_size = 0;
     char *inPtr = NULL, *compPtr = NULL, *decompPtr = NULL;
-    int64_t resultComp = 0, resultDecomp = 0;
+    int64_t resultCompBound = 0, resultComp = 0, resultDecomp = 0;
 
     if (argc < 2)
     {
@@ -43,7 +43,13 @@ int main (int argc, char **argv)
     aocl_compression_handle->optOff = 0;
     aocl_compression_handle->measureStats = 0;
     aocl_compression_handle->inSize = file_size;
-    aocl_compression_handle->outSize = (file_size + (file_size / 6) + (16 * 1024));
+    resultCompBound = aocl_llc_compressBound(method, aocl_compression_handle->inSize);
+    if (resultCompBound < 0)
+    {
+        printf("CompressBound: failed\n");
+        goto error_exit;
+    }
+    aocl_compression_handle->outSize = resultCompBound;
     inPtr = (char *)calloc(1, aocl_compression_handle->inSize);
     compPtr = (char *)calloc(1, aocl_compression_handle->outSize);
     decompPtr = (char *)calloc(1, aocl_compression_handle->inSize);
@@ -108,7 +114,6 @@ Build AOCL-Compression library with `AOCL_ENABLE_THREADS`.
 #include <stdio.h> 
 #include <stdlib.h>
 #include "aocl_compression.h"
-#include "aocl_threads.h"
 
 int main (int argc, char **argv)
 {
@@ -117,7 +122,7 @@ int main (int argc, char **argv)
     FILE *inFp = NULL;
     int file_size = 0;
     char *inPtr = NULL, *compPtr = NULL, *decompPtr = NULL;
-    int64_t resultComp = 0, resultDecomp = 0;
+    int64_t resultCompBound = 0, resultComp = 0, resultDecomp = 0;
 
     if (argc < 2)
     {
@@ -135,8 +140,13 @@ int main (int argc, char **argv)
     aocl_compression_handle->optOff = 0;
     aocl_compression_handle->measureStats = 0;
     aocl_compression_handle->inSize = file_size;
-    aocl_compression_handle->outSize = (file_size + (file_size / 6) + (16 * 1024)) /* LZ4 ST compress bound */ 
-                                        + aocl_get_rap_frame_bound_mt() /* upper bound of RAP frame bytes */;
+    resultCompBound = aocl_llc_compressBound(method, aocl_compression_handle->inSize);
+    if (resultCompBound < 0)
+    {
+        printf("CompressBound: failed\n");
+        goto error_exit;
+    }
+    aocl_compression_handle->outSize = resultCompBound;
     inPtr = (char *)calloc(1, aocl_compression_handle->inSize);
     compPtr = (char *)calloc(1, aocl_compression_handle->outSize);
     decompPtr = (char *)calloc(1, aocl_compression_handle->inSize);
@@ -159,7 +169,7 @@ int main (int argc, char **argv)
 
     //3. ST decompress
     // Get number of bytes for the RAP frame
-    int rap_frame_len = aocl_skip_rap_frame_mt((char *)compPtr, resultComp);
+    int rap_frame_len = aocl_llc_skip_rap_frame((char *)compPtr, resultComp);
 
     // Skip RAP frame in input stream and pass this to ST decompressor
     aocl_compression_handle->inSize = resultComp - rap_frame_len;
@@ -191,8 +201,7 @@ int main (int argc, char **argv)
 
 ```
 
-To build this example test program on a Linux system using GCC or AOCC, 
-you must specify path to aocl_compression.h and aocl_threads.h header files
-and link with libaocl_compression.so file as follows:
+To build this example test program on a Linux system using GCC or AOCC, you must specify
+path to aocl_compression.h header file and link with libaocl_compression.so file as follows:
 
 `gcc test.c -I <aocl_compression.h file path> -L <libaocl_compression.so file path> -laocl_compression`

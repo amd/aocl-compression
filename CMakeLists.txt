@@ -171,10 +171,6 @@ if (AOCL_ENABLE_THREADS AND WIN32)
     endif ()
 endif ()
 
-if (AOCL_ENABLE_THREADS)
-set (API_SRC_FILES  ${API_SRC_FILES}
-                    api/aocl_threads.h)
-endif()
 
 set (ALGOS_PATH algos)
 if (NOT AOCL_EXCLUDE_BZIP2)
@@ -318,9 +314,6 @@ set(DEST_BIN_PATH aocl_compression/bin)
 
 set(INC_FILES api/aocl_compression.h
               ${ALGOS_PATH}/common/aoclAlgoOpt.h)
-if (AOCL_ENABLE_THREADS)
-    set(INC_FILES ${INC_FILES} api/aocl_threads.h)
-endif ()
 if (NOT AOCL_EXCLUDE_BZIP2)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/bzip2/bzlib.h)
 endif ()

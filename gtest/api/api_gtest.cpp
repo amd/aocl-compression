@@ -31,7 +31,7 @@
  *  @brief Test cases for AOCL Compression API.
  *
  *  This file contains the test cases for apis exposed 
- *  by api/aocl_compression.h and api/aocl_threads.h.
+ *  by api/aocl_compression.h.
  *
  *  @author Ashish Sriram
  */
@@ -46,7 +46,6 @@
 #include "api/types.h"
 
 #ifdef AOCL_ENABLE_THREADS
-#include "api/aocl_threads.h"
 #include "threads/threads.h"
 #endif /* AOCL_ENABLE_THREADS */
 

@@ -176,6 +176,8 @@ int ZEXPORT uncompress2(Bytef *dest, uLongf *destLen, const Bytef *source,
     AOCL_INT32 use_ST_decompressor = 0;
     AOCL_UINT32 thread_cnt = 0;
     AOCL_INT32 rap_metadata_len = 0;
+    uLongf total_uncompressed_len = 0;
+    uLongf dstCapacity = *destLen;
 
     rap_metadata_len = aocl_setup_parallel_decompress_mt(&thread_group_handle, (char *)source, (char *)dest,
                                                    *sourceLen, *destLen, use_ST_decompressor);
@@ -243,6 +245,13 @@ int ZEXPORT uncompress2(Bytef *dest, uLongf *destLen, const Bytef *source,
         printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
 #endif
         //For all the threads: Write to a single output buffer in a single-threaded mode
+
+        for(AOCL_UINT32 thread_id=0; thread_id<thread_group_handle.num_threads; thread_id++)
+            total_uncompressed_len += thread_group_handle.threads_info_list[thread_id].dst_trap_size;
+
+        if(total_uncompressed_len > dstCapacity)
+            RETURN_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, Z_BUF_ERROR);
+
         AOCL_UINT32 adler = 1;
         for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
         {

@@ -103,6 +103,43 @@ extern "C"
     (childThreads * mainThreads * (RAP_OFFSET_BYTES + RAP_LEN_BYTES)) )
 //#define APPROX_PADDED_DST_CHUNK //Keep this disabled as it is more accurate to send the actual dest decompressed len bytes
 
+#define RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(error) { \
+                        LOG_UNFORMATTED(ERR, logCtx, "Destination buffer is too small/ insufficient."); \
+                        LOG_UNFORMATTED(TRACE, logCtx, "Exit"); \
+                        return error; \
+                    }
+
+#define RETURN_DST_BUFF_INSUFFICIENT_ERROR_MT(handle, error) { \
+                        aocl_destroy_parallel_compress_mt(&handle); \
+                        LOG_UNFORMATTED(ERR, logCtx, "Destination buffer is too small/ insufficient."); \
+                        LOG_UNFORMATTED(TRACE, logCtx, "Exit"); \
+                        return error; \
+                    }
+
+/**
+ * srcSize         : Size of the source/input buffer to be compressed.
+ * compressBound_st: Single threaded compressBound function.
+ * window_len      : Search window length.
+ * window_factor   : Multiplication factor used to determine partition size.
+ * sz1             : Single threaded compressBound on `srcSize`.
+ * sz2             : Multi threaded compressBound on `srcSize`.
+ * error_code      : Error code.
+ * 
+ * Returns 
+ * error_code : If aocl_set_partition_stats_mt fails. 
+*/
+#define COMPRESS_BOUND_MT(srcSize, compressBound_st, window_len, window_factor, sz1, sz2, error_code) { \
+            aocl_thread_group_t thread_group_handle;\
+            if(aocl_set_partition_stats_mt(&thread_group_handle, srcSize, window_len, window_factor) != 0)\
+                return error_code;\
+            if (thread_group_handle.num_threads == 1)\
+                sz2 = sz1;\
+            else\
+                sz2 = (compressBound_st(thread_group_handle.common_part_src_size) * (thread_group_handle.num_threads - 1)) + \
+                        (compressBound_st(thread_group_handle.common_part_src_size + thread_group_handle.leftover_part_src_bytes)) + \
+                        aocl_get_rap_frame_bound_mt();\
+        }
+
 #define WINDOW_FACTOR 4
 
 //#define AOCL_THREADS_LOG
@@ -188,7 +225,7 @@ typedef struct thread_group
  * |:-----------|:------------|
  * | Success    | RAP frame length (RAP header + RAP metadata) |
  * | Fail       | `ERR_INVALID_INPUT`                          |
- * | ^          | -1                                           |
+ * | ^          | `ERR_MEMORY_ALLOC`                           |
  *
  */
 EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t* thread_grp,
@@ -218,8 +255,8 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_
  * return
  * | Result     | Description |
  * |:-----------|:------------|
- * | Success    | 0           |
- * | Fail       | -1          |
+ * | Success    | 0                    |
+ * | Fail       | `ERR_MEMORY_ALLOC`   |
  *
  */
 EXPORT_SYM_THREADS AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t* thread_grp,
@@ -266,6 +303,7 @@ EXPORT_SYM_THREADS void aocl_destroy_parallel_compress_mt(aocl_thread_group_t* t
  * |:-----------|:------------|
  * | Success    | RAP frame length (RAP header + RAP metadata) |
  * | Fail       | `ERR_INVALID_INPUT`                          |
+ * | ^          | `ERR_MEMORY_ALLOC`                           |
  * | ^          | -1                                           |
  *
  */
@@ -296,7 +334,7 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_grou
  * |:-----------|:------------|
  * | Success    | 0           |
  * | Success    | 1 when partition source size for this thread_id is 0 |
- * | Fail       | -1                                                   |
+ * | Fail       | `ERR_MEMORY_ALLOC`                                   |
  *
  */
 EXPORT_SYM_THREADS AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
@@ -318,6 +356,67 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_
  */
 EXPORT_SYM_THREADS void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp);
 
+/**
+ * @brief Function to get the upper bound of RAP frame bytes that will be added 
+ * during multithreaded compression.
+ *
+ * This function returns additional bytes that are needed in the destination
+ * buffer in addition to what is needed for single threaded compression.
+ *
+ * @return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | RAP_frame_bound | Upper bound of RAP frame bytes |
+ *
+ */
+EXPORT_SYM_THREADS AOCL_INT32 aocl_get_rap_frame_bound_mt(void);
+
+/**
+ * @brief Function to get the length of the RAP frame in the compressed stream.
+ *
+ * This function is called to know how many bytes of the compressed stream to skip to get 
+ * the format compliant compressed stream that legacy single threaded decompressors can decompress.
+ * 
+ * Note : Presence of RAP frame is determined by checking for the magic word: 0x434C4C5F4C434F41 
+ *        (ASCII encoding of AOCL_LLC) at the start of the stream.
+ *
+ * | Parameters      | Direction   | Description |
+ * |:----------------|:-----------:|:------------|
+ * | \b src          | in          | Input stream buffer pointer. |
+ * | \b src_size     | in          | Input stream buffer size. |
+ * 
+ * @return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | RAP_frame_length | Length of RAP frame bytes in src |
+ * | 0                | If RAP frame does not exist      |
+ * | Fail             | `ERR_INVALID_INPUT`              |
+ *
+ */
+EXPORT_SYM_THREADS AOCL_INT32 aocl_skip_rap_frame_mt(AOCL_CHAR* src, AOCL_INT32 src_size);
+
+/**
+ * Function to set the following thread_grp data structure members:
+ * num_threads, 
+ * common_part_src_size and 
+ * leftover_part_src_bytes.
+ * 
+ * | Parameters             | Direction   | Description |
+ * |:-----------------------|:-----------:|:------------|
+ * | \b thread_grp          | out         | Holds list of thread info, pointers to input and output streams and other information needed for multi-threaded compression. |
+ * | \b in_size             | in          | Input stream buffer size. |
+ * | \b win_len             | in          | Search window length. |
+ * | \b window_factor       | in          | Multiplication factor used to determine partition size. |
+ *
+ * return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    | 0                    |
+ * | Fail       | `ERR_INVALID_INPUT`  |
+ *
+ */
+EXPORT_SYM_THREADS AOCL_INT32 aocl_set_partition_stats_mt(aocl_thread_group_t *thread_grp,
+                                AOCL_INT32 in_size, AOCL_INT32 window_len, AOCL_INT32 window_factor);
 #ifdef __cplusplus
 }
 #endif

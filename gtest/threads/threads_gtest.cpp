@@ -449,6 +449,13 @@ AOCL_INT32 Test_aocl_setup_parallel_compress_mt(aocl_thread_group_t* thread_grp,
         out_size, window_len, window_factor);
 }
 
+AOCL_INT32 Test_aocl_set_partition_stats_mt(aocl_thread_group_t *thread_grp,
+    AOCL_INT32 in_size, AOCL_INT32 window_len, 
+    AOCL_INT32 window_factor) {
+    return aocl_set_partition_stats_mt(thread_grp, in_size,
+        window_len, window_factor);
+}
+
 AOCL_INT32 Test_aocl_do_partition_compress_mt(aocl_thread_group_t* thread_grp,
     aocl_thread_info_t* cur_thread_info,
     AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id) {
@@ -665,6 +672,84 @@ TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_
 
 /*********************************************
 * End multi-threaded compress setup Tests
+*********************************************/
+
+/*********************************************
+* Begin multi-threaded set partition stats Tests
+*********************************************/
+class API_set_partition_stats_MT : public ::testing::Test {
+public:
+    void SetUp() override {
+        init_thread_group(&thread_grp);
+        in_size  = buff_size;
+    }
+
+    void validate(AOCL_INT32 window_len) {
+        // validate thread_grp is set
+        EXPECT_EQ(thread_grp.src, nullptr);
+        EXPECT_EQ(thread_grp.dst, nullptr);
+        EXPECT_EQ(thread_grp.src_size, in_size);
+        EXPECT_EQ(thread_grp.dst_size, 0);
+        EXPECT_EQ(thread_grp.search_window_length, window_len);
+        EXPECT_EQ(thread_grp.threads_info_list, nullptr);
+
+        if(thread_grp.num_threads > 1) {
+            EXPECT_GT(thread_grp.common_part_src_size, 0);
+            EXPECT_GE(thread_grp.leftover_part_src_bytes, 0);
+        }
+    }
+
+    aocl_thread_group_t thread_grp;
+    AOCL_INT32 in_size;
+    const AOCL_INT32 buff_size = 1024 * 16;
+};
+
+TEST_F(API_set_partition_stats_MT, AOCL_Compression_api_aocl_set_partition_stats_mt_common_1) { // window_len is a factor of in_size
+    AOCL_INT32 window_len = in_size / 16;
+    AOCL_INT32 window_factor = 2;
+    AOCL_INT32 res = Test_aocl_set_partition_stats_mt(&thread_grp, in_size,
+        window_len, window_factor);
+    validate(window_len);
+    EXPECT_LE(thread_grp.num_threads, 8); // num_parallel_partitions = 8 based on window_len and window_factor
+}
+
+TEST_F(API_set_partition_stats_MT, AOCL_Compression_api_aocl_set_partition_stats_mt_common_2) { // window_len is not a factor of in_size
+    AOCL_INT32 window_len = (in_size / 16) + 1;
+    AOCL_INT32 window_factor = 2;
+    AOCL_INT32 res = Test_aocl_set_partition_stats_mt(&thread_grp, in_size,
+        window_len, window_factor);
+    validate(window_len);
+    EXPECT_LE(thread_grp.num_threads, 8); // num_parallel_partitions = 8 based on window_len and window_factor
+}
+
+TEST_F(API_set_partition_stats_MT, AOCL_Compression_api_aocl_set_partition_stats_mt_common_3) { // in_size = 0, valid
+    AOCL_INT32 window_len = in_size / 16;
+    AOCL_INT32 window_factor = 2;
+    in_size = 0;
+    Test_aocl_set_partition_stats_mt(&thread_grp, in_size,
+        window_len, window_factor);
+    validate(window_len);
+    EXPECT_EQ(thread_grp.num_threads, 1); // single thread.
+}
+
+TEST_F(API_set_partition_stats_MT, AOCL_Compression_api_aocl_set_partition_stats_mt_common_4) { // window_len = 0, invalid
+    AOCL_INT32 window_len = 0;
+    AOCL_INT32 window_factor = 2;
+    AOCL_INT32 res = Test_aocl_set_partition_stats_mt(&thread_grp, in_size,
+        window_len, window_factor);
+    EXPECT_EQ(res, ERR_INVALID_INPUT);
+}
+
+TEST_F(API_set_partition_stats_MT, AOCL_Compression_api_aocl_set_partition_stats_mt_common_5) { // window_factor = 0, invalid
+    AOCL_INT32 window_len = in_size;
+    AOCL_INT32 window_factor = 0;
+    AOCL_INT32 res = Test_aocl_set_partition_stats_mt(&thread_grp, in_size,
+        window_len, window_factor);
+    EXPECT_EQ(res, ERR_INVALID_INPUT);
+}
+
+/*********************************************
+* End multi-threaded set partition stats Tests
 *********************************************/
 
 /*********************************************

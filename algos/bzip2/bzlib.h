@@ -650,6 +650,14 @@ BZ_EXTERN void BZ_API(BZ2_bzWriteClose64) (
  * @{
 */
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+/*
+* Provides the maximum size that BZIP2 compression may output in a "worst case" scenario (input data not compressible)
+* where `insize` is the size of source buffer to be compressed.
+*/
+unsigned int BZ2_bzCompressBound(unsigned int insize);
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
+
 /*!
 * @brief Attempts to compress the data in `source` into the destination buffer, `dest`. 
 * 

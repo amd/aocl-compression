@@ -10,7 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
-   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+   Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -99,6 +99,14 @@ void BZ2_bz__AssertH__fail ( int errcode )
    exit(3);
 }
 #endif
+
+//Minimum compressed buffer size
+#define MIN_PAD_SIZE (16*1024)
+unsigned int BZ2_bzCompressBound(unsigned int insize)
+{
+   unsigned int outSize = (insize + (insize / 6) + MIN_PAD_SIZE);
+   return outSize;
+}
 
 static Bool copy_input_until_stop ( EState* s );
 static Bool copy_output_until_stop ( EState* s );

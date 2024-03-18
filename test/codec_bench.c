@@ -40,9 +40,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "aocl_compression.h"
-#ifdef AOCL_ENABLE_THREADS
-#include "aocl_threads.h"
-#endif
 #include "codec_bench.h"
 #include <sys/stat.h>
 
@@ -497,17 +494,9 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
     return ret;
 }
 
-AOCL_UINTP compression_bound(AOCL_UINTP inSize)
-{
-    AOCL_UINTP outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
-#ifdef AOCL_ENABLE_THREADS
-    outSize += aocl_get_rap_frame_bound_mt();
-#endif
-    return outSize;
-}
 
 AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
-          aocl_compression_desc *aocl_codec_handle)
+          aocl_compression_desc *aocl_codec_handle, aocl_compression_type codec)
 {
     LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
@@ -520,7 +509,15 @@ AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
             codec_bench_handle->mem_limit : codec_bench_handle->file_size;
         codec_bench_handle->inPtr =
             (AOCL_CHAR*)allocMem(codec_bench_handle->inSize, 0);
-        codec_bench_handle->outSize = compression_bound(codec_bench_handle->inSize);
+        AOCL_UINTP inSize_compressBound = aocl_llc_compressBound(codec, codec_bench_handle->inSize);
+        if (inSize_compressBound < 0)
+        {
+            LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] compressBound: failed\n",
+                        codec_list[codec].codec_name, aocl_codec_handle->level, codec_bench_handle->fName);
+            LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+            return ERR_CODEC_BENCH_ARGS;
+        }
+        codec_bench_handle->outSize = inSize_compressBound;
         codec_bench_handle->outPtr =
             (AOCL_CHAR*)allocMem(codec_bench_handle->outSize, 0); // ptr to hold compressed data
         codec_bench_handle->decompPtr =
@@ -529,9 +526,18 @@ AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
     else 
     { // codec_bench_handle->runOperation == RUN_OPERATION_DECOMPRESS
 
-        if (codec_bench_handle->file_size > compression_bound(codec_bench_handle->mem_limit))
+        AOCL_UINTP mem_limit_compressBound = aocl_llc_compressBound(codec, codec_bench_handle->mem_limit);
+        if (mem_limit_compressBound < 0)
+        {
+            LOG_BENCH(ERR, "AOCL-COMPRESSION [%s-%td] [Filename:%s] compressBound: failed\n",
+                        codec_list[codec].codec_name, aocl_codec_handle->level, codec_bench_handle->fName);
+            LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+            return ERR_CODEC_BENCH_ARGS;
+        }
+        if (codec_bench_handle->file_size > mem_limit_compressBound)
         {
             LOG_BENCH(ERR, "Cannot decompress this large file.\n");
+            LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
             return ERR_CODEC_BENCH_MEM;
 
         }
@@ -1355,7 +1361,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
         codec_bench_handle.valFp = valFp;
     }
 
-    if (init(&codec_bench_handle, aocl_codec_handle) < 0)
+    if (init(&codec_bench_handle, aocl_codec_handle, codec_bench_handle.codec_method) < 0)
     {
         LOG_BENCH(ERR, "Error in allocating memory.\n");
         result = ERR_CODEC_BENCH_MEM;

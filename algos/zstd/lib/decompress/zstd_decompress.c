@@ -1312,6 +1312,7 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
     AOCL_INT32 ret_status = -1;
     AOCL_CHAR* src_ptr = (AOCL_CHAR*)src;
     size_t srcDataSz = srcSize;
+    size_t total_decompressed_sz = 0;
 
     //Read and skip skippable RAP frame header
     size_t skip_head_sz = AOCL_ZSTD_readSkippableRAPFrameHeader(src_ptr, srcSize);
@@ -1403,6 +1404,7 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
         /* compute cumulative dst_trap_size and save in unsued member partition_src_size
          * This is used as offset to indicate starting points of decompressed data blocks in dst */
         AOCL_UINT32 dst_offset = 0;
+        total_decompressed_sz = thread_group_handle.threads_info_list[0].dst_trap_size;
         thread_group_handle.threads_info_list[0].partition_src_size = 0;
         for (AOCL_UINT32 thread_id = 1; thread_id < thread_group_handle.num_threads; thread_id++)
         {
@@ -1421,7 +1423,11 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
             dst_offset = thread_group_handle.threads_info_list[thread_id - 1].partition_src_size +
                 thread_group_handle.threads_info_list[thread_id - 1].dst_trap_size; // cumulative dst_trap_size
             thread_group_handle.threads_info_list[thread_id].partition_src_size = dst_offset;
+            total_decompressed_sz += thread_group_handle.threads_info_list[thread_id].dst_trap_size;
         }
+
+        if (total_decompressed_sz > dstCapacity) 
+            RETURN_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, ERROR(dstSize_tooSmall));
 
         /* copy decompressed data from threads to dst multi-threaded */
 #pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)

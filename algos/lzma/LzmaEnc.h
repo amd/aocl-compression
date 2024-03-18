@@ -265,6 +265,14 @@ LZMALIB_API SRes LzmaEnc_MemEncode(CLzmaEncHandle p, Byte *dest, SizeT *destLen,
  * @}
  */
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+/*
+* Provides the maximum size that LZMA compression may output in a "worst case" scenario (input data not compressible)
+* where `insize` is the size of source buffer to be compressed.
+*/
+size_t Lzma_compressBound(size_t insize);
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
+
 /* ---------- One Call Interface ---------- */
 /*!
  * @name Encode One Call Interface

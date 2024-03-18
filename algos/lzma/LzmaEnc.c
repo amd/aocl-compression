@@ -4431,6 +4431,14 @@ SRes ValidateParams(const CLzmaEncProps* props) {
         return SZ_OK;
 }
 
+//Minimum compressed buffer size
+#define MIN_PAD_SIZE (16*1024)
+size_t Lzma_compressBound(size_t insize)
+{
+    size_t outSize = (insize + (insize / 6) + MIN_PAD_SIZE);
+    return outSize;
+}
+
 SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)

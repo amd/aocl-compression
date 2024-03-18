@@ -779,7 +779,29 @@ typedef enum { noDictIssue = 0, dictSmall } dictIssue_directive;
 **************************************/
 int LZ4_versionNumber (void) { return LZ4_VERSION_NUMBER; }
 const char* LZ4_versionString(void) { return LZ4_VERSION_STRING; }
-int LZ4_compressBound(int isize)  { return LZ4_COMPRESSBOUND(isize); }
+
+int LZ4_compressBound_st(int isize)  { return LZ4_COMPRESSBOUND(isize); }
+
+#ifdef AOCL_ENABLE_THREADS
+int LZ4_compressBound_mt(int isize) {
+
+    int sz1 = LZ4_compressBound_st(isize);
+    if (sz1 == 0)
+        return sz1;
+    
+    int sz2 = 0;
+    COMPRESS_BOUND_MT(isize, LZ4_compressBound_st, LZ4_COMPRESS_INPLACE_MARGIN, WINDOW_FACTOR, sz1, sz2, 0)
+    return sz2;
+}
+#endif
+
+static int (*LZ4_compressBound_fp)(int isize) = LZ4_compressBound_st;
+
+int LZ4_compressBound(int isize) {
+    AOCL_SETUP_NATIVE();
+    return LZ4_compressBound_fp(isize);
+}
+
 int LZ4_sizeofState(void) { return sizeof(LZ4_stream_t); }
 
 
@@ -2769,6 +2791,14 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
         LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return 0;
     }
+    int cprBound = LZ4_compressBound_mt(inputSize);
+    if (cprBound == 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "LZ4_compressBound_mt failed");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return 0;
+    }
+    if(maxOutputSize < cprBound)
+        RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(0)
     
     int result;
     aocl_thread_group_t thread_group_handle;
@@ -2852,7 +2882,7 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
 #endif
 
         //Post processing in single-threaded mode: Prepares RAP frame and joins the last sequences of the neighboring threads
-        
+
         // <-- RAP Header -->
         //Add at the start of the stream : Although it can be at the end or at any other point in the stream, but it is more easier for parsing at the start
         AOCL_CHAR* dst_org = thread_group_handle.dst;
@@ -5219,6 +5249,13 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
         printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
 #endif
 
+        int total_decompressed_sz = 0;
+        for(AOCL_UINT32 thread_id=0; thread_id<thread_group_handle.num_threads; thread_id++)
+            total_decompressed_sz += thread_group_handle.threads_info_list[thread_id].dst_trap_size;
+        
+        if(total_decompressed_sz > maxDecompressedSize)
+            RETURN_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, -1);
+
         //For all the threads: Write to a single output buffer in a single-threaded mode
         for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
         {
@@ -5517,6 +5554,7 @@ LZ4_decompress_safe_partial_forceExtDict_fp    = LZ4_decompress_safe_partial_for
 LZ4_decompress_safe_doubleDict_fp              = LZ4_decompress_safe_doubleDict_internal;
 
 #define SET_LZ4_COMPRESS_DEFAULT_FUNCTIONS \
+LZ4_compressBound_fp               = LZ4_compressBound_st;\
 LZ4_compress_fast_extState_fp      = LZ4_compress_fast_extState_internal;\
 LZ4_compress_fast_continue_fp      = LZ4_compress_fast_continue_internal;\
 LZ4_compress_destSize_extState_fp  = LZ4_compress_destSize_extState_internal;
@@ -5542,15 +5580,23 @@ LZ4_compress_destSize_extState_fp  = AOCL_LZ4_compress_destSize_extState_interna
 #endif /* AOCL_LZ4_OPT */
 
 #ifdef AOCL_ENABLE_THREADS
-#ifdef AOCL_LZ4_AVX_OPT
-#define SET_LZ4_MT_FUNCTIONS \
-LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;\
-LZ4_compress_fast_mt_fp      = AOCL_LZ4_compress_fast_mt;
-#endif /* AOCL_LZ4_AVX_OPT */
-
-#define SET_LZ4_ST_FUNCTIONS \
-LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;\
-LZ4_compress_fast_mt_fp      = AOCL_LZ4_compress_fast_st;
+    #ifdef AOCL_LZ4_AVX_OPT
+        #define SET_LZ4_MT_FUNCTIONS \
+            LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;\
+            LZ4_compressBound_fp         = LZ4_compressBound_mt;\
+            LZ4_compress_fast_mt_fp      = AOCL_LZ4_compress_fast_mt;
+    #endif /* AOCL_LZ4_AVX_OPT */
+        #define SET_LZ4_ST_FUNCTIONS \
+            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;\
+            LZ4_compressBound_fp         = LZ4_compressBound_st;\
+            LZ4_compress_fast_mt_fp      = AOCL_LZ4_compress_fast_st;
+#else
+    #ifdef AOCL_LZ4_AVX_OPT
+        #define SET_LZ4_MT_FUNCTIONS \
+            LZ4_compressBound_fp         = LZ4_compressBound_st;
+    #endif /* AOCL_LZ4_AVX_OPT */
+        #define SET_LZ4_ST_FUNCTIONS \
+            LZ4_compressBound_fp         = LZ4_compressBound_st;
 #endif /* AOCL_ENABLE_THREADS */
 
 LZ4_FORCE_O2
@@ -5851,9 +5897,7 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
         case 1://SSE version
             SET_LZ4_COMPRESS_OPT_FUNCTIONS
             SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
-#ifdef AOCL_ENABLE_THREADS
             SET_LZ4_ST_FUNCTIONS
-#endif
             break;
         case 2://AVX version
         case 3://AVX2 version
@@ -5861,24 +5905,17 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
 #ifdef AOCL_LZ4_AVX_OPT
             SET_LZ4_COMPRESS_OPT_FUNCTIONS
             SET_LZ4_DECOMPRESS_AVX_OPT_FUNCTIONS
-#ifdef AOCL_ENABLE_THREADS
             SET_LZ4_MT_FUNCTIONS
-#endif
 #else
             SET_LZ4_COMPRESS_OPT_FUNCTIONS
             SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
-#ifdef AOCL_ENABLE_THREADS
             SET_LZ4_ST_FUNCTIONS
-#endif
 #endif
             break;
 #else /* !AOCL_LZ4_OPT */
         default:
             SET_LZ4_COMPRESS_DEFAULT_FUNCTIONS
             SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
-#ifdef AOCL_ENABLE_THREADS
-            SET_LZ4_ST_FUNCTIONS
-#endif
             break;
 #endif /* AOCL_LZ4_OPT */
         }

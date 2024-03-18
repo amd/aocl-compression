@@ -40,6 +40,7 @@
 #ifndef CODEC_H
 #define CODEC_H
 
+typedef AOCL_UINTP (*comp_bound_fp)(AOCL_UINTP inSize);
 typedef AOCL_INT64 (*comp_decomp_fp)(AOCL_CHAR *inStream, AOCL_UINTP inSize, AOCL_CHAR *outStream,
                                 AOCL_UINTP outSize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR*);
 typedef AOCL_CHAR* (*setup_fp)(AOCL_INTP optOff, AOCL_INTP optLevel, AOCL_UINTP inSize, AOCL_UINTP,
@@ -48,6 +49,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
 
 //Method 1
 #ifndef AOCL_EXCLUDE_BZIP2
+        AOCL_UINTP aocl_bzip2_compressBound(AOCL_UINTP inSize);
         AOCL_INT64 aocl_bzip2_compress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf,
                          AOCL_UINTP outSize, AOCL_UINTP level, AOCL_UINTP optVar, AOCL_CHAR *workBuf);
         AOCL_INT64 aocl_bzip2_decompress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf,
@@ -56,6 +58,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
                            AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog);
         AOCL_VOID aocl_bzip2_destroy(AOCL_CHAR* workmem);
 #else
+    #define aocl_bzip2_compressBound NULL
     #define aocl_bzip2_compress NULL
     #define aocl_bzip2_decompress NULL
     #define aocl_bzip2_setup NULL
@@ -63,6 +66,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
 #endif
 //Method 2
 #ifndef AOCL_EXCLUDE_LZ4
+        AOCL_UINTP aocl_lz4_compressBound(AOCL_UINTP inSize);
         AOCL_INT64 aocl_lz4_compress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
                          AOCL_UINTP outSize, AOCL_UINTP level, AOCL_UINTP optVar, AOCL_CHAR *workBuf);
         AOCL_INT64 aocl_lz4_decompress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
@@ -71,6 +75,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
                          AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog);
         AOCL_VOID aocl_lz4_destroy(AOCL_CHAR* workmem);
 #else
+    #define aocl_lz4_compressBound NULL
     #define aocl_lz4_compress NULL
     #define aocl_lz4_decompress NULL
     #define aocl_lz4_setup NULL
@@ -78,6 +83,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
 #endif
 //Method 3
 #if !defined(AOCL_EXCLUDE_LZ4HC) && !defined(AOCL_EXCLUDE_LZ4)
+        AOCL_UINTP aocl_lz4hc_compressBound(AOCL_UINTP inSize);
         AOCL_INT64 aocl_lz4hc_compress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
                          AOCL_UINTP outSize, AOCL_UINTP level, AOCL_UINTP optVar, AOCL_CHAR *workBuf);
         AOCL_INT64 aocl_lz4hc_decompress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
@@ -86,6 +92,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
                          AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog);
         AOCL_VOID aocl_lz4hc_destroy(AOCL_CHAR* workmem);
 #else
+    #define aocl_lz4hc_compressBound NULL
     #define aocl_lz4hc_compress NULL
     #define aocl_lz4hc_decompress NULL
     #define aocl_lz4hc_setup NULL
@@ -93,6 +100,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
 #endif
 //Method 4
 #ifndef AOCL_EXCLUDE_LZMA
+        AOCL_UINTP aocl_lzma_compressBound(AOCL_UINTP inSize);
         AOCL_INT64 aocl_lzma_compress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
                          AOCL_UINTP outSize, AOCL_UINTP level, AOCL_UINTP optVar, AOCL_CHAR *workBuf);
         AOCL_INT64 aocl_lzma_decompress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
@@ -101,6 +109,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
                          AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog);
         AOCL_VOID aocl_lzma_destroy(AOCL_CHAR* workmem);
 #else
+    #define aocl_lzma_compressBound NULL
     #define aocl_lzma_compress NULL
     #define aocl_lzma_decompress NULL
     #define aocl_lzma_setup NULL
@@ -108,6 +117,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
 #endif
 //Method 5
 #ifndef AOCL_EXCLUDE_SNAPPY
+        AOCL_UINTP aocl_snappy_compressBound(AOCL_UINTP inSize);
         AOCL_INT64 aocl_snappy_compress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
                          AOCL_UINTP outSize, AOCL_UINTP level, AOCL_UINTP optVar, AOCL_CHAR *workBuf);
         AOCL_INT64 aocl_snappy_decompress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
@@ -116,6 +126,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
                          AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog);
         AOCL_VOID aocl_snappy_destroy(AOCL_CHAR* workmem);
 #else
+    #define aocl_snappy_compressBound NULL
     #define aocl_snappy_compress NULL
     #define aocl_snappy_decompress NULL
     #define aocl_snappy_setup NULL
@@ -123,6 +134,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
 #endif
 //Method 6
 #ifndef AOCL_EXCLUDE_ZLIB
+        AOCL_UINTP aocl_zlib_compressBound(AOCL_UINTP inSize);
         AOCL_INT64 aocl_zlib_compress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
                          AOCL_UINTP outSize, AOCL_UINTP level, AOCL_UINTP optVar, AOCL_CHAR *workBuf);
         AOCL_INT64 aocl_zlib_decompress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
@@ -131,6 +143,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
                          AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog);
         AOCL_VOID aocl_zlib_destroy(AOCL_CHAR* workmem);
 #else
+    #define aocl_zlib_compressBound NULL
     #define aocl_zlib_compress NULL
     #define aocl_zlib_decompress NULL
     #define aocl_zlib_setup NULL
@@ -138,6 +151,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
 #endif
 //Method 7
 #ifndef AOCL_EXCLUDE_ZSTD
+        AOCL_UINTP aocl_zstd_compressBound(AOCL_UINTP inSize);
         AOCL_INT64 aocl_zstd_compress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
                          AOCL_UINTP outSize, AOCL_UINTP level, AOCL_UINTP optVar, AOCL_CHAR *workBuf);
         AOCL_INT64 aocl_zstd_decompress(AOCL_CHAR *inBuf, AOCL_UINTP inSize, AOCL_CHAR *outBuf, 
@@ -146,6 +160,7 @@ typedef AOCL_VOID  (*destroy_fp)(AOCL_CHAR *memBuff);
                          AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog);
         AOCL_VOID aocl_zstd_destroy(AOCL_CHAR *workmem);
 #else
+    #define aocl_zstd_compressBound NULL
 	#define aocl_zstd_compress NULL
 	#define aocl_zstd_decompress NULL
 	#define aocl_zstd_setup NULL
@@ -156,6 +171,7 @@ typedef struct
 {
     const AOCL_CHAR* codec_name;
     const AOCL_CHAR* codec_version;
+    comp_bound_fp compressBound;
     comp_decomp_fp compress;
     comp_decomp_fp decompress;
     setup_fp setup;
@@ -164,13 +180,13 @@ typedef struct
 
 static const aocl_codec_t aocl_codec[AOCL_COMPRESSOR_ALGOS_NUM] =
 {
-    { "lz4",    "1.9.4",      aocl_lz4_compress,    aocl_lz4_decompress,    aocl_lz4_setup,    aocl_lz4_destroy },
-    { "lz4hc",  "1.9.4",      aocl_lz4hc_compress,  aocl_lz4_decompress,    aocl_lz4hc_setup,  aocl_lz4hc_destroy },
-    { "lzma",   "22.01",      aocl_lzma_compress,   aocl_lzma_decompress,   aocl_lzma_setup,   aocl_lzma_destroy },
-    { "bzip2",  "1.0.8",      aocl_bzip2_compress,  aocl_bzip2_decompress,  aocl_bzip2_setup,  aocl_bzip2_destroy },
-    { "snappy", "2020-07-11", aocl_snappy_compress, aocl_snappy_decompress, aocl_snappy_setup, aocl_snappy_destroy },
-    { "zlib",   "1.3",        aocl_zlib_compress,   aocl_zlib_decompress,   aocl_zlib_setup,   aocl_zlib_destroy },
-    { "zstd",   "1.5.5",      aocl_zstd_compress,   aocl_zstd_decompress,   aocl_zstd_setup,   aocl_zstd_destroy }
+    { "lz4",    "1.9.4",      aocl_lz4_compressBound,    aocl_lz4_compress,    aocl_lz4_decompress,    aocl_lz4_setup,    aocl_lz4_destroy },
+    { "lz4hc",  "1.9.4",      aocl_lz4hc_compressBound,  aocl_lz4hc_compress,  aocl_lz4_decompress,    aocl_lz4hc_setup,  aocl_lz4hc_destroy },
+    { "lzma",   "22.01",      aocl_lzma_compressBound,   aocl_lzma_compress,   aocl_lzma_decompress,   aocl_lzma_setup,   aocl_lzma_destroy },
+    { "bzip2",  "1.0.8",      aocl_bzip2_compressBound,  aocl_bzip2_compress,  aocl_bzip2_decompress,  aocl_bzip2_setup,  aocl_bzip2_destroy },
+    { "snappy", "2020-07-11", aocl_snappy_compressBound, aocl_snappy_compress, aocl_snappy_decompress, aocl_snappy_setup, aocl_snappy_destroy },
+    { "zlib",   "1.3",        aocl_zlib_compressBound,   aocl_zlib_compress,   aocl_zlib_decompress,   aocl_zlib_setup,   aocl_zlib_destroy },
+    { "zstd",   "1.5.5",      aocl_zstd_compressBound,   aocl_zstd_compress,   aocl_zstd_decompress,   aocl_zstd_setup,   aocl_zstd_destroy }
 };
 
 #endif

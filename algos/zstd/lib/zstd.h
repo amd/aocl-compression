@@ -2629,6 +2629,7 @@ typedef enum {
 /***************************************
 *  Frame header and size functions
 ***************************************/
+ZSTDLIB_API size_t      AOCL_ZSTD_compressBound(size_t srcSize, ZSTD_parameters params); /*!< @brief A tighter upper bound on compressed size than the one provided by ZSTD_compressBound(). */
 
 /* ZSTD_findDecompressedSize() :
  *  `src` should point to the start of a series of ZSTD encoded and/or skippable frames

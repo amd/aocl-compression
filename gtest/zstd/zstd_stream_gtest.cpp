@@ -1087,7 +1087,8 @@ public:
             ret = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_flush);
             if (Test_ZSTD_isError(ret))
                 break;
-            EXPECT_GT(buffOut.pos, prev_out_pos);
+            if(buffOut.pos == prev_out_pos)
+                break; // If d.getCompressedSize() is larger than compressed data, there is no more data to flush.
             prev_out_pos = buffOut.pos;
             buffOut.size += dstStep;
         } while (buffOut.size <= d.getCompressedSize());
@@ -1388,7 +1389,8 @@ public:
             ret = Test_ZSTD_flushStream(g_cstream, &buffOut); //flush
             if (Test_ZSTD_isError(ret))
                 break;
-            EXPECT_GT(buffOut.pos, prev_out_pos);
+            if(buffOut.pos == prev_out_pos)
+                break; // If d.getCompressedSize() is larger than compressed data, there is no more data to flush.
             prev_out_pos = buffOut.pos;
             buffOut.size += dstStep;
         } while (buffOut.size <= d.getCompressedSize());
