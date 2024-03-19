@@ -1420,6 +1420,15 @@ _last_literals:
  *  - source != NULL
  *  - inputSize > 0
  *  Implements AOCL optimized LZ4 compression
+ *  With `noDict` mode, search range upper bound check is made to execute optimally after the match is found.
+ *  The following optimizations will be included if the respective flags are enabled:
+ * - AOCL_LZ4_OPT_PREFETCH_BACKWARDS    : Data access optimizations related to backward prefetching of data.
+ * - AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY: Data access optimizations related to early loading of data.
+ * - AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 : Uses larger base step size. [For next sequence `step` starts from `half of current step` instead of `1`.]
+ * - AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2 : Aggressively sets search distance on top of strategy-1.
+ * - AOCL_LZ4_NEW_PRIME_NUMBER          : New prime number for hashing.
+ * - AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES  : Additional hash table updates to improve ratio.
+ * 
  */
 LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                  LZ4_stream_t_internal* const cctx,
@@ -1606,6 +1615,13 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                 DEBUGLOG(7, "candidate at pos=%u  (offset=%u \n", matchIndex, current - matchIndex);
                 if ((dictIssue == dictSmall) && (matchIndex < prefixIdxLimit)) { continue; }    /* match outside of valid area */
                 assert(matchIndex < current);
+
+                /* For cases when `dictDirective == noDict`, search range upper bound check is made to execute optimally after the match is found. */
+                if ((dictDirective > noDict) && ((tableType != byU16) || (LZ4_DISTANCE_MAX < LZ4_DISTANCE_ABSOLUTE_MAX))
+                    && (matchIndex+LZ4_DISTANCE_MAX < current)) {
+                    continue;
+                } /* too far */
+
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
                 matchData=*(U32*)match;
 
@@ -1614,7 +1630,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                 if (LZ4_read32(match) == LZ4_read32(ip)) {
 #endif
                     /* The below conditional is moved inside `if(matchData == ipData)` for performance improvement */
-                    if ( ((tableType != byU16) || (LZ4_DISTANCE_MAX < LZ4_DISTANCE_ABSOLUTE_MAX))
+                    if ((dictDirective == noDict) && ((tableType != byU16) || (LZ4_DISTANCE_MAX < LZ4_DISTANCE_ABSOLUTE_MAX))
                         && (matchIndex+LZ4_DISTANCE_MAX < current)) {
                         continue;
                     } /* too far */
@@ -2564,7 +2580,6 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_mt(
 
 int LZ4_compress_fast_extState_internal(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
-    AOCL_SETUP_NATIVE();
     if(state==NULL || (source==NULL && inputSize!=0) || dest==NULL)
         return 0;
     
@@ -2592,7 +2607,6 @@ int LZ4_compress_fast_extState_internal(void* state, const char* source, char* d
 #ifdef AOCL_LZ4_OPT
 int AOCL_LZ4_compress_fast_extState_internal(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
-    AOCL_SETUP_NATIVE();
     if(state==NULL || (source==NULL && inputSize!=0) || dest==NULL)
     {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
@@ -3041,7 +3055,7 @@ int AOCL_LZ4_compress_fast_st(const char* source, char* dest, int inputSize, int
 
 static int (*LZ4_compress_fast_mt_fp)(const char* source, char* dest, int inputSize, 
     int maxOutputSize, int acceleration) = AOCL_LZ4_compress_fast_st;
-#endif
+#endif /* AOCL_ENABLE_THREADS */
 
 int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
@@ -3084,9 +3098,8 @@ int LZ4_compress_default(const char* src, char* dst, int srcSize, int maxOutputS
 /* Note!: This function leaves the stream in an unclean/broken state!
  * It is not safe to subsequently use the same state with a _fastReset() or
  * _continue() call without resetting it. */
-static int LZ4_compress_destSize_extState (LZ4_stream_t* state, const char* src, char* dst, int* srcSizePtr, int targetDstSize)
+static int LZ4_compress_destSize_extState_internal (LZ4_stream_t* state, const char* src, char* dst, int* srcSizePtr, int targetDstSize)
 {
-    AOCL_SETUP_NATIVE();
     if(state==NULL || dst==NULL || srcSizePtr==NULL || (src==NULL && *srcSizePtr!=0))
         return 0;
     
@@ -3104,6 +3117,43 @@ static int LZ4_compress_destSize_extState (LZ4_stream_t* state, const char* src,
     }   }
 }
 
+#ifdef AOCL_LZ4_OPT
+/**
+ * Same as LZ4_compress_destSize_extState_internal(), but calls optimized implementation
+ * i.e., AOCL_LZ4_compress_generic() in place of LZ4_compress_generic().
+*/ 
+static int AOCL_LZ4_compress_destSize_extState_internal (LZ4_stream_t* state, const char* src, char* dst, int* srcSizePtr, int targetDstSize)
+{
+    if(state==NULL || dst==NULL || srcSizePtr==NULL || (src==NULL && *srcSizePtr!=0))
+        return 0;
+    
+    void* const s = LZ4_initStream(state, sizeof (*state));
+    assert(s != NULL); (void)s;
+
+    if (targetDstSize >= LZ4_compressBound(*srcSizePtr)) {  /* compression success is guaranteed */
+        return LZ4_compress_fast_extState(state, src, dst, *srcSizePtr, targetDstSize, 1);
+    } else {
+        if (*srcSizePtr < LZ4_64Klimit) {
+            return AOCL_LZ4_compress_generic(&state->internal_donotuse, src, dst, *srcSizePtr, srcSizePtr, targetDstSize, fillOutput, byU16, noDict, noDictIssue, 1);
+        } else {
+            tableType_t const addrMode = ((sizeof(void*)==4) && ((uptrval)src > LZ4_DISTANCE_MAX)) ? byPtr : byU32;
+            return AOCL_LZ4_compress_generic(&state->internal_donotuse, src, dst, *srcSizePtr, srcSizePtr, targetDstSize, fillOutput, addrMode, noDict, noDictIssue, 1);
+    }   }
+}
+#endif /* AOCL_LZ4_OPT */
+
+/* Function pointer holding the optimized function variant as per the detected
+ * CPU features */
+/* Function pointer definition placed inside #ifndef LZ4_COMMONDEFS_ONLY to avoid
+ warnings related to unused variable. */
+static int (*LZ4_compress_destSize_extState_fp)(LZ4_stream_t* state, const char* src, char* dst, 
+                                             int* srcSizePtr, int targetDstSize) = LZ4_compress_destSize_extState_internal;
+
+static int LZ4_compress_destSize_extState (LZ4_stream_t* state, const char* src, char* dst, int* srcSizePtr, int targetDstSize)
+{
+    AOCL_SETUP_NATIVE();
+    return LZ4_compress_destSize_extState_fp(state, src, dst, srcSizePtr, targetDstSize);
+}
 
 int LZ4_compress_destSize(const char* src, char* dst, int* srcSizePtr, int targetDstSize)
 {
@@ -3287,12 +3337,11 @@ static void LZ4_renormDictT(LZ4_stream_t_internal* LZ4_dict, int nextSize)
 }
 
 
-int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
+int LZ4_compress_fast_continue_internal (LZ4_stream_t* LZ4_stream,
                                 const char* source, char* dest,
                                 int inputSize, int maxOutputSize,
                                 int acceleration)
 {
-    AOCL_SETUP_NATIVE();
     if(LZ4_stream==NULL || (source==NULL && inputSize!=0) || dest==NULL)
         return 0;
         
@@ -3300,7 +3349,7 @@ int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
     LZ4_stream_t_internal* const streamPtr = &LZ4_stream->internal_donotuse;
     const char* dictEnd = streamPtr->dictSize ? (const char*)streamPtr->dictionary + streamPtr->dictSize : NULL;
 
-    DEBUGLOG(5, "LZ4_compress_fast_continue (inputSize=%i, dictSize=%u)", inputSize, streamPtr->dictSize);
+    DEBUGLOG(5, "LZ4_compress_fast_continue_internal (inputSize=%i, dictSize=%u)", inputSize, streamPtr->dictSize);
 
     LZ4_renormDictT(streamPtr, inputSize);   /* fix index overflow */
     if (acceleration < 1) acceleration = LZ4_ACCELERATION_DEFAULT;
@@ -3312,7 +3361,7 @@ int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
       && (inputSize > 0)               /* tolerance : don't lose history, in case next invocation would use prefix mode */ 
       && (streamPtr->dictCtx == NULL)  /* usingDictCtx */
       ) {
-        DEBUGLOG(5, "LZ4_compress_fast_continue: dictSize(%u) at addr:%p is too small", streamPtr->dictSize, (void *)streamPtr->dictionary);
+        DEBUGLOG(5, "LZ4_compress_fast_continue_internal: dictSize(%u) at addr:%p is too small", streamPtr->dictSize, (void *)streamPtr->dictionary);
         /* remove dictionary existence from history, to employ faster prefix mode */
         streamPtr->dictSize = 0;
         streamPtr->dictionary = (const BYTE*)source;
@@ -3367,6 +3416,111 @@ int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
         streamPtr->dictSize = (U32)inputSize;
         return result;
     }
+}
+
+#ifdef AOCL_LZ4_OPT
+/**
+ * Same as LZ4_compress_fast_continue_internal(), but calls optimized implementation
+ * i.e., AOCL_LZ4_compress_generic() in place of LZ4_compress_generic().
+*/
+int AOCL_LZ4_compress_fast_continue_internal (LZ4_stream_t* LZ4_stream,
+                                const char* source, char* dest,
+                                int inputSize, int maxOutputSize,
+                                int acceleration)
+{
+    if(LZ4_stream==NULL || (source==NULL && inputSize!=0) || dest==NULL)
+        return 0;
+        
+    const tableType_t tableType = byU32;
+    LZ4_stream_t_internal* const streamPtr = &LZ4_stream->internal_donotuse;
+    const char* dictEnd = streamPtr->dictSize ? (const char*)streamPtr->dictionary + streamPtr->dictSize : NULL;
+
+    DEBUGLOG(5, "AOCL_LZ4_compress_fast_continue_internal (inputSize=%i, dictSize=%u)", inputSize, streamPtr->dictSize);
+
+    LZ4_renormDictT(streamPtr, inputSize);   /* fix index overflow */
+    if (acceleration < 1) acceleration = LZ4_ACCELERATION_DEFAULT;
+    if (acceleration > LZ4_ACCELERATION_MAX) acceleration = LZ4_ACCELERATION_MAX;
+
+    /* invalidate tiny dictionaries */
+    if ( (streamPtr->dictSize < 4)     /* tiny dictionary : not enough for a hash */
+      && (dictEnd != source)           /* prefix mode */
+      && (inputSize > 0)               /* tolerance : don't lose history, in case next invocation would use prefix mode */ 
+      && (streamPtr->dictCtx == NULL)  /* usingDictCtx */
+      ) {
+        DEBUGLOG(5, "AOCL_LZ4_compress_fast_continue_internal: dictSize(%u) at addr:%p is too small", streamPtr->dictSize, (void *)streamPtr->dictionary);
+        /* remove dictionary existence from history, to employ faster prefix mode */
+        streamPtr->dictSize = 0;
+        streamPtr->dictionary = (const BYTE*)source;
+        dictEnd = source;
+    }
+
+    /* Check overlapping input/dictionary space */
+    {   const char* const sourceEnd = source + inputSize;
+        if ((sourceEnd > (const char*)streamPtr->dictionary) && (sourceEnd < dictEnd)) {
+            streamPtr->dictSize = (U32)(dictEnd - sourceEnd);
+            if (streamPtr->dictSize > 64 KB) streamPtr->dictSize = 64 KB;
+            if (streamPtr->dictSize < 4) streamPtr->dictSize = 0;
+            streamPtr->dictionary = (const BYTE*)dictEnd - streamPtr->dictSize;
+        }
+    }
+
+    /* prefix mode : source data follows dictionary */
+    if (dictEnd == source) {
+        if ((streamPtr->dictSize < 64 KB) && (streamPtr->dictSize < streamPtr->currentOffset))
+            return AOCL_LZ4_compress_generic(streamPtr, source, dest, inputSize, NULL, maxOutputSize, limitedOutput, tableType, withPrefix64k, dictSmall, acceleration);
+        else
+            return AOCL_LZ4_compress_generic(streamPtr, source, dest, inputSize, NULL, maxOutputSize, limitedOutput, tableType, withPrefix64k, noDictIssue, acceleration);
+    }
+
+    /* external dictionary mode */
+    {   int result;
+        if (streamPtr->dictCtx) {
+            /* We depend here on the fact that dictCtx'es (produced by
+             * LZ4_loadDict) guarantee that their tables contain no references
+             * to offsets between dictCtx->currentOffset - 64 KB and
+             * dictCtx->currentOffset - dictCtx->dictSize. This makes it safe
+             * to use noDictIssue even when the dict isn't a full 64 KB.
+             */
+            if (inputSize > 4 KB) {
+                /* For compressing large blobs, it is faster to pay the setup
+                 * cost to copy the dictionary's tables into the active context,
+                 * so that the compression loop is only looking into one table.
+                 */
+                LZ4_memcpy(streamPtr, streamPtr->dictCtx, sizeof(*streamPtr));
+                result = AOCL_LZ4_compress_generic(streamPtr, source, dest, inputSize, NULL, maxOutputSize, limitedOutput, tableType, usingExtDict, noDictIssue, acceleration);
+            } else {
+                result = AOCL_LZ4_compress_generic(streamPtr, source, dest, inputSize, NULL, maxOutputSize, limitedOutput, tableType, usingDictCtx, noDictIssue, acceleration);
+            }
+        } else {  /* small data <= 4 KB */
+            if ((streamPtr->dictSize < 64 KB) && (streamPtr->dictSize < streamPtr->currentOffset)) {
+                result = AOCL_LZ4_compress_generic(streamPtr, source, dest, inputSize, NULL, maxOutputSize, limitedOutput, tableType, usingExtDict, dictSmall, acceleration);
+            } else {
+                result = AOCL_LZ4_compress_generic(streamPtr, source, dest, inputSize, NULL, maxOutputSize, limitedOutput, tableType, usingExtDict, noDictIssue, acceleration);
+            }
+        }
+        streamPtr->dictionary = (const BYTE*)source;
+        streamPtr->dictSize = (U32)inputSize;
+        return result;
+    }
+}
+#endif /* AOCL_LZ4_OPT */
+
+/* Function pointer holding the optimized function variant as per the detected
+ * CPU features */
+/* Function pointer definition placed inside #ifndef LZ4_COMMONDEFS_ONLY to avoid
+ warnings related to unused variable. */
+static int (*LZ4_compress_fast_continue_fp)(LZ4_stream_t* LZ4_stream,
+                                const char* source, char* dest,
+                                int inputSize, int maxOutputSize,
+                                int acceleration) = LZ4_compress_fast_continue_internal;
+
+int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
+                                const char* source, char* dest,
+                                int inputSize, int maxOutputSize,
+                                int acceleration)
+{
+    AOCL_SETUP_NATIVE();
+    return LZ4_compress_fast_continue_fp(LZ4_stream, source, dest, inputSize, maxOutputSize, acceleration);
 }
 
 
@@ -5096,9 +5250,9 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
     }//thread_group_handle.num_threads > 1
 }
 
+#endif /* AOCL_LZ4_AVX_OPT */
 static int (*LZ4_decompress_wrapper_mt_fp) (const char* source, char* dest, 
             int compressedSize, int maxDecompressedSize) = LZ4_decompress_wrapper;
-#endif /* AOCL_LZ4_AVX_OPT */
 #endif /* AOCL_ENABLE_THREADS */
 
 LZ4_FORCE_O2
@@ -5116,13 +5270,7 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
 #ifdef AOCL_ENABLE_THREADS
-#ifdef AOCL_LZ4_AVX_OPT
     result = LZ4_decompress_wrapper_mt_fp(source, dest, compressedSize, maxDecompressedSize);
-#else
-    result = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
-                                    decode_full_block, noDict,
-                                    (BYTE*)dest, NULL, 0);
-#endif
 #else /* !AOCL_ENABLE_THREADS */
 #ifdef AOCL_LZ4_OPT
     result = LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
@@ -5137,111 +5285,6 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
     return result;
 }
 
-static void aocl_register_lz4_fmv(int optOff, int optLevel)
-{
-    if (optOff)
-    {
-        //C version
-        LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState_internal;
-        LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-    }
-    else
-    {
-        switch (optLevel)
-        {
-        case -1: // undecided. use defaults based on compiler flags
-#ifdef AOCL_LZ4_AVX_OPT
-            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState_internal;
-            LZ4_decompress_wrapper_fp = AOCL_LZ4_decompress_wrapper;
-#ifdef AOCL_ENABLE_THREADS
-            LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;
-            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_mt;
-#endif
-#elif defined(AOCL_LZ4_OPT)
-            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState_internal;
-            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-#ifdef AOCL_ENABLE_THREADS
-            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
-#endif
-#else
-            LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState_internal;
-            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-#ifdef AOCL_ENABLE_THREADS
-            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
-#endif
-#endif
-            break;
-#ifdef AOCL_LZ4_OPT
-        case 0://C version
-        case 1://SSE version
-            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState_internal;
-            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-#ifdef AOCL_ENABLE_THREADS
-            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
-#endif
-            break;
-        case 2://AVX version
-        case 3://AVX2 version
-        default://AVX512 and other versions
-#ifdef AOCL_LZ4_AVX_OPT
-            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState_internal;
-            LZ4_decompress_wrapper_fp = AOCL_LZ4_decompress_wrapper;
-#ifdef AOCL_ENABLE_THREADS
-            LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;
-            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_mt;
-#endif
-#else
-            LZ4_compress_fast_extState_fp = AOCL_LZ4_compress_fast_extState_internal;
-            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-#ifdef AOCL_ENABLE_THREADS
-            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
-#endif
-#endif
-            break;
-#else
-        default:
-            LZ4_compress_fast_extState_fp = LZ4_compress_fast_extState_internal;
-            LZ4_decompress_wrapper_fp = LZ4_decompress_wrapper;
-#ifdef AOCL_ENABLE_THREADS
-            LZ4_compress_fast_mt_fp = AOCL_LZ4_compress_fast_st;
-#endif
-            break;
-#endif
-        }
-    }
-}
-
-char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
-    size_t level, size_t windowLog)
-{
-    AOCL_ENTER_CRITICAL(setup_lz4)
-    if (!setup_ok_lz4) {
-        optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_lz4_fmv(optOff, optLevel);
-        setup_ok_lz4 = 1;
-    }
-    AOCL_EXIT_CRITICAL(setup_lz4)
-    return NULL;
-}
-
-void aocl_destroy_lz4(void){
-    AOCL_ENTER_CRITICAL(setup_lz4)
-    setup_ok_lz4 = 0;
-    AOCL_EXIT_CRITICAL(setup_lz4)
-}
-
-#ifdef AOCL_LZ4_OPT
-static void aocl_setup_native(void) {
-    AOCL_ENTER_CRITICAL(setup_lz4)
-    if (!setup_ok_lz4) {
-        int optLevel = get_cpu_opt_flags(0);
-        int optOff = get_disable_opt_flags(0);
-        aocl_register_lz4_fmv(optOff, optLevel);
-        setup_ok_lz4 = 1;
-    }
-    AOCL_EXIT_CRITICAL(setup_lz4)
-}
-#endif /* AOCL_LZ4_OPT */
 
 #ifdef AOCL_UNIT_TEST
 #ifdef AOCL_LZ4_AVX_OPT
@@ -5258,9 +5301,8 @@ void LZ4_writeLE16_wrapper(void* memPtr, unsigned short value)
 #endif /* AOCL_UNIT_TEST */
 
 LZ4_FORCE_O2
-int LZ4_decompress_safe_partial(const char* src, char* dst, int compressedSize, int targetOutputSize, int dstCapacity)
+int LZ4_decompress_safe_partial_internal(const char* src, char* dst, int compressedSize, int targetOutputSize, int dstCapacity)
 {
-    AOCL_SETUP_NATIVE();
     dstCapacity = MIN(targetOutputSize, dstCapacity);
     return LZ4_decompress_generic(src, dst, compressedSize, dstCapacity,
                                   partial_decode,
@@ -5280,16 +5322,15 @@ int LZ4_decompress_fast(const char* source, char* dest, int originalSize)
 /*===== Instantiate a few more decoding cases, used more than once. =====*/
 
 LZ4_FORCE_O2 /* Exported, an obsolete API function. */
-int LZ4_decompress_safe_withPrefix64k(const char* source, char* dest, int compressedSize, int maxOutputSize)
+int LZ4_decompress_safe_withPrefix64k_internal(const char* source, char* dest, int compressedSize, int maxOutputSize)
 {
-    AOCL_SETUP_NATIVE();
     return LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
                                   decode_full_block, withPrefix64k,
                                   (BYTE*)dest - 64 KB, NULL, 0);
 }
 
 LZ4_FORCE_O2
-static int LZ4_decompress_safe_partial_withPrefix64k(const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity)
+static int LZ4_decompress_safe_partial_withPrefix64k_internal(const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity)
 {
     dstCapacity = MIN(targetOutputSize, dstCapacity);
     return LZ4_decompress_generic(source, dest, compressedSize, dstCapacity,
@@ -5307,17 +5348,16 @@ int LZ4_decompress_fast_withPrefix64k(const char* source, char* dest, int origin
 }
 
 LZ4_FORCE_O2
-static int LZ4_decompress_safe_withSmallPrefix(const char* source, char* dest, int compressedSize, int maxOutputSize,
+static int LZ4_decompress_safe_withSmallPrefix_internal(const char* source, char* dest, int compressedSize, int maxOutputSize,
                                                size_t prefixSize)
 {
-    AOCL_SETUP_NATIVE();
     return LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
                                   decode_full_block, noDict,
                                   (BYTE*)dest-prefixSize, NULL, 0);
 }
 
 LZ4_FORCE_O2
-static int LZ4_decompress_safe_partial_withSmallPrefix(const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity,
+static int LZ4_decompress_safe_partial_withSmallPrefix_internal(const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity,
                                                size_t prefixSize)
 {
     dstCapacity = MIN(targetOutputSize, dstCapacity);
@@ -5327,18 +5367,17 @@ static int LZ4_decompress_safe_partial_withSmallPrefix(const char* source, char*
 }
 
 LZ4_FORCE_O2
-int LZ4_decompress_safe_forceExtDict(const char* source, char* dest,
+int LZ4_decompress_safe_forceExtDict_internal(const char* source, char* dest,
                                      int compressedSize, int maxOutputSize,
                                      const void* dictStart, size_t dictSize)
 {
-    AOCL_SETUP_NATIVE();
     return LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
                                   decode_full_block, usingExtDict,
                                   (BYTE*)dest, (const BYTE*)dictStart, dictSize);
 }
 
 LZ4_FORCE_O2
-int LZ4_decompress_safe_partial_forceExtDict(const char* source, char* dest,
+int LZ4_decompress_safe_partial_forceExtDict_internal(const char* source, char* dest,
                                      int compressedSize, int targetOutputSize, int dstCapacity,
                                      const void* dictStart, size_t dictSize)
 {
@@ -5362,13 +5401,224 @@ static int LZ4_decompress_fast_extDict(const char* source, char* dest, int origi
  * of the dictionary is passed as prefix, and the second via dictStart + dictSize.
  * These routines are used only once, in LZ4_decompress_*_continue().
  */
-LZ4_FORCE_INLINE
-int LZ4_decompress_safe_doubleDict(const char* source, char* dest, int compressedSize, int maxOutputSize,
+LZ4_FORCE_O2
+int LZ4_decompress_safe_doubleDict_internal(const char* source, char* dest, int compressedSize, int maxOutputSize,
                                    size_t prefixSize, const void* dictStart, size_t dictSize)
 {
     return LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
                                   decode_full_block, usingExtDict,
                                   (BYTE*)dest-prefixSize, (const BYTE*)dictStart, dictSize);
+}
+
+
+#ifdef AOCL_LZ4_AVX_OPT
+/**
+ * AOCL_LZ4_decompress_safe_*_internal variants are same as LZ4_decompress_safe_*_internal, 
+ * but calls AOCL_LZ4_decompress_generic() in place of LZ4_decompress_generic().
+*/
+
+LZ4_FORCE_O2
+int AOCL_LZ4_decompress_safe_partial_internal(const char* src, char* dst, int compressedSize, int targetOutputSize, int dstCapacity)
+{
+    dstCapacity = MIN(targetOutputSize, dstCapacity);
+    return AOCL_LZ4_decompress_generic(src, dst, compressedSize, dstCapacity,
+                                  partial_decode,
+                                  noDict, (BYTE*)dst, NULL, 0);
+}
+
+LZ4_FORCE_O2 /* Exported, an obsolete API function. */
+int AOCL_LZ4_decompress_safe_withPrefix64k_internal(const char* source, char* dest, int compressedSize, int maxOutputSize)
+{
+    return AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
+                                  decode_full_block, withPrefix64k,
+                                  (BYTE*)dest - 64 KB, NULL, 0);
+}
+
+LZ4_FORCE_O2
+static int AOCL_LZ4_decompress_safe_partial_withPrefix64k_internal(const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity)
+{
+    dstCapacity = MIN(targetOutputSize, dstCapacity);
+    return AOCL_LZ4_decompress_generic(source, dest, compressedSize, dstCapacity,
+                                  partial_decode, withPrefix64k,
+                                  (BYTE*)dest - 64 KB, NULL, 0);
+}
+
+LZ4_FORCE_O2
+static int AOCL_LZ4_decompress_safe_withSmallPrefix_internal(const char* source, char* dest, int compressedSize, int maxOutputSize,
+                                               size_t prefixSize)
+{
+    return AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
+                                  decode_full_block, noDict,
+                                  (BYTE*)dest-prefixSize, NULL, 0);
+}
+
+LZ4_FORCE_O2
+static int AOCL_LZ4_decompress_safe_partial_withSmallPrefix_internal(const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity,
+                                               size_t prefixSize)
+{
+    dstCapacity = MIN(targetOutputSize, dstCapacity);
+    return AOCL_LZ4_decompress_generic(source, dest, compressedSize, dstCapacity,
+                                  partial_decode, noDict,
+                                  (BYTE*)dest-prefixSize, NULL, 0);
+}
+
+LZ4_FORCE_O2
+int AOCL_LZ4_decompress_safe_forceExtDict_internal(const char* source, char* dest,
+                                     int compressedSize, int maxOutputSize,
+                                     const void* dictStart, size_t dictSize)
+{
+    return AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
+                                  decode_full_block, usingExtDict,
+                                  (BYTE*)dest, (const BYTE*)dictStart, dictSize);
+}
+LZ4_FORCE_O2
+int AOCL_LZ4_decompress_safe_partial_forceExtDict_internal(const char* source, char* dest,
+                                     int compressedSize, int targetOutputSize, int dstCapacity,
+                                     const void* dictStart, size_t dictSize)
+{
+    dstCapacity = MIN(targetOutputSize, dstCapacity);
+    return AOCL_LZ4_decompress_generic(source, dest, compressedSize, dstCapacity,
+                                  partial_decode, usingExtDict,
+                                  (BYTE*)dest, (const BYTE*)dictStart, dictSize);
+}
+
+LZ4_FORCE_O2
+int AOCL_LZ4_decompress_safe_doubleDict_internal(const char* source, char* dest, int compressedSize, int maxOutputSize,
+                                   size_t prefixSize, const void* dictStart, size_t dictSize)
+{
+    return AOCL_LZ4_decompress_generic(source, dest, compressedSize, maxOutputSize,
+                                  decode_full_block, usingExtDict,
+                                  (BYTE*)dest-prefixSize, (const BYTE*)dictStart, dictSize);
+}
+
+#endif /* AOCL_LZ4_AVX_OPT */
+
+// Function Pointers
+
+static int (*LZ4_decompress_safe_partial_fp)                 (const char* src, char* dst, int compressedSize, int targetOutputSize, int dstCapacity) = LZ4_decompress_safe_partial_internal;
+static int (*LZ4_decompress_safe_withPrefix64k_fp)           (const char* source, char* dest, int compressedSize, int maxOutputSize) = LZ4_decompress_safe_withPrefix64k_internal;
+static int (*LZ4_decompress_safe_partial_withPrefix64k_fp)   (const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity) = LZ4_decompress_safe_partial_withPrefix64k_internal;
+static int (*LZ4_decompress_safe_withSmallPrefix_fp)         (const char* source, char* dest, int compressedSize, int maxOutputSize, size_t prefixSize) = LZ4_decompress_safe_withSmallPrefix_internal;
+static int (*LZ4_decompress_safe_partial_withSmallPrefix_fp) (const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity, size_t prefixSize) = LZ4_decompress_safe_partial_withSmallPrefix_internal;
+static int (*LZ4_decompress_safe_forceExtDict_fp)            (const char* source, char* dest, int compressedSize, int maxOutputSize, const void* dictStart, size_t dictSize) = LZ4_decompress_safe_forceExtDict_internal;
+static int (*LZ4_decompress_safe_partial_forceExtDict_fp)    (const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity, const void* dictStart, size_t dictSize) = LZ4_decompress_safe_partial_forceExtDict_internal;
+static int (*LZ4_decompress_safe_doubleDict_fp)              (const char* source, char* dest, int compressedSize, int maxOutputSize, size_t prefixSize, const void* dictStart, size_t dictSize) = LZ4_decompress_safe_doubleDict_internal;
+
+
+#define SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS \
+LZ4_decompress_wrapper_fp                      = LZ4_decompress_wrapper;\
+LZ4_decompress_safe_partial_fp                 = LZ4_decompress_safe_partial_internal;\
+LZ4_decompress_safe_withPrefix64k_fp           = LZ4_decompress_safe_withPrefix64k_internal;\
+LZ4_decompress_safe_partial_withPrefix64k_fp   = LZ4_decompress_safe_partial_withPrefix64k_internal;\
+LZ4_decompress_safe_withSmallPrefix_fp         = LZ4_decompress_safe_withSmallPrefix_internal;\
+LZ4_decompress_safe_partial_withSmallPrefix_fp = LZ4_decompress_safe_partial_withSmallPrefix_internal;\
+LZ4_decompress_safe_forceExtDict_fp            = LZ4_decompress_safe_forceExtDict_internal;\
+LZ4_decompress_safe_partial_forceExtDict_fp    = LZ4_decompress_safe_partial_forceExtDict_internal;\
+LZ4_decompress_safe_doubleDict_fp              = LZ4_decompress_safe_doubleDict_internal;
+
+#define SET_LZ4_COMPRESS_DEFAULT_FUNCTIONS \
+LZ4_compress_fast_extState_fp      = LZ4_compress_fast_extState_internal;\
+LZ4_compress_fast_continue_fp      = LZ4_compress_fast_continue_internal;\
+LZ4_compress_destSize_extState_fp  = LZ4_compress_destSize_extState_internal;
+
+#ifdef AOCL_LZ4_AVX_OPT
+#define SET_LZ4_DECOMPRESS_AVX_OPT_FUNCTIONS \
+LZ4_decompress_wrapper_fp                      = AOCL_LZ4_decompress_wrapper;\
+LZ4_decompress_safe_partial_fp                 = AOCL_LZ4_decompress_safe_partial_internal;\
+LZ4_decompress_safe_withPrefix64k_fp           = AOCL_LZ4_decompress_safe_withPrefix64k_internal;\
+LZ4_decompress_safe_partial_withPrefix64k_fp   = AOCL_LZ4_decompress_safe_partial_withPrefix64k_internal;\
+LZ4_decompress_safe_withSmallPrefix_fp         = AOCL_LZ4_decompress_safe_withSmallPrefix_internal;\
+LZ4_decompress_safe_partial_withSmallPrefix_fp = AOCL_LZ4_decompress_safe_partial_withSmallPrefix_internal;\
+LZ4_decompress_safe_forceExtDict_fp            = AOCL_LZ4_decompress_safe_forceExtDict_internal;\
+LZ4_decompress_safe_partial_forceExtDict_fp    = AOCL_LZ4_decompress_safe_partial_forceExtDict_internal;\
+LZ4_decompress_safe_doubleDict_fp              = AOCL_LZ4_decompress_safe_doubleDict_internal;
+#endif /*AOCL_LZ4_AVX_OPT */
+
+#ifdef AOCL_LZ4_OPT
+#define SET_LZ4_COMPRESS_OPT_FUNCTIONS \
+LZ4_compress_fast_extState_fp      = AOCL_LZ4_compress_fast_extState_internal;\
+LZ4_compress_fast_continue_fp      = AOCL_LZ4_compress_fast_continue_internal;\
+LZ4_compress_destSize_extState_fp  = AOCL_LZ4_compress_destSize_extState_internal;
+#endif /* AOCL_LZ4_OPT */
+
+#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_LZ4_AVX_OPT
+#define SET_LZ4_MT_FUNCTIONS \
+LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;\
+LZ4_compress_fast_mt_fp      = AOCL_LZ4_compress_fast_mt;
+#endif /* AOCL_LZ4_AVX_OPT */
+
+#define SET_LZ4_ST_FUNCTIONS \
+LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;\
+LZ4_compress_fast_mt_fp      = AOCL_LZ4_compress_fast_st;
+#endif /* AOCL_ENABLE_THREADS */
+
+LZ4_FORCE_O2
+int LZ4_decompress_safe_partial(const char* src, char* dst, int compressedSize, int targetOutputSize, int dstCapacity)
+{
+    AOCL_SETUP_NATIVE();
+    if (dst == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        return -1;
+    }
+    return LZ4_decompress_safe_partial_fp(src, dst, compressedSize, targetOutputSize, dstCapacity);
+}
+
+
+LZ4_FORCE_O2 /* Exported, an obsolete API function. */
+int LZ4_decompress_safe_withPrefix64k(const char* source, char* dest, int compressedSize, int maxOutputSize)
+{
+    AOCL_SETUP_NATIVE();
+    return LZ4_decompress_safe_withPrefix64k_fp(source, dest, compressedSize, maxOutputSize);
+}
+
+
+LZ4_FORCE_O2
+static int LZ4_decompress_safe_partial_withPrefix64k(const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity)
+{
+    AOCL_SETUP_NATIVE();
+    return LZ4_decompress_safe_partial_withPrefix64k_fp(source, dest, compressedSize, targetOutputSize, dstCapacity);
+}
+
+LZ4_FORCE_O2
+static int LZ4_decompress_safe_withSmallPrefix(const char* source, char* dest, int compressedSize, int maxOutputSize,
+                                               size_t prefixSize)
+{
+    AOCL_SETUP_NATIVE();
+    return LZ4_decompress_safe_withSmallPrefix_fp(source, dest, compressedSize, maxOutputSize, prefixSize);
+}
+
+LZ4_FORCE_O2
+static int LZ4_decompress_safe_partial_withSmallPrefix(const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity,
+                                               size_t prefixSize)
+{
+    AOCL_SETUP_NATIVE();
+    return LZ4_decompress_safe_partial_withSmallPrefix_fp(source, dest, compressedSize, targetOutputSize, dstCapacity, prefixSize);
+}
+
+LZ4_FORCE_O2
+int LZ4_decompress_safe_forceExtDict(const char* source, char* dest, int compressedSize, int maxOutputSize,
+                                     const void* dictStart, size_t dictSize)
+{
+    AOCL_SETUP_NATIVE();
+    return LZ4_decompress_safe_forceExtDict_fp(source, dest, compressedSize, maxOutputSize, dictStart, dictSize);
+}
+
+LZ4_FORCE_O2
+int LZ4_decompress_safe_partial_forceExtDict(const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity,
+                                     const void* dictStart, size_t dictSize)
+{
+    AOCL_SETUP_NATIVE();
+    return LZ4_decompress_safe_partial_forceExtDict_fp(source, dest, compressedSize, targetOutputSize, dstCapacity, dictStart, dictSize);
+}
+
+LZ4_FORCE_INLINE
+int LZ4_decompress_safe_doubleDict(const char* source, char* dest, int compressedSize, int maxOutputSize,
+                                   size_t prefixSize, const void* dictStart, size_t dictSize)
+{
+    AOCL_SETUP_NATIVE();
+    return LZ4_decompress_safe_doubleDict_fp(source, dest, compressedSize, maxOutputSize, prefixSize, dictStart, dictSize);
 }
 
 /*===== streaming decompression functions =====*/
@@ -5534,6 +5784,11 @@ Advanced decoding functions :
 int LZ4_decompress_safe_usingDict(const char* source, char* dest, int compressedSize, int maxOutputSize, const char* dictStart, int dictSize)
 {
     AOCL_SETUP_NATIVE();
+    if (dest == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        return -1;
+    }
     if (dictSize==0)
         return LZ4_decompress_safe(source, dest, compressedSize, maxOutputSize);
     if (dictStart+dictSize == dest) {
@@ -5550,6 +5805,11 @@ int LZ4_decompress_safe_usingDict(const char* source, char* dest, int compressed
 int LZ4_decompress_safe_partial_usingDict(const char* source, char* dest, int compressedSize, int targetOutputSize, int dstCapacity, const char* dictStart, int dictSize)
 {
     AOCL_SETUP_NATIVE();
+    if (dest == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        return -1;
+    }
     if (dictSize==0)
         return LZ4_decompress_safe_partial(source, dest, compressedSize, targetOutputSize, dstCapacity);
     if (dictStart+dictSize == dest) {
@@ -5573,6 +5833,89 @@ int LZ4_decompress_fast_usingDict(const char* source, char* dest, int originalSi
     assert(dictSize >= 0);
     return LZ4_decompress_fast_extDict(source, dest, originalSize, dictStart, (size_t)dictSize);
 }
+
+static void aocl_register_lz4_fmv(int optOff, int optLevel)
+{
+    if (optOff)
+    {
+        //C version
+        SET_LZ4_COMPRESS_DEFAULT_FUNCTIONS
+        SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
+    }
+    else
+    {
+        switch (optLevel)
+        {
+#ifdef AOCL_LZ4_OPT
+        case 0://C version
+        case 1://SSE version
+            SET_LZ4_COMPRESS_OPT_FUNCTIONS
+            SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
+#ifdef AOCL_ENABLE_THREADS
+            SET_LZ4_ST_FUNCTIONS
+#endif
+            break;
+        case 2://AVX version
+        case 3://AVX2 version
+        default://AVX512 and other versions
+#ifdef AOCL_LZ4_AVX_OPT
+            SET_LZ4_COMPRESS_OPT_FUNCTIONS
+            SET_LZ4_DECOMPRESS_AVX_OPT_FUNCTIONS
+#ifdef AOCL_ENABLE_THREADS
+            SET_LZ4_MT_FUNCTIONS
+#endif
+#else
+            SET_LZ4_COMPRESS_OPT_FUNCTIONS
+            SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
+#ifdef AOCL_ENABLE_THREADS
+            SET_LZ4_ST_FUNCTIONS
+#endif
+#endif
+            break;
+#else /* !AOCL_LZ4_OPT */
+        default:
+            SET_LZ4_COMPRESS_DEFAULT_FUNCTIONS
+            SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
+#ifdef AOCL_ENABLE_THREADS
+            SET_LZ4_ST_FUNCTIONS
+#endif
+            break;
+#endif /* AOCL_LZ4_OPT */
+        }
+    }
+}
+
+char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
+    size_t level, size_t windowLog)
+{
+    AOCL_ENTER_CRITICAL(setup_lz4)
+    if (!setup_ok_lz4) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_lz4_fmv(optOff, optLevel);
+        setup_ok_lz4 = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lz4)
+    return NULL;
+}
+
+void aocl_destroy_lz4(void){
+    AOCL_ENTER_CRITICAL(setup_lz4)
+    setup_ok_lz4 = 0;
+    AOCL_EXIT_CRITICAL(setup_lz4)
+}
+
+#ifdef AOCL_LZ4_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_lz4)
+    if (!setup_ok_lz4) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_register_lz4_fmv(optOff, optLevel);
+        setup_ok_lz4 = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_lz4)
+}
+#endif /* AOCL_LZ4_OPT */
 
 
 /*=*************************************************
