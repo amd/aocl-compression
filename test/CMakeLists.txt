@@ -203,6 +203,10 @@ if (AOCL_TEST_COVERAGE)
             add_test(BENCH-${method}-calgary-${TFILE}-optoff ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -o ${filename})
             add_test(BENCH-${method}-calgary-${TFILE}-native ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -n ${filename})
         endforeach()
+        #methods with external dictionary support. same input file used as dictionary.
+if (NOT AOCL_EXCLUDE_ZSTD)
+        add_test(BENCH-zstd-calgary-${TFILE}-native-dict ${CMAKE_BINARY_DIR}/aocl_compression_bench -eZSTD -t -n -y${filename} ${filename})
+endif()
     endforeach()
 
     file(GLOB canterbury_dataset ${CMAKE_BINARY_DIR}/canterbury/*)
@@ -213,6 +217,10 @@ if (AOCL_TEST_COVERAGE)
             add_test(BENCH-${method}-canterbury-${TFILE}-optoff ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -o ${filename})
             add_test(BENCH-${method}-canterbury-${TFILE}-native ${CMAKE_BINARY_DIR}/aocl_compression_bench -e${method} -t -n ${filename})
         endforeach()
+        #methods with external dictionary support. same input file used as dictionary.
+if (NOT AOCL_EXCLUDE_ZSTD)
+        add_test(BENCH-zstd-canterbury-${TFILE}-native-dict ${CMAKE_BINARY_DIR}/aocl_compression_bench -eZSTD -t -n -y${filename} ${filename})
+endif()
     endforeach()
 
     file(GLOB silesia_dataset ${CMAKE_BINARY_DIR}/silesia/*)

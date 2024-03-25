@@ -84,6 +84,9 @@ typedef struct
     AOCL_INTP upper_level;
     AOCL_INTP extra_param;
     AOCL_INTP max_block_size_param;
+    AOCL_INTP native_st_support; // single-threaded native APIs supported
+    AOCL_INTP native_mt_support; // multi-threaded native APIs supported
+    AOCL_INTP dict_support; // native APIs with external dictionary supported
     const AOCL_CHAR* extension;
 } codec_list_t;
 
@@ -91,13 +94,13 @@ typedef struct
 //The list is ordered as per the enum aocl_compression_type
 static const codec_list_t codec_list[AOCL_COMPRESSOR_ALGOS_NUM] =
 {
-    {"LZ4",    0, 0,  0, 0, ".lz4"},
-    {"LZ4HC",  1, 12, 0, 0, ".lz4"},
-    {"LZMA",   0, 9,  0, 0, ".lzma"},
-    {"BZIP2",  1, 9,  0, 0, ".bz2"},
-    {"SNAPPY", 0, 0,  0, 0, ".snappy"},
-    {"ZLIB",   1, 9,  0, 0, ".zlib"},
-    {"ZSTD",   1, 22, 0, 0, ".zst"}
+    {"LZ4",    0, 0,  0, 0, 1, 0, 0, ".lz4"},
+    {"LZ4HC",  1, 12, 0, 0, 1, 0, 0, ".lz4"},
+    {"LZMA",   0, 9,  0, 0, 1, 0, 0, ".lzma"},
+    {"BZIP2",  1, 9,  0, 0, 1, 0, 0, ".bz2"},
+    {"SNAPPY", 0, 0,  0, 0, 1, 0, 0, ".snappy"},
+    {"ZLIB",   1, 9,  0, 0, 1, 0, 0, ".zlib"},
+    {"ZSTD",   1, 22, 0, 0, 1, 1, 1, ".zst"}
 };
 
 //Main data structure for Test bench functionality
@@ -106,8 +109,10 @@ typedef struct
     AOCL_CHAR *inPtr;            //buffer containing input data
     AOCL_CHAR *outPtr;           //buffer containing output data
     AOCL_CHAR *decompPtr;        //buffer containing decompressed data for validation
+    AOCL_CHAR* dictPtr;          //buffer containing external dictionary data
     AOCL_UINTP inSize;           //input data length
     AOCL_UINTP outSize;          //output data length
+    AOCL_UINTP dictSize;         //dictionary data length
     AOCL_UINTP optVar;           //optional param used by compression method
     AOCL_INTP use_all_codecs;		
     AOCL_UINTP mem_limit;
@@ -121,7 +126,8 @@ typedef struct
     AOCL_INTP useIPP;
     AOCL_CHAR *ippDir;
     AOCL_INTP useNAPI;
-    FILE *fp;
+    FILE *fp;                    //file pointer for input data
+    FILE *fpDict;                //file pointer for dictionary data
     AOCL_CHAR *fName;
     AOCL_UINT64 cSize;           //size of compressed output
     AOCL_UINT64 dSize;           //size of decompressed output

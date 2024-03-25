@@ -81,6 +81,8 @@ AOCL_INTP dumpEnabled = 0;
 AOCL_CHAR valFile[MAX_FILENAME_LEN];
 AOCL_INTP valEnabled = 0;
 AOCL_INTP isFolder = 0;
+AOCL_CHAR dictFile[MAX_FILENAME_LEN];
+AOCL_INTP useDict = 0;
 
 AOCL_VOID print_user_options (AOCL_VOID)
 {
@@ -97,7 +99,8 @@ AOCL_VOID print_user_options (AOCL_VOID)
     printf("-m<>        Maximum size in MBs of the input for compression and decompression. Default=MIN(filesize, 1024 MB)\n");
     printf("-e<>:<>:<>  Compression/decompression method. Optional level and additional param may be specified using : separator\n");
     printf("            If not using -n option, additional param is passed through aocl_compression_desc to unified APIs. For ZSTD, this sets windowLog.\n");
-    printf("            If using -n option, for ZSTD, additional param can be set to > 1 to run multithreaded reference code. It sets number of workers.\n");
+    printf("            If using -n option (but not -y), for ZSTD, it sets number of workers. This additional param can be set to > 1 to run multithreaded reference code.\n");
+    printf("            If using -n and -y option, this value is ignored.\n");
     printf("-i<>        Number of iterations of compression/decompression\n");
     printf("-t          Verification and functional tests of the compression/decompression methods\n");
     printf("-p          Print stats like compression/decompression time, speed, ratio\n");
@@ -107,21 +110,29 @@ AOCL_VOID print_user_options (AOCL_VOID)
     printf("-f          Input uncompressed file to be used for validation in -rdecompress mode.\n");
     printf("-c          Run IPP library methods. Provide the path for the IPP library path after the -c option.\n");
     printf("-n          Use Native APIs for compression/decompression.\n");
+    printf("-y          External dictionary file to be used in compress and decompress for supported native APIs. Ignored if -n is not set.\n");
+}
+
+const char* print_bool(AOCL_INTP val) {
+    return val ? "Yes" : "No";
 }
 
 AOCL_VOID print_supported_compressors (AOCL_VOID)
 {
    printf("\nSupported compression/decompression methods along with their supported levels are:\n");
-   printf("===========================================\n");
-   printf("Method Name\tLower Level\tUpper Level\n");
-   printf("===========================================\n");
-   printf("LZ4\t\t %s\t\t%s\n", "NA", "NA");
-   printf("LZ4HC\t\t %td\t\t%td\n", codec_list[LZ4HC].lower_level, codec_list[LZ4HC].upper_level);
-   printf("LZMA\t\t %td\t\t%td\n", codec_list[LZMA].lower_level, codec_list[LZMA].upper_level);
-   printf("SNAPPY\t\t %s\t\t%s\n", "NA", "NA");
-   printf("ZLIB\t\t %td\t\t%td\n", codec_list[ZLIB].lower_level, codec_list[ZLIB].upper_level);
-   printf("ZSTD\t\t %td\t\t%td\n", codec_list[ZSTD].lower_level, codec_list[ZSTD].upper_level);
-   printf("BZIP2\t\t %td\t\t%td\n", codec_list[BZIP2].lower_level, codec_list[BZIP2].upper_level);
+   printf("===========================================================================================\n");
+   printf("Method Name\tLower Level\tUpper Level\tNative API ST\tNative API MT\tNative dict ST\n");
+   printf("===========================================================================================\n");
+   for (int i = 0; i < AOCL_COMPRESSOR_ALGOS_NUM; ++i) {
+       printf("%s\t\t", codec_list[i].codec_name);
+       if (codec_list[i].lower_level == codec_list[i].upper_level)
+           printf("NA\t\tNA\t\t");
+       else
+           printf("%td\t\t%td\t\t", codec_list[i].lower_level, codec_list[i].upper_level);
+       printf("%s\t\t%s\t\t%s\n", print_bool(codec_list[i].native_st_support),
+                                  print_bool(codec_list[i].native_mt_support), 
+                                  print_bool(codec_list[i].dict_support));
+   }
 }
 
 AOCL_VOID *allocMem(AOCL_UINTP size, AOCL_INTP zeroInit)
@@ -329,6 +340,8 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
     codec_bench_handle->optVar = UNINIT_OPT_VAR;
     codec_bench_handle->inPtr = NULL;
     codec_bench_handle->outPtr = NULL;
+    codec_bench_handle->dictPtr = NULL;
+    codec_bench_handle->dictSize = 0;
     codec_bench_handle->decompPtr = NULL;
     codec_bench_handle->optOff = 0;
     codec_bench_handle->useIPP = 0;
@@ -452,6 +465,20 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                     }
                     valEnabled = 1;
                     break;
+
+                case 'y':
+                    if (useDict)
+                    {
+                        LOG_BENCH(ERR, "Multiple -y options are not allowed.\n");
+                        ret = ERR_CODEC_BENCH_ARGS;
+                        break;
+                    }
+                    if (read_file_name(dictFile, &argv[cnt][2]) != 0) {
+                        LOG_STRING_OVERFLOW(&argv[cnt][2]);
+                        ret = ERR_CODEC_BENCH_ARGS;
+                    }
+                    useDict = 1;
+                    break;
  
                 default:
                     ret = ERR_CODEC_BENCH_ARGS;
@@ -539,6 +566,10 @@ AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
             (AOCL_CHAR*)allocMem(codec_bench_handle->outSize, 0); // get size of decompressed data from output
     }
 
+    if (codec_bench_handle->dictSize > 0)
+        codec_bench_handle->dictPtr =
+            (AOCL_CHAR*)allocMem(codec_bench_handle->dictSize, 0);
+
     codec_bench_handle->cTime = 0;
     codec_bench_handle->cSize = 0;
     codec_bench_handle->cSpeed = 0.0;
@@ -568,27 +599,51 @@ AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
     }
 }
 
-AOCL_INTP open_file(aocl_codec_bench_info* codec_bench_handle, 
-                    const AOCL_CHAR* filePath, const AOCL_CHAR* filename)
-{
-    codec_bench_handle->fp = fopen(filePath, "rb");
-    if (!codec_bench_handle->fp)
-    {
-        LOG_BENCH(ERR, "Error in opening input file [%s].\n", filename);
+typedef enum { CB_FILE_INPUT, CB_FILE_DICT } codec_bench_file_type;
 
+AOCL_INTP open_file(aocl_codec_bench_info* codec_bench_handle, 
+                    const AOCL_CHAR* filePath, const AOCL_CHAR* filename, 
+                    codec_bench_file_type type)
+{
+    FILE* fp;
+    AOCL_UINTP* file_size;
+    if (type == CB_FILE_INPUT) {
+        fp = codec_bench_handle->fp = fopen(filePath, "rb"); 
+        file_size = &codec_bench_handle->file_size;
+    }
+    else { // type == CB_FILE_DICT
+        fp = codec_bench_handle->fpDict = fopen(filePath, "rb");
+        file_size = &codec_bench_handle->dictSize;
+    }
+
+    if (!fp)
+    {
+        LOG_BENCH(ERR, "Error in opening file [%s].\n", filename);
         return 0;
     }
 
 #ifdef _WINDOWS
-    _fseeki64(codec_bench_handle->fp, 0L, SEEK_END);
-    codec_bench_handle->file_size = _ftelli64(codec_bench_handle->fp);
+    _fseeki64(fp, 0L, SEEK_END);
+    *file_size = _ftelli64(fp);
 #else
-    fseek(codec_bench_handle->fp, 0L, SEEK_END);
-    codec_bench_handle->file_size = ftell(codec_bench_handle->fp);
+    fseek(fp, 0L, SEEK_END);
+    *file_size = ftell(fp);
 #endif
-    rewind(codec_bench_handle->fp);
+    rewind(fp);
 
     return 1;
+}
+
+AOCL_INTP open_input_file(aocl_codec_bench_info* codec_bench_handle, 
+                    const AOCL_CHAR* filePath, const AOCL_CHAR* filename)
+{
+    return open_file(codec_bench_handle, filePath, filename, CB_FILE_INPUT);
+}
+
+AOCL_INTP open_dict_file(aocl_codec_bench_info* codec_bench_handle, 
+                    const AOCL_CHAR* filePath, const AOCL_CHAR* filename)
+{
+    return open_file(codec_bench_handle, filePath, filename, CB_FILE_DICT);
 }
 
 AOCL_INTP open_file_in_folder(aocl_codec_bench_info* codec_bench_handle,
@@ -615,7 +670,7 @@ AOCL_INTP open_file_in_folder(aocl_codec_bench_info* codec_bench_handle,
     CODEC_STRCAT(filePath);
     strcat(filePath, filename);
 
-    if (!open_file(codec_bench_handle, filePath, filename))
+    if (!open_input_file(codec_bench_handle, filePath, filename))
     {
         return ERR_CODEC_BENCH_FILE_IO;
     }
@@ -628,17 +683,34 @@ AOCL_INTP open_file_in_folder(aocl_codec_bench_info* codec_bench_handle,
     return 0;
 }
 
-AOCL_VOID close_file(aocl_codec_bench_info* codec_bench_handle) {
-    if (codec_bench_handle->fp) {
-        fclose(codec_bench_handle->fp);
-        codec_bench_handle->fp = NULL;
+AOCL_VOID close_file(aocl_codec_bench_info* codec_bench_handle, codec_bench_file_type type) {
+    if (type == CB_FILE_INPUT) {
+        if (codec_bench_handle->fp) {
+            fclose(codec_bench_handle->fp);
+            codec_bench_handle->fp = NULL;
+        }
+        codec_bench_handle->file_size = 0;
     }
-    codec_bench_handle->file_size = 0;
+    else { // type == CB_FILE_DICT
+        if (codec_bench_handle->fpDict) {
+            fclose(codec_bench_handle->fpDict);
+            codec_bench_handle->fpDict = NULL;
+        }
+        codec_bench_handle->dictSize = 0;
+    }
+}
+
+AOCL_VOID close_input_file(aocl_codec_bench_info* codec_bench_handle) {
+    close_file(codec_bench_handle, CB_FILE_INPUT);
+}
+
+AOCL_VOID close_dict_file(aocl_codec_bench_info* codec_bench_handle) {
+    close_file(codec_bench_handle, CB_FILE_DICT);
 }
 
 AOCL_VOID close_file_in_folder(aocl_codec_bench_info* codec_bench_handle)
 {
-    close_file(codec_bench_handle);
+    close_input_file(codec_bench_handle);
     
     // free the mem allocated before
     if (codec_bench_handle->inPtr) {
@@ -1016,7 +1088,8 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             }
         }
 
-        rewind(codec_bench_handle->fp);
+        if (codec_bench_handle->fp) rewind(codec_bench_handle->fp);
+        if (codec_bench_handle->fpDict) rewind(codec_bench_handle->fpDict);
         if (status != 0)
             break;
     }
@@ -1220,6 +1293,8 @@ AOCL_VOID destroy(aocl_codec_bench_info *codec_bench_handle)
         free(codec_bench_handle->outPtr);
     if (codec_bench_handle->decompPtr)
         free(codec_bench_handle->decompPtr);
+    if (codec_bench_handle->dictPtr)
+        free(codec_bench_handle->dictPtr);
 
     LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 }
@@ -1228,6 +1303,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
 {
     aocl_codec_bench_info codec_bench_handle;
     codec_bench_handle.fp = NULL;
+    codec_bench_handle.fpDict = NULL;
     aocl_compression_desc aocl_codec_ds;
     aocl_compression_desc *aocl_codec_handle = &aocl_codec_ds;
     FILE* valFp = NULL;
@@ -1290,11 +1366,11 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
             CODEC_STRCAT(filePath);
             strcat(filePath, filename);
 
-            if (!open_file(&codec_bench_handle, filePath, filename))
+            if (!open_input_file(&codec_bench_handle, filePath, filename))
             {
                 result = ERR_CODEC_BENCH_FILE_IO;
                 goto exit;
-            }      
+            }
         }
         else 
         {
@@ -1303,7 +1379,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
     }   
 
     if (!(codec_bench_handle.runOperation == RUN_OPERATION_DECOMPRESS && isFolder)) {
-        if (!open_file(&codec_bench_handle, inFile, inFile))
+        if (!open_input_file(&codec_bench_handle, inFile, inFile))
         {
             result = ERR_CODEC_BENCH_FILE_IO;
             goto exit;
@@ -1349,6 +1425,14 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
         codec_bench_handle.valFp = valFp;
     }
 
+    if (useDict) {
+        if (!open_dict_file(&codec_bench_handle, dictFile, dictFile))
+        {
+            result = ERR_CODEC_BENCH_FILE_IO;
+            goto exit;
+        }
+    }
+
     if (init(&codec_bench_handle, aocl_codec_handle) < 0)
     {
         LOG_BENCH(ERR, "Error in allocating memory.\n");
@@ -1380,7 +1464,8 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
     destroy(&codec_bench_handle);
 
 exit:
-    close_file(&codec_bench_handle);
+    close_input_file(&codec_bench_handle);
+    close_dict_file(&codec_bench_handle);
     if (valFp)
         fclose(valFp);
     LOG_UNFORMATTED(TRACE, log_ctx, "Exit");

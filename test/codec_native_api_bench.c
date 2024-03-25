@@ -75,6 +75,7 @@
 #ifndef AOCL_EXCLUDE_ZSTD
 #define ZSTD_STATIC_LINKING_ONLY
 #include "zstd.h"
+#include "zdict.h"
 #endif
 
 /* Wrapper functions defination for Compression and Decompression.  */
@@ -372,6 +373,47 @@ AOCL_INT64 native_zstd_mt_compress(AOCL_CHAR* inbuf, AOCL_UINTP insize, AOCL_CHA
 #endif 
 }
 
+//pointer to dict. Lifetime of dict buffer is handled in codec_bench_handle.
+AOCL_CHAR* dictbuf = NULL;
+AOCL_UINTP dictsize = 0;
+
+AOCL_INT64 native_zstd_dict_compress(AOCL_CHAR* inbuf, AOCL_UINTP insize, AOCL_CHAR* outbuf, AOCL_UINTP outsize, AOCL_UINTP level)
+{
+#ifndef AOCL_EXCLUDE_ZSTD
+    if (dictbuf == NULL || dictsize == 0) {
+        // no valid dict exists, run without it
+        LOG_BENCH(INFO, "Running without dictionary. \n");
+        return native_zstd_compress(inbuf, insize, outbuf, outsize, level);
+    }
+
+    AOCL_INT64 res;
+    ZSTD_CCtx* cctx = ZSTD_createCCtx();
+    if (!cctx)
+    {
+        LOG_BENCH(ERR, "ZSTD compression context creation failed. \n");
+        return -1;
+    }
+
+    res = ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, level); CHECK_RET_ZSTD(res);
+    ZSTD_CDict* cdict = ZSTD_createCDict(dictbuf, dictsize, level);
+
+    //Perform the compression
+    res = ZSTD_compress_usingCDict(cctx, outbuf, outsize, inbuf, insize, cdict);
+
+    CHECK_RET_ZSTD(res);
+
+    if (cdict)
+        ZSTD_freeCDict(cdict);
+
+    if (cctx)
+        ZSTD_freeCCtx(cctx);
+
+    return res;
+#else
+    return -2;
+#endif 
+}
+
 AOCL_INT64 native_zstd_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, AOCL_UINTP outsize)
 {
     #ifndef AOCL_EXCLUDE_ZSTD
@@ -399,6 +441,45 @@ AOCL_INT64 native_zstd_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR
     #else
         return -2;
     #endif
+}
+
+AOCL_INT64 native_zstd_dict_decompress(AOCL_CHAR* inbuf, AOCL_UINTP insize, AOCL_CHAR* outbuf, AOCL_UINTP outsize)
+{
+    if (dictbuf == NULL || dictsize == 0) {
+        // no valid dict exists, run without it
+        LOG_BENCH(INFO, "Running without dictionary. \n");
+        return native_zstd_decompress(inbuf, insize, outbuf, outsize);
+    }
+
+#ifndef AOCL_EXCLUDE_ZSTD
+    AOCL_INT64 res;
+    ZSTD_DCtx* dctx = ZSTD_createDCtx();
+    if (!dctx)
+    {
+        LOG_BENCH(ERR, "ZSTD decompression context creation failed. \n");
+        return -1;
+    }
+
+    //Perform the decompression
+    ZSTD_DDict* ddict = ZSTD_createDDict(dictbuf, dictsize);
+    res = ZSTD_decompress_usingDDict(dctx, outbuf, outsize, inbuf, insize, ddict);
+    if (ZSTD_isError(res))
+    {
+        LOG_BENCH(ERR, "ZSTD decompression error: %s\n", ZSTD_getErrorName(res));
+        res = -1;
+    }
+
+    if (ddict)
+        ZSTD_freeDDict(ddict);
+
+    if (dctx)
+        ZSTD_freeDCtx(dctx);
+
+
+    return res;
+#else
+    return -2;
+#endif
 }
 
 // Function pointer type defination
@@ -446,7 +527,6 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 {
     AOCL_INTP status = 0;
     AOCL_UINTP inSize, file_size;
-    FILE* inFp = codec_bench_handle->fp;
     AOCL_INT64 resultComp = 0;
     AOCL_INT64 resultDecomp = 0;
 
@@ -459,7 +539,15 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     codec_bench_handle->cBestTime = UINT64_MAX;
     codec_bench_handle->dBestTime = UINT64_MAX;
     aocl_codec_handle->level = level;
-    
+
+    // load dict
+    {
+        dictbuf = codec_bench_handle->dictPtr;
+        dictsize = codec_bench_handle->dictSize;
+        if (dictbuf)
+            dictsize = fread(dictbuf, 1, dictsize, codec_bench_handle->fpDict); // read dictionary in one shot
+    }
+
     for (AOCL_INTP k = 0; k < codec_bench_handle->iterations; k++)
     {
         AOCL_UINT64 temp_cTime = 0;
@@ -472,7 +560,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         {
             while (inSize)
             {
-                inSize = fread(codec_bench_handle->inPtr, 1, inSize, inFp); // read data in blocks of inSize
+                inSize = fread(codec_bench_handle->inPtr, 1, inSize, codec_bench_handle->fp); // read data in blocks of inSize
 
                 // compress
                 aocl_codec_handle->inSize = inSize;
@@ -500,12 +588,17 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                         resultComp = native_run_compress(aocl_codec_handle, native_lzma_compress);
                         break;
                      case ZSTD:
-                         if (aocl_codec_handle->optVar != 0) {
-                             ZSTD_native_c_nbWorkers = aocl_codec_handle->optVar; // number of worker threads to use for mt compression
-                             resultComp = native_run_compress(aocl_codec_handle, native_zstd_mt_compress);
+                         if (codec_bench_handle->dictPtr) {
+                             resultComp = native_run_compress(aocl_codec_handle, native_zstd_dict_compress);
                          }
-                         else
-                             resultComp = native_run_compress(aocl_codec_handle, native_zstd_compress);
+                         else {
+                             if (aocl_codec_handle->optVar != 0) {
+                                 ZSTD_native_c_nbWorkers = aocl_codec_handle->optVar; // number of worker threads to use for mt compression
+                                 resultComp = native_run_compress(aocl_codec_handle, native_zstd_mt_compress);
+                             }
+                             else
+                                 resultComp = native_run_compress(aocl_codec_handle, native_zstd_compress);
+                         }
                         break;
                     default:
                         return -2;
@@ -557,7 +650,12 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                             resultDecomp = native_run_decompress(aocl_codec_handle, native_lzma_decompress);
                             break;
                         case ZSTD:
-                            resultDecomp = native_run_decompress(aocl_codec_handle, native_zstd_decompress);
+                            if (codec_bench_handle->dictPtr) {
+                                resultDecomp = native_run_decompress(aocl_codec_handle, native_zstd_dict_decompress);
+                            }
+                            else {
+                                resultDecomp = native_run_decompress(aocl_codec_handle, native_zstd_decompress);
+                            }
                             break;
                         default:
                             return -2;
@@ -620,15 +718,13 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         else 
         {   /* Decompress only */
             /* In this mode, 
-            * inFp is the input compressed data.
-            * valFp is the decompressed data for validation.
+            * codec_bench_handle->fp is the input compressed data.
+            * codec_bench_handle->valFp is the decompressed data for validation.
             * Decompression is done in a single block. Hence,
             * max file size of decompressed data supported 
             * is MAX_MEM_SIZE_FOR_FILE_READ */
-            FILE* valFp = codec_bench_handle->valFp;
-
             // load input compressed file
-            inSize = fread(codec_bench_handle->inPtr, 1, inSize, inFp);
+            inSize = fread(codec_bench_handle->inPtr, 1, inSize, codec_bench_handle->fp);
 
             // decompress
             aocl_codec_handle->inSize = inSize;
@@ -672,7 +768,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
             if (codec_bench_handle->verify)
             {
-                if (valFp == NULL) 
+                if (codec_bench_handle->valFp == NULL)
                 {
                     LOG_BENCH(ERR, "COMPRESSION Native API [%s-%td] [Filename:%s] verification file not provided\n",
                         codec_list[codec].codec_name,
@@ -682,7 +778,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 }
                 // load decompressed file for validation
                 codec_bench_handle->outSize = fread(codec_bench_handle->decompPtr,
-                    1, codec_bench_handle->outSize, valFp);
+                    1, codec_bench_handle->outSize, codec_bench_handle->valFp);
 
                 if (memcmp(codec_bench_handle->outPtr,
                     codec_bench_handle->decompPtr, codec_bench_handle->outSize) != 0)
@@ -709,7 +805,8 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             }
         }
 
-        rewind(inFp);
+        if (codec_bench_handle->fp) rewind(codec_bench_handle->fp);
+        if (codec_bench_handle->fpDict) rewind(codec_bench_handle->fpDict);
         if (status != 0)
             break;
     }
