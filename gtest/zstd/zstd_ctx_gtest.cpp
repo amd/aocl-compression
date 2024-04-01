@@ -465,6 +465,7 @@ TEST_F(ZSTD_ZSTD_CCtx_setParameter, AOCL_Compression_zstd_ZSTD_CCtx_setParameter
     CHECK_PASS_ZSTD(ret);
 }
 
+#ifdef ZSTD_MULTITHREAD // ZSTD_c_rsyncable = ZSTD_c_experimentalParam1 is not supported when not compiled with multithreading
 TEST_F(ZSTD_ZSTD_CCtx_setParameter, AOCL_Compression_zstd_ZSTD_CCtx_setParameter_pass_common_2) { // experimental param
     ZSTD_bounds bounds = Test_ZSTD_cParam_getBounds(ZSTD_c_experimentalParam1);
     CHECK_PASS_ZSTD(bounds.error);
@@ -473,6 +474,7 @@ TEST_F(ZSTD_ZSTD_CCtx_setParameter, AOCL_Compression_zstd_ZSTD_CCtx_setParameter
     ret = Test_ZSTD_CCtx_setParameter(cctx, ZSTD_c_experimentalParam1, bounds.upperBound);
     CHECK_PASS_ZSTD(ret);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_CCtx_setParameter, AOCL_Compression_zstd_ZSTD_CCtx_setParameter_fail_common_3) { // invalid param
     size_t ret = Test_ZSTD_CCtx_setParameter(cctx, (ZSTD_cParameter)5555, 0);
@@ -576,6 +578,7 @@ TEST_F(ZSTD_ZSTD_CCtx_getParameter, AOCL_Compression_zstd_ZSTD_CCtx_getParameter
     EXPECT_EQ(value, bounds.upperBound);
 }
 
+#ifdef ZSTD_MULTITHREAD // ZSTD_c_rsyncable = ZSTD_c_experimentalParam1 is not supported when not compiled with multithreading
 TEST_F(ZSTD_ZSTD_CCtx_getParameter, AOCL_Compression_zstd_ZSTD_CCtx_getParameter_pass_common_2) { // experimental param
     int value = 0;
     ZSTD_bounds bounds = Test_ZSTD_cParam_getBounds(ZSTD_c_experimentalParam1);
@@ -593,6 +596,7 @@ TEST_F(ZSTD_ZSTD_CCtx_getParameter, AOCL_Compression_zstd_ZSTD_CCtx_getParameter
     CHECK_PASS_ZSTD(ret);
     EXPECT_EQ(value, bounds.upperBound);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_CCtx_getParameter, AOCL_Compression_zstd_ZSTD_CCtx_getParameter_fail_common_3) { // invalid param
     int value = 0;
@@ -980,6 +984,7 @@ TEST_F(ZSTD_ZSTD_CCtxParams_getParameter, AOCL_Compression_zstd_ZSTD_CCtxParams_
     EXPECT_EQ(value, bounds.upperBound);
 }
 
+#ifdef ZSTD_MULTITHREAD // ZSTD_c_rsyncable = ZSTD_c_experimentalParam1 is not supported when not compiled with multithreading
 TEST_F(ZSTD_ZSTD_CCtxParams_getParameter, AOCL_Compression_zstd_ZSTD_CCtxParams_getParameter_pass_common_2) { // experimental param
     int value = 0;
     ZSTD_bounds bounds = Test_ZSTD_cParam_getBounds(ZSTD_c_experimentalParam1);
@@ -995,6 +1000,7 @@ TEST_F(ZSTD_ZSTD_CCtxParams_getParameter, AOCL_Compression_zstd_ZSTD_CCtxParams_
     CHECK_PASS_ZSTD(ret);
     EXPECT_EQ(value, bounds.upperBound);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_CCtxParams_getParameter, AOCL_Compression_zstd_ZSTD_CCtxParams_getParameter_fail_common_3) { // invalid param
     int value = 0;
@@ -1025,6 +1031,7 @@ TEST_F(ZSTD_ZSTD_CCtxParams_setParameter, AOCL_Compression_zstd_ZSTD_CCtxParams_
     CHECK_PASS_ZSTD(ret);
 }
 
+#ifdef ZSTD_MULTITHREAD // ZSTD_c_rsyncable = ZSTD_c_experimentalParam1 is not supported when not compiled with multithreading
 TEST_F(ZSTD_ZSTD_CCtxParams_setParameter, AOCL_Compression_zstd_ZSTD_CCtxParams_setParameter_pass_common_2) { // experimental param
     ZSTD_bounds bounds = Test_ZSTD_cParam_getBounds(ZSTD_c_experimentalParam1);
     CHECK_PASS_ZSTD(bounds.error);
@@ -1033,6 +1040,7 @@ TEST_F(ZSTD_ZSTD_CCtxParams_setParameter, AOCL_Compression_zstd_ZSTD_CCtxParams_
     ret = Test_ZSTD_CCtxParams_setParameter(cctxParams, ZSTD_c_experimentalParam1, bounds.upperBound);
     CHECK_PASS_ZSTD(ret);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_CCtxParams_setParameter, AOCL_Compression_zstd_ZSTD_CCtxParams_setParameter_fail_common_3) { // invalid param
     size_t ret = Test_ZSTD_CCtxParams_setParameter(cctxParams, (ZSTD_cParameter)5555, 0);
@@ -1581,7 +1589,7 @@ TEST(ZSTD_ZSTD_initStaticDCtx, AOCL_Compression_zstd_Test_ZSTD_initStaticDCtx_fa
 }
 
 TEST(ZSTD_ZSTD_initStaticDCtx, AOCL_Compression_zstd_Test_ZSTD_initStaticDCtx_fail_common_3) { // workspaceSize is too small
-    size_t const workspaceSize = sizeof(ZSTD_DCtx) - 1;
+    size_t const workspaceSize = Test_ZSTD_estimateDCtxSize() - 1;
     void * workspace = malloc(workspaceSize);
     ZSTD_DCtx* dctx = Test_ZSTD_initStaticDCtx(workspace, workspaceSize);
     EXPECT_EQ(dctx, nullptr);

@@ -131,6 +131,9 @@ if(AOCL_TEST_FUZZER)
         message(WARNING  "Target not supported. Fuzz tests are only supported on Linux OS with Clang compiler")
     endif()
 endif()
+if(AOCL_TEST_FUZZER)
+    set(AOCL_TEST_COVERAGE ON)
+endif()
 
 #CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=ON                                 : run coverage for aocl + third_party ctests
 #CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=OFF, TEST_COVERAGE_THIRD_PARTY=OFF : run coverage for aocl + third_party ctests
@@ -143,10 +146,6 @@ endif()
 
 if(AOCL_TEST_COVERAGE)
     set(TEST_COVERAGE_THIRD_PARTY ON) # enable to maximize test coverage
-endif()
-
-if(AOCL_TEST_FUZZER)
-    set(AOCL_TEST_COVERAGE ON)
 endif()
 
 #list source files to be compiled for the library
