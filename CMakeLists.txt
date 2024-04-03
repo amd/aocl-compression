@@ -77,7 +77,6 @@ option (AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 "Enable LZ4 match skipping optimizati
 option (AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2 "Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1 (Disabled by default)" OFF)
 option (AOCL_LZ4_NEW_PRIME_NUMBER "Enable the usage of a new prime number for LZ4 hashing function (Disabled by default)" OFF)
 option (AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES "Enable storing of additional potential matches to improve compression ratio. Recommended for higher compressibility use cases (Disabled by default)" OFF)
-option (AOCL_LZ4_HASH_BITS_USED "Control the number of bits used for LZ4 hashing, allowed values are LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (Disabled by default)" OFF)
 option (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL "Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)" OFF)
 option (AOCL_ENABLE_LOG_FEATURE "Enable logging support in library, for which log level is determined by environement variable AOCL_ENABLE_LOG (go through README.md) (Disabled by default)" OFF)
 option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression using SMP openMP threads (Disabled by default)" OFF)
@@ -92,6 +91,13 @@ option (AOCL_EXCLUDE_LZMA "Exclude LZMA compression method from the library buil
 option (AOCL_EXCLUDE_SNAPPY "Exclude SNAPPY compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_ZLIB "Exclude ZLIB compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_ZSTD "Exclude ZSTD compression method from the library build (Disabled by default)" OFF)
+
+set(AOCL_LZ4_HASH_BITS_USED "OFF" CACHE STRING "Control the number of bits used for LZ4 hashing, allowed values are LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (Disabled by default)")
+set_property(
+    CACHE AOCL_LZ4_HASH_BITS_USED
+    PROPERTY STRINGS
+    "OFF" "LOW" "HIGH"
+)
 
 # setup to get source code coverage(GCOV)
 if (CODE_COVERAGE)
@@ -454,7 +460,7 @@ if (AOCL_LZ4_HASH_BITS_USED)
         set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_HASH_BITS_USED=41")
     elseif(AOCL_LZ4_HASH_BITS_USED  STREQUAL "HIGH")
         set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_HASH_BITS_USED=44")
-    else()
+    elseif(NOT AOCL_LZ4_HASH_BITS_USED  STREQUAL "OFF")
         message(FATAL_ERROR "AOCL_LZ4_HASH_BITS_USED can only be LOW or HIGH, the provided value is:${AOCL_LZ4_HASH_BITS_USED}")
     endif()
 endif()
