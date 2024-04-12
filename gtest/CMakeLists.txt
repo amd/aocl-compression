@@ -43,6 +43,7 @@ if (NOT googletest_POPULATED)
 endif()
 
 if(AOCL_TEST_FUZZER)
+    set(ANTLR_BUILD_CPP_TESTS OFF) # Disable dependency project test suite
     FetchContent_Declare(
         googlefuzztest
         QUIET
