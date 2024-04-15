@@ -109,6 +109,10 @@ void (*LzmaEncProps_Normalize_fp)(CLzmaEncProps* p) = LzmaEncProps_Normalize;
 
 void LzmaEncProps_Init(CLzmaEncProps *p)
 {
+  if(p==NULL){
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaEncProps");
+    return;
+  }
   LOG_UNFORMATTED(TRACE, logCtx, "Enter");
   p->level = 5;
   p->dictSize = p->mc = 0;
@@ -126,6 +130,12 @@ void LzmaEncProps_Init(CLzmaEncProps *p)
 // Default settings as per LZMA SDK 22.01
 void LzmaEncProps_Normalize(CLzmaEncProps *p)
 {
+  if(p == NULL)
+  {
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaEncProps");
+    return;
+  }
+
   int level = p->level;
   if (level < 0) level = 5;
   p->level = level;
@@ -174,6 +184,12 @@ void LzmaEncProps_Normalize(CLzmaEncProps *p)
 */
 void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
 {
+  if(p == NULL)
+  {
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaEncProps");
+    return;
+  }
+
   int level = p->level;
   if (level < 0) level = 5;
   p->level = level;
@@ -282,6 +298,12 @@ void AOCL_LzmaEncProps_Normalize(CLzmaEncProps* p)
 
 UInt32 LzmaEncProps_GetDictSize(const CLzmaEncProps *props2)
 {
+  if(props2 == NULL)
+  {
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaEncProps");
+    return SZ_ERROR_PARAM;
+  }
+
   CLzmaEncProps props = *props2;
 #ifdef AOCL_LZMA_OPT
   LzmaEncProps_Normalize_fp(&props);
@@ -764,6 +786,12 @@ void LzmaEnc_RestoreState(CLzmaEncHandle pp)
 
 SRes LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps *props2)
 {
+  if(props2 == NULL)
+  {
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid props2");
+    return SZ_ERROR_PARAM;
+  }
+
   CLzmaEnc *p = (CLzmaEnc *)pp;
   CLzmaEncProps props = *props2;
   LzmaEncProps_Normalize(&props);
@@ -842,6 +870,12 @@ SRes LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps *props2)
 */
 SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* props2)
 {
+    if(props2 == NULL)
+    {
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid props2");
+    return SZ_ERROR_PARAM;
+    }
+
     CLzmaEnc* p = (CLzmaEnc*)pp;
     CLzmaEncProps props = *props2;
     AOCL_LzmaEncProps_Normalize(&props);
@@ -849,7 +883,7 @@ SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* props2)
     if (props.lc > LZMA_LC_MAX
         || props.lp > LZMA_LP_MAX
         || props.pb > LZMA_PB_MAX) {
-        LOG_UNFORMATTED(ERR, logCtx, "Invalid props");
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid props2");
         return SZ_ERROR_PARAM;
     }
 
@@ -4319,6 +4353,12 @@ static SRes LzmaEnc_Encode2(CLzmaEnc *p, ICompressProgress *progress)
 SRes LzmaEnc_Encode(CLzmaEncHandle pp, ISeqOutStream *outStream, ISeqInStream *inStream, ICompressProgress *progress,
     ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
+  if(outStream == NULL || inStream == NULL || alloc == NULL || allocBig == NULL)
+  {
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+    return SZ_ERROR_PARAM;
+  }
+
   AOCL_SETUP_NATIVE();
   RINOK(LzmaEnc_Prepare(pp, outStream, inStream, alloc, allocBig));
   return LzmaEnc_Encode2((CLzmaEnc *)pp, progress);
@@ -4373,7 +4413,7 @@ SRes LzmaEnc_MemEncode(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte
     int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
   AOCL_SETUP_NATIVE();
-  if (pp == NULL || src == NULL || srcLen == 0 || dest == NULL || destLen == NULL) {
+  if (pp == NULL || src == NULL || srcLen == 0 || dest == NULL || destLen == NULL || alloc == NULL || allocBig == NULL) {
       LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
       return SZ_ERROR_PARAM;
   }

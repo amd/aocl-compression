@@ -1536,6 +1536,10 @@ void LzmaDec_InitDicAndState(CLzmaDec* p, BoolInt initDic, BoolInt initState)
 
 void LzmaDec_Init(CLzmaDec* p)
 {
+    if(p == NULL){
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaDec");
+        return;
+    }
     p->dicPos = 0;
     LzmaDec_InitDicAndState(p, True, True);
 }
@@ -1839,7 +1843,7 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
 SRes LzmaDec_DecodeToBuf(CLzmaDec* p, Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen, ELzmaFinishMode finishMode, ELzmaStatus* status)
 {
     AOCL_SETUP_NATIVE();
-    if (p == NULL || src == NULL || srcLen == NULL || status == NULL) {
+    if (p == NULL || src == NULL || srcLen == NULL || status == NULL || destLen == NULL || dest == NULL) {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return SZ_ERROR_PARAM;
     }
@@ -1884,6 +1888,11 @@ SRes LzmaDec_DecodeToBuf(CLzmaDec* p, Byte* dest, SizeT* destLen, const Byte* sr
 
 void LzmaDec_FreeProbs(CLzmaDec* p, ISzAllocPtr alloc)
 {
+    if(p==NULL || alloc == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaDec or alloc");
+        return;
+    }
     ISzAlloc_Free(alloc, p->probs);
     p->probs = NULL;
 }
@@ -1896,12 +1905,23 @@ static void LzmaDec_FreeDict(CLzmaDec* p, ISzAllocPtr alloc)
 
 void LzmaDec_Free(CLzmaDec* p, ISzAllocPtr alloc)
 {
+    if(p==NULL || alloc == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaDec or alloc");
+        return;
+    }
     LzmaDec_FreeProbs(p, alloc);
     LzmaDec_FreeDict(p, alloc);
 }
 
 SRes LzmaProps_Decode(CLzmaProps* p, const Byte* data, unsigned size)
 {
+    if(p==NULL || data==NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaProps or data");
+        return SZ_ERROR_PARAM;
+    }
+
     UInt32 dicSize;
     Byte d;
 
