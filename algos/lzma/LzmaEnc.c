@@ -301,7 +301,7 @@ UInt32 LzmaEncProps_GetDictSize(const CLzmaEncProps *props2)
   if(props2 == NULL)
   {
     LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaEncProps");
-    return SZ_ERROR_PARAM;
+    return 0;
   }
 
   CLzmaEncProps props = *props2;
@@ -4360,6 +4360,12 @@ SRes LzmaEnc_Encode(CLzmaEncHandle pp, ISeqOutStream *outStream, ISeqInStream *i
   }
 
   AOCL_SETUP_NATIVE();
+  if(outStream == NULL || inStream == NULL || alloc == NULL || allocBig == NULL)
+  {
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+    return SZ_ERROR_PARAM;
+  }
+
   RINOK(LzmaEnc_Prepare(pp, outStream, inStream, alloc, allocBig));
   return LzmaEnc_Encode2((CLzmaEnc *)pp, progress);
 }

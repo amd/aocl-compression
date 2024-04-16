@@ -227,10 +227,30 @@ LZMALIB_API SRes LzmaEnc_WriteProperties(CLzmaEncHandle p, Byte *properties, Siz
 */
 LZMALIB_API unsigned LzmaEnc_IsWriteEndMark(CLzmaEncHandle p);
 
-/// @cond DOXYGEN_SHOULD_SKIP_THIS
+/*! @brief Incremental compression using streaming interfaces
+*
+* | Parameters      | Direction   | Description |
+* |:----------------|:-----------:|:------------|
+* | \b p            | in,out      | Lzma encoder handle |
+* | \b outStream    | in, out     | Properly initialized interface to save compressed data |
+* | \b inStream     | in          | Properly initialized interface to read uncompressed data |
+* | \b alloc        | in          | Allocator object |
+* | \b allocBig     | in          | Allocator object for large blocks |
+*
+* @return 
+* | Result     | Description |
+* |:-----------|:------------|
+* | Success    |SZ_OK                      |
+* | Fail       |SZ_ERROR_MEM        - Memory allocation error |
+* | ^          |SZ_ERROR_PARAM      - Incorrect parameters    |
+* | ^          |SZ_ERROR_WRITE      - ISeqOutStream write callback error |
+* | ^          |SZ_ERROR_READ       - ISeqOutStream read callback error  |
+* | ^          |SZ_ERROR_PROGRESS   - some break from progress callback  |
+* 
+* @note Passed allocator objects should be valid.
+*/
 LZMALIB_API SRes LzmaEnc_Encode(CLzmaEncHandle p, ISeqOutStream *outStream, ISeqInStream *inStream,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig);
-/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 
 /*! @brief Encode src in-memory and save compressed data to dest
@@ -257,6 +277,7 @@ LZMALIB_API SRes LzmaEnc_Encode(CLzmaEncHandle p, ISeqOutStream *outStream, ISeq
 * | ^          |SZ_ERROR_OUTPUT_EOF - output buffer overflow - version with (Byte *) output  |
 * | ^          |SZ_ERROR_PROGRESS   - some break from progress callback  |
 * 
+* @note Passed allocator objects should be valid.
 */
 LZMALIB_API SRes LzmaEnc_MemEncode(CLzmaEncHandle p, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig);

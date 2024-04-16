@@ -116,6 +116,7 @@ Returns:
 * |:-----------|:------------|
 * | Success    |SZ_OK                                         |
 * | Fail       |SZ_ERROR_UNSUPPORTED - Unsupported properties |
+* | Fail       |SZ_ERROR_PARAM - Invalid input                |
 * 
 */
 LZMALIB_API SRes LzmaProps_Decode(CLzmaProps* p, const Byte* data, unsigned size);
