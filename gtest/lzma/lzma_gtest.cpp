@@ -4646,45 +4646,74 @@ TEST(LZMA_XZ_version, AOCL_Compression_lzma_lzma_version_string_pass_common)
 #ifdef AOCL_TEST_FUZZER
 #include <vector>
 
-void LzmaEncode_fuzz(std::vector<Byte> dest,
-                     std::vector<Byte> source,
-                     int level)
+void LzmaEncode_fuzz(std::vector<Byte> source, size_t dest_sz,
+                     int level, int optOff, int optLevel)
 {
-  if (dest.size() < LZMA_PROPS_SIZE) return;
-  
-  SizeT destLen = dest.size();
-  SizeT srcLen = source.size();
+    aocl_setup_lzma_encode(optOff, optLevel, 0, 0, 0);
 
-  CLzmaEncProps encProps;
-  SizeT headerSize = LZMA_PROPS_SIZE;
-  SizeT outLen = destLen - LZMA_PROPS_SIZE;
-  LzmaEncProps_Init(&encProps);
-  encProps.level = level;
+    if (dest_sz < LZMA_PROPS_SIZE) return;
 
-  LzmaEncode(dest.data() + LZMA_PROPS_SIZE, &outLen, source.data(),
-              srcLen, &encProps, dest.data(), &headerSize, 0, NULL,
-              &g_Alloc, &g_Alloc);
+    SizeT destLen = dest_sz;
+    SizeT srcLen = source.size();
+    vector<Byte> dest(destLen, 0);
+
+    CLzmaEncProps encProps;
+    SizeT headerSize = LZMA_PROPS_SIZE;
+    SizeT outLen = destLen - LZMA_PROPS_SIZE;
+    LzmaEncProps_Init(&encProps);
+    encProps.level = level;
+
+    LzmaEncode(dest.data() + LZMA_PROPS_SIZE, &outLen, source.data(),
+        srcLen, &encProps, dest.data(), &headerSize, 0, NULL,
+        &g_Alloc, &g_Alloc);
+
+    aocl_destroy_lzma_encode();
 }
-
 FUZZ_TEST(AOCL_Compression_lzma, LzmaEncode_fuzz)
-    .WithDomains(fuzztest::Arbitrary<std::vector<Byte>>(),
-                fuzztest::Arbitrary<std::vector<Byte>>(),
-                fuzztest::InRange<int>(0, 9));
+.WithDomains(fuzztest::Arbitrary<std::vector<Byte>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 9),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_cpr_seed_t<Byte> {
+    auto seed_files = READ_FUZZ_CPR_SEED();
+    return get_fuzz_cpr_seeds<Byte>([](size_t src_sz) -> size_t {
+        size_t dst_sz = (size_t)Lzma_compressBound(src_sz);
+        return limit_fuzz_size_max(dst_sz);
+    }, 0, 9, seed_files);
+})
+#endif
+;
 
-void LzmaDecode_fuzz(std::vector<Byte> dest,
-                     std::vector<Byte> source)
+void LzmaDecode_fuzz(std::vector<Byte> source, size_t dest_sz,
+                    int optOff, int optLevel)
 {
-  if (source.size() < LZMA_PROPS_SIZE) return;
+    aocl_setup_lzma_decode(optOff, optLevel, 0, 0, 0);
+    if (source.size() < LZMA_PROPS_SIZE) return;
 
-  SizeT destLen = dest.size();
-  SizeT srcLen = source.size() - LZMA_PROPS_SIZE;
+    SizeT destLen = dest_sz;
+    SizeT srcLen = source.size() - LZMA_PROPS_SIZE;
+    vector<Byte> dest(destLen, 0);
 
-  ELzmaStatus status;
-  LzmaDecode(dest.data(), &destLen, source.data() + LZMA_PROPS_SIZE,
-              &srcLen, source.data(), LZMA_PROPS_SIZE, LZMA_FINISH_END,
-              &status, &g_Alloc);
+    ELzmaStatus status;
+    LzmaDecode(dest.data(), &destLen, source.data() + LZMA_PROPS_SIZE,
+                &srcLen, source.data(), LZMA_PROPS_SIZE, LZMA_FINISH_END,
+                &status, &g_Alloc);
+    aocl_destroy_lzma_decode();
 }
-FUZZ_TEST(AOCL_Compression_lzma, LzmaDecode_fuzz);
+FUZZ_TEST(AOCL_Compression_lzma, LzmaDecode_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Byte>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<Byte> {
+  auto seed_files = READ_FUZZ_DPR_SEED();
+  return get_fuzz_dpr_seeds<Byte>(seed_files);
+})
+#endif
+;
 
 #endif /* AOCL_TEST_FUZZER */
 /*********************************************

@@ -153,6 +153,10 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             if (AOCL_EXCLUDE_ZSTD)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
             endif()
+            if(AOCL_TEST_FUZZER_WITH_CORPUS)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_TEST_FUZZER_WITH_CORPUS")
+            endif()
+
             # Non API function tests
             if (BUILD_STATIC_LIBS)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_INTERNAL_TEST")

@@ -3264,27 +3264,66 @@ TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_pass_common_4)
  * "End" of AOCL_LZ4_hash5
  *********************************************/
 
-
-
+/*********************************************
+ * Begin fuzz tests for lz4
+ *********************************************/
 #ifdef AOCL_TEST_FUZZER
-
-void LZ4_compress_default_fuzz(vector<char> dest, vector<char> source)
+void LZ4_compress_default_fuzz(vector<char> source, size_t dest_sz,
+                               int level, int optOff, int optLevel)
 {
-  int destLen = dest.size();
-  int srcLen = source.size();
+    (void)(level);
+    aocl_setup_lz4(optOff, optLevel, 0, 0, 0);
 
-  LZ4_compress_default((const char *)source.data(), dest.data(), srcLen, destLen);
+    int destLen = dest_sz > INT_MAX ? INT_MAX : dest_sz;
+    int srcLen = source.size();
+    vector<char> dest(destLen, 0);
+
+    LZ4_compress_default((const char*)source.data(), dest.data(), srcLen, destLen);
+
+    aocl_destroy_lz4();
 }
-FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_default_fuzz);
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_default_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<char>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 0),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_cpr_seed_t<char> {
+  auto seed_files = READ_FUZZ_CPR_SEED();
+  return get_fuzz_cpr_seeds<char>([](size_t src_sz) -> size_t {
+    size_t dst_sz = (size_t)LZ4_compressBound((int)src_sz);
+    return limit_fuzz_size_max(dst_sz);
+  }, 0, 0, seed_files);
+})
+#endif
+;
 
-void LZ4_decompress_safe_fuzz(vector<char> dest, vector<char> source)
+void LZ4_decompress_safe_fuzz(vector<char> source, size_t dest_sz,
+                              int optOff, int optLevel)
 {
-  int destLen = dest.size();
-  int srcLen = source.size();
+    aocl_setup_lz4(optOff, optLevel, 0, 0, 0);
 
-  LZ4_decompress_safe(source.data(), dest.data(), srcLen, destLen);
+    int destLen = dest_sz;
+    int srcLen = source.size();
+    vector<char> dest(destLen, 0);
+
+    LZ4_decompress_safe(source.data(), dest.data(), srcLen, destLen);
+
+    aocl_destroy_lz4();
 }
-FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_fuzz);
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<char>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<char> {
+  auto seed_files = READ_FUZZ_DPR_SEED();
+  return get_fuzz_dpr_seeds<char>(seed_files);
+})
+#endif
+;
 
 void LZ4_compress_fast_fuzz(int dest_len, vector<char> source, int acceleration)
 {
@@ -3384,3 +3423,6 @@ FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_partial_usingDict_prefixmode
                 fuzztest::InRange<int>(1,10000)
                 );
 #endif /* AOCL_TEST_FUZZER */
+/*********************************************
+ * End fuzz tests for lz4
+ *********************************************/

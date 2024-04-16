@@ -3219,31 +3219,77 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_pas
  *********************************************/
 #ifdef AOCL_TEST_FUZZER
 #include "fuzztest/fuzztest.h"
-
-void BuffToBuffCompress_fuzz(std::vector<char> dest, std::vector<char> source, int level, int workFactor)
+void BuffToBuffCompress_fuzz(std::vector<char> source, size_t dest_sz,
+                             int level, int optOff, int optLevel, int workFactor)
 {
-    unsigned int destLen = dest.size();
+    aocl_setup_bzip2(optOff, optLevel, 0, 0, 0);
+
+    unsigned destLen = dest_sz > UINT_MAX ? UINT_MAX : dest_sz;
+    vector<char> dest(destLen, 0);
+
     // Verbosity is set to 0 to avoid extensive logs
     BZIP2_API::BuffToBuffCompress(dest.data(), &destLen, source.data(), source.size(), level, 0, workFactor);
-}
 
+    aocl_destroy_bzip2();
+}
 FUZZ_TEST(AOCL_Compression_bzip2, BuffToBuffCompress_fuzz)
-    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
-                fuzztest::Arbitrary<std::vector<char>>(),
-                fuzztest::InRange<int>(1, 9),
-                fuzztest::InRange<int>(0, 250));
+.WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(1, 9),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4),
+             fuzztest::InRange<int>(0, 250))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> vector<tuple<vector<char>, size_t, int, int, int, int>> {
+    auto seed_files = READ_FUZZ_CPR_SEED();
+    vector<tuple<vector<char>, size_t, int, int, int, int>> seeds;
+    auto seeds_base = get_fuzz_cpr_seeds<char>([](size_t src_sz) -> size_t {
+        size_t dst_sz = (size_t)BZ2_bzCompressBound((unsigned)src_sz);
+        return limit_fuzz_size_max(dst_sz);
+        }, 1, 9, seed_files);
+    int workFactor = 0; // include additional parameter in seed : workFactor
+    for (auto& seed : seeds_base) {
+        seeds.push_back({ get<0>(seed), get<1>(seed), get<2>(seed), get<3>(seed), get<4>(seed), workFactor });
+        workFactor += 10; workFactor %= 250;
+    }
+    return seeds;
+})
+#endif
+;
 
-void BuffToBuffDecompress_fuzz(std::vector<char> dest, std::vector<char> source, int small)
+void BuffToBuffDecompress_fuzz(vector<char> source, size_t dest_sz,
+                               int optOff, int optLevel, int small)
 {
-    unsigned int destSize = dest.size();
-    // Verbosity is set to 0 to avoid extensive logs
-    BZIP2_API::BuffToBuffDecompress(dest.data(), &destSize, source.data(), source.size(), small, 0);
-}
+    aocl_setup_bzip2(optOff, optLevel, 0, 0, 0);
 
+    unsigned int destLen = dest_sz;
+    vector<char> dest(destLen, 0);
+
+    // Verbosity is set to 0 to avoid extensive logs
+    BZIP2_API::BuffToBuffDecompress(dest.data(), &destLen, source.data(), source.size(), small, 0);
+
+    aocl_destroy_bzip2();
+}
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
 FUZZ_TEST(AOCL_Compression_bzip2, BuffToBuffDecompress_fuzz)
-    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
-                fuzztest::Arbitrary<std::vector<char>>(),
-                fuzztest::InRange<int>(0, 1));
+.WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4),
+             fuzztest::InRange<int>(0, 1))
+.WithSeeds([]() -> vector<tuple<vector<char>, size_t, int, int, int>> {
+    auto seed_files = READ_FUZZ_DPR_SEED();
+    vector<tuple<vector<char>, size_t, int, int, int>> seeds;
+    auto seeds_base = get_fuzz_dpr_seeds<char>(seed_files);
+    int small = 0; // include additional parameter in seed : small
+    for (auto& seed : seeds_base) {
+        seeds.push_back({ get<0>(seed), get<1>(seed), get<2>(seed), get<3>(seed), small });
+        small = !small;
+    }
+    return seeds;
+})
+#endif
+;
 
 void BZ2_bzCompress_fuzz(std::vector<char> input, int out_len, int action, int block_size, int verbosity, int work_factor)
 {

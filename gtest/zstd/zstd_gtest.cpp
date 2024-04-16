@@ -54,6 +54,8 @@
 #include "fuzztest/fuzztest.h"
 #endif
 
+#include "gtest/gtest_utils.h"
+
 // Test wrapper function for API ZSTD_versionNumber()
 unsigned Test_ZSTD_versionNumber()
 {
@@ -2386,42 +2388,77 @@ TEST(ZSTD_ZSTD_maxCLevel, AOCL_Compression_zstd_ZSTD_maxCLevel_pass_common_1) {
  * Begin fuzz tests for zstd
  *********************************************/
 #ifdef AOCL_TEST_FUZZER
-#include <vector>
-
-void ZSTD_compress_advanced_fuzz(std::vector<char> dest,
-                                 std::vector<char> source,
-                                 std::vector<char> dict,
-                                 int level)
+void ZSTD_compress_advanced_fuzz(vector<char> source, size_t dest_sz,
+                                 int level, int optOff, int optLevel,
+                                 vector<char> dict)
 {
-    size_t destLen = dest.size();
+    aocl_setup_zstd_encode(optOff, optLevel, 0, 0, 0);
+
+    size_t destLen = dest_sz;
     size_t srcLen = source.size();
     size_t dictLen = dict.size();
+    vector<char> dest(destLen, 0);
 
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
     ZSTD_parameters zparams = ZSTD_getParams(level, srcLen, dictLen);
     zparams.fParams.contentSizeFlag = 1;
     ZSTD_compress_advanced(cctx, dest.data(), destLen, source.data(), srcLen, dict.data(), dictLen, zparams);
     if (cctx) ZSTD_freeCCtx(cctx);
+
+    aocl_destroy_zstd_encode();
 }
-
 FUZZ_TEST(AOCL_Compression_zstd, ZSTD_compress_advanced_fuzz)
-    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
-                 fuzztest::Arbitrary<std::vector<char>>(),
-                 fuzztest::Arbitrary<std::vector<char>>(),
-                 fuzztest::InRange<int>(-1, 22));
+.WithDomains(fuzztest::Arbitrary<vector<char>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(-1, 22),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4),
+             fuzztest::Arbitrary<vector<char>>())
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> vector<tuple<vector<char>, size_t, int, int, int, vector<char>>> {
+    auto seed_files = READ_FUZZ_CPR_SEED();
+    vector<tuple<vector<char>, size_t, int, int, int, vector<char>>> seeds;
+    fuzz_cpr_seed_t<char> seeds_base = get_fuzz_cpr_seeds<char>([](size_t src_sz) -> size_t {
+        size_t dst_sz = ZSTD_compressBound(src_sz);
+        return limit_fuzz_size_max(dst_sz);
+        }, -1, 22, seed_files);
+    // include additional parameter in seed : dict
+    for (auto& seed : seeds_base) {
+        vector<char> dict(get<0>(seed).begin(), get<0>(seed).end()); // created from source data
+        seeds.push_back({ get<0>(seed), get<1>(seed), get<2>(seed), get<3>(seed), get<4>(seed), dict });
+    }
+    return seeds;
+})
+#endif
+;
 
-void ZSTD_decompressDCtx_fuzz(std::vector<char> dest,
-                              std::vector<char> source)
+void ZSTD_decompressDCtx_fuzz(vector<char> source, size_t dest_sz,
+                              int optOff, int optLevel)
 {
-    size_t destLen = dest.size();
+    aocl_setup_zstd_decode(optOff, optLevel, 0, 0, 0);
+
+    size_t destLen = dest_sz;
     size_t srcLen = source.size();
+    vector<char> dest(destLen, 0);
 
     ZSTD_DCtx* dctx = ZSTD_createDCtx();
     ZSTD_decompressDCtx(dctx, dest.data(), destLen, source.data(), srcLen);
     if (dctx) ZSTD_freeDCtx(dctx);
-}
-FUZZ_TEST(AOCL_Compression_zstd, ZSTD_decompressDCtx_fuzz);
 
+    aocl_destroy_zstd_decode();
+}
+FUZZ_TEST(AOCL_Compression_zstd, ZSTD_decompressDCtx_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<char>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<char> {
+    auto seed_files = READ_FUZZ_DPR_SEED();
+    return get_fuzz_dpr_seeds<char>(seed_files);
+})
+#endif
+;
 #endif /* AOCL_TEST_FUZZER */
 /*********************************************
  * End fuzz tests for zstd

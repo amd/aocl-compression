@@ -126,6 +126,7 @@ AOCL_ENABLE_THREADS                 |  Enable multi-threaded compression and dec
 TEST_COVERAGE_THIRD_PARTY           |  Enable third party test bench based CTest suite (Disabled by default)
 NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression for supported methods (Disabled by default)
 AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
+AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
 
 Running AOCL-Compression Test Bench On Linux
 --------------------------------------------
@@ -264,6 +265,20 @@ Fuzzer test can be run in two modes:
 
    To run a single fuzz test until a bug is found or until manually stopped:
    `<METHOD_GTEST_EXECUTABLE> --fuzz=<TestSuiteName>.<FuzzTestName>`
+
+   To run a single fuzz test by feeding in an external corpus of seeds: Enabled with cmake option AOCL_TEST_FUZZER_WITH_CORPUS.
+   Place folders containing seed files in the directory pointed by environment variable AOCL_FUZZ_CORPUS_DIR.
+   Sub-folders under this must be as follows:
+   *   /compress_fuzz : Must contain uncompressed raw files for compress API fuzz tests.
+   *   /*_fuzz        : Folders with individual fuzz test names must contain compressed files 
+                        for respective methods used for decompress API fuzz tests.
+                        Example: /LZ4_decompress_safe_fuzz, /RawUncompress_fuzz, etc
+   Run the single fuzz test:
+   `<METHOD_GTEST_EXECUTABLE> --fuzz=<TestSuiteName>.<FuzzTestName>`
+   example: `zlib_gtest --fuzz=AOCL_Compression_zlib.compress2_fuzz`
+   Additional seed properties can be specified by environment variables:
+   *  AOCL_FUZZ_SIZE_MAX : Max size in bytes to use for i/o buffers used in fuzz testing.
+   *  AOCL_FUZZ_CPR_RATIO : Compression ratio estimate of compressed files used for decompress API fuzz tests.
 
 Running Performance Benchmarking
 --------------------------------

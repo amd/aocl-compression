@@ -37,6 +37,7 @@
  */
 
 #include "zlib_gtest.h"
+#include "gtest_utils.h"
 
 TEST(AOCL_Compression_zlib, zlibVersion_common)
 {
@@ -850,31 +851,65 @@ TEST_F(ZLIB_AOCL_send_bits, AOCL_Compression_zlib_AOCL_send_bits_common_3)
 }
 #endif /* AOCL_ZLIB_OPT && AOCL_INTERNAL_TEST */
 
+/*********************************************
+ * Begin fuzz tests for zlib
+ *********************************************/
 #ifdef AOCL_TEST_FUZZER
-
-void compress2_fuzz(vector<Bytef> dest,
-                    vector<Bytef> source,
-                    int level)
+void compress2_fuzz(vector<Bytef> source, size_t dest_sz,
+                    int level, int optOff, int optLevel)
 {
-  uLong destLen = dest.size();
+  aocl_setup_zlib(optOff, optLevel, 0, 0, 0);
+
+  uLong destLen = dest_sz > ULONG_MAX ? ULONG_MAX : dest_sz;
   uLong srcLen = source.size();
+  vector<Bytef> dest(destLen, 0);
 
   compress2(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  aocl_destroy_zlib();
 }
-
 FUZZ_TEST(AOCL_Compression_zlib, compress2_fuzz)
-    .WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
-                fuzztest::Arbitrary<vector<Bytef>>(),
-                fuzztest::InRange<int>(-1, 9));
+.WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+            fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+            fuzztest::InRange<int>(-1, 9),
+            fuzztest::InRange<int>(0, 1),
+            fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_cpr_seed_t<Bytef> {
+  auto seed_files = READ_FUZZ_CPR_SEED();
+  return get_fuzz_cpr_seeds<Bytef>([](size_t src_sz) -> size_t {
+    size_t dst_sz = (size_t)compressBound((uLong)src_sz);
+    return limit_fuzz_size_max(dst_sz);
+  }, -1, 9, seed_files);
+})
+#endif
+;
 
-void uncompress_fuzz(vector<Bytef> dest,
-                    vector<Bytef> source)
+void uncompress_fuzz(vector<Bytef> source, size_t dest_sz,
+                    int optOff, int optLevel)
 {
-  uLong destLen = dest.size();
+  aocl_setup_zlib(optOff, optLevel, 0, 0, 0);
+
+  uLong destLen = dest_sz;
   uLong srcLen = source.size();
+  vector<Bytef> dest(destLen, 0);
 
   uncompress(dest.data(), &destLen, source.data(), srcLen);
-}
-FUZZ_TEST(AOCL_Compression_zlib, uncompress_fuzz);
 
+  aocl_destroy_zlib();
+}
+FUZZ_TEST(AOCL_Compression_zlib, uncompress_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<Bytef> {
+  auto seed_files = READ_FUZZ_DPR_SEED();
+  return get_fuzz_dpr_seeds<Bytef>(seed_files);
+})
+#endif
+;
 #endif /* AOCL_TEST_FUZZER */
+/*********************************************
+ * End fuzz tests for zlib
+ *********************************************/

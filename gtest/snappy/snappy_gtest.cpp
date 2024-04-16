@@ -41,7 +41,7 @@
 #include <random>
 #include <limits.h>
 #include "gtest/gtest.h"
-#include "gtest_utils.h"
+#include "gtest/gtest_utils.h"
 
 #include "algos/snappy/snappy.h"
 #include "algos/snappy/snappy-sinksource.h"
@@ -2665,28 +2665,64 @@ INSTANTIATE_TEST_SUITE_P(
 #ifdef AOCL_TEST_FUZZER
 #include "fuzztest/fuzztest.h"
 
-void RawCompress_fuzz(vector<char> source)
+void RawCompress_fuzz(vector<char> source, size_t dest_sz,
+                      int level, int optOff, int optLevel)
 {
+    (void)(level); (void)(dest_sz);
+    aocl_setup_snappy(optOff, optLevel, 0, 0, 0);
+
     // dest should be at least the size MaxCompressedLength(srcSize), or else out of bound memory access error occurs.
     vector<char> dest = vector<char>(MaxCompressedLength(source.size()));
     // destLen stores the size of the compressed data
     size_t destLen;
     RawCompress(source.data(), source.size(), dest.data(), &destLen);
+
+    aocl_destroy_snappy();
 }
+FUZZ_TEST(AOCL_Compression_snappy, RawCompress_fuzz)
+.WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 0),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_cpr_seed_t<char> {
+    auto seed_files = READ_FUZZ_CPR_SEED();
+        return get_fuzz_cpr_seeds<char>([](size_t src_sz) -> size_t {
+        size_t dst_sz = MaxCompressedLength(src_sz);
+        return limit_fuzz_size_max(dst_sz);
+    }, 0, 0, seed_files);
+})
+#endif
+;
 
-FUZZ_TEST(AOCL_Compression_snappy, RawCompress_fuzz);
-
-void RawUncompress_fuzz(vector<char> source)
+void RawUncompress_fuzz(vector<char> source, size_t dest_sz,
+                        int optOff, int optLevel)
 {
+    (void)(dest_sz);
+    aocl_setup_snappy(optOff, optLevel, 0, 0, 0);
+
     size_t result = 0;
     if(!GetUncompressedLength(source.data(), source.size(), &result))
         return;
     // dest should be at least the size of the uncompressed length, or else out of bound memory access error occurs.
     vector<char> dest(result);
     RawUncompress(source.data(), source.size(), dest.data());
-}
 
-FUZZ_TEST(AOCL_Compression_snappy, RawUncompress_fuzz);
+    aocl_destroy_snappy();
+}
+FUZZ_TEST(AOCL_Compression_snappy, RawUncompress_fuzz)
+.WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<char> {
+  auto seed_files = READ_FUZZ_DPR_SEED();
+  return get_fuzz_dpr_seeds<char>(seed_files);
+})
+#endif
+;
 
 #endif /* AOCL_TEST_FUZZER */
 /*********************************************

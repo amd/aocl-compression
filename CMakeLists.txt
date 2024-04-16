@@ -82,6 +82,7 @@ option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression
 option (TEST_COVERAGE_THIRD_PARTY "Enable third party test bench based CTest suite (Disabled by default)" OFF)
 option (NATIVE_ENABLE_THREADS "Enable native multi-threaded compression for supported methods (Disabled by default)" OFF)
 option (AOCL_TEST_FUZZER "Enable AOCL Compression fuzzer (only on Linux with Clang compiler)" OFF)
+option (AOCL_TEST_FUZZER_WITH_CORPUS "Run fuzzer tests with corpus (only on Linux with Clang compiler)" OFF)
 
 option (AOCL_EXCLUDE_BZIP2 "Exclude BZIP2 compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_LZ4 "Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)" OFF)
@@ -143,6 +144,9 @@ if(VALGRIND OR ASAN)
 endif()
 
 # validating google fuzz test environment
+if(AOCL_TEST_FUZZER_WITH_CORPUS)
+    set(AOCL_TEST_FUZZER ON)
+endif()
 if(AOCL_TEST_FUZZER)
     if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${CMAKE_C_COMPILER_ID} STREQUAL "Clang"))
         set(AOCL_TEST_FUZZER OFF)

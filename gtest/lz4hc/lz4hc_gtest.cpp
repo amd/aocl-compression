@@ -39,6 +39,7 @@
 #include <string>
 #include <climits>
 #include "gtest/gtest.h"
+#include "gtest/gtest_utils.h"
 
 #include <utils/utils.h>
 #include "algos/lz4/lz4.h"
@@ -2640,21 +2641,40 @@ TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4H
  *****************************************************/
 #endif
 
-
+/*********************************************
+ * Begin fuzz tests for lz4hc
+ *********************************************/
 #ifdef AOCL_TEST_FUZZER
-
-void LZ4_compress_HC_fuzz(vector<char> dest,
-                    vector<char> source,
-                    int level)
+void LZ4_compress_HC_fuzz(vector<char> source, size_t dest_sz,
+                          int level, int optOff, int optLevel)
 {
-  int destLen = dest.size();
+  aocl_setup_lz4hc(optOff, optLevel, 0, 0, 0);
+
+  int destLen = dest_sz > INT_MAX ? INT_MAX : dest_sz;
   int srcLen = source.size();
+  vector<char> dest(destLen, 0);
 
   LZ4_compress_HC((const char*)source.data(), dest.data(), srcLen, destLen, level);
-}
 
+  aocl_destroy_lz4hc();
+}
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_fuzz)
     .WithDomains(fuzztest::Arbitrary<vector<char>>(),
-                fuzztest::Arbitrary<vector<char>>(),
-                fuzztest::InRange<int>(-1, 12));
+                fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+                fuzztest::InRange<int>(-1, 12),
+                fuzztest::InRange<int>(0, 1),
+                fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+    .WithSeeds([]() -> fuzz_cpr_seed_t<char> {
+    auto seed_files = READ_FUZZ_CPR_SEED();
+    return get_fuzz_cpr_seeds<char>([](size_t src_sz) -> size_t {
+        size_t dst_sz = (size_t)LZ4_compressBound((int)src_sz);
+        return limit_fuzz_size_max(dst_sz);
+    }, -1, 12, seed_files);
+})
+#endif
+;
 #endif /* AOCL_TEST_FUZZER */
+/*********************************************
+ * End fuzz tests for lz4hc
+ *********************************************/

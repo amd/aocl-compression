@@ -38,6 +38,10 @@
 
 #include <random>
 #include <vector>
+#include <string>
+#include <tuple>
+#include <functional>
+#include <stdexcept>
 #include "aocl_compression.h"
 
 using namespace std;
@@ -193,4 +197,110 @@ private:
 
     static const std::vector<std::string> randomStrs;
 };
+
+/* Fuzz testing utils */
+#define FUZZ_TEST_NAME ::testing::UnitTest::GetInstance()->current_test_info()->name()
+#define FUZZ_CPR_SEED "compress_fuzz"
+#define FUZZ_SIZE_MAX 512 // allocating buffers larger than this will slow down fuzz testing. Limit all src and dst buffers to this size.
+#define FUZZ_CPR_RATIO 30.0 // expect compression ratio to be 30 or higher
+
+static std::string get_env_var_str(const char* env_var) {
+    const char* corpus_dir = std::getenv(env_var);
+    if (corpus_dir == NULL) 
+        return std::string(); // empty string
+    else 
+        return std::string(corpus_dir);
+}
+
+template <typename T>
+static T get_env_var_abs(const char* env_var, T default_val) {
+    std::string env_str = get_env_var_str(env_var);
+    if (env_str.empty()) 
+        return default_val;
+    else {
+        try {
+            T ret;
+            if (std::is_same<T, int>::value)
+                ret = std::stoi(env_str);
+            else
+                ret = (T)std::stof(env_str);
+            return ret < 0 ? default_val : ret;
+        } catch (std::invalid_argument& e) {
+            return default_val;
+        } catch (std::out_of_range& e) {
+            return default_val;
+        } catch (...) {
+            return default_val;
+        }
+    }
+}
+
+/* To run a single fuzz test by feeding in an external corpus of seeds: Enabled with cmake option AOCL_TEST_FUZZER_WITH_CORPUS.
+   Place folders containing seed files in the directory pointed by environment variable AOCL_FUZZ_CORPUS_DIR.
+   If AOCL_FUZZ_CORPUS_DIR is not set, current directory is used as parent directory.
+   Sub-folders under this must be as follows:
+   *   /compress_fuzz : Must contain uncompressed raw files for compress API fuzz tests.
+   *   /xxxxxxxx_fuzz : Folders with individual fuzz test names must contain compressed files 
+                        for respective methods used for decompress API fuzz tests.
+                        Example: /LZ4_decompress_safe_fuzz, /RawUncompress_fuzz, etc
+*/
+#define READ_FUZZ_CPR_SEED() fuzztest::ReadFilesFromDirectory(absl::StrCat(get_env_var_str("AOCL_FUZZ_CORPUS_DIR"), FUZZ_CPR_SEED));
+#define READ_FUZZ_DPR_SEED() fuzztest::ReadFilesFromDirectory(absl::StrCat(get_env_var_str("AOCL_FUZZ_CORPUS_DIR"), FUZZ_TEST_NAME));
+
+#define READ_FUZZ_SIZE_MAX() get_env_var_abs<int>("AOCL_FUZZ_SIZE_MAX", FUZZ_SIZE_MAX)
+#define READ_FUZZ_CPR_RATIO() get_env_var_abs<float>("AOCL_FUZZ_CPR_RATIO", FUZZ_CPR_RATIO)
+static inline size_t limit_fuzz_size_max(size_t sz) {
+    size_t fuzzSizeMax = READ_FUZZ_SIZE_MAX();
+    return (sz > fuzzSizeMax) ? fuzzSizeMax : sz;
+}
+
+template <typename T>
+using fuzz_cpr_seed_t = vector<tuple<vector<T>, size_t, int, int, int>>;
+template <typename T>
+using fuzz_dpr_seed_t = vector<tuple<vector<T>, size_t, int, int>>;
+
+template <typename T> 
+fuzz_cpr_seed_t<T> get_fuzz_cpr_seeds(gtest_compress_bound_t compress_bound_ptr, int minLevel, int maxLevel,
+vector<tuple<string>>& seed_files) {
+    fuzz_cpr_seed_t<T> seeds;
+    bool optOff = 0;
+    int optLevel = 0;
+    int level = minLevel;
+    size_t fuzzSizeMax = READ_FUZZ_SIZE_MAX();
+    for (auto& src_file : seed_files) {
+        auto src_data = get<0>(src_file);
+        size_t src_sz = (src_data.size() > fuzzSizeMax) ? fuzzSizeMax : src_data.size();
+        auto src_end = src_data.begin() + src_sz;
+        vector<T> src(src_data.begin(), src_end);
+        size_t dst_sz = compress_bound_ptr(src.size());
+        dst_sz = dst_sz > fuzzSizeMax ? fuzzSizeMax : dst_sz;
+        seeds.push_back({ src, dst_sz, level, optOff, optLevel });
+        level = (level == maxLevel) ? minLevel : (level+1);
+        optOff = !optOff;
+        optLevel++; optLevel %= 5;
+    }
+    return seeds;
+}
+
+template <typename T> 
+fuzz_dpr_seed_t<T> get_fuzz_dpr_seeds(vector<tuple<string>>& seed_files) {
+    fuzz_dpr_seed_t<T> seeds;
+    bool optOff = 0;
+    int optLevel = 0;
+    size_t fuzzSizeMax = READ_FUZZ_SIZE_MAX();
+    float ratio = READ_FUZZ_CPR_RATIO();
+    for (auto& src_file : seed_files) {
+        auto src_data = get<0>(src_file);
+        size_t src_sz = (src_data.size() > fuzzSizeMax) ? fuzzSizeMax : src_data.size();
+        auto src_end = src_data.begin() + src_sz;
+        vector<T> src(src_data.begin(), src_end);
+        size_t dst_sz = src.size() * 100.0 / ratio;
+        dst_sz = dst_sz > fuzzSizeMax ? fuzzSizeMax : dst_sz;
+        seeds.push_back({ src, dst_sz, optOff, optLevel });
+        optOff = !optOff;
+        optLevel++; optLevel %= 5;
+    }
+    return seeds;
+}
+
 #endif /* _GTEST_UTILS_H_ */
