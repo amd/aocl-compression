@@ -309,27 +309,13 @@ int ZEXPORT compress(Bytef *dest, uLongf *destLen, const Bytef *source,
    this function needs to be updated.
  */
 
-static uLong (*compressBound_fp)(uLong sourceLen) = compressBound_ST;
-
 uLong ZEXPORT compressBound(uLong sourceLen) {
-    AOCL_SETUP_NATIVE();
-    return compressBound_fp(sourceLen);
-}
-
-#ifdef AOCL_ZLIB_OPT
-/* AOCL-Compression defined setup function that sets up ZLIB with the right
-*  AMD optimized zlib routines depending upon the CPU features. */
-static void aocl_setup_compressBound_fmv(void)
-{
-
 #ifdef AOCL_ENABLE_THREADS
-    compressBound_fp = compressBound_MT;
+    return compressBound_MT(sourceLen);
 #else
-    compressBound_fp = compressBound_ST;
+    return compressBound_ST(sourceLen);
 #endif
-
 }
-#endif
 
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
@@ -344,7 +330,6 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
         aocl_setup_deflate(optOff, optLevel);
         aocl_setup_inflate(optOff, optLevel);
         aocl_setup_adler32(optOff, optLevel);
-        aocl_setup_compressBound_fmv();
         setup_ok_zlib = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib)
@@ -362,7 +347,6 @@ static void aocl_setup_native(void) {
         aocl_setup_deflate(optOff, optLevel);
         aocl_setup_inflate(optOff, optLevel);
         aocl_setup_adler32(optOff, optLevel);
-        aocl_setup_compressBound_fmv();
         setup_ok_zlib = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib)

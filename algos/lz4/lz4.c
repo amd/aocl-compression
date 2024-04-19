@@ -795,11 +795,12 @@ int LZ4_compressBound_mt(int isize) {
 }
 #endif
 
-static int (*LZ4_compressBound_fp)(int isize) = LZ4_compressBound_st;
-
 int LZ4_compressBound(int isize) {
-    AOCL_SETUP_NATIVE();
-    return LZ4_compressBound_fp(isize);
+#ifdef AOCL_ENABLE_THREADS
+    return LZ4_compressBound_mt(isize);
+#else
+    return LZ4_compressBound_st(isize);
+#endif
 }
 
 int LZ4_sizeofState(void) { return sizeof(LZ4_stream_t); }
@@ -5554,7 +5555,6 @@ LZ4_decompress_safe_partial_forceExtDict_fp    = LZ4_decompress_safe_partial_for
 LZ4_decompress_safe_doubleDict_fp              = LZ4_decompress_safe_doubleDict_internal;
 
 #define SET_LZ4_COMPRESS_DEFAULT_FUNCTIONS \
-LZ4_compressBound_fp               = LZ4_compressBound_st;\
 LZ4_compress_fast_extState_fp      = LZ4_compress_fast_extState_internal;\
 LZ4_compress_fast_continue_fp      = LZ4_compress_fast_continue_internal;\
 LZ4_compress_destSize_extState_fp  = LZ4_compress_destSize_extState_internal;
@@ -5583,20 +5583,14 @@ LZ4_compress_destSize_extState_fp  = AOCL_LZ4_compress_destSize_extState_interna
     #ifdef AOCL_LZ4_AVX_OPT
         #define SET_LZ4_MT_FUNCTIONS \
             LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;\
-            LZ4_compressBound_fp         = LZ4_compressBound_mt;\
             LZ4_compress_fast_mt_fp      = AOCL_LZ4_compress_fast_mt;
     #endif /* AOCL_LZ4_AVX_OPT */
         #define SET_LZ4_ST_FUNCTIONS \
             LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;\
-            LZ4_compressBound_fp         = LZ4_compressBound_st;\
             LZ4_compress_fast_mt_fp      = AOCL_LZ4_compress_fast_st;
 #else
-    #ifdef AOCL_LZ4_AVX_OPT
-        #define SET_LZ4_MT_FUNCTIONS \
-            LZ4_compressBound_fp         = LZ4_compressBound_st;
-    #endif /* AOCL_LZ4_AVX_OPT */
-        #define SET_LZ4_ST_FUNCTIONS \
-            LZ4_compressBound_fp         = LZ4_compressBound_st;
+    #define SET_LZ4_MT_FUNCTIONS
+    #define SET_LZ4_ST_FUNCTIONS
 #endif /* AOCL_ENABLE_THREADS */
 
 LZ4_FORCE_O2

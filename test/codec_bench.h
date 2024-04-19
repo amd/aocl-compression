@@ -146,7 +146,7 @@ static aocl_log_ctx log_ctx = {-1};
 
 //Function declarations
 AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
-          aocl_compression_desc *aocl_codec_handle, aocl_compression_type codec);
+          aocl_compression_desc *aocl_codec_handle);
 AOCL_INTP read_user_options (AOCL_INTP argc,
                        AOCL_CHAR **argv,
                        aocl_codec_bench_info *codec_bench_handle);

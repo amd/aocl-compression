@@ -178,11 +178,12 @@ size_t AOCL_ZSTD_compressBound(size_t srcSize, ZSTD_parameters params) {
 
 }
 
-static size_t (*ZSTD_compressBound_fp)(size_t srcSize) = ZSTD_compressBound_st;
-
 size_t ZSTD_compressBound(size_t srcSize) {
-    AOCL_SETUP_NATIVE();
-    return ZSTD_compressBound_fp(srcSize);
+#ifdef AOCL_ENABLE_THREADS
+    return ZSTD_compressBound_mt(srcSize);
+#else
+    return ZSTD_compressBound_st(srcSize);
+#endif
 }
 
 /*-*************************************
@@ -7644,7 +7645,6 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
         //Unoptimized C version
         aoclOptFlag = 0;
         AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
-        ZSTD_compressBound_fp = ZSTD_compressBound_st;
     }
     else
     {
@@ -7658,15 +7658,9 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
 #ifdef AOCL_ZSTD_OPT
                 aoclOptFlag = 1;
                 AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
-#ifdef AOCL_ENABLE_THREADS
-                ZSTD_compressBound_fp = ZSTD_compressBound_mt;
-#else
-                ZSTD_compressBound_fp = ZSTD_compressBound_st;
-#endif /* AOCL_ENABLE_THREADS */
 #else
                 aoclOptFlag = 0;
                 AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
-                ZSTD_compressBound_fp = ZSTD_compressBound_st;
 #endif /* AOCL_ZSTD_OPT */
                 break;
         }
