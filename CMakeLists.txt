@@ -162,16 +162,6 @@ set (API_SRC_FILES  api/code_alignment.cpp
                     api/codec.h
                     api/types.h)
 
-if (AOCL_ENABLE_THREADS AND WIN32)
-    #openmp support
-    find_package(OpenMP)
-    if (NOT OPENMP_FOUND)
-        set(AOCL_ENABLE_THREADS OFF)
-        message(WARNING "OpenMP not found. Library is not built with multi-threaded support.")
-    endif ()
-endif ()
-
-
 set (ALGOS_PATH algos)
 if (NOT AOCL_EXCLUDE_BZIP2)
 set (BZIP2_SRC_FILES    ${ALGOS_PATH}/bzip2/code_alignment.c
@@ -308,9 +298,9 @@ if (AOCL_ENABLE_THREADS)
 endif ()
 
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-set(DEST_LIB_PATH aocl_compression/lib)
-set(DEST_INC_PATH aocl_compression/include)
-set(DEST_BIN_PATH aocl_compression/bin)
+set(DEST_LIB_PATH lib)
+set(DEST_INC_PATH include)
+set(DEST_BIN_PATH bin)
 
 set(INC_FILES api/aocl_compression.h
               ${ALGOS_PATH}/common/aoclAlgoOpt.h)
@@ -397,6 +387,7 @@ else()
 set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
 endif()
 if (WIN32)
+    find_package(OpenMP REQUIRED) # openmp required for all configurations
 	if (CMAKE_BUILD_TYPE STREQUAL "Release")
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /fp:fast /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /fp:fast /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
@@ -594,10 +585,8 @@ target_include_directories(${lib_name}
                             PRIVATE ${ALGOS_PATH}/common
                             PRIVATE api)
 
-if (AOCL_ENABLE_THREADS AND WIN32)
-    if (OPENMP_FOUND)
-        target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
-    endif ()
+if (WIN32 AND OPENMP_FOUND)
+    target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
 endif ()
 
 #add benchmarking application and tests
