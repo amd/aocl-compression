@@ -1,0 +1,716 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>Brief Overview of algos &#8212; AOCL-Compression 4.2 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.1.2/css/all.min.css?digest=5b4479735964841361fd" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_header.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_footer.css" />
+    <link rel="stylesheet" type="text/css" href="_static/fonts.css" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=5b4479735964841361fd" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd" />
+  <script src="_static/vendor/fontawesome/6.1.2/js/all.min.js?digest=5b4479735964841361fd"></script>
+
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
+    <script async="async" src="_static/code_word_breaks.js"></script>
+    <script async="async" src="_static/renameVersionLinks.js"></script>
+    <script async="async" src="_static/rdcMisc.js"></script>
+    <script async="async" src="_static/theme_mode_captions.js"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?digest=5a5c038af52cf7bc1a1ec88eea08e6366ee68824"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'INTRODUCTION';</script>
+    <link rel="icon" href="https://www.amd.com/themes/custom/amd/favicon.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Example Test Programs" href="EXAMPLE_README.html" />
+    <link rel="prev" title="Multi-threaded API" href="multi-thread.html" />
+    <meta name="google-site-verification" content="ZOn0RZC0Pwzlmf2SaE0bRttWk1YzOhuslbpxUDchQ90" />
+
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+
+<header class="common-header" >
+    <nav class="navbar navbar-expand-xl">
+        <div class="container-fluid main-nav rocm-header">
+            
+            <div class="header-logo">
+                <a class="navbar-brand" href="https://www.amd.com/">
+                    <img src="_static/images/amd-header-logo.svg" alt="AMD Logo" title="AMD Logo" width="90" class="d-inline-block align-text-top hover-opacity"/>
+                </a>
+                <div class="vr vr mx-40 my-25"></div>
+                <a class="klavika-font hover-opacity" href="./index.html">AOCL Compression 4.2</a>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var elements = document.getElementsByClassName('header-all-versions');
+            for (var i = 0; i < elements.length; i++) {
+                elements[i].remove();
+            }
+
+            elements = document.querySelector("body > footer > div > section > div:nth-child(1) > div > ul").children;
+            var removable_items = ['2020-2024, Advanced Micro Devices, Inc', 'Statement on Forced Labor', 'Fair and Open Competition', 'UK Tax Strategy', 'Cookie Policy', 'Cookie Settings'];
+            for(var i = 0; i < elements.length; i++) {
+                if(removable_items.includes(elements[i].innerText)) {
+                    elements[i].remove();
+                    i--;
+                }
+            }
+        })
+    </script>
+                <a class="header-all-versions" href="https://rocm.docs.amd.com/en/latest/release/versions.html">Version List</a>
+            </div>
+            <div class="icon-nav text-center d-flex ms-auto">
+            </div>
+        </div>
+    </nav>
+    
+</header>
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">AOCL-Compression 4.2 documentation</p>
+  
+</a></div>
+        <div class="sidebar-primary-item"><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Table of Contents</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="INSTALLATION.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unified_api.html">Standardized/Unified API</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="algos.html">Algorithms</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="lz4.html">1. LZ4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zlib.html">2. ZLIB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lzma.html">3. LZMA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zstd.html">4. ZSTD</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bzip2.html">5. BZIP2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snappy.html">6. SNAPPY</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lz4hc.html">7. LZ4HC</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="multi-thread.html">Multi-threaded API</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Brief Overview of algos</a></li>
+<li class="toctree-l1"><a class="reference internal" href="EXAMPLE_README.html">Example Test Programs</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><label class="sidebar-toggle primary-toggle btn btn-sm" for="__primary" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-angle-right"></span>
+  </label></div>
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Brief...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<label class="sidebar-toggle secondary-toggle btn btn-sm" for="__secondary"title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</label>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Brief Overview of algos</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lz4-introduction">LZ4 - Introduction</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation">Documentation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#other-source-versions">Other source versions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#lz4-library-files">LZ4 - Library Files</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#minimal-lz4-build">Minimal LZ4 build</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#high-compression-variant">High Compression variant</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#frame-support-for-interoperability">Frame Support for Interoperability</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-experimental-api">Advanced / Experimental API</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#build-macros">Build macros</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#license">License</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lz4hc-introduction">LZ4HC - Introduction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lzma-introduction">LZMA - Introduction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#snappy-introduction">Snappy - Introduction</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#introduction">Introduction</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#performance">Performance</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#zlib-introduction">ZLIB - Introduction</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#notes">Notes:</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#zstd-introduction">ZSTD - Introduction</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-case-for-small-data-compression">The case for Small Data compression</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">License</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bzip2-introduction">BZIP2 - Introduction</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article" role="main">
+                  
+  <section id="brief-overview-of-algos">
+<h1>Brief Overview of algos<a class="headerlink" href="#brief-overview-of-algos" title="Permalink to this heading">#</a></h1>
+<section id="lz4-introduction">
+<h2>LZ4 - Introduction<a class="headerlink" href="#lz4-introduction" title="Permalink to this heading">#</a></h2>
+<p>LZ4 is a lossless compression algorithm
+providing a compression speed &gt; 500 MB/s per core,
+scalable with multi-cores CPU.
+It features an extremely fast decoder
+with speed in multiple GB/s per core,
+reaching RAM speed limits on multi-core systems.</p>
+<p>Speed can be tuned dynamically, selecting an “acceleration” factor
+which trades compression ratio for faster speed.
+On the other end, a high compression derivative, LZ4_HC, is also provided,
+trading CPU time for improved compression ratio.
+All the versions feature the same decompression speed.</p>
+<p>LZ4 is also compatible with <a class="reference external" href="https://github.com/facebook/zstd#the-case-for-small-data-compression">dictionary compression</a>,
+both at <a class="reference external" href="https://github.com/lz4/lz4/blob/v1.8.3/lib/lz4frame.h#L481">API</a> and <a class="reference external" href="https://github.com/lz4/lz4/blob/v1.8.3/programs/lz4.1.md#operation-modifiers">CLI</a> levels.
+It can ingest any input file as dictionary, though only the final 64 KB is used.
+This capability can be combined with the <a class="reference external" href="https://github.com/facebook/zstd/blob/v1.3.5/programs/zstd.1.md#dictionary-builder">Zstandard Dictionary Builder</a>
+to improve the compression performance on small files.</p>
+<p>LZ4 library is provided as an open-source software using BSD 2-Clause license.</p>
+<section id="documentation">
+<h3>Documentation<a class="headerlink" href="#documentation" title="Permalink to this heading">#</a></h3>
+<p>The raw LZ4 block compression format is detailed within <a class="reference external" href="https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md">lz4_Block_format</a>.</p>
+<p>Arbitrarily, for streaming requirements, long files or data streams are compressed using multiple blocks. These blocks are organized into a frame,
+defined into <a class="reference external" href="https://github.com/lz4/lz4/blob/dev/doc/lz4_Frame_format.md">lz4_Frame_format</a>.
+Interoperable versions of LZ4 must also respect the frame format.</p>
+</section>
+<section id="other-source-versions">
+<h3>Other source versions<a class="headerlink" href="#other-source-versions" title="Permalink to this heading">#</a></h3>
+<p>Beyond the C reference source,
+many contributors have created versions of LZ4 in multiple languages
+(Java, C#, Python, Perl, Ruby, and so on).
+A list of known source ports is maintained on the <a class="reference external" href="http://www.lz4.org">LZ4 Homepage</a>.</p>
+</section>
+<section id="lz4-library-files">
+<h3>LZ4 - Library Files<a class="headerlink" href="#lz4-library-files" title="Permalink to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">/lib</span></code> directory contains many files, but depending on the project’s objectives,
+not all of them are necessary.</p>
+</section>
+<section id="minimal-lz4-build">
+<h3>Minimal LZ4 build<a class="headerlink" href="#minimal-lz4-build" title="Permalink to this heading">#</a></h3>
+<p>The minimum required is <strong>lz4.c</strong> and <strong>lz4.h</strong>,
+which provides the fast compression and decompression algorithms.
+They generate and decode data using the [LZ4 block format].</p>
+</section>
+<section id="high-compression-variant">
+<h3>High Compression variant<a class="headerlink" href="#high-compression-variant" title="Permalink to this heading">#</a></h3>
+<p>For more compression ratio at the cost of compression speed,
+the High Compression variant called <strong>lz4hc</strong> is available.
+Add the files <strong>lz4hc.c</strong> and <strong>lz4hc.h</strong>.
+This variant also compresses data using the [LZ4 block format]
+and depends on the regular <code class="docutils literal notranslate"><span class="pre">lib/lz4.*</span></code> source files.</p>
+</section>
+<section id="frame-support-for-interoperability">
+<h3>Frame Support for Interoperability<a class="headerlink" href="#frame-support-for-interoperability" title="Permalink to this heading">#</a></h3>
+<p>To produce compressed data compatible with <code class="docutils literal notranslate"><span class="pre">lz4</span></code> command line utility,
+it’s necessary to use the [official interoperable frame format].
+This format is generated and decoded automatically by the <strong>lz4frame</strong> library.
+Its public API is described in <code class="docutils literal notranslate"><span class="pre">lib/lz4frame.h</span></code>.
+To work properly, lz4frame needs all other modules present in <code class="docutils literal notranslate"><span class="pre">/lib</span></code>,
+including, lz4, lz4hc, and <strong>xxhash</strong>.
+So it’s necessary to include all the <code class="docutils literal notranslate"><span class="pre">*.c</span></code> and <code class="docutils literal notranslate"><span class="pre">*.h</span></code> files present in <code class="docutils literal notranslate"><span class="pre">/lib</span></code>.</p>
+</section>
+<section id="advanced-experimental-api">
+<h3>Advanced / Experimental API<a class="headerlink" href="#advanced-experimental-api" title="Permalink to this heading">#</a></h3>
+<p>Definitions which are not guaranteed to remain stable in future versions,
+are protected behind macros, such as <code class="docutils literal notranslate"><span class="pre">LZ4_STATIC_LINKING_ONLY</span></code>.
+As the name strongly implies, these definitions should only be invoked
+in the context of static linking <em><strong>only</strong></em>.
+Otherwise, the dependent application may fail on API or ABI break in the future.
+The associated symbols are also not exposed by the dynamic library by default.
+If required, it’s possible to force their publication
+by using build macros <code class="docutils literal notranslate"><span class="pre">LZ4_PUBLISH_STATIC_FUNCTIONS</span></code>
+and <code class="docutils literal notranslate"><span class="pre">LZ4F_PUBLISH_STATIC_FUNCTIONS</span></code>.</p>
+</section>
+<section id="build-macros">
+<h3>Build macros<a class="headerlink" href="#build-macros" title="Permalink to this heading">#</a></h3>
+<p>The following build macro can be selected to adjust the source code behavior during the compilation:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">LZ4_FAST_DEC_LOOP</span></code> : Triggers a speed optimized decompression loop, more powerful on modern CPU.
+This loop works optimally on <code class="docutils literal notranslate"><span class="pre">x86</span></code>, <code class="docutils literal notranslate"><span class="pre">x64</span></code> and <code class="docutils literal notranslate"><span class="pre">aarch64</span></code> CPU, and is automatically enabled for them.
+It’s also possible to enable or disable it manually by passing <code class="docutils literal notranslate"><span class="pre">LZ4_FAST_DEC_LOOP=1</span></code> or <code class="docutils literal notranslate"><span class="pre">0</span></code> to the preprocessor.
+For example, with <code class="docutils literal notranslate"><span class="pre">GCC</span></code> : <code class="docutils literal notranslate"><span class="pre">-DLZ4_FAST_DEC_LOOP=1</span></code>
+and with <code class="docutils literal notranslate"><span class="pre">make</span></code> : <code class="docutils literal notranslate"><span class="pre">CPPFLAGS+=-DLZ4_FAST_DEC_LOOP=1</span> <span class="pre">make</span> <span class="pre">lz4</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LZ4_DISTANCE_MAX</span></code> : Controls the maximum offset that the compressor will allow.
+Set to 65535 by default, which is the maximum value supported by LZ4 format.
+Reducing the maximum distance will reduce opportunities for LZ4 to find matches and
+hence, will produce a worse compression ratio.
+However, a smaller maximum distance can allow compatibility with specific decoders using a limited memory.
+This build macro only influences the compressed output of the compressor.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LZ4_DISABLE_DEPRECATE_WARNINGS</span></code> : Invoking a deprecated function will make the compiler generate a warning.
+This is meant to invite the users to update their source code.
+Should this be a problem, it’s possible to make the compiler ignore these warnings,
+for example, with <code class="docutils literal notranslate"><span class="pre">-Wno-deprecated-declarations</span></code> on <code class="docutils literal notranslate"><span class="pre">GCC</span></code>
+or <code class="docutils literal notranslate"><span class="pre">_CRT_SECURE_NO_WARNINGS</span></code> for Microsoft Visual Studio.
+This build macro offers another project-specific method
+by defining <code class="docutils literal notranslate"><span class="pre">LZ4_DISABLE_DEPRECATE_WARNINGS</span></code> before including the LZ4 header files.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LZ4_USER_MEMORY_FUNCTIONS</span></code> : Replace calls to <stdlib>’s <code class="docutils literal notranslate"><span class="pre">malloc</span></code>, <code class="docutils literal notranslate"><span class="pre">calloc</span></code> and <code class="docutils literal notranslate"><span class="pre">free</span></code>
+by user defined functions, which must be called <code class="docutils literal notranslate"><span class="pre">LZ4_malloc()</span></code>, <code class="docutils literal notranslate"><span class="pre">LZ4_calloc()</span></code>, and <code class="docutils literal notranslate"><span class="pre">LZ4_free()</span></code>.
+User functions must be available at link time.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LZ4_FORCE_SW_BITCOUNT</span></code> : By default, the compression algorithm tries to determine lengths
+using bit count instructions, generally implemented as fast single instructions in many CPUs.
+In case, the target CPUs don’t support it, compiler intrinsic doesn’t work, or feature bad performance,
+it’s possible to use an optimized software path instead.
+This is achieved by setting the build macros .
+In most cases, it can be considered for rare platforms.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LZ4_ALIGN_TEST</span></code> : Alignment test ensures that the memory area
+passed as an argument to become a compression state is suitably aligned.
+This test can be disabled if it proves flaky, by setting this value to 0.</p></li>
+</ul>
+</section>
+<section id="license">
+<h3>License<a class="headerlink" href="#license" title="Permalink to this heading">#</a></h3>
+<p>All the source material in <strong>lib</strong> directory is BSD 2-Clause licensed.
+For more information, refer to <a class="reference download internal" download="" href="_downloads/49d6c9972f5812e1c8c5ed34ef4be3fc/LICENSE"><span class="xref download myst">LICENSE</span></a> for details.
+This license is also reminded at the top of each source file.</p>
+</section>
+</section>
+<section id="lz4hc-introduction">
+<h2>LZ4HC - Introduction<a class="headerlink" href="#lz4hc-introduction" title="Permalink to this heading">#</a></h2>
+<p>LZ4HC is the High Compression variant of LZ4.
+It offers more compression ratio at the cost of compression speed.
+The files lz4hc.c and lz4hc.h add the support for LZ4HC.</p>
+<p>This variant also compresses data using the LZ4 block format,
+and depends on regular lib/lz4.* source files.</p>
+<p>It is covered by the same LICENSE as that of LZ4.</p>
+</section>
+<section id="lzma-introduction">
+<h2>LZMA - Introduction<a class="headerlink" href="#lzma-introduction" title="Permalink to this heading">#</a></h2>
+<p>LZMA / LZMA2 are default and general compression methods of 7z format in the 7-Zip program.
+LZMA provides a high compression ratio and fast decompression, so it is very suitable for
+embedded applications. For example, it can be used for ROM (firmware) compressing.</p>
+<p>LZMA features:</p>
+<p>Compression speed: 3 MB/s on 3 GHz dual-core CPU.
+Decompression speed:
+20-50 MB/s on modern 3 GHz CPU (Intel, AMD, ARM).
+Small memory requirements for decompression: 8-32 KB + DictionarySize
+Small code size for decompression: 2-8 KB (depending on speed optimizations)</p>
+<p>The LZMA decoder uses only CPU integer instructions and can be implemented for any modern 32-bit CPU.</p>
+</section>
+<section id="snappy-introduction">
+<h2>Snappy - Introduction<a class="headerlink" href="#snappy-introduction" title="Permalink to this heading">#</a></h2>
+<section id="introduction">
+<h3>Introduction<a class="headerlink" href="#introduction" title="Permalink to this heading">#</a></h3>
+<p>Snappy is a compression/decompression library. It does not aim for maximum
+compression or compatibility with any other compression library; instead,
+it aims for very high speeds and reasonable compression.</p>
+<p>Snappy has the following properties:</p>
+<ul class="simple">
+<li><p>Fast: Compared to the fastest mode of zlib, Snappy is faster for most inputs.</p></li>
+<li><p>Stable: Over the last few years, Snappy has compressed and decompressed
+Petabytes of data in Google’s production environment. The Snappy bitstream
+format is stable and does not change between versions.</p></li>
+<li><p>Robust: The Snappy decompressor is designed not to crash in the face of
+corrupted or malicious input.</p></li>
+<li><p>Free and open-source software: Snappy is licensed under a BSD-type license.
+For more information, refer to the included COPYING file.</p></li>
+</ul>
+<p>Snappy has previously been called “Zippy” in some Google presentations
+and the like.</p>
+</section>
+<section id="performance">
+<h3>Performance<a class="headerlink" href="#performance" title="Permalink to this heading">#</a></h3>
+<p>Although Snappy should be fairly portable, it is primarily optimized
+for 64-bit x86-compatible processors, and may run slower in other environments.
+In particular:</p>
+<ul class="simple">
+<li><p>It uses 64-bit operations in several places to process more data at
+once.</p></li>
+<li><p>It assumes unaligned 32 and 64-bit loads and stores are cheap.
+On some platforms, these must be emulated with single-byte loads
+and stores, which is much slower.</p></li>
+<li><p>It assumes little-endian throughout, and needs to byte-swap data in
+several places if running on a big-endian platform.</p></li>
+</ul>
+<p>Even heavily tuned code can be improved.</p>
+</section>
+</section>
+<section id="zlib-introduction">
+<h2>ZLIB - Introduction<a class="headerlink" href="#zlib-introduction" title="Permalink to this heading">#</a></h2>
+<p>zlib 1.3 is a general-purpose data compression library.  All the code is
+thread safe.  The data format used by the zlib library is described by
+Request for Comments (RFCs) 1950 to 1952 in the files
+<a class="reference external" href="http://tools.ietf.org/html/rfc1950">http://tools.ietf.org/html/rfc1950</a> (zlib format), rfc1951 (deflate format), and
+rfc1952 (gzip format).</p>
+<p>All functions of the compression library are documented in the file zlib.h (volunteer to write man pages welcome, contact zlib&#64;gzip.org).</p>
+<section id="notes">
+<h3>Notes:<a class="headerlink" href="#notes" title="Permalink to this heading">#</a></h3>
+<ul class="simple">
+<li><p>For 64-bit Irix, deflate.c must be compiled without any optimization. With
+-O, one libpng test fails. The test works in 32-bit mode (with the -n32
+compiler flag). The compiler bug has been reported to SGI.</p></li>
+<li><p>zlib doesn’t work with GCC 2.6.3 on a DEC 3000/300LX under OSF/1 2.1. It works
+when compiled with cc.</p></li>
+<li><p>On Digital Unix 4.0D (formerly OSF/1) on AlphaServer, the CC option -std1 is
+necessary to get gzprintf working correctly. This is done by configure.</p></li>
+<li><p>zlib doesn’t work on HP-UX 9.05 with some versions of /bin/cc. It works with
+the other compilers. Use “make test” to check your compiler.</p></li>
+<li><p>gzdopen is not supported on RISCOS or BEOS.</p></li>
+<li><p>For PalmOs, refer to <a class="reference external" href="http://palmzlib.sourceforge.net/">http://palmzlib.sourceforge.net/</a></p></li>
+</ul>
+</section>
+</section>
+<section id="zstd-introduction">
+<h2>ZSTD - Introduction<a class="headerlink" href="#zstd-introduction" title="Permalink to this heading">#</a></h2>
+<p><strong>Zstandard</strong>, or <code class="docutils literal notranslate"><span class="pre">zstd</span></code> as short version, is a fast lossless compression algorithm,
+targeting real-time compression scenarios at zlib-level and better compression ratios.
+It’s backed by a very fast entropy stage, provided by <a class="reference external" href="https://github.com/Cyan4973/FiniteStateEntropy">Huff0 and FSE library</a>.</p>
+<p>The project is provided as an open-source dual <a class="reference download internal" download="" href="_downloads/3b9980d388c6f34b59984fd8863feb0c/LICENSE"><span class="xref download myst">BSD</span></a> and <a class="reference external" href="https://github.com/facebook/zstd/blob/dev/COPYING">GPLv2</a> licensed <strong>C</strong> library,
+and a command line utility producing and decoding <code class="docutils literal notranslate"><span class="pre">.zst</span></code>, <code class="docutils literal notranslate"><span class="pre">.gz</span></code>, <code class="docutils literal notranslate"><span class="pre">.xz</span></code> and <code class="docutils literal notranslate"><span class="pre">.lz4</span></code> files.
+Should your project require another programming language,
+a list of known ports and bindings is provided on <a class="reference external" href="http://www.zstd.net/#other-languages">Zstandard homepage</a>.</p>
+<p>The negative compression levels, specified with <code class="docutils literal notranslate"><span class="pre">--fast=#</span></code>,
+offer faster compression and decompression speed in exchange for some loss in
+compression ratio compared to level 1, as seen in the table above.</p>
+<p>Zstd can also offer stronger compression ratios at the cost of compression speed.
+Speed vs Compression trade-off is configurable by small increments.
+Decompression speed is preserved and remains roughly the same at all settings,
+a property shared by most LZ compression algorithms, such as [zlib] or lzma.</p>
+<section id="the-case-for-small-data-compression">
+<h3>The case for Small Data compression<a class="headerlink" href="#the-case-for-small-data-compression" title="Permalink to this heading">#</a></h3>
+<p>The smaller the amount of data to compress, the more difficult it is to compress. This problem is common to all compression algorithms, and reason is, compression algorithms learn from past data how to compress future data. But at the beginning of a new data set, there is no “past” to build upon.</p>
+<p>To solve this situation, Zstd offers a <strong>training mode</strong>, which can be used to tune the algorithm for a selected type of data.
+Training Zstandard is achieved by providing it with a few samples (one file per sample). The result of this training is stored in a file called “dictionary”, which must be loaded before compression and decompression.
+Using this dictionary, the compression ratio achievable on small data improves dramatically.</p>
+<p>Training works if there is some correlation in a family of small data samples. The more data-specific a dictionary is, the more efficient it is (there is no <em>universal dictionary</em>).
+Hence, deploying one dictionary per type of data will provide the greatest benefits.
+Dictionary gains are mostly effective in the first few KB. Then, the compression algorithm will gradually use previously decoded content to better compress the rest of the file.</p>
+</section>
+<section id="id1">
+<h3>License<a class="headerlink" href="#id1" title="Permalink to this heading">#</a></h3>
+<p>Zstandard is dual-licensed under <a class="reference download internal" download="" href="_downloads/3b9980d388c6f34b59984fd8863feb0c/LICENSE"><span class="xref download myst">BSD</span></a> and <a class="reference external" href="https://github.com/facebook/zstd/blob/dev/COPYING">GPLv2</a>.</p>
+</section>
+</section>
+<section id="bzip2-introduction">
+<h2>BZIP2 - Introduction<a class="headerlink" href="#bzip2-introduction" title="Permalink to this heading">#</a></h2>
+<p>Bzip2 compresses files using the Burrows-Wheeler block-sorting text compression algorithm, and Huffman coding. Compression is generally considerably better than that achieved by more conventional LZ77/LZ78-based compressors, and approaches the performance of the PPM family of statistical compressors.</p>
+<p>This file is part of bzip2/libbzip2, a program and library for
+lossless, block-sorting data compression.</p>
+<p>bzip2/libbzip2 version 1.0.8 of 13 July 2019
+Copyright (C) 1996-2019 Julian Seward <a class="reference external" href="mailto:jseward&#37;&#52;&#48;acm&#46;org">jseward<span>&#64;</span>acm<span>&#46;</span>org</a></p>
+<p>Please read the WARNING, DISCLAIMER and PATENTS sections in the file
+available at <a class="github reference external" href="https://github.com/joachimmetz/bzip2/blob/main/README">joachimmetz/bzip2</a> .</p>
+<p>This program is released under the terms of the license contained in the file LICENSE.</p>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="multi-thread.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Multi-threaded API</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="EXAMPLE_README.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Example Test Programs</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lz4-introduction">LZ4 - Introduction</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation">Documentation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#other-source-versions">Other source versions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#lz4-library-files">LZ4 - Library Files</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#minimal-lz4-build">Minimal LZ4 build</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#high-compression-variant">High Compression variant</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#frame-support-for-interoperability">Frame Support for Interoperability</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-experimental-api">Advanced / Experimental API</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#build-macros">Build macros</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#license">License</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lz4hc-introduction">LZ4HC - Introduction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lzma-introduction">LZMA - Introduction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#snappy-introduction">Snappy - Introduction</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#introduction">Introduction</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#performance">Performance</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#zlib-introduction">ZLIB - Introduction</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#notes">Notes:</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#zstd-introduction">ZSTD - Introduction</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-case-for-small-data-compression">The case for Small Data compression</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">License</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bzip2-introduction">BZIP2 - Introduction</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            <p>
+  </p>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=5b4479735964841361fd"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd"></script>
+
+<footer class="rocm-footer">
+    <div class="container-lg">
+        <section class="bottom-menu menu py-45">
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <ul>
+                        <li><a href="https://www.amd.com/en/corporate/copyright" target="_blank">Terms and Conditions</a></li>
+                        
+                        <li><a href="">2020-2024, Advanced Micro Devices, Inc</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/privacy" target="_blank">Privacy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/trademarks" target="_blank">Trademarks</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/statement-human-trafficking-forced-labor.pdf" target="_blank">Statement on Forced Labor</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/competition" target="_blank">Fair and Open Competition</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/amd-uk-tax-strategy.pdf" target="_blank">UK Tax Strategy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/cookies" target="_blank">Cookie Policy</a></li>
+                        <!-- OneTrust Cookies Settings button start -->
+                        <li><a href="#cookie-settings" id="ot-sdk-btn" class="ot-sdk-show-settings">Cookie Settings</a></li>
+                        <!-- OneTrust Cookies Settings button end -->
+                    </ul>
+                </div>
+            </div>
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <div>
+                        <span class="copyright">© 2023 Advanced Micro Devices, Inc</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</footer>
+
+<!-- <div id="rdc-watermark-container">
+    <img id="rdc-watermark" src="_static/images/alpha-watermark.svg" alt="DRAFT watermark"/>
+</div> -->
+  </body>
+</html>

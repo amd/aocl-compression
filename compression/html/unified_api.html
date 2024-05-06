@@ -1,0 +1,803 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>Standardized/Unified API &#8212; AOCL-Compression 4.2 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.1.2/css/all.min.css?digest=5b4479735964841361fd" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_header.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_footer.css" />
+    <link rel="stylesheet" type="text/css" href="_static/fonts.css" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=5b4479735964841361fd" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd" />
+  <script src="_static/vendor/fontawesome/6.1.2/js/all.min.js?digest=5b4479735964841361fd"></script>
+
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
+    <script async="async" src="_static/code_word_breaks.js"></script>
+    <script async="async" src="_static/renameVersionLinks.js"></script>
+    <script async="async" src="_static/rdcMisc.js"></script>
+    <script async="async" src="_static/theme_mode_captions.js"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?digest=5a5c038af52cf7bc1a1ec88eea08e6366ee68824"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'unified_api';</script>
+    <link rel="icon" href="https://www.amd.com/themes/custom/amd/favicon.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Algorithms" href="algos.html" />
+    <link rel="prev" title="Installation" href="INSTALLATION.html" />
+    <meta name="google-site-verification" content="ZOn0RZC0Pwzlmf2SaE0bRttWk1YzOhuslbpxUDchQ90" />
+
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+
+<header class="common-header" >
+    <nav class="navbar navbar-expand-xl">
+        <div class="container-fluid main-nav rocm-header">
+            
+            <div class="header-logo">
+                <a class="navbar-brand" href="https://www.amd.com/">
+                    <img src="_static/images/amd-header-logo.svg" alt="AMD Logo" title="AMD Logo" width="90" class="d-inline-block align-text-top hover-opacity"/>
+                </a>
+                <div class="vr vr mx-40 my-25"></div>
+                <a class="klavika-font hover-opacity" href="./index.html">AOCL Compression 4.2</a>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var elements = document.getElementsByClassName('header-all-versions');
+            for (var i = 0; i < elements.length; i++) {
+                elements[i].remove();
+            }
+
+            elements = document.querySelector("body > footer > div > section > div:nth-child(1) > div > ul").children;
+            var removable_items = ['2020-2024, Advanced Micro Devices, Inc', 'Statement on Forced Labor', 'Fair and Open Competition', 'UK Tax Strategy', 'Cookie Policy', 'Cookie Settings'];
+            for(var i = 0; i < elements.length; i++) {
+                if(removable_items.includes(elements[i].innerText)) {
+                    elements[i].remove();
+                    i--;
+                }
+            }
+        })
+    </script>
+                <a class="header-all-versions" href="https://rocm.docs.amd.com/en/latest/release/versions.html">Version List</a>
+            </div>
+            <div class="icon-nav text-center d-flex ms-auto">
+            </div>
+        </div>
+    </nav>
+    
+</header>
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">AOCL-Compression 4.2 documentation</p>
+  
+</a></div>
+        <div class="sidebar-primary-item"><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Table of Contents</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="INSTALLATION.html">Installation</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Standardized/Unified API</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="algos.html">Algorithms</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="lz4.html">1. LZ4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zlib.html">2. ZLIB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lzma.html">3. LZMA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zstd.html">4. ZSTD</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bzip2.html">5. BZIP2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snappy.html">6. SNAPPY</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lz4hc.html">7. LZ4HC</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="multi-thread.html">Multi-threaded API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="INTRODUCTION.html">Brief Overview of algos</a></li>
+<li class="toctree-l1"><a class="reference internal" href="EXAMPLE_README.html">Example Test Programs</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><label class="sidebar-toggle primary-toggle btn btn-sm" for="__primary" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-angle-right"></span>
+  </label></div>
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Standardized...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Standardized/Unified API</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article" role="main">
+                  
+  <section id="standardized-unified-api">
+<span id="ref-unified-api"></span><h1>Standardized/Unified API<a class="headerlink" href="#standardized-unified-api" title="Permalink to this heading">#</a></h1>
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="a00215"></span><em><span class="pre">group</span></em> <span class="sig-name descname"><span class="pre">API</span></span></dt>
+<dd><p>Interface APIs and data structures of AOCL Compression library are described in this section. </p>
+<p>This file contains the unified interface API set and associated data structure. </p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-enums">Enums</p>
+<dl class="cpp enum">
+<dt class="sig sig-object cpp" id="_CPPv421aocl_compression_type">
+<span id="_CPPv321aocl_compression_type"></span><span id="_CPPv221aocl_compression_type"></span><span class="target" id="a00215_1gace5009dd6f568c529a030555ba1940f0"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">aocl_compression_type</span></span></span><a class="headerlink" href="#_CPPv421aocl_compression_type" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Types of compression methods supported. </p>
+<p>Optimizations are included for all the supported methods </p>
+<p><em>Values:</em></p>
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_type3LZ4E">
+<span id="_CPPv3N21aocl_compression_type3LZ4E"></span><span id="_CPPv2N21aocl_compression_type3LZ4E"></span><span class="target" id="a00215_1ggace5009dd6f568c529a030555ba1940f0a502c6ca9aa5be0804452e92943a37ab7"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_type3LZ4E" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_type5LZ4HCE">
+<span id="_CPPv3N21aocl_compression_type5LZ4HCE"></span><span id="_CPPv2N21aocl_compression_type5LZ4HCE"></span><span class="target" id="a00215_1ggace5009dd6f568c529a030555ba1940f0a42c78d35fd183d9aa3d55a31dc04c633"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4HC</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_type5LZ4HCE" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_type4LZMAE">
+<span id="_CPPv3N21aocl_compression_type4LZMAE"></span><span id="_CPPv2N21aocl_compression_type4LZMAE"></span><span class="target" id="a00215_1ggace5009dd6f568c529a030555ba1940f0ae9012876af64d659e85a8728eff020f8"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZMA</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_type4LZMAE" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_type5BZIP2E">
+<span id="_CPPv3N21aocl_compression_type5BZIP2E"></span><span id="_CPPv2N21aocl_compression_type5BZIP2E"></span><span class="target" id="a00215_1ggace5009dd6f568c529a030555ba1940f0af072cbd4765483ae305ca479f7764031"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZIP2</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_type5BZIP2E" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_type6SNAPPYE">
+<span id="_CPPv3N21aocl_compression_type6SNAPPYE"></span><span id="_CPPv2N21aocl_compression_type6SNAPPYE"></span><span class="target" id="a00215_1ggace5009dd6f568c529a030555ba1940f0a0b355b7ea2797d684a49a6f6eca24c50"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SNAPPY</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_type6SNAPPYE" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_type4ZLIBE">
+<span id="_CPPv3N21aocl_compression_type4ZLIBE"></span><span id="_CPPv2N21aocl_compression_type4ZLIBE"></span><span class="target" id="a00215_1ggace5009dd6f568c529a030555ba1940f0aff714d61d445b732d2553d246ac580e8"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ZLIB</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_type4ZLIBE" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_type4ZSTDE">
+<span id="_CPPv3N21aocl_compression_type4ZSTDE"></span><span id="_CPPv2N21aocl_compression_type4ZSTDE"></span><span class="target" id="a00215_1ggace5009dd6f568c529a030555ba1940f0a0d27b7d5f49b692fa62f88efce1c6dc4"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ZSTD</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_type4ZSTDE" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_type25AOCL_COMPRESSOR_ALGOS_NUME">
+<span id="_CPPv3N21aocl_compression_type25AOCL_COMPRESSOR_ALGOS_NUME"></span><span id="_CPPv2N21aocl_compression_type25AOCL_COMPRESSOR_ALGOS_NUME"></span><span class="target" id="a00215_1ggace5009dd6f568c529a030555ba1940f0ad6567a5c455752f4b1e23ffe3b1f693f"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">AOCL_COMPRESSOR_ALGOS_NUM</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_type25AOCL_COMPRESSOR_ALGOS_NUME" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="cpp enum">
+<dt class="sig sig-object cpp" id="_CPPv415aocl_error_type">
+<span id="_CPPv315aocl_error_type"></span><span id="_CPPv215aocl_error_type"></span><span class="target" id="a00215_1ga402c596b9e1134ce6edd37303da6e565"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">aocl_error_type</span></span></span><a class="headerlink" href="#_CPPv415aocl_error_type" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Error codes supported by unified APIs of AOCL-Compression library. </p>
+<p><em>Values:</em></p>
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N15aocl_error_type17ERR_INVALID_INPUTE">
+<span id="_CPPv3N15aocl_error_type17ERR_INVALID_INPUTE"></span><span id="_CPPv2N15aocl_error_type17ERR_INVALID_INPUTE"></span><span class="target" id="a00215_1gga402c596b9e1134ce6edd37303da6e565af32dca25324f09210d5aa72663fbc1fd"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ERR_INVALID_INPUT</span></span></span><a class="headerlink" href="#_CPPv4N15aocl_error_type17ERR_INVALID_INPUTE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Invalid input parameter provided. </p>
+</dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N15aocl_error_type22ERR_UNSUPPORTED_METHODE">
+<span id="_CPPv3N15aocl_error_type22ERR_UNSUPPORTED_METHODE"></span><span id="_CPPv2N15aocl_error_type22ERR_UNSUPPORTED_METHODE"></span><span class="target" id="a00215_1gga402c596b9e1134ce6edd37303da6e565a2bb484977ea4bb76ca0858e3faada3f6"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ERR_UNSUPPORTED_METHOD</span></span></span><a class="headerlink" href="#_CPPv4N15aocl_error_type22ERR_UNSUPPORTED_METHODE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Compression method not supported by the library. </p>
+</dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N15aocl_error_type19ERR_EXCLUDED_METHODE">
+<span id="_CPPv3N15aocl_error_type19ERR_EXCLUDED_METHODE"></span><span id="_CPPv2N15aocl_error_type19ERR_EXCLUDED_METHODE"></span><span class="target" id="a00215_1gga402c596b9e1134ce6edd37303da6e565ae1123ded6c9df04d0660d56d77f2be0b"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ERR_EXCLUDED_METHOD</span></span></span><a class="headerlink" href="#_CPPv4N15aocl_error_type19ERR_EXCLUDED_METHODE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Compression method excluded from this library build. </p>
+</dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N15aocl_error_type22ERR_COMPRESSION_FAILEDE">
+<span id="_CPPv3N15aocl_error_type22ERR_COMPRESSION_FAILEDE"></span><span id="_CPPv2N15aocl_error_type22ERR_COMPRESSION_FAILEDE"></span><span class="target" id="a00215_1gga402c596b9e1134ce6edd37303da6e565a61f8b267a3993a592587a3a01d855d6d"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ERR_COMPRESSION_FAILED</span></span></span><a class="headerlink" href="#_CPPv4N15aocl_error_type22ERR_COMPRESSION_FAILEDE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Failure during compression/decompression. </p>
+</dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N15aocl_error_type30ERR_COMPRESSION_INVALID_OUTPUTE">
+<span id="_CPPv3N15aocl_error_type30ERR_COMPRESSION_INVALID_OUTPUTE"></span><span id="_CPPv2N15aocl_error_type30ERR_COMPRESSION_INVALID_OUTPUTE"></span><span class="target" id="a00215_1gga402c596b9e1134ce6edd37303da6e565afc08da275a338cdc2b145452ff8b5915"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ERR_COMPRESSION_INVALID_OUTPUT</span></span></span><a class="headerlink" href="#_CPPv4N15aocl_error_type30ERR_COMPRESSION_INVALID_OUTPUTE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Invalid compression/decompression output. </p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-functions">Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417aocl_llc_compressP21aocl_compression_desc21aocl_compression_type">
+<span id="_CPPv317aocl_llc_compressP21aocl_compression_desc21aocl_compression_type"></span><span id="_CPPv217aocl_llc_compressP21aocl_compression_desc21aocl_compression_type"></span><span id="aocl_llc_compress__aocl_compression_descP.aocl_compression_type"></span><span class="target" id="a00215_1gad44ac041bcfa05a8c418f0b445944fe3"></span><span class="n"><span class="pre">int64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">aocl_llc_compress</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv421aocl_compression_desc" title="aocl_compression_desc"><span class="n"><span class="pre">aocl_compression_desc</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">handle</span></span>, <a class="reference internal" href="#_CPPv421aocl_compression_type" title="aocl_compression_type"><span class="n"><span class="pre">aocl_compression_type</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">codec_type</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417aocl_llc_compressP21aocl_compression_desc21aocl_compression_type" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Interface API to compress data. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>handle</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>This acts as a handle for compression and decompression. For more information, refer to <a class="reference internal" href="#a00230"><span class="std std-ref">aocl_compression_desc</span></a>.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>codec_type</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Select the algorithm to be used for compression, choose from aocl_compression_type.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Number of bytes decompressed    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="2"><p>Fail   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ERR_COMPRESSION_FAILED</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ERR_COMPRESSION_INVALID_OUTPUT</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv419aocl_llc_decompressP21aocl_compression_desc21aocl_compression_type">
+<span id="_CPPv319aocl_llc_decompressP21aocl_compression_desc21aocl_compression_type"></span><span id="_CPPv219aocl_llc_decompressP21aocl_compression_desc21aocl_compression_type"></span><span id="aocl_llc_decompress__aocl_compression_descP.aocl_compression_type"></span><span class="target" id="a00215_1gabe612e9cece47d6fb444526e06d4c5d5"></span><span class="n"><span class="pre">int64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">aocl_llc_decompress</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv421aocl_compression_desc" title="aocl_compression_desc"><span class="n"><span class="pre">aocl_compression_desc</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">handle</span></span>, <a class="reference internal" href="#_CPPv421aocl_compression_type" title="aocl_compression_type"><span class="n"><span class="pre">aocl_compression_type</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">codec_type</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv419aocl_llc_decompressP21aocl_compression_desc21aocl_compression_type" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Interface API to decompress data. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>handle</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>This acts as a handle for compression and decompression. For more information, refer to <a class="reference internal" href="#a00230"><span class="std std-ref">aocl_compression_desc</span></a>.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>codec_type</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Select the algorithm to be used for compression, choose from aocl_compression_type.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Numbers of bytes decompressed    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="2"><p>Fail   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ERR_COMPRESSION_FAILED</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ERR_COMPRESSION_INVALID_OUTPUT</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv416aocl_llc_destroyP21aocl_compression_desc21aocl_compression_type">
+<span id="_CPPv316aocl_llc_destroyP21aocl_compression_desc21aocl_compression_type"></span><span id="_CPPv216aocl_llc_destroyP21aocl_compression_desc21aocl_compression_type"></span><span id="aocl_llc_destroy__aocl_compression_descP.aocl_compression_type"></span><span class="target" id="a00215_1gacf5944ce8012355c0b717a4061a68822"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">aocl_llc_destroy</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv421aocl_compression_desc" title="aocl_compression_desc"><span class="n"><span class="pre">aocl_compression_desc</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">handle</span></span>, <a class="reference internal" href="#_CPPv421aocl_compression_type" title="aocl_compression_type"><span class="n"><span class="pre">aocl_compression_type</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">codec_type</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv416aocl_llc_destroyP21aocl_compression_desc21aocl_compression_type" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Interface API to destroy the compression method. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>handle</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>This acts as a handle for compression and decompression. For more information, refer to <a class="reference internal" href="#a00230"><span class="std std-ref">aocl_compression_desc</span></a>.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>codec_type</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Select the algorithm to be used for compression, choose from aocl_compression_type.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv414aocl_llc_setupP21aocl_compression_desc21aocl_compression_type">
+<span id="_CPPv314aocl_llc_setupP21aocl_compression_desc21aocl_compression_type"></span><span id="_CPPv214aocl_llc_setupP21aocl_compression_desc21aocl_compression_type"></span><span id="aocl_llc_setup__aocl_compression_descP.aocl_compression_type"></span><span class="target" id="a00215_1ga5f7dc0a80ded7ab40f7603e029de33ed"></span><span class="n"><span class="pre">int32_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">aocl_llc_setup</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv421aocl_compression_desc" title="aocl_compression_desc"><span class="n"><span class="pre">aocl_compression_desc</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">handle</span></span>, <a class="reference internal" href="#_CPPv421aocl_compression_type" title="aocl_compression_type"><span class="n"><span class="pre">aocl_compression_type</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">codec_type</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv414aocl_llc_setupP21aocl_compression_desc21aocl_compression_type" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Interface API to setup the compression method. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>handle</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>This acts as a handle for compression and decompression. For more information, refer to <a class="reference internal" href="#a00230"><span class="std std-ref">aocl_compression_desc</span></a>.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>codec_type</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Select the algorithm to be used for compression, choose from aocl_compression_type.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p><strong>0</strong></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="2"><p>Fail   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ERR_UNSUPPORTED_METHOD</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ERR_EXCLUDED_METHOD</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv416aocl_llc_versionv">
+<span id="_CPPv316aocl_llc_versionv"></span><span id="_CPPv216aocl_llc_versionv"></span><span id="aocl_llc_version__void"></span><span class="target" id="a00215_1ga53e8ce11ee6a96372917b72c9debb9d5"></span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">aocl_llc_version</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv416aocl_llc_versionv" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Interface API to get the compression library version string. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>AOCL library version </p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv421aocl_compression_desc">
+<span id="_CPPv321aocl_compression_desc"></span><span id="_CPPv221aocl_compression_desc"></span><span id="aocl_compression_desc"></span><span class="target" id="a00230"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">aocl_compression_desc</span></span></span><a class="headerlink" href="#_CPPv421aocl_compression_desc" title="Permalink to this definition">#</a><br /></dt>
+<dd><div class="docutils container">
+<em>#include &lt;aocl_compression.h&gt;</em></div>
+<p>This acts as a handle for the compression and decompression of AOCL Compression library. </p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc5cSizeE">
+<span id="_CPPv3N21aocl_compression_desc5cSizeE"></span><span id="_CPPv2N21aocl_compression_desc5cSizeE"></span><span id="aocl_compression_desc::cSize__uint64_t"></span><span class="target" id="a00230_1a69a9e80fd53680a1d9f7a883b68b1bdf"></span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">cSize</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc5cSizeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Size of compressed output </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc6cSpeedE">
+<span id="_CPPv3N21aocl_compression_desc6cSpeedE"></span><span id="_CPPv2N21aocl_compression_desc6cSpeedE"></span><span id="aocl_compression_desc::cSpeed__float"></span><span class="target" id="a00230_1ad776b9b11a01199a69a525446fa92d99"></span><span class="kt"><span class="pre">float</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">cSpeed</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc6cSpeedE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Speed of compression </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc5cTimeE">
+<span id="_CPPv3N21aocl_compression_desc5cTimeE"></span><span id="_CPPv2N21aocl_compression_desc5cTimeE"></span><span id="aocl_compression_desc::cTime__uint64_t"></span><span class="target" id="a00230_1a1b37333301f6d89d18d18f7e9dee1b7c"></span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">cTime</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc5cTimeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Time to compress input </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc5dSizeE">
+<span id="_CPPv3N21aocl_compression_desc5dSizeE"></span><span id="_CPPv2N21aocl_compression_desc5dSizeE"></span><span id="aocl_compression_desc::dSize__uint64_t"></span><span class="target" id="a00230_1a598b2299ee456800195e11c34ec18501"></span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dSize</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc5dSizeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Size of decompressed output </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc6dSpeedE">
+<span id="_CPPv3N21aocl_compression_desc6dSpeedE"></span><span id="_CPPv2N21aocl_compression_desc6dSpeedE"></span><span id="aocl_compression_desc::dSpeed__float"></span><span class="target" id="a00230_1ade992f4d6571e6e3c8cfc9df6b9b9354"></span><span class="kt"><span class="pre">float</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dSpeed</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc6dSpeedE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Speed of decompression </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc5dTimeE">
+<span id="_CPPv3N21aocl_compression_desc5dTimeE"></span><span id="_CPPv2N21aocl_compression_desc5dTimeE"></span><span id="aocl_compression_desc::dTime__uint64_t"></span><span class="target" id="a00230_1a955de291ea9df2ba49606da0ff10e846"></span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dTime</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc5dTimeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Time to decompress input </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc5inBufE">
+<span id="_CPPv3N21aocl_compression_desc5inBufE"></span><span id="_CPPv2N21aocl_compression_desc5inBufE"></span><span id="aocl_compression_desc::inBuf__cP"></span><span class="target" id="a00230_1a7c98c56843ce5aa678821bf748df49ea"></span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">inBuf</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc5inBufE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Pointer to input buffer data </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc6inSizeE">
+<span id="_CPPv3N21aocl_compression_desc6inSizeE"></span><span id="_CPPv2N21aocl_compression_desc6inSizeE"></span><span id="aocl_compression_desc::inSize__s"></span><span class="target" id="a00230_1a65859b6883c0d4a0bb958196630f033f"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">inSize</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc6inSizeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Input data length </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc5levelE">
+<span id="_CPPv3N21aocl_compression_desc5levelE"></span><span id="_CPPv2N21aocl_compression_desc5levelE"></span><span id="aocl_compression_desc::level__s"></span><span class="target" id="a00230_1a4782de6d891f365018c170a845a768c9"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">level</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc5levelE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Requested compression level </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc12measureStatsE">
+<span id="_CPPv3N21aocl_compression_desc12measureStatsE"></span><span id="_CPPv2N21aocl_compression_desc12measureStatsE"></span><span id="aocl_compression_desc::measureStats__i"></span><span class="target" id="a00230_1ad3a53e9e6de1663225a9a4234fbce6e0"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">measureStats</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc12measureStatsE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Measure speed and size of compression/decompression </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc8memLimitE">
+<span id="_CPPv3N21aocl_compression_desc8memLimitE"></span><span id="_CPPv2N21aocl_compression_desc8memLimitE"></span><span id="aocl_compression_desc::memLimit__s"></span><span class="target" id="a00230_1a1a55c2930f4c762bffeef6d3ad733af9"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">memLimit</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc8memLimitE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Maximum memory limit for compression/decompression </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc11numMPIranksE">
+<span id="_CPPv3N21aocl_compression_desc11numMPIranksE"></span><span id="_CPPv2N21aocl_compression_desc11numMPIranksE"></span><span id="aocl_compression_desc::numMPIranks__i"></span><span class="target" id="a00230_1a6cb0bd5e5863a313d91879570d287119"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">numMPIranks</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc11numMPIranksE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Number of available multi-core MPI ranks </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc10numThreadsE">
+<span id="_CPPv3N21aocl_compression_desc10numThreadsE"></span><span id="_CPPv2N21aocl_compression_desc10numThreadsE"></span><span id="aocl_compression_desc::numThreads__i"></span><span class="target" id="a00230_1a3d9c2b7da03af4ab1e147e510b6ea91d"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">numThreads</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc10numThreadsE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Number of threads available for multi-threading </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc8optLevelE">
+<span id="_CPPv3N21aocl_compression_desc8optLevelE"></span><span id="_CPPv2N21aocl_compression_desc8optLevelE"></span><span id="aocl_compression_desc::optLevel__i"></span><span class="target" id="a00230_1a88a8cdab9808417859fa62c85bfd6a4a"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">optLevel</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc8optLevelE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Optimization level:</p>
+<p>0 - non-SIMD algorithmic optimizations,</p>
+<p>1 - SSE2 optimizations,</p>
+<p>2 - AVX optimizations,</p>
+<p>3 - AVX2 optimizations,</p>
+<p>4 - AVX512 optimizations</p>
+</p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc6optOffE">
+<span id="_CPPv3N21aocl_compression_desc6optOffE"></span><span id="_CPPv2N21aocl_compression_desc6optOffE"></span><span id="aocl_compression_desc::optOff__i"></span><span class="target" id="a00230_1a08b38dd15058c99fbe5ca90690a3b5f9"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">optOff</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc6optOffE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Turn off all optimizations </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc6optVarE">
+<span id="_CPPv3N21aocl_compression_desc6optVarE"></span><span id="_CPPv2N21aocl_compression_desc6optVarE"></span><span id="aocl_compression_desc::optVar__s"></span><span class="target" id="a00230_1a064ba1dc19d6ccc9c0a6fe4187c32a3f"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">optVar</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc6optVarE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Additional variables or parameters </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc6outBufE">
+<span id="_CPPv3N21aocl_compression_desc6outBufE"></span><span id="_CPPv2N21aocl_compression_desc6outBufE"></span><span id="aocl_compression_desc::outBuf__cP"></span><span class="target" id="a00230_1a2fccd2343335510f7dd29c59d747308e"></span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">outBuf</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc6outBufE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Pointer to output buffer data </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc7outSizeE">
+<span id="_CPPv3N21aocl_compression_desc7outSizeE"></span><span id="_CPPv2N21aocl_compression_desc7outSizeE"></span><span id="aocl_compression_desc::outSize__s"></span><span class="target" id="a00230_1ad50d80519fddece7564991d6c3e9a993"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">outSize</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc7outSizeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Output data length </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N21aocl_compression_desc7workBufE">
+<span id="_CPPv3N21aocl_compression_desc7workBufE"></span><span id="_CPPv2N21aocl_compression_desc7workBufE"></span><span id="aocl_compression_desc::workBuf__cP"></span><span class="target" id="a00230_1a6c2d900d0e7fb6803649d50e93f82199"></span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">workBuf</span></span></span><a class="headerlink" href="#_CPPv4N21aocl_compression_desc7workBufE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Pointer to temporary work buffer </p>
+</dd></dl>
+
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="INSTALLATION.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Installation</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="algos.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Algorithms</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            <p>
+  </p>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=5b4479735964841361fd"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd"></script>
+
+<footer class="rocm-footer">
+    <div class="container-lg">
+        <section class="bottom-menu menu py-45">
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <ul>
+                        <li><a href="https://www.amd.com/en/corporate/copyright" target="_blank">Terms and Conditions</a></li>
+                        
+                        <li><a href="">2020-2024, Advanced Micro Devices, Inc</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/privacy" target="_blank">Privacy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/trademarks" target="_blank">Trademarks</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/statement-human-trafficking-forced-labor.pdf" target="_blank">Statement on Forced Labor</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/competition" target="_blank">Fair and Open Competition</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/amd-uk-tax-strategy.pdf" target="_blank">UK Tax Strategy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/cookies" target="_blank">Cookie Policy</a></li>
+                        <!-- OneTrust Cookies Settings button start -->
+                        <li><a href="#cookie-settings" id="ot-sdk-btn" class="ot-sdk-show-settings">Cookie Settings</a></li>
+                        <!-- OneTrust Cookies Settings button end -->
+                    </ul>
+                </div>
+            </div>
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <div>
+                        <span class="copyright">© 2023 Advanced Micro Devices, Inc</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</footer>
+
+<!-- <div id="rdc-watermark-container">
+    <img id="rdc-watermark" src="_static/images/alpha-watermark.svg" alt="DRAFT watermark"/>
+</div> -->
+  </body>
+</html>

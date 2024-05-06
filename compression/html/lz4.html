@@ -1,0 +1,1473 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>1. LZ4 &#8212; AOCL-Compression 4.2 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.1.2/css/all.min.css?digest=5b4479735964841361fd" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_header.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_footer.css" />
+    <link rel="stylesheet" type="text/css" href="_static/fonts.css" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=5b4479735964841361fd" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd" />
+  <script src="_static/vendor/fontawesome/6.1.2/js/all.min.js?digest=5b4479735964841361fd"></script>
+
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
+    <script async="async" src="_static/code_word_breaks.js"></script>
+    <script async="async" src="_static/renameVersionLinks.js"></script>
+    <script async="async" src="_static/rdcMisc.js"></script>
+    <script async="async" src="_static/theme_mode_captions.js"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?digest=5a5c038af52cf7bc1a1ec88eea08e6366ee68824"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'lz4';</script>
+    <link rel="icon" href="https://www.amd.com/themes/custom/amd/favicon.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="2. ZLIB" href="zlib.html" />
+    <link rel="prev" title="Algorithms" href="algos.html" />
+    <meta name="google-site-verification" content="ZOn0RZC0Pwzlmf2SaE0bRttWk1YzOhuslbpxUDchQ90" />
+
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+
+<header class="common-header" >
+    <nav class="navbar navbar-expand-xl">
+        <div class="container-fluid main-nav rocm-header">
+            
+            <div class="header-logo">
+                <a class="navbar-brand" href="https://www.amd.com/">
+                    <img src="_static/images/amd-header-logo.svg" alt="AMD Logo" title="AMD Logo" width="90" class="d-inline-block align-text-top hover-opacity"/>
+                </a>
+                <div class="vr vr mx-40 my-25"></div>
+                <a class="klavika-font hover-opacity" href="./index.html">AOCL Compression 4.2</a>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var elements = document.getElementsByClassName('header-all-versions');
+            for (var i = 0; i < elements.length; i++) {
+                elements[i].remove();
+            }
+
+            elements = document.querySelector("body > footer > div > section > div:nth-child(1) > div > ul").children;
+            var removable_items = ['2020-2024, Advanced Micro Devices, Inc', 'Statement on Forced Labor', 'Fair and Open Competition', 'UK Tax Strategy', 'Cookie Policy', 'Cookie Settings'];
+            for(var i = 0; i < elements.length; i++) {
+                if(removable_items.includes(elements[i].innerText)) {
+                    elements[i].remove();
+                    i--;
+                }
+            }
+        })
+    </script>
+                <a class="header-all-versions" href="https://rocm.docs.amd.com/en/latest/release/versions.html">Version List</a>
+            </div>
+            <div class="icon-nav text-center d-flex ms-auto">
+            </div>
+        </div>
+    </nav>
+    
+</header>
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">AOCL-Compression 4.2 documentation</p>
+  
+</a></div>
+        <div class="sidebar-primary-item"><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Table of Contents</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="INSTALLATION.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unified_api.html">Standardized/Unified API</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="algos.html">Algorithms</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">1. LZ4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zlib.html">2. ZLIB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lzma.html">3. LZMA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zstd.html">4. ZSTD</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bzip2.html">5. BZIP2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snappy.html">6. SNAPPY</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lz4hc.html">7. LZ4HC</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="multi-thread.html">Multi-threaded API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="INTRODUCTION.html">Brief Overview of algos</a></li>
+<li class="toctree-l1"><a class="reference internal" href="EXAMPLE_README.html">Example Test Programs</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><label class="sidebar-toggle primary-toggle btn btn-sm" for="__primary" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-angle-right"></span>
+  </label></div>
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="algos.html" class="nav-link">Algorithms</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>LZ4</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article" role="main">
+                  
+  <section id="lz4">
+<span id="ref-lz4"></span><h1><span class="section-number">1. </span>LZ4<a class="headerlink" href="#lz4" title="Permalink to this heading">#</a></h1>
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="a00216"></span><em><span class="pre">group</span></em> <span class="sig-name descname"><span class="pre">LZ4_API</span></span></dt>
+<dd><p>LZ4 is a lossless compression algorithm, providing compression speeds greater than 500 MB/s per core, and scalable with multi-core CPU. It features an extremely fast decoder, with speed in multiple GB/s per core and reaching RAM speed limits on multi-core systems. </p>
+<p>This library provides in-memory compression and decompression functions. It gives full buffer control to the user. Compression can be done in:<ul class="simple">
+<li><p>a single step (described in Simple Functions)</p></li>
+<li><p>a single step, reusing a context (described in Advanced Functions)</p></li>
+<li><p>unbounded multiple steps (described in Streaming compression)</p></li>
+</ul>
+</p>
+<p>APIs in lz4.h generate LZ4-compressed blocks in the format <a class="reference external" href="https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md">lz4_Block_format</a>. Decompressing such a compressed block requires additional metadata. Exact metadata depends on exact decompression function. In the case of <a class="reference internal" href="#a00216_1gacd2bf35d3f502d03dc980c1f71dc16e5"><span class="std std-ref">LZ4_decompress_safe()</span></a>, the metadata includes block’s compressed size, and maximum bound of decompressed size. Each application is free to encode and pass such metadata in whichever way it wants.</p>
+<p>API in lz4.h only handle blocks, it cannot generate Frames.</p>
+<p>Blocks are different from Frames <a class="reference external" href="https://github.com/lz4/lz4/blob/dev/doc/lz4_Frame_format.md">lz4_Frame_format</a>. The Frames bundle both blocks and metadata in the specified manner. Embedding metadata is required for the compressed data to be self-contained and portable. The Frame format is delivered through the companion API declared in lz4frame.h. The <code class="docutils literal notranslate"><span class="pre">lz4</span></code> CLI can only manage Frames. </p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-helper-functions">Helper Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417LZ4_versionNumberv">
+<span id="_CPPv317LZ4_versionNumberv"></span><span id="_CPPv217LZ4_versionNumberv"></span><span id="LZ4_versionNumber__void"></span><span class="target" id="a00216_1ga9a7a69397b6452fcf6a35caa40493776"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_versionNumber</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417LZ4_versionNumberv" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Library Version number. Useful to check Dynamic-link Library (DLL) version. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Library Version in integer format. </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417LZ4_versionStringv">
+<span id="_CPPv317LZ4_versionStringv"></span><span id="_CPPv217LZ4_versionStringv"></span><span id="LZ4_versionString__void"></span><span class="target" id="a00216_1ga6ef97df81fadbddc3a58c1b96ca0a81d"></span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_versionString</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417LZ4_versionStringv" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Library version string. Useful to check DLL version. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Version in const char* format. </p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-simple-functions">Simple Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv420LZ4_compress_defaultPKcPcii">
+<span id="_CPPv320LZ4_compress_defaultPKcPcii"></span><span id="_CPPv220LZ4_compress_defaultPKcPcii"></span><span id="LZ4_compress_default__cCP.cP.i.i"></span><span class="target" id="a00216_1gaacc5de6f21665d10fd8ec9e5ac0b9d40"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_compress_default</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dst</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">srcSize</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dstCapacity</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv420LZ4_compress_defaultPKcPcii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Compresses ‘srcSize’ bytes from buffer ‘src’ into allocated ‘dst’ buffer of size ‘dstCapacity’. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer, the data you want to compress is copied/or pointed here.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dst</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer, compressed data is kept here, memory should be allocated already.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>srcSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Maximum supported value is <code class="docutils literal notranslate"><span class="pre">LZ4_MAX_INPUT_SIZE</span></code>.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dstCapacity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of pre-allocated ‘dst’ buffer.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Compression is guaranteed to succeed if ‘dstCapacity’ &gt;= LZ4_compressBound(srcSize). It is recommended to use this setting as the compression runs faster on this setting. </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This function is protected against buffer overflow scenarios (never writes outside ‘dst’ buffer nor reads outside ‘source’ buffer).</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>If the function cannot compress ‘src’ into a more limited ‘dst’ budget, compression stops <em>immediately</em> and the function result is zero. In which case, ‘dst’ content is undefined (invalid).</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns a positive number (&lt;= dstCapacity) indicating the number of bytes written into the buffer dst.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>Returns 0.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv419LZ4_decompress_safePKcPcii">
+<span id="_CPPv319LZ4_decompress_safePKcPcii"></span><span id="_CPPv219LZ4_decompress_safePKcPcii"></span><span id="LZ4_decompress_safe__cCP.cP.i.i"></span><span class="target" id="a00216_1gacd2bf35d3f502d03dc980c1f71dc16e5"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_decompress_safe</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dst</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">compressedSize</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dstCapacity</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv419LZ4_decompress_safePKcPcii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Decompresses the compressed data pointed by src into dst and returns the number of bytes decompressed into the destination buffer. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This buffer contains compressed data.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dst</strong></p></td>
+<td><p>out   </p></td>
+<td><p>This is the destination buffer, the data is decompressed to this buffer.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>compressedSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>It is the exact complete size of the compressed block.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dstCapacity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>It is the size of the destination buffer (which must be pre-allocated), presumed to be an upper bound of decompressed size.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>1 : This function is protected against malicious data packets : it will never writes outside ‘dst’ buffer, nor read outside ‘source’ buffer, even if the compressed block is maliciously modified to order the decoder to do these actions. In such case, the decoder stops immediately, and considers the compressed block malformed. </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>2 : compressedSize and dstCapacity must be provided to the function, the compressed block does not contain them. The implementation is free to send / store / derive this information in whichever way is most beneficial. If there is a need for a different format which bundles together both compressed data and its metadata, consider looking at lz4frame.h instead.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>The number of bytes decompressed into destination buffer (&lt;= dstCapacity)    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="2"><p>Fail   </p></td>
+<td><p>If destination buffer is not large enough, decoding will stop and output an error code (negative value).    </p></td>
+</tr>
+<tr class="row-even"><td><p>If the source stream is detected malformed, the function will stop decoding and return a negative result.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-advanced-functions">Advanced Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417LZ4_compressBoundi">
+<span id="_CPPv317LZ4_compressBoundi"></span><span id="_CPPv217LZ4_compressBoundi"></span><span id="LZ4_compressBound__i"></span><span class="target" id="a00216_1ga362093578d68480b493984b4853edc1f"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_compressBound</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">inputSize</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417LZ4_compressBoundi" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Provides the maximum size that LZ4 compression may output in a “worst case” scenario (input data not compressible). </p>
+<p>This function is primarily useful for memory allocation purposes (destination buffer size). Macro <a class="reference internal" href="#a00216_1ga2453a423fd34640a0afbbf57ed0a5399"><span class="std std-ref">LZ4_COMPRESSBOUND(isize)</span></a> is also provided for compilation-time evaluation (stack memory allocation for example).</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>inputSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Maximum supported value is LZ4_MAX_INPUT_SIZE .   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#a00216_1gaacc5de6f21665d10fd8ec9e5ac0b9d40"><span class="std std-ref">LZ4_compress_default()</span></a> compresses faster when dstCapacity is &gt;= LZ4_compressBound(srcSize).</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns Maximum output size in a “worst case” scenario    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>Returns 0, if input size is incorrect (too large or negative).   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417LZ4_compress_fastPKcPciii">
+<span id="_CPPv317LZ4_compress_fastPKcPciii"></span><span id="_CPPv217LZ4_compress_fastPKcPciii"></span><span id="LZ4_compress_fast__cCP.cP.i.i.i"></span><span class="target" id="a00216_1ga1af5fb2f539203c891e9c9c5b6e598a5"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_compress_fast</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dst</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">srcSize</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dstCapacity</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">acceleration</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417LZ4_compress_fastPKcPciii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Same as <a class="reference internal" href="#a00216_1gaacc5de6f21665d10fd8ec9e5ac0b9d40"><span class="std std-ref">LZ4_compress_default()</span></a>, but allows the selection of “acceleration” factor. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer, the data you want to compress is copied/or pointed here.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dst</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer, compressed data is kept here, memory should be allocated already.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>srcSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Maximum supported value is LZ4_MAX_INPUT_SIZE.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dstCapacity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of buffer ‘dst’ (which must be already allocated).    </p></td>
+</tr>
+<tr class="row-even"><td rowspan="5"><p><strong>acceleration</strong></p></td>
+<td rowspan="5"><p>in   </p></td>
+<td><p>Values &lt;= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Values &gt; LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).    </p></td>
+</tr>
+<tr class="row-even"><td><p>The larger the acceleration value, the faster the algorithm, but also the lesser the compression. It’s a trade-off.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>It can be fine-tuned with each successive value providing roughly +~3% to speed.    </p></td>
+</tr>
+<tr class="row-even"><td><p>An acceleration value of “1” is the same as regular <a class="reference internal" href="#a00216_1gaacc5de6f21665d10fd8ec9e5ac0b9d40"><span class="std std-ref">LZ4_compress_default()</span></a>.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns a positive number (&lt;= dstCapacity) indicating the number of bytes written into the buffer dst.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>Returns 0.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv415LZ4_sizeofStatev">
+<span id="_CPPv315LZ4_sizeofStatev"></span><span id="_CPPv215LZ4_sizeofStatev"></span><span id="LZ4_sizeofState__void"></span><span class="target" id="a00216_1ga5533b6e13559d2c75ac5ac6d4eb13beb"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_sizeofState</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv415LZ4_sizeofStatev" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Get the memory to be allocated for its state. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The amount of memory which must be allocated for its state. </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv426LZ4_compress_fast_extStatePvPKcPciii">
+<span id="_CPPv326LZ4_compress_fast_extStatePvPKcPciii"></span><span id="_CPPv226LZ4_compress_fast_extStatePvPKcPciii"></span><span id="LZ4_compress_fast_extState__voidP.cCP.cP.i.i.i"></span><span class="target" id="a00216_1ga2b241266a74fc87e1c126a17b852c934"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_compress_fast_extState</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">state</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dst</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">srcSize</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dstCapacity</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">acceleration</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv426LZ4_compress_fast_extStatePvPKcPciii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Same as <a class="reference internal" href="#a00216_1ga1af5fb2f539203c891e9c9c5b6e598a5"><span class="std std-ref">LZ4_compress_fast()</span></a>, using an externally allocated memory space for its state. </p>
+<p>Use <a class="reference internal" href="#a00216_1ga5533b6e13559d2c75ac5ac6d4eb13beb"><span class="std std-ref">LZ4_sizeofState()</span></a> to know how much memory must be allocated, and allocate it on 8-bytes boundaries (using <code class="docutils literal notranslate"><span class="pre">malloc()</span></code> typically). Then, provide this buffer as <code class="docutils literal notranslate"><span class="pre">void*</span> <span class="pre">state</span></code> to compression function.</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>state</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>It acts as a handle.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer, the data which you want to compress is copied/or pointed here.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>dst</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer, compressed data is kept here, memory should be allocated already.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>srcSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Maximum supported value is LZ4_MAX_INPUT_SIZE.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>dstCapacity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of buffer ‘dst’ (which must be already allocated).    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="5"><p><strong>acceleration</strong></p></td>
+<td rowspan="5"><p>in   </p></td>
+<td><p>The larger the acceleration value, the faster the algorithm, but also the lesser the compression.    </p></td>
+</tr>
+<tr class="row-even"><td><p>It’s a trade-off. It can be fine-tuned, with each successive value providing roughly +~3% to speed.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>An acceleration value of “1” is the same as regular <a class="reference internal" href="#a00216_1gaacc5de6f21665d10fd8ec9e5ac0b9d40"><span class="std std-ref">LZ4_compress_default()</span></a>.    </p></td>
+</tr>
+<tr class="row-even"><td><p>Values &lt;= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Values &gt; LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns a positive number (&lt;= dstCapacity) indicating the number of bytes written into the buffer dst.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>Returns 0.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv421LZ4_compress_destSizePKcPcPii">
+<span id="_CPPv321LZ4_compress_destSizePKcPcPii"></span><span id="_CPPv221LZ4_compress_destSizePKcPcPii"></span><span id="LZ4_compress_destSize__cCP.cP.iP.i"></span><span class="target" id="a00216_1ga54116374080dae219ffa71e484ce5f2a"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_compress_destSize</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dst</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">srcSizePtr</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">targetDstSize</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv421LZ4_compress_destSizePKcPcPii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>This function either compresses the entire ‘src’ content into ‘dst’ if it’s large enough or fills ‘dst’ buffer completely with as much data as possible from ‘src’. Reverse the logic : Compresses as much data as possible from the ‘src’ buffer into the allocated buffer ‘dst’, of size &gt;= ‘targetDestSize’. </p>
+<p><strong>Note:</strong> Acceleration parameter is fixed to “default”.</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer, the data you want to compress is copied/or pointed here.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dst</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer, compressed data is kept here, memory should be pre-allocated.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>srcSizePtr</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Will be modified to indicate how many bytes were read from ‘src’ to fill ‘dst’. New value is necessarily &lt;= input value.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Size</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of buffer ‘dst’ (which must be already allocated).   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>From v1.8.2 to v1.9.1, this function had a bug (fixed un v1.9.2+): Sometimes, the produced compressed content must be decompressed into a destination buffer larger by at least 1 byte than the content to decompress. If an application uses <code class="docutils literal notranslate"><a class="reference internal" href="#a00216_1ga54116374080dae219ffa71e484ce5f2a"><span class="std std-ref"><span class="pre">LZ4_compress_destSize()</span></span></a></code>, it’s highly recommended to update liblz4 to v1.9.2 or better. If this can’t be done or ensured, the receiving decompression function should provide a dstCapacity &gt; decompressedSize, by at least 1 byte. For more information, refer to <a class="github reference external" href="https://github.com/lz4/lz4/issues/859">lz4/lz4#859</a>.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns Nb bytes written into <strong>dst</strong> (&lt;= targetDestSize).    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>Returns 0 on fail .   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv427LZ4_decompress_safe_partialPKcPciii">
+<span id="_CPPv327LZ4_decompress_safe_partialPKcPciii"></span><span id="_CPPv227LZ4_decompress_safe_partialPKcPciii"></span><span id="LZ4_decompress_safe_partial__cCP.cP.i.i.i"></span><span class="target" id="a00216_1ga38b600e2b09771a7c5ed6bedd32411b5"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_decompress_safe_partial</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dst</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">srcSize</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">targetOutputSize</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dstCapacity</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv427LZ4_decompress_safe_partialPKcPciii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Decompress an LZ4 compressed block, of size ‘srcSize’ at the position ‘src’ into destination buffer ‘dst’ of size ‘dstCapacity’. Up to ‘targetOutputSize’ bytes will be decoded. </p>
+<p>The function stops decoding on reaching this objective. This can be useful to boost performance whenever only the beginning of a block is required.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>1 : return can be &lt; targetOutputSize, if compressed block contains less data.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>2 : targetOutputSize must be &lt;= dstCapacity.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>3 : this function effectively stops decoding on reaching targetOutputSize, so dstCapacity is kind of redundant. This is because in older versions of this function, decoding operation would still write complete sequences. Therefore, there was no guarantee that it would stop writing at exactly targetOutputSize, it could write more bytes, though only up to dstCapacity. Some “margin” used to be required for this operation to work properly. Thankfully, this is no longer necessary. The function nonetheless keeps the same signature, in an effort to preserve API compatibility.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>4 : If srcSize is the exact size of the block, then targetOutputSize can be any value, including larger than the block’s decompressed size. The function will, at most, generate block’s decompressed size.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>5 : If srcSize is <em>larger</em> than block’s compressed size, then targetOutputSize <strong>MUST</strong> be &lt;= block’s decompressed size. Otherwise, <em>silent corruption will occur</em>.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>The number of bytes decoded in <code class="docutils literal notranslate"><span class="pre">dst</span></code> (&lt;= targetOutputSize)    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>If source stream is detected malformed, function returns a negative result.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-streaming-compression-functions">Streaming Compression Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv416LZ4_createStreamv">
+<span id="_CPPv316LZ4_createStreamv"></span><span id="_CPPv216LZ4_createStreamv"></span><span id="LZ4_createStream__void"></span><span class="target" id="a00216_1ga9f7c46cabd525df03c0a4b79634a041b"></span><a class="reference internal" href="#_CPPv412LZ4_stream_t" title="LZ4_stream_t"><span class="n"><span class="pre">LZ4_stream_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_createStream</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv416LZ4_createStreamv" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Creates LZ4_stream_t, allocates memory dynamically and returns its memory address. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>void</strong> – </p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A pointer of LZ4_stream_t type whose memmory has been allocated dynamically. </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv414LZ4_freeStreamP12LZ4_stream_t">
+<span id="_CPPv314LZ4_freeStreamP12LZ4_stream_t"></span><span id="_CPPv214LZ4_freeStreamP12LZ4_stream_t"></span><span id="LZ4_freeStream__LZ4_stream_tP"></span><span class="target" id="a00216_1ga2767ab06e17851306c82beb70d1ae285"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_freeStream</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv412LZ4_stream_t" title="LZ4_stream_t"><span class="n"><span class="pre">LZ4_stream_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">streamPtr</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv414LZ4_freeStreamP12LZ4_stream_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Frees the memory pointed by streamPtr . </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>StreamPtr</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>LZ4_stream_t* type streaming compression tracking context. A tracking context can be re-used multiple times. Declare or create <code class="docutils literal notranslate"><span class="pre">LZ4_stream_t</span></code> using <code class="docutils literal notranslate"><a class="reference internal" href="#a00216_1ga9f7c46cabd525df03c0a4b79634a041b"><span class="std std-ref"><span class="pre">LZ4_createStream()</span></span></a></code>, which is recommended.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int 0 . </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv420LZ4_resetStream_fastP12LZ4_stream_t">
+<span id="_CPPv320LZ4_resetStream_fastP12LZ4_stream_t"></span><span id="_CPPv220LZ4_resetStream_fastP12LZ4_stream_t"></span><span id="LZ4_resetStream_fast__LZ4_stream_tP"></span><span class="target" id="a00216_1ga71d5b9b31c1874ba615bf5e27e0246ab"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_resetStream_fast</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv412LZ4_stream_t" title="LZ4_stream_t"><span class="n"><span class="pre">LZ4_stream_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">streamPtr</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv420LZ4_resetStream_fastP12LZ4_stream_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Use this to prepare an LZ4_stream_t for a new chain of dependent blocks (for example, <a class="reference internal" href="#a00216_1ga53879e7a7174fcfa3b8676cfc4625a42"><span class="std std-ref">LZ4_compress_fast_continue()</span></a>). </p>
+<p>An LZ4_stream_t must be initialized once before usage. This is automatically done when created by <a class="reference internal" href="#a00216_1ga9f7c46cabd525df03c0a4b79634a041b"><span class="std std-ref">LZ4_createStream()</span></a>. However, should the LZ4_stream_t be simply declared on stack (for example), it’s necessary to initialize it first, using <a class="reference internal" href="#a00216_1ga7a89d0d01282953dc67d3215cf4bbde4"><span class="std std-ref">LZ4_initStream()</span></a>.</p>
+<p>After init, start any new stream with <a class="reference internal" href="#a00216_1ga71d5b9b31c1874ba615bf5e27e0246ab"><span class="std std-ref">LZ4_resetStream_fast()</span></a>. A same LZ4_stream_t can be re-used multiple times consecutively and compress multiple streams, provided that it starts each new stream with <a class="reference internal" href="#a00216_1ga71d5b9b31c1874ba615bf5e27e0246ab"><span class="std std-ref">LZ4_resetStream_fast()</span></a>.</p>
+<p><a class="reference internal" href="#a00216_1ga71d5b9b31c1874ba615bf5e27e0246ab"><span class="std std-ref">LZ4_resetStream_fast()</span></a> is much faster than <a class="reference internal" href="#a00216_1ga7a89d0d01282953dc67d3215cf4bbde4"><span class="std std-ref">LZ4_initStream()</span></a>, but is not compatible with memory regions containing garbage data.</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>StreamPtr</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>LZ4_stream_t* type streaming compression tracking context. A tracking context can be re-used multiple times. Declare or create <code class="docutils literal notranslate"><span class="pre">LZ4_stream_t</span></code> using <code class="docutils literal notranslate"><a class="reference internal" href="#a00216_1ga9f7c46cabd525df03c0a4b79634a041b"><span class="std std-ref"><span class="pre">LZ4_createStream()</span></span></a></code>, which is recommended.   </p></td>
+</tr>
+</tbody>
+</table>
+<dl class="simple">
+<dt><strong>Attention</strong></dt><dd><p>This function is for v1.9.0+.</p>
+</dd>
+</dl>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>It’s only useful to call <a class="reference internal" href="#a00216_1ga71d5b9b31c1874ba615bf5e27e0246ab"><span class="std std-ref">LZ4_resetStream_fast()</span></a> in the context of streaming compression. The <em>extState</em> functions perform their own resets. Invoking <a class="reference internal" href="#a00216_1ga71d5b9b31c1874ba615bf5e27e0246ab"><span class="std std-ref">LZ4_resetStream_fast()</span></a> before is redundant, and even counterproductive.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>void</strong> . </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv412LZ4_loadDictP12LZ4_stream_tPKci">
+<span id="_CPPv312LZ4_loadDictP12LZ4_stream_tPKci"></span><span id="_CPPv212LZ4_loadDictP12LZ4_stream_tPKci"></span><span id="LZ4_loadDict__LZ4_stream_tP.cCP.i"></span><span class="target" id="a00216_1ga8bddc4523649a0417a05b51cd86d29dc"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_loadDict</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv412LZ4_stream_t" title="LZ4_stream_t"><span class="n"><span class="pre">LZ4_stream_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">streamPtr</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dictionary</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dictSize</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv412LZ4_loadDictP12LZ4_stream_tPKci" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Use this function to reference a static dictionary into LZ4_stream_t. </p>
+<p>The dictionary must remain available during compression. <a class="reference internal" href="#a00216_1ga8bddc4523649a0417a05b51cd86d29dc"><span class="std std-ref">LZ4_loadDict()</span></a> triggers a reset, so any previous data will be forgotten. The same dictionary will have to be loaded on decompression side for successful decoding. Dictionary are useful for better compression of small data (KB range). While LZ4 accept any input as dictionary, results are generally better when using Zstandard’s Dictionary Builder. Loading a size of 0 is allowed, and is the same as reset.</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>streamPtr</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>LZ4_stream_t* type streaming type compression tracking context. A tracking context can be re-used multiple times. Declare or create <code class="docutils literal notranslate"><span class="pre">LZ4_stream_t</span></code> using <code class="docutils literal notranslate"><a class="reference internal" href="#a00216_1ga9f7c46cabd525df03c0a4b79634a041b"><span class="std std-ref"><span class="pre">LZ4_createStream()</span></span></a></code>, which is recommended. Initialize <code class="docutils literal notranslate"><span class="pre">LZ4_stream_t</span></code> using <code class="docutils literal notranslate"><a class="reference internal" href="#a00216_1ga7a89d0d01282953dc67d3215cf4bbde4"><span class="std std-ref"><span class="pre">LZ4_initStream()</span></span></a></code>.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dictionary</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Dictionary buffer    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>dictSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of dictionary   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Loaded dictionary size, in bytes (&lt;= 64 KB).    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>-1 if (streamPtr == NULL) or (dictionary == NULL &amp;&amp; dictSize &gt;= sizeof(reg_t)).   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv426LZ4_compress_fast_continueP12LZ4_stream_tPKcPciii">
+<span id="_CPPv326LZ4_compress_fast_continueP12LZ4_stream_tPKcPciii"></span><span id="_CPPv226LZ4_compress_fast_continueP12LZ4_stream_tPKcPciii"></span><span id="LZ4_compress_fast_continue__LZ4_stream_tP.cCP.cP.i.i.i"></span><span class="target" id="a00216_1ga53879e7a7174fcfa3b8676cfc4625a42"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_compress_fast_continue</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv412LZ4_stream_t" title="LZ4_stream_t"><span class="n"><span class="pre">LZ4_stream_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">streamPtr</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dst</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">srcSize</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dstCapacity</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">acceleration</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv426LZ4_compress_fast_continueP12LZ4_stream_tPKcPciii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Compress <code class="docutils literal notranslate"><span class="pre">src</span></code> content using data from the previously compressed blocks for a better compression ratio. The <code class="docutils literal notranslate"><span class="pre">dst</span></code> buffer must be already allocated. If dstCapacity &gt;= LZ4_compressBound(srcSize), the compression would succeed and run faster. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>state</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>LZ4_stream_t* type streaming type compression tracking context. A tracking context can be re-used multiple times. Declare or create <code class="docutils literal notranslate"><span class="pre">LZ4_stream_t</span></code> using <code class="docutils literal notranslate"><a class="reference internal" href="#a00216_1ga9f7c46cabd525df03c0a4b79634a041b"><span class="std std-ref"><span class="pre">LZ4_createStream()</span></span></a></code>, which is recommended. Initialize <code class="docutils literal notranslate"><span class="pre">LZ4_stream_t</span></code> using <code class="docutils literal notranslate"><a class="reference internal" href="#a00216_1ga7a89d0d01282953dc67d3215cf4bbde4"><span class="std std-ref"><span class="pre">LZ4_initStream()</span></span></a></code>.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer, the data you want to compress is copied/or pointed here.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>dst</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer, compressed data is kept here, memory should be allocated already.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>srcSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Maximum supported value is LZ4_MAX_INPUT_SIZE.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>dstCapacity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of buffer ‘dst’ (which must be already allocated).    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="5"><p><strong>acceleration</strong></p></td>
+<td rowspan="5"><p>in   </p></td>
+<td><p>The larger the acceleration value, the faster the algorithm, but also the lesser the compression.    </p></td>
+</tr>
+<tr class="row-even"><td><p>It’s a trade-off. It can be fine-tuned, with each successive value providing roughly +~3% to speed.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>An acceleration value of “1” is the same as regular <a class="reference internal" href="#a00216_1gaacc5de6f21665d10fd8ec9e5ac0b9d40"><span class="std std-ref">LZ4_compress_default()</span></a>.    </p></td>
+</tr>
+<tr class="row-even"><td><p>Values &lt;= 0 will be replaced by LZ4_ACCELERATION_DEFAULT (currently == 1, see lz4.c).    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Values &gt; LZ4_ACCELERATION_MAX will be replaced by LZ4_ACCELERATION_MAX (currently == 65537, see lz4.c).   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>1 : Each invocation to <a class="reference internal" href="#a00216_1ga53879e7a7174fcfa3b8676cfc4625a42"><span class="std std-ref">LZ4_compress_fast_continue()</span></a> generates a new block. Each block has precise boundaries and must be decompressed separately, calling LZ4_decompress_*() with relevant metadata. It’s not possible to append blocks together and expect a single invocation of LZ4_decompress_*() to decompress them together.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>2 : The previous 64KB of source data is <strong>assumed</strong> to remain present, unmodified, at same address in memory !</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>3 : When input is structured as a double buffer, each buffer can have any size, including &lt; 64 KB. Make sure that buffers are separated, by at least one byte. This construction ensures that each block only depends on previous block.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>4 : If input buffer is a ring-buffer, it can have any size, including &lt; 64 KB.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>5 : After an error, the stream status is undefined (invalid), it can only be reset or freed.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns the size of compressed block    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>Returns 0 if there is an error (typically, cannot fit into ‘dst’).   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv412LZ4_saveDictP12LZ4_stream_tPci">
+<span id="_CPPv312LZ4_saveDictP12LZ4_stream_tPci"></span><span id="_CPPv212LZ4_saveDictP12LZ4_stream_tPci"></span><span id="LZ4_saveDict__LZ4_stream_tP.cP.i"></span><span class="target" id="a00216_1ga11235cceb96213727927150b198f9607"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_saveDict</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv412LZ4_stream_t" title="LZ4_stream_t"><span class="n"><span class="pre">LZ4_stream_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">streamPtr</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">safeBuffer</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">maxDictSize</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv412LZ4_saveDictP12LZ4_stream_tPci" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>If the last 64KB data would not be available at its current memory location, save it in a safer location (char* safeBuffer). </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>streamPtr</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>LZ4_stream_t* type streaming type compression tracking context. A tracking context can be re-used multiple times. Declare or create <code class="docutils literal notranslate"><span class="pre">LZ4_stream_t</span></code> using <code class="docutils literal notranslate"><a class="reference internal" href="#a00216_1ga9f7c46cabd525df03c0a4b79634a041b"><span class="std std-ref"><span class="pre">LZ4_createStream()</span></span></a></code>, which is recommended. Initialize <code class="docutils literal notranslate"><span class="pre">LZ4_stream_t</span></code> using <code class="docutils literal notranslate"><a class="reference internal" href="#a00216_1ga7a89d0d01282953dc67d3215cf4bbde4"><span class="std std-ref"><span class="pre">LZ4_initStream()</span></span></a></code>.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>safeBuffer</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Buffer where you want to store dictionary.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>maxDictSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of safeBuffer, memory should be allocated such that dictionary would fit inside safeBuffer.This is schematically equivalent to a memcpy() followed by <a class="reference internal" href="#a00216_1ga8bddc4523649a0417a05b51cd86d29dc"><span class="std std-ref">LZ4_loadDict()</span></a>,but is much faster, because <a class="reference internal" href="#a00216_1ga11235cceb96213727927150b198f9607"><span class="std std-ref">LZ4_saveDict()</span></a> doesn’t need to rebuild tables.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<p><a class="reference internal" href="#a00216_1ga11235cceb96213727927150b198f9607"><span class="std std-ref">LZ4_saveDict()</span></a> : If previously compressed data block is not guaranteed to remain available at its memory location, save it into a safer place (char* safeBuffer). Note : you don’t need to call <a class="reference internal" href="#a00216_1ga8bddc4523649a0417a05b51cd86d29dc"><span class="std std-ref">LZ4_loadDict()</span></a> afterwards, dictionary is immediately usable, you can therefore call <a class="reference internal" href="#a00216_1ga53879e7a7174fcfa3b8676cfc4625a42"><span class="std std-ref">LZ4_compress_fast_continue()</span></a>. Return : saved dictionary size in bytes (necessarily &lt;= dictSize), or 0 if error. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Saved dictionary size in bytes which is a positive integer (&lt;= maxDictSize)    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>Returns 0 if error.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv414LZ4_initStreamPv6size_t">
+<span id="_CPPv314LZ4_initStreamPv6size_t"></span><span id="_CPPv214LZ4_initStreamPv6size_t"></span><span id="LZ4_initStream__voidP.s"></span><span class="target" id="a00216_1ga7a89d0d01282953dc67d3215cf4bbde4"></span><a class="reference internal" href="#_CPPv412LZ4_stream_t" title="LZ4_stream_t"><span class="n"><span class="pre">LZ4_stream_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_initStream</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">buffer</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">size</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv414LZ4_initStreamPv6size_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Use <a class="reference internal" href="#a00216_1ga7a89d0d01282953dc67d3215cf4bbde4"><span class="std std-ref">LZ4_initStream()</span></a> to properly initialize a newly declared LZ4_stream_t. It can also initialize any arbitrary buffer of sufficient size, and will return a pointer of the proper type upon initialization. </p>
+<p>An LZ4_stream_t structure must be initialized at least once. This is automatically done when invoking <a class="reference internal" href="#a00216_1ga9f7c46cabd525df03c0a4b79634a041b"><span class="std std-ref">LZ4_createStream()</span></a>, but it’s not when the structure is simply declared on stack (for example).</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>1: Initialization fails if size and alignment conditions are not respected. In which case, the function will return <strong>NULL</strong>. </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>2: An LZ4_stream_t structure guarantees correct alignment and size. </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>3: Before v1.9.0, use LZ4_resetStream() instead</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Works for v1.9.0+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>A pointer of proper type upon initialization.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>Initialization fails if size and alignment conditions are not respected. In which case, the function will return <strong>NULL</strong>.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-streaming-decompression-functions">Streaming Decompression Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv422LZ4_createStreamDecodev">
+<span id="_CPPv322LZ4_createStreamDecodev"></span><span id="_CPPv222LZ4_createStreamDecodev"></span><span id="LZ4_createStreamDecode__void"></span><span class="target" id="a00216_1gafe5b34a42176888d7e31d79c25dc052b"></span><a class="reference internal" href="#_CPPv418LZ4_streamDecode_t" title="LZ4_streamDecode_t"><span class="n"><span class="pre">LZ4_streamDecode_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_createStreamDecode</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv422LZ4_createStreamDecodev" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Creation of streaming decompression tracking context. </p>
+<p><a class="reference internal" href="#a00216_1gafe5b34a42176888d7e31d79c25dc052b"><span class="std std-ref">LZ4_createStreamDecode()</span></a> and <a class="reference internal" href="#a00216_1gafdcbf92c1921ecf2838db322c77c1485"><span class="std std-ref">LZ4_freeStreamDecode()</span></a> : creation / destruction of streaming decompression tracking context. </p>
+<p>A tracking context can be re-used multiple times.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A pointer of LZ4_stream_t type whose memmory has been allocated dynamically. </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv420LZ4_freeStreamDecodeP18LZ4_streamDecode_t">
+<span id="_CPPv320LZ4_freeStreamDecodeP18LZ4_streamDecode_t"></span><span id="_CPPv220LZ4_freeStreamDecodeP18LZ4_streamDecode_t"></span><span id="LZ4_freeStreamDecode__LZ4_streamDecode_tP"></span><span class="target" id="a00216_1gafdcbf92c1921ecf2838db322c77c1485"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_freeStreamDecode</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv418LZ4_streamDecode_t" title="LZ4_streamDecode_t"><span class="n"><span class="pre">LZ4_streamDecode_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">LZ4_stream</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv420LZ4_freeStreamDecodeP18LZ4_streamDecode_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Frees up the memory occupied by LZ4_stream . </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>LZ4_stream</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>LZ4_streamDecode_t* works as a streaming decompression tracking context. A tracking context can be re-used multiple times.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int 0. </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv419LZ4_setStreamDecodeP18LZ4_streamDecode_tPKci">
+<span id="_CPPv319LZ4_setStreamDecodeP18LZ4_streamDecode_tPKci"></span><span id="_CPPv219LZ4_setStreamDecodeP18LZ4_streamDecode_tPKci"></span><span id="LZ4_setStreamDecode__LZ4_streamDecode_tP.cCP.i"></span><span class="target" id="a00216_1ga971624e4abed2ab679a8c1728875663b"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_setStreamDecode</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv418LZ4_streamDecode_t" title="LZ4_streamDecode_t"><span class="n"><span class="pre">LZ4_streamDecode_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">LZ4_streamDecode</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dictionary</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dictSize</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv419LZ4_setStreamDecodeP18LZ4_streamDecode_tPKci" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Use this function to start decompression of a new stream of blocks. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>LZ4_streamDecode</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>An LZ4_streamDecode_t context can be allocated once and re-used multiple times.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dictionary</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A dictionary can optionally be set. Use <strong>NULL</strong> or size 0 for a reset order.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>dictSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of dictionary   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Dictionary is presumed stable : it must remain accessible and unmodified during next decompression.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns 1 if OK .    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>Returns 0 if error.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv425LZ4_decoderRingBufferSizei">
+<span id="_CPPv325LZ4_decoderRingBufferSizei"></span><span id="_CPPv225LZ4_decoderRingBufferSizei"></span><span id="LZ4_decoderRingBufferSize__i"></span><span class="target" id="a00216_1ga48c320b65924a5e535cf8d8cee7f6755"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_decoderRingBufferSize</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">maxBlockSize</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv425LZ4_decoderRingBufferSizei" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>In a ring buffer scenario (optional), blocks are presumed decompressed next to each other until there isn’t enough space for the next block (remainingSize &lt; maxBlockSize). After that it resumes from the beginning of ring buffer. </p>
+<p>When setting such a ring buffer for streaming decompression, this function provides the minimum size of this ring buffer to be compatible with any source respecting maxBlockSize condition.</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>maxBlockSize</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>The maximum block size of compressed data.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This works for v1.8.2+ . </p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Minimum ring buffer size.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>Returns 0 if there is an error (invalid maxBlockSize).   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv428LZ4_decompress_safe_continueP18LZ4_streamDecode_tPKcPcii">
+<span id="_CPPv328LZ4_decompress_safe_continueP18LZ4_streamDecode_tPKcPcii"></span><span id="_CPPv228LZ4_decompress_safe_continueP18LZ4_streamDecode_tPKcPcii"></span><span id="LZ4_decompress_safe_continue__LZ4_streamDecode_tP.cCP.cP.i.i"></span><span class="target" id="a00216_1gac2748b4600e4472ed04ab045c6088d8c"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_decompress_safe_continue</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv418LZ4_streamDecode_t" title="LZ4_streamDecode_t"><span class="n"><span class="pre">LZ4_streamDecode_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">LZ4_streamDecode</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dst</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">srcSize</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dstCapacity</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv428LZ4_decompress_safe_continueP18LZ4_streamDecode_tPKcPcii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>These decoding functions allow decompression of consecutive blocks in “streaming” mode. </p>
+<p>A block is an unsplittable entity, it must be presented entirely to a decompression function. Decompression functions only accepts one block at a time. The last 64KB of previously decoded data <em>must</em> remain available and unmodified at the memory position where they were decoded. If less than 64KB of data has been decoded, all the data must be present.</p>
+<p>Special : if decompression side sets a ring buffer, it must respect one of the following conditions :<ul class="simple">
+<li><p>Decompression buffer size is <em>at least</em> LZ4_decoderRingBufferSize(maxBlockSize). maxBlockSize is the maximum size of any single block. It can have any value &gt; 16 bytes. In which case, encoding and decoding buffers do not need to be synchronized. Actually, data can be produced by any source compliant with LZ4 format specification, and respecting maxBlockSize.</p></li>
+<li><p>Synchronized mode : Decompression buffer size is <em>exactly</em> the same as compression buffer size, and follows exactly same update rule (block boundaries at same positions), and decoding function is provided with exact decompressed size of each block (exception for last block of the stream), <em>then</em> decoding &amp; encoding ring buffer can have any size, including small ones ( &lt; 64 KB).</p></li>
+<li><p>Decompression buffer is larger than encoding buffer, by a minimum of maxBlockSize more bytes. In which case, encoding and decoding buffers do not need to be synchronized, and encoding ring buffer can have any size, including small ones ( &lt; 64 KB).</p></li>
+</ul>
+</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>LZ4_streamDecode</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>An LZ4_streamDecode_t context can be allocated once and re-used multiple times.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This buffer contains compressed data.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>dst</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer, the data is decompressed to this buffer.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>srcSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>It is the exact complete size of the src.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>dstCapacity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>It is the size of destination buffer (which must be already allocated), presumed an upper bound of decompressed size.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Whenever these conditions are not possible, save the last 64KB of decoded data into a safe buffer where it can’t be modified during decompression, then indicate where this data is saved using <a class="reference internal" href="#a00216_1ga971624e4abed2ab679a8c1728875663b"><span class="std std-ref">LZ4_setStreamDecode()</span></a>, before decompressing next block.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns the number of bytes decoded in <code class="docutils literal notranslate"><span class="pre">dst</span></code> which is positive (&lt;= targetOutputSize)    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>If source stream is detected malformed, function returns a negative result.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv429LZ4_decompress_safe_usingDictPKcPciiPKci">
+<span id="_CPPv329LZ4_decompress_safe_usingDictPKcPciiPKci"></span><span id="_CPPv229LZ4_decompress_safe_usingDictPKcPciiPKci"></span><span id="LZ4_decompress_safe_usingDict__cCP.cP.i.i.cCP.i"></span><span class="target" id="a00216_1gaeb0f9dfbd9713b7d809c2335842ba8d1"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_decompress_safe_usingDict</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dst</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">srcSize</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dstCapcity</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dictStart</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dictSize</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv429LZ4_decompress_safe_usingDictPKcPciiPKci" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>These decoding functions work the same as a combination of <a class="reference internal" href="#a00216_1ga971624e4abed2ab679a8c1728875663b"><span class="std std-ref">LZ4_setStreamDecode()</span></a> followed by LZ4_decompress_*_continue() </p>
+<p>They are stand-alone, and don’t need an LZ4_streamDecode_t structure. Dictionary is presumed stable : it must remain accessible and unmodified during decompression. Performance tip : Decompression speed can be substantially increased when dst == dictStart + dictSize.</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This buffer contains compressed data.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dst</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer, the data is decompressed to this buffer.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>srcSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>It is the exact complete size of the src.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dstCapacity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>It is the size of destination buffer (which must be already allocated), presumed an upper bound of decompressed size.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>dictStart</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A dictionary can optionally be set. Use <strong>NULL</strong> or size 0 for a reset order.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dictSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of dictionary.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>The number of bytes decoded in <code class="docutils literal notranslate"><span class="pre">dst</span></code> (&lt;= targetOutputSize)    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>If source stream is detected malformed, function returns a negative result.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-defines">Defines</p>
+<dl class="cpp macro">
+<dt class="sig sig-object cpp" id="c.LZ4_COMPRESSBOUND">
+<span class="target" id="a00216_1ga2453a423fd34640a0afbbf57ed0a5399"></span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_COMPRESSBOUND</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">isize</span></span><span class="sig-paren">)</span><a class="headerlink" href="#c.LZ4_COMPRESSBOUND" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Macro <a class="reference internal" href="#a00216_1ga2453a423fd34640a0afbbf57ed0a5399"><span class="std std-ref">LZ4_COMPRESSBOUND(isize)</span></a> is provided for compilation-time evaluation (stack memory allocation) alternative of <a class="reference internal" href="#a00216_1ga362093578d68480b493984b4853edc1f"><span class="std std-ref">LZ4_compressBound()</span></a></p>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-typedefs">Typedefs</p>
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv412LZ4_stream_t">
+<span id="_CPPv312LZ4_stream_t"></span><span id="_CPPv212LZ4_stream_t"></span><span id="LZ4_stream_t"></span><span class="target" id="a00216_1ga4fb9ac4ce6d5e25edc9188f9d6633498"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><span class="k"><span class="pre">union</span></span><span class="w"> </span><span class="n"><span class="pre">LZ4_stream_u</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_stream_t</span></span></span><a class="headerlink" href="#_CPPv412LZ4_stream_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>A tracking context can be re-used multiple times. Declare or create <code class="docutils literal notranslate"><span class="pre">LZ4_stream_t</span></code> using <code class="docutils literal notranslate"><a class="reference internal" href="#a00216_1ga9f7c46cabd525df03c0a4b79634a041b"><span class="std std-ref"><span class="pre">LZ4_createStream()</span></span></a></code>, which is recommended. </p>
+</dd></dl>
+
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv418LZ4_streamDecode_t">
+<span id="_CPPv318LZ4_streamDecode_t"></span><span id="_CPPv218LZ4_streamDecode_t"></span><span id="LZ4_streamDecode_t"></span><span class="target" id="a00216_1ga76a1eaa4729efddb43040217daad4d4e"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><span class="k"><span class="pre">union</span></span><span class="w"> </span><span class="n"><span class="pre">LZ4_streamDecode_u</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZ4_streamDecode_t</span></span></span><a class="headerlink" href="#_CPPv418LZ4_streamDecode_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>It is used to track the LZ4 stream during decompression. </p>
+</dd></dl>
+
+</div>
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="algos.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Algorithms</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="zlib.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title"><span class="section-number">2. </span>ZLIB</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            <p>
+  </p>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=5b4479735964841361fd"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd"></script>
+
+<footer class="rocm-footer">
+    <div class="container-lg">
+        <section class="bottom-menu menu py-45">
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <ul>
+                        <li><a href="https://www.amd.com/en/corporate/copyright" target="_blank">Terms and Conditions</a></li>
+                        
+                        <li><a href="">2020-2024, Advanced Micro Devices, Inc</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/privacy" target="_blank">Privacy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/trademarks" target="_blank">Trademarks</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/statement-human-trafficking-forced-labor.pdf" target="_blank">Statement on Forced Labor</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/competition" target="_blank">Fair and Open Competition</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/amd-uk-tax-strategy.pdf" target="_blank">UK Tax Strategy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/cookies" target="_blank">Cookie Policy</a></li>
+                        <!-- OneTrust Cookies Settings button start -->
+                        <li><a href="#cookie-settings" id="ot-sdk-btn" class="ot-sdk-show-settings">Cookie Settings</a></li>
+                        <!-- OneTrust Cookies Settings button end -->
+                    </ul>
+                </div>
+            </div>
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <div>
+                        <span class="copyright">© 2023 Advanced Micro Devices, Inc</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</footer>
+
+<!-- <div id="rdc-watermark-container">
+    <img id="rdc-watermark" src="_static/images/alpha-watermark.svg" alt="DRAFT watermark"/>
+</div> -->
+  </body>
+</html>

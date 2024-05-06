@@ -1,0 +1,1224 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>6. SNAPPY &#8212; AOCL-Compression 4.2 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.1.2/css/all.min.css?digest=5b4479735964841361fd" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_header.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_footer.css" />
+    <link rel="stylesheet" type="text/css" href="_static/fonts.css" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=5b4479735964841361fd" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd" />
+  <script src="_static/vendor/fontawesome/6.1.2/js/all.min.js?digest=5b4479735964841361fd"></script>
+
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
+    <script async="async" src="_static/code_word_breaks.js"></script>
+    <script async="async" src="_static/renameVersionLinks.js"></script>
+    <script async="async" src="_static/rdcMisc.js"></script>
+    <script async="async" src="_static/theme_mode_captions.js"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?digest=5a5c038af52cf7bc1a1ec88eea08e6366ee68824"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'snappy';</script>
+    <link rel="icon" href="https://www.amd.com/themes/custom/amd/favicon.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="7. LZ4HC" href="lz4hc.html" />
+    <link rel="prev" title="5. BZIP2" href="bzip2.html" />
+    <meta name="google-site-verification" content="ZOn0RZC0Pwzlmf2SaE0bRttWk1YzOhuslbpxUDchQ90" />
+
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+
+<header class="common-header" >
+    <nav class="navbar navbar-expand-xl">
+        <div class="container-fluid main-nav rocm-header">
+            
+            <div class="header-logo">
+                <a class="navbar-brand" href="https://www.amd.com/">
+                    <img src="_static/images/amd-header-logo.svg" alt="AMD Logo" title="AMD Logo" width="90" class="d-inline-block align-text-top hover-opacity"/>
+                </a>
+                <div class="vr vr mx-40 my-25"></div>
+                <a class="klavika-font hover-opacity" href="./index.html">AOCL Compression 4.2</a>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var elements = document.getElementsByClassName('header-all-versions');
+            for (var i = 0; i < elements.length; i++) {
+                elements[i].remove();
+            }
+
+            elements = document.querySelector("body > footer > div > section > div:nth-child(1) > div > ul").children;
+            var removable_items = ['2020-2024, Advanced Micro Devices, Inc', 'Statement on Forced Labor', 'Fair and Open Competition', 'UK Tax Strategy', 'Cookie Policy', 'Cookie Settings'];
+            for(var i = 0; i < elements.length; i++) {
+                if(removable_items.includes(elements[i].innerText)) {
+                    elements[i].remove();
+                    i--;
+                }
+            }
+        })
+    </script>
+                <a class="header-all-versions" href="https://rocm.docs.amd.com/en/latest/release/versions.html">Version List</a>
+            </div>
+            <div class="icon-nav text-center d-flex ms-auto">
+            </div>
+        </div>
+    </nav>
+    
+</header>
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">AOCL-Compression 4.2 documentation</p>
+  
+</a></div>
+        <div class="sidebar-primary-item"><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Table of Contents</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="INSTALLATION.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unified_api.html">Standardized/Unified API</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="algos.html">Algorithms</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="lz4.html">1. LZ4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zlib.html">2. ZLIB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lzma.html">3. LZMA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zstd.html">4. ZSTD</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bzip2.html">5. BZIP2</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">6. SNAPPY</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lz4hc.html">7. LZ4HC</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="multi-thread.html">Multi-threaded API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="INTRODUCTION.html">Brief Overview of algos</a></li>
+<li class="toctree-l1"><a class="reference internal" href="EXAMPLE_README.html">Example Test Programs</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><label class="sidebar-toggle primary-toggle btn btn-sm" for="__primary" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-angle-right"></span>
+  </label></div>
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="algos.html" class="nav-link">Algorithms</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>SNAPPY</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article" role="main">
+                  
+  <section id="snappy">
+<span id="ref-snappy"></span><h1><span class="section-number">6. </span>SNAPPY<a class="headerlink" href="#snappy" title="Permalink to this heading">#</a></h1>
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="a00217"></span><em><span class="pre">group</span></em> <span class="sig-name descname"><span class="pre">SNAPPY_API</span></span></dt>
+<dd><p>A light-weight compression algorithm. It is designed for speed of compression and decompression, rather than for the utmost in space savings. </p>
+<p>For getting better compression ratios when you are compressing data with long repeated sequences or compressing data that is similar to other data, while still compressing fast, you might look at first using BMDiff and then compressing the output of BMDiff with Snappy. </p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-generic-compression/decompression-routines.">Generic compression/decompression routines.</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv48CompressP6SourceP4Sink">
+<span id="_CPPv38CompressP6SourceP4Sink"></span><span id="_CPPv28CompressP6SourceP4Sink"></span><span id="Compress__SourceP.SinkP"></span><span class="target" id="a00217_1ga2da5d1a7fd7d4c4084695cb492d3161c"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Compress</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Source</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">source</span></span>, <span class="n"><span class="pre">Sink</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">sink</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv48CompressP6SourceP4Sink" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Compress the bytes read from “*source” and append to “*sink”. Return the number of bytes written. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>source</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen);where inBuf is the pointer to original data and inBufLen is the size of inBuf    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>sink</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A Sink is an interface that consumes a sequence of bytes, you can initialize it by calling snappy::UncheckedByteArraySink(dest); where dest is the pointer to the destination buffer.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Return the number of bytes written.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Return 0 upon failure or NULL parameters are passed   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv421GetUncompressedLengthP6SourceP8uint32_t">
+<span id="_CPPv321GetUncompressedLengthP6SourceP8uint32_t"></span><span id="_CPPv221GetUncompressedLengthP6SourceP8uint32_t"></span><span id="GetUncompressedLength__SourceP.uint32_tP"></span><span class="target" id="a00217_1ga6e24ae8f7f490f3e6a04af94c6ca66b1"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">GetUncompressedLength</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Source</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">source</span></span>, <span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">result</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv421GetUncompressedLengthP6SourceP8uint32_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Find the uncompressed length of the given stream, as given by the header. Note that the true length could deviate from this; the stream could e.g. be truncated. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>source</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>result</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Uncompressed length of the given stream is stored here.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Also note that this leaves “*source” in a state that is unsuitable for further operations, such as <a class="reference internal" href="#a00217_1gaa819b5aa79dd56dbf172843b7f208ac3"><span class="std std-ref">RawUncompress()</span></a>. You will need to rewind or recreate the source yourself before attempting any further calls.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>If the data inside the source is uncorrupted it will return <strong>true</strong>.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>It will return <strong>false</strong> if the data inside the source is corrupted.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv410UncompressP6SourceP4Sink">
+<span id="_CPPv310UncompressP6SourceP4Sink"></span><span id="_CPPv210UncompressP6SourceP4Sink"></span><span id="Uncompress__SourceP.SinkP"></span><span class="target" id="a00217_1ga386aa26d442e7dc2f76e0f55c0cb62ff"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Uncompress</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Source</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="n"><span class="pre">Sink</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">uncompressed</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv410UncompressP6SourceP4Sink" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Decompresses “compressed” to “*uncompressed”. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf .    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>uncompressed</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A Sink is an interface that consumes a sequence of bytes, you can initialize it by calling snappy::UncheckedByteArraySink(dest); where dest is the pointer to the destination buffer.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns <strong>true</strong> if successful.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Returns <strong>false</strong> if the decompression fails.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv426UncompressAsMuchAsPossibleP6SourceP4Sink">
+<span id="_CPPv326UncompressAsMuchAsPossibleP6SourceP4Sink"></span><span id="_CPPv226UncompressAsMuchAsPossibleP6SourceP4Sink"></span><span id="UncompressAsMuchAsPossible__SourceP.SinkP"></span><span class="target" id="a00217_1ga6ca1d2feb36631f0519592806678b6fa"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">UncompressAsMuchAsPossible</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Source</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="n"><span class="pre">Sink</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">uncompressed</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv426UncompressAsMuchAsPossibleP6SourceP4Sink" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>This routine decompresses as much of the “compressed” as possible into sink. It returns the number of valid bytes added to sink (extra invalid bytes may have been added due to errors; the caller should ignore those). The emitted data typically has length <a class="reference internal" href="#a00217_1gad6fe29af414aeb3324b7f4c290770433"><span class="std std-ref">GetUncompressedLength()</span></a>, but may be shorter if an error is encountered. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf .    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>uncompressed</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A Sink is an interface that consumes a sequence of bytes, you can initialize it by calling snappy::UncheckedByteArraySink(dest); where dest is the pointer to the destination buffer.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>It returns the number of valid bytes added to sink (extra invalid bytes may have been added due to errors; the caller should ignore those)    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Returns 0 if the message is corrupted and could not be decompressed or NULL parameters are passed.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-higher-level-string-based-routines.">Higher-level string based routines.</p>
+<p>Higher-level string based routines (should be sufficient for most users) </p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv48CompressPKc6size_tPNSt6stringE">
+<span id="_CPPv38CompressPKc6size_tPNSt6stringE"></span><span id="_CPPv28CompressPKc6size_tPNSt6stringE"></span><span id="Compress__cCP.s.ssP"></span><span class="target" id="a00217_1ga959b607d5ec602059f6413588c3e00e9"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Compress</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">input</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">input_length</span></span>, <span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">string</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv48CompressPKc6size_tPNSt6stringE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Sets “*compressed” to the compressed version of “input[0,input_length-1]”. Original contents of *compressed are lost. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>input</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is the buffer where the data we want to compress is accessible.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>input_length</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Length of the input buffer.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>This is a buffer in which compressed data is stored.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<p><dl class="simple">
+<dt><strong>Attention</strong></dt><dd><p>REQUIRES: “input[]” is not an alias of “*compressed”.</p>
+</dd>
+</dl>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Return the number of bytes written.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Return 0 upon failure or NULL parameters are passed   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv410UncompressPKc6size_tPNSt6stringE">
+<span id="_CPPv310UncompressPKc6size_tPNSt6stringE"></span><span id="_CPPv210UncompressPKc6size_tPNSt6stringE"></span><span id="Uncompress__cCP.s.ssP"></span><span class="target" id="a00217_1gad53c2461d9b86d41e3554bfbc96997ce"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Uncompress</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">compressed_length</span></span>, <span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">string</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">uncompressed</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv410UncompressPKc6size_tPNSt6stringE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Decompresses “compressed[0,compressed_length-1]” to “*uncompressed”. Original contents of “*uncompressed” are lost. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is a buffer which contains compressed data.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>compressed_length</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is the length of the compressed buffer.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>uncompressed</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Uncompressed data is stored in this buffer.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<p><dl class="simple">
+<dt><strong>Attention</strong></dt><dd><p>REQUIRES: “compressed[]” is not an alias of “*uncompressed”.</p>
+</dd>
+</dl>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>If the data inside the compressed is successfully decompressed it will return <strong>true</strong>.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>It will return <strong>false</strong> if the decompression fails.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-lower-level-character-array-based-routines.">Lower-level character array based routines.</p>
+<p>These May be useful for efficiency reasons in certain circumstances. </p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv411RawCompressPKc6size_tPcP6size_t">
+<span id="_CPPv311RawCompressPKc6size_tPcP6size_t"></span><span id="_CPPv211RawCompressPKc6size_tPcP6size_t"></span><span id="RawCompress__cCP.s.cP.sP"></span><span class="target" id="a00217_1ga194defa9e5c973190db7ad022ca37fa0"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RawCompress</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">input</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">input_length</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed_length</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv411RawCompressPKc6size_tPcP6size_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Takes the data stored in “input[0..input_length]” and stores it in the array pointed to by “compressed”. </p>
+<p>“*compressed_length” is set to the length of the compressed output.</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>input</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is the buffer where the data we want to compress is accessible.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>input_length</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Length of the input buffer.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>out   </p></td>
+<td><p>This is a buffer in which compressed data is stored.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>compressed_length</strong></p></td>
+<td><p>out   </p></td>
+<td><p>The length of the data after compression is stored in this.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<p><dl class="simple">
+<dt><strong>Attention</strong></dt><dd><p>REQUIRES: “compressed” must point to an area of memory that is at least “MaxCompressedLength(input_length)” bytes in length.</p>
+</dd>
+</dl>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>- Example:<div class="highlight-c notranslate"><div class="highlight"><pre><span></span>char  output = new char[snappy::MaxCompressedLength(input_length)];\n
+size_t output_length;\n
+RawCompress(input, input_length, output, &amp;output_length);\n
+... Process(output, output_length) ...\n
+delete [] output;\n
+</pre></div>
+</div>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>void</strong></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv413RawUncompressPKc6size_tPc">
+<span id="_CPPv313RawUncompressPKc6size_tPc"></span><span id="_CPPv213RawUncompressPKc6size_tPc"></span><span id="RawUncompress__cCP.s.cP"></span><span class="target" id="a00217_1gaa819b5aa79dd56dbf172843b7f208ac3"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RawUncompress</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">compressed_length</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">uncompressed</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv413RawUncompressPKc6size_tPc" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Given data in “compressed[0..compressed_length-1]” generated by calling the Snappy::Compress routine, this routine stores the uncompressed data to uncompressed[0..GetUncompressedLength(compressed)-1] . </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is a buffer which contains compressed data.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>compressed_length</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is the length of the compressed buffer.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>uncompressed</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Uncompressed data is stored in this buffer.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns <strong>true</strong> if successful.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Returns <strong>false</strong> if the message is corrupted and could not be decrypted.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv413RawUncompressP6SourcePc">
+<span id="_CPPv313RawUncompressP6SourcePc"></span><span id="_CPPv213RawUncompressP6SourcePc"></span><span id="RawUncompress__SourceP.cP"></span><span class="target" id="a00217_1ga0b510c02e547770b0ff30207929bcf38"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RawUncompress</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Source</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">uncompressed</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv413RawUncompressP6SourcePc" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Given data from the byte source ‘compressed’ generated by calling the Snappy::Compress routine, this routine stores the uncompressed data to uncompressed[0..GetUncompressedLength(compressed,compressed_length)-1] . </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf .    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>uncompressed</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Uncompressed data is stored in this buffer.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns <strong>true</strong> if successful.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Returns <strong>false</strong> if the message is corrupted and could not be decrypted.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv420RawUncompressToIOVecPKc6size_tPK5iovec6size_t">
+<span id="_CPPv320RawUncompressToIOVecPKc6size_tPK5iovec6size_t"></span><span id="_CPPv220RawUncompressToIOVecPKc6size_tPK5iovec6size_t"></span><span id="RawUncompressToIOVec__cCP.s.iovecCP.s"></span><span class="target" id="a00217_1ga56b011f1677811b77f546be68a498d44"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RawUncompressToIOVec</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">compressed_length</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="n"><span class="pre">iovec</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">iov</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">iov_cnt</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv420RawUncompressToIOVecPKc6size_tPK5iovec6size_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Given data in “compressed[0..compressed_length-1]” generated by calling the Snappy::Compress routine, this routine stores the uncompressed data to the iovec “iov”. The number of physical buffers in “iov” is given by iov_cnt and their cumulative size must be at least GetUncompressedLength(compressed). The individual buffers in “iov” must not overlap with each other. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is a buffer which contains compressed data.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>compressed_length</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is the length of the compressed buffer.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>iov</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>The struct iovec defines one vector element. Normally, this structure is used as an array of multiple elements.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>iov_cnt</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>This is the number of <em>iovec</em> structures in the array of <em>iov</em> .   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns <strong>true</strong> if successful.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Returns <strong>false</strong> if the message is corrupted and could not be decrypted.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv420RawUncompressToIOVecP6SourcePK5iovec6size_t">
+<span id="_CPPv320RawUncompressToIOVecP6SourcePK5iovec6size_t"></span><span id="_CPPv220RawUncompressToIOVecP6SourcePK5iovec6size_t"></span><span id="RawUncompressToIOVec__SourceP.iovecCP.s"></span><span class="target" id="a00217_1ga57efb72a36bc4fb6901ead49d4a02e2d"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RawUncompressToIOVec</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Source</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="n"><span class="pre">iovec</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">iov</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">iov_cnt</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv420RawUncompressToIOVecP6SourcePK5iovec6size_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Given data from the byte source ‘compressed’ generated by calling the Snappy::Compress routine, this routine stores the uncompressed data to the iovec “iov”. The number of physical buffers in “iov” is given by iov_cnt and their cumulative size must be at least GetUncompressedLength(compressed). The individual buffers in “iov” must not overlap with each other. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf .    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>iov</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>The struct iovec defines one vector element. Normally, this structure is used as an array of multiple elements.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>iov_cnt</strong></p></td>
+<td><p>out   </p></td>
+<td><p>This is the number of <em>iovec</em> structures in the array of <em>iov</em> .   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns <strong>true</strong> if successful.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Returns <strong>false</strong> if the message is corrupted and could not be decrypted.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-helper-functions.">Helper Functions.</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv419MaxCompressedLength6size_t">
+<span id="_CPPv319MaxCompressedLength6size_t"></span><span id="_CPPv219MaxCompressedLength6size_t"></span><span id="MaxCompressedLength__s"></span><span class="target" id="a00217_1ga71b678f8e07d0ca9b280dd6b8f80efd2"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">MaxCompressedLength</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">source_bytes</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv419MaxCompressedLength6size_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>This function determines the maximal size of the compressed representation of input data that is “source_bytes” bytes in length. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>source_bytes</strong></p></td>
+<td><p>in   </p></td>
+<td><p>The size of source in bytes.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns the maximal size of the compressed representation of input data that is “source_bytes” bytes in length.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv421GetUncompressedLengthPKc6size_tP6size_t">
+<span id="_CPPv321GetUncompressedLengthPKc6size_tP6size_t"></span><span id="_CPPv221GetUncompressedLengthPKc6size_tP6size_t"></span><span id="GetUncompressedLength__cCP.s.sP"></span><span class="target" id="a00217_1gad6fe29af414aeb3324b7f4c290770433"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">GetUncompressedLength</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">compressed_length</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">result</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv421GetUncompressedLengthPKc6size_tP6size_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Get the Uncompressed Length object. </p>
+<p>This operation takes O(1) time.</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is a buffer which contains compressed data.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>compressed_length</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is the length of the compressed buffer.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>result</strong></p></td>
+<td><p>out   </p></td>
+<td><p>This is the pointer to type size_t where the uncompressed length is stored.   </p></td>
+</tr>
+</tbody>
+</table>
+<dl class="simple">
+<dt><strong>Attention</strong></dt><dd><p>REQUIRES: “compressed[]” was produced by <a class="reference internal" href="#a00217_1ga194defa9e5c973190db7ad022ca37fa0"><span class="std std-ref">RawCompress()</span></a> or <a class="reference internal" href="#a00217_1ga2da5d1a7fd7d4c4084695cb492d3161c"><span class="std std-ref">Compress()</span></a>.</p>
+</dd>
+</dl>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns <strong>true</strong> on successful parsing.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Returns <strong>false</strong> on parsing error.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv443GetUncompressedLengthFromMTCompressedBufferPKc6size_tP6size_t">
+<span id="_CPPv343GetUncompressedLengthFromMTCompressedBufferPKc6size_tP6size_t"></span><span id="_CPPv243GetUncompressedLengthFromMTCompressedBufferPKc6size_tP6size_t"></span><span id="GetUncompressedLengthFromMTCompressedBuffer__cCP.s.sP"></span><span class="target" id="a00217_1ga08e4a5229d8de4251e8a256c0ae7c484"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">GetUncompressedLengthFromMTCompressedBuffer</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">compressed_length</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">result</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv443GetUncompressedLengthFromMTCompressedBufferPKc6size_tP6size_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Get the Uncompressed Length object from the AOCL multithreaded compressor’s compressed buffer. </p>
+<p>This operation takes O(1) time.</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is a buffer which contains compressed data. (along with the RAP frame)    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>compressed_length</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is the length of the compressed buffer (including the RAP frame).    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>result</strong></p></td>
+<td><p>out   </p></td>
+<td><p>This is the pointer to type size_t where the uncompressed length is stored.   </p></td>
+</tr>
+</tbody>
+</table>
+<dl class="simple">
+<dt><strong>Attention</strong></dt><dd><p>REQUIRES: “compressed[]” was produced by <a class="reference internal" href="#a00217_1ga194defa9e5c973190db7ad022ca37fa0"><span class="std std-ref">RawCompress()</span></a> or <a class="reference internal" href="#a00217_1ga2da5d1a7fd7d4c4084695cb492d3161c"><span class="std std-ref">Compress()</span></a> IN AOCL’s MULTITHREADED MODE.</p>
+</dd>
+</dl>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns <strong>true</strong> on successful parsing.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Returns <strong>false</strong> on parsing error.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv423IsValidCompressedBufferPKc6size_t">
+<span id="_CPPv323IsValidCompressedBufferPKc6size_t"></span><span id="_CPPv223IsValidCompressedBufferPKc6size_t"></span><span id="IsValidCompressedBuffer__cCP.s"></span><span class="target" id="a00217_1ga517708615a7302a9872d77a22f224f68"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">IsValidCompressedBuffer</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">compressed_length</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv423IsValidCompressedBufferPKc6size_t" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Returns <strong>true</strong> iff the contents of “compressed[]” can be uncompressed successfully. Does not return the uncompressed data. Takes time proportional to compressed_length, but is usually at least a factor of four faster than actual decompression. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is a buffer which contains compressed data.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>compressed_length</strong></p></td>
+<td><p>in   </p></td>
+<td><p>This is the length of the compressed buffer.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns <strong>true</strong> iff the contents of “compressed[]” can be uncompressed successfully.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Returns <strong>false</strong> if error.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417IsValidCompressedP6Source">
+<span id="_CPPv317IsValidCompressedP6Source"></span><span id="_CPPv217IsValidCompressedP6Source"></span><span id="IsValidCompressed__SourceP"></span><span class="target" id="a00217_1gad1f71f05de7d1608a35046bbdeaa0356"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">IsValidCompressed</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Source</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">compressed</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417IsValidCompressedP6Source" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Returns <strong>true</strong> iff the contents of “compressed” can be uncompressed successfully. Does not return the uncompressed data. Takes time proportional to *compressed length, but is usually at least a factor of four faster than actual decompression. On success, consumes all of *compressed. On failure, consumes an unspecified prefix of *compressed. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>compressed</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>A Source is an interface that yields a sequence of bytes, you can initialize it by calling snappy::ByteArraySource(inBuf,inBufLen); where inBuf is the pointer to original data and inBufLen is the size of inBuf .   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Returns <strong>true</strong> iff the contents of “compressed” can be uncompressed successfully.    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Failure   </p></td>
+<td><p>Returns <strong>false</strong> if error.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-variables">Variables</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp">
+<span class="target" id="a00217_1ga97e8b15f3abf9cc918116dc83bd38c03"></span><span class="sig-name descname"><span class="pre">static</span> <span class="pre">DOXYGEN_SHOULD_SKIP_THIS</span> <span class="pre">constexpr</span> <span class="pre">int</span> <span class="pre">kBlockLog</span>&#160;&#160; <span class="pre">=</span> <span class="pre">16</span></span></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv410kBlockSize">
+<span id="_CPPv310kBlockSize"></span><span id="_CPPv210kBlockSize"></span><span id="kBlockSize__s"></span><span class="target" id="a00217_1gac96b014cab97ed6326cfebe24a401fc6"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kBlockSize</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">1</span></span><span class="w"> </span><span class="o"><span class="pre">&lt;&lt;</span></span><span class="w"> </span><span class="n"><span class="pre">kBlockLog</span></span><a class="headerlink" href="#_CPPv410kBlockSize" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv417kMaxHashTableBits">
+<span id="_CPPv317kMaxHashTableBits"></span><span id="_CPPv217kMaxHashTableBits"></span><span id="kMaxHashTableBits__i"></span><span class="target" id="a00217_1gad3bbfb2a0252036f1019c7326d7997aa"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kMaxHashTableBits</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">14</span></span><a class="headerlink" href="#_CPPv417kMaxHashTableBits" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv417kMaxHashTableSize">
+<span id="_CPPv317kMaxHashTableSize"></span><span id="_CPPv217kMaxHashTableSize"></span><span id="kMaxHashTableSize__s"></span><span class="target" id="a00217_1ga3e838209a397a876a33afb9dc0d80c96"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kMaxHashTableSize</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">1</span></span><span class="w"> </span><span class="o"><span class="pre">&lt;&lt;</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv417kMaxHashTableBits" title="kMaxHashTableBits"><span class="n"><span class="pre">kMaxHashTableBits</span></span></a><a class="headerlink" href="#_CPPv417kMaxHashTableSize" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv417kMinHashTableBits">
+<span id="_CPPv317kMinHashTableBits"></span><span id="_CPPv217kMinHashTableBits"></span><span id="kMinHashTableBits__i"></span><span class="target" id="a00217_1gaa3af1741b2688b78b489cb610ca8fa9d"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kMinHashTableBits</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">8</span></span><a class="headerlink" href="#_CPPv417kMinHashTableBits" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv417kMinHashTableSize">
+<span id="_CPPv317kMinHashTableSize"></span><span id="_CPPv217kMinHashTableSize"></span><span id="kMinHashTableSize__s"></span><span class="target" id="a00217_1ga7ddbcaae675a284cd56ac96a6d762688"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kMinHashTableSize</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">1</span></span><span class="w"> </span><span class="o"><span class="pre">&lt;&lt;</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv417kMinHashTableBits" title="kMinHashTableBits"><span class="n"><span class="pre">kMinHashTableBits</span></span></a><a class="headerlink" href="#_CPPv417kMinHashTableSize" title="Permalink to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+</div>
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="bzip2.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title"><span class="section-number">5. </span>BZIP2</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="lz4hc.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title"><span class="section-number">7. </span>LZ4HC</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            <p>
+  </p>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=5b4479735964841361fd"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd"></script>
+
+<footer class="rocm-footer">
+    <div class="container-lg">
+        <section class="bottom-menu menu py-45">
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <ul>
+                        <li><a href="https://www.amd.com/en/corporate/copyright" target="_blank">Terms and Conditions</a></li>
+                        
+                        <li><a href="">2020-2024, Advanced Micro Devices, Inc</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/privacy" target="_blank">Privacy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/trademarks" target="_blank">Trademarks</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/statement-human-trafficking-forced-labor.pdf" target="_blank">Statement on Forced Labor</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/competition" target="_blank">Fair and Open Competition</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/amd-uk-tax-strategy.pdf" target="_blank">UK Tax Strategy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/cookies" target="_blank">Cookie Policy</a></li>
+                        <!-- OneTrust Cookies Settings button start -->
+                        <li><a href="#cookie-settings" id="ot-sdk-btn" class="ot-sdk-show-settings">Cookie Settings</a></li>
+                        <!-- OneTrust Cookies Settings button end -->
+                    </ul>
+                </div>
+            </div>
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <div>
+                        <span class="copyright">© 2023 Advanced Micro Devices, Inc</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</footer>
+
+<!-- <div id="rdc-watermark-container">
+    <img id="rdc-watermark" src="_static/images/alpha-watermark.svg" alt="DRAFT watermark"/>
+</div> -->
+  </body>
+</html>

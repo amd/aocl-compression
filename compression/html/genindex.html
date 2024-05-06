@@ -1,0 +1,1474 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Index &#8212; AOCL-Compression 4.2 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.1.2/css/all.min.css?digest=5b4479735964841361fd" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_header.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_footer.css" />
+    <link rel="stylesheet" type="text/css" href="_static/fonts.css" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=5b4479735964841361fd" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd" />
+  <script src="_static/vendor/fontawesome/6.1.2/js/all.min.js?digest=5b4479735964841361fd"></script>
+
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
+    <script async="async" src="_static/code_word_breaks.js"></script>
+    <script async="async" src="_static/renameVersionLinks.js"></script>
+    <script async="async" src="_static/rdcMisc.js"></script>
+    <script async="async" src="_static/theme_mode_captions.js"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?digest=5a5c038af52cf7bc1a1ec88eea08e6366ee68824"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'genindex';</script>
+    <link rel="icon" href="https://www.amd.com/themes/custom/amd/favicon.ico"/>
+    <link rel="index" title="Index" href="#" />
+    <link rel="search" title="Search" href="search.html" />
+    <meta name="google-site-verification" content="ZOn0RZC0Pwzlmf2SaE0bRttWk1YzOhuslbpxUDchQ90" />
+
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+
+<header class="common-header" >
+    <nav class="navbar navbar-expand-xl">
+        <div class="container-fluid main-nav rocm-header">
+            
+            <div class="header-logo">
+                <a class="navbar-brand" href="https://www.amd.com/">
+                    <img src="_static/images/amd-header-logo.svg" alt="AMD Logo" title="AMD Logo" width="90" class="d-inline-block align-text-top hover-opacity"/>
+                </a>
+                <div class="vr vr mx-40 my-25"></div>
+                <a class="klavika-font hover-opacity" href="./index.html">AOCL Compression 4.2</a>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var elements = document.getElementsByClassName('header-all-versions');
+            for (var i = 0; i < elements.length; i++) {
+                elements[i].remove();
+            }
+
+            elements = document.querySelector("body > footer > div > section > div:nth-child(1) > div > ul").children;
+            var removable_items = ['2020-2024, Advanced Micro Devices, Inc', 'Statement on Forced Labor', 'Fair and Open Competition', 'UK Tax Strategy', 'Cookie Policy', 'Cookie Settings'];
+            for(var i = 0; i < elements.length; i++) {
+                if(removable_items.includes(elements[i].innerText)) {
+                    elements[i].remove();
+                    i--;
+                }
+            }
+        })
+    </script>
+                <a class="header-all-versions" href="https://rocm.docs.amd.com/en/latest/release/versions.html">Version List</a>
+            </div>
+            <div class="icon-nav text-center d-flex ms-auto">
+            </div>
+        </div>
+    </nav>
+    
+</header>
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">AOCL-Compression 4.2 documentation</p>
+  
+</a></div>
+        <div class="sidebar-primary-item"><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Table of Contents</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="INSTALLATION.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unified_api.html">Standardized/Unified API</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="algos.html">Algorithms</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="lz4.html">1. LZ4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zlib.html">2. ZLIB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lzma.html">3. LZMA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zstd.html">4. ZSTD</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bzip2.html">5. BZIP2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snappy.html">6. SNAPPY</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lz4hc.html">7. LZ4HC</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="multi-thread.html">Multi-threaded API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="INTRODUCTION.html">Brief Overview of algos</a></li>
+<li class="toctree-l1"><a class="reference internal" href="EXAMPLE_README.html">Example Test Programs</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><label class="sidebar-toggle primary-toggle btn btn-sm" for="__primary" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-angle-right"></span>
+  </label></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article" role="main">
+                  
+
+<h1 id="index">Index</h1>
+
+<div class="genindex-jumpbox">
+ <a href="#_"><strong>_</strong></a>
+ | <a href="#A"><strong>A</strong></a>
+ | <a href="#B"><strong>B</strong></a>
+ | <a href="#C"><strong>C</strong></a>
+ | <a href="#D"><strong>D</strong></a>
+ | <a href="#E"><strong>E</strong></a>
+ | <a href="#F"><strong>F</strong></a>
+ | <a href="#G"><strong>G</strong></a>
+ | <a href="#I"><strong>I</strong></a>
+ | <a href="#K"><strong>K</strong></a>
+ | <a href="#L"><strong>L</strong></a>
+ | <a href="#M"><strong>M</strong></a>
+ | <a href="#R"><strong>R</strong></a>
+ | <a href="#U"><strong>U</strong></a>
+ | <a href="#Z"><strong>Z</strong></a>
+ 
+</div>
+<h2 id="_">_</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="lzma.html#_CPPv414_CLzmaEncProps">_CLzmaEncProps (C++ struct)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps4algoE">_CLzmaEncProps::algo (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps6btModeE">_CLzmaEncProps::btMode (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps8dictSizeE">_CLzmaEncProps::dictSize (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps2fbE">_CLzmaEncProps::fb (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps2lcE">_CLzmaEncProps::lc (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps5levelE">_CLzmaEncProps::level (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps2lpE">_CLzmaEncProps::lp (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps2mcE">_CLzmaEncProps::mc (C++ member)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps12numHashBytesE">_CLzmaEncProps::numHashBytes (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps10numThreadsE">_CLzmaEncProps::numThreads (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps2pbE">_CLzmaEncProps::pb (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps10reduceSizeE">_CLzmaEncProps::reduceSize (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N14_CLzmaEncProps12writeEndMarkE">_CLzmaEncProps::writeEndMark (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv411_CLzmaProps">_CLzmaProps (C++ struct)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N11_CLzmaProps7dicSizeE">_CLzmaProps::dicSize (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N11_CLzmaProps2lcE">_CLzmaProps::lc (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N11_CLzmaProps2lpE">_CLzmaProps::lp (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N11_CLzmaProps2pbE">_CLzmaProps::pb (C++ member)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="A">A</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="zlib.html#_CPPv47adler325uLongPK5Bytef4uInt">adler32 (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv415adler32_combine5uLong5uLong7z_off_t">adler32_combine (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv411adler32_x868uint32_tPK5Bytef8z_size_t">adler32_x86 (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv49adler32_z5uLongPK5Bytef8z_size_t">adler32_z (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv410alloc_func">alloc_func (C++ type)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv421aocl_compression_desc">aocl_compression_desc (C++ struct)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc5cSizeE">aocl_compression_desc::cSize (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc6cSpeedE">aocl_compression_desc::cSpeed (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc5cTimeE">aocl_compression_desc::cTime (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc5dSizeE">aocl_compression_desc::dSize (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc6dSpeedE">aocl_compression_desc::dSpeed (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc5dTimeE">aocl_compression_desc::dTime (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc5inBufE">aocl_compression_desc::inBuf (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc6inSizeE">aocl_compression_desc::inSize (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc5levelE">aocl_compression_desc::level (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc12measureStatsE">aocl_compression_desc::measureStats (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc8memLimitE">aocl_compression_desc::memLimit (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc11numMPIranksE">aocl_compression_desc::numMPIranks (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc10numThreadsE">aocl_compression_desc::numThreads (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc8optLevelE">aocl_compression_desc::optLevel (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc6optOffE">aocl_compression_desc::optOff (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc6optVarE">aocl_compression_desc::optVar (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc6outBufE">aocl_compression_desc::outBuf (C++ member)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc7outSizeE">aocl_compression_desc::outSize (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_desc7workBufE">aocl_compression_desc::workBuf (C++ member)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv421aocl_compression_type">aocl_compression_type (C++ enum)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_type25AOCL_COMPRESSOR_ALGOS_NUME">aocl_compression_type::AOCL_COMPRESSOR_ALGOS_NUM (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_type5BZIP2E">aocl_compression_type::BZIP2 (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_type3LZ4E">aocl_compression_type::LZ4 (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_type5LZ4HCE">aocl_compression_type::LZ4HC (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_type4LZMAE">aocl_compression_type::LZMA (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_type6SNAPPYE">aocl_compression_type::SNAPPY (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_type4ZLIBE">aocl_compression_type::ZLIB (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N21aocl_compression_type4ZSTDE">aocl_compression_type::ZSTD (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv415aocl_error_type">aocl_error_type (C++ enum)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N15aocl_error_type22ERR_COMPRESSION_FAILEDE">aocl_error_type::ERR_COMPRESSION_FAILED (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N15aocl_error_type30ERR_COMPRESSION_INVALID_OUTPUTE">aocl_error_type::ERR_COMPRESSION_INVALID_OUTPUT (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N15aocl_error_type19ERR_EXCLUDED_METHODE">aocl_error_type::ERR_EXCLUDED_METHOD (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N15aocl_error_type17ERR_INVALID_INPUTE">aocl_error_type::ERR_INVALID_INPUT (C++ enumerator)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv4N15aocl_error_type22ERR_UNSUPPORTED_METHODE">aocl_error_type::ERR_UNSUPPORTED_METHOD (C++ enumerator)</a>
+</li>
+      <li><a href="multi-thread.html#_CPPv427aocl_get_rap_frame_bound_mtv">aocl_get_rap_frame_bound_mt (C++ function)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv417aocl_llc_compressP21aocl_compression_desc21aocl_compression_type">aocl_llc_compress (C++ function)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv419aocl_llc_decompressP21aocl_compression_desc21aocl_compression_type">aocl_llc_decompress (C++ function)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv416aocl_llc_destroyP21aocl_compression_desc21aocl_compression_type">aocl_llc_destroy (C++ function)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv414aocl_llc_setupP21aocl_compression_desc21aocl_compression_type">aocl_llc_setup (C++ function)</a>
+</li>
+      <li><a href="unified_api.html#_CPPv416aocl_llc_versionv">aocl_llc_version (C++ function)</a>
+</li>
+      <li><a href="multi-thread.html#_CPPv422aocl_skip_rap_frame_mtPc7int32_t">aocl_skip_rap_frame_mt (C++ function)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="B">B</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="bzip2.html#_CPPv424BZ2_bzBuffToBuffCompressPcPjPcjiii">BZ2_bzBuffToBuffCompress (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv426BZ2_bzBuffToBuffDecompressPcPjPcjii">BZ2_bzBuffToBuffDecompress (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv414BZ2_bzCompressP9bz_streami">BZ2_bzCompress (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv417BZ2_bzCompressEndP9bz_stream">BZ2_bzCompressEnd (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv418BZ2_bzCompressInitP9bz_streamiii">BZ2_bzCompressInit (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv416BZ2_bzDecompressP9bz_stream">BZ2_bzDecompress (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv419BZ2_bzDecompressEndP9bz_stream">BZ2_bzDecompressEnd (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv420BZ2_bzDecompressInitP9bz_streamii">BZ2_bzDecompressInit (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv410BZ2_bzReadPiP6BZFILEPvi">BZ2_bzRead (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv415BZ2_bzReadClosePiP6BZFILE">BZ2_bzReadClose (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv419BZ2_bzReadGetUnusedPiP6BZFILEPPvPi">BZ2_bzReadGetUnused (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv414BZ2_bzReadOpenPiP4FILEiiPvi">BZ2_bzReadOpen (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv411BZ2_bzWritePiP6BZFILEPvi">BZ2_bzWrite (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv416BZ2_bzWriteClosePiP6BZFILEiPjPj">BZ2_bzWriteClose (C++ function)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="bzip2.html#_CPPv418BZ2_bzWriteClose64PiP6BZFILEiPjPjPjPj">BZ2_bzWriteClose64 (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv415BZ2_bzWriteOpenPiP4FILEiii">BZ2_bzWriteOpen (C++ function)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv49bz_stream">bz_stream (C++ struct)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream8avail_inE">bz_stream::avail_in (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream9avail_outE">bz_stream::avail_out (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream7bzallocE">bz_stream::bzalloc (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream6bzfreeE">bz_stream::bzfree (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream7next_inE">bz_stream::next_in (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream8next_outE">bz_stream::next_out (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream6opaqueE">bz_stream::opaque (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream5stateE">bz_stream::state (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream13total_in_hi32E">bz_stream::total_in_hi32 (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream13total_in_lo32E">bz_stream::total_in_lo32 (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream14total_out_hi32E">bz_stream::total_out_hi32 (C++ member)</a>
+</li>
+      <li><a href="bzip2.html#_CPPv4N9bz_stream14total_out_lo32E">bz_stream::total_out_lo32 (C++ member)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="C">C</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="lzma.html#_CPPv48CLzmaDec">CLzmaDec (C++ struct)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec3bufE">CLzmaDec::buf (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec12checkDicSizeE">CLzmaDec::checkDicSize (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec4codeE">CLzmaDec::code (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec3dicE">CLzmaDec::dic (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec10dicBufSizeE">CLzmaDec::dicBufSize (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec6dicPosE">CLzmaDec::dicPos (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec8numProbsE">CLzmaDec::numProbs (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec5probsE">CLzmaDec::probs (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec10probs_1664E">CLzmaDec::probs_1664 (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec12processedPosE">CLzmaDec::processedPos (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec4propE">CLzmaDec::prop (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec5rangeE">CLzmaDec::range (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec9remainLenE">CLzmaDec::remainLen (C++ member)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec4repsE">CLzmaDec::reps (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N8CLzmaDec5stateE">CLzmaDec::state (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv414CLzmaEncHandle">CLzmaEncHandle (C++ type)</a>
+</li>
+      <li><a href="lzma.html#_CPPv413CLzmaEncProps">CLzmaEncProps (C++ type)</a>
+</li>
+      <li><a href="lzma.html#_CPPv410CLzmaProps">CLzmaProps (C++ type)</a>
+</li>
+      <li><a href="snappy.html#_CPPv48CompressP6SourceP4Sink">Compress (C++ function)</a>, <a href="snappy.html#_CPPv48CompressPKc6size_tPNSt6stringE">[1]</a>
+</li>
+      <li><a href="zlib.html#_CPPv48compressP5BytefP6uLongfPK5Bytef5uLong">compress (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv49compress2P5BytefP6uLongfPK5Bytef5uLongi">compress2 (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv413compressBound5uLong">compressBound (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv45crc325uLongPK5Bytef4uInt">crc32 (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv413crc32_combine5uLong5uLong7z_off_t">crc32_combine (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv417crc32_combine_gen7z_off_t">crc32_combine_gen (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv416crc32_combine_op5uLong5uLong5uLong">crc32_combine_op (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv47crc32_z5uLongPK5Bytef8z_size_t">crc32_z (C++ function)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="D">D</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="zlib.html#_CPPv47deflate9z_streampi">deflate (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv412deflateBound9z_streamp5uLong">deflateBound (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv411deflateCopy9z_streamp9z_streamp">deflateCopy (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv410deflateEnd9z_streamp">deflateEnd (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv420deflateGetDictionary9z_streampP5BytefP4uInt">deflateGetDictionary (C++ function)</a>
+</li>
+      <li><a href="zlib.html#c.deflateInit">deflateInit (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.deflateInit2">deflateInit2 (C macro)</a>
+</li>
+      <li><a href="zlib.html#_CPPv413deflateInit2_9z_streampiiiiiPKci">deflateInit2_ (C++ function)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="zlib.html#_CPPv412deflateInit_9z_streampiPKci">deflateInit_ (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv413deflateParams9z_streampii">deflateParams (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv414deflatePending9z_streampPjPi">deflatePending (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv412deflatePrime9z_streampii">deflatePrime (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv412deflateReset9z_streamp">deflateReset (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv416deflateResetKeep9z_streamp">deflateResetKeep (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv420deflateSetDictionary9z_streampPK5Bytef4uInt">deflateSetDictionary (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv416deflateSetHeader9z_streamp10gz_headerp">deflateSetHeader (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv411deflateTune9z_streampiiii">deflateTune (C++ function)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="E">E</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="lzma.html#_CPPv415ELzmaFinishMode">ELzmaFinishMode (C++ enum)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N15ELzmaFinishMode15LZMA_FINISH_ANYE">ELzmaFinishMode::LZMA_FINISH_ANY (C++ enumerator)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N15ELzmaFinishMode15LZMA_FINISH_ENDE">ELzmaFinishMode::LZMA_FINISH_END (C++ enumerator)</a>
+</li>
+      <li><a href="lzma.html#_CPPv411ELzmaStatus">ELzmaStatus (C++ enum)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="lzma.html#_CPPv4N11ELzmaStatus30LZMA_STATUS_FINISHED_WITH_MARKE">ELzmaStatus::LZMA_STATUS_FINISHED_WITH_MARK (C++ enumerator)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N11ELzmaStatus39LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARKE">ELzmaStatus::LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK (C++ enumerator)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N11ELzmaStatus28LZMA_STATUS_NEEDS_MORE_INPUTE">ELzmaStatus::LZMA_STATUS_NEEDS_MORE_INPUT (C++ enumerator)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N11ELzmaStatus24LZMA_STATUS_NOT_FINISHEDE">ELzmaStatus::LZMA_STATUS_NOT_FINISHED (C++ enumerator)</a>
+</li>
+      <li><a href="lzma.html#_CPPv4N11ELzmaStatus25LZMA_STATUS_NOT_SPECIFIEDE">ELzmaStatus::LZMA_STATUS_NOT_SPECIFIED (C++ enumerator)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="F">F</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="zlib.html#_CPPv49free_func">free_func (C++ type)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="G">G</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="snappy.html#_CPPv421GetUncompressedLengthP6SourceP8uint32_t">GetUncompressedLength (C++ function)</a>, <a href="snappy.html#_CPPv421GetUncompressedLengthPKc6size_tP6size_t">[1]</a>
+</li>
+      <li><a href="snappy.html#_CPPv443GetUncompressedLengthFromMTCompressedBufferPKc6size_tP6size_t">GetUncompressedLengthFromMTCompressedBuffer (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv49gz_header">gz_header (C++ type)</a>
+</li>
+      <li><a href="zlib.html#_CPPv411gz_header_s">gz_header_s (C++ struct)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s8comm_maxE">gz_header_s::comm_max (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s7commentE">gz_header_s::comment (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s4doneE">gz_header_s::done (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s5extraE">gz_header_s::extra (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s9extra_lenE">gz_header_s::extra_len (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s9extra_maxE">gz_header_s::extra_max (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s4hcrcE">gz_header_s::hcrc (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s4nameE">gz_header_s::name (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s8name_maxE">gz_header_s::name_max (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s2osE">gz_header_s::os (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s4textE">gz_header_s::text (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s4timeE">gz_header_s::time (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N11gz_header_s6xflagsE">gz_header_s::xflags (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv48gzbuffer6gzFilej">gzbuffer (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv410gzclearerr6gzFile">gzclearerr (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv47gzclose6gzFile">gzclose (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv49gzclose_r6gzFile">gzclose_r (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv49gzclose_w6gzFile">gzclose_w (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv48gzdirect6gzFile">gzdirect (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv47gzdopeniPKc">gzdopen (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv45gzeof6gzFile">gzeof (C++ function)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="zlib.html#_CPPv47gzerror6gzFilePi">gzerror (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv46gzFile">gzFile (C++ type)</a>
+</li>
+      <li><a href="zlib.html#_CPPv48gzFile_s">gzFile_s (C++ struct)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N8gzFile_s4haveE">gzFile_s::have (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N8gzFile_s4nextE">gzFile_s::next (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N8gzFile_s3posE">gzFile_s::pos (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv47gzflush6gzFilei">gzflush (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv47gzfread5voidp8z_size_t8z_size_t6gzFile">gzfread (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv48gzfwrite6voidpc8z_size_t8z_size_t6gzFile">gzfwrite (C++ function)</a>
+</li>
+      <li><a href="zlib.html#c.gzgetc">gzgetc (C macro)</a>
+
+      <ul>
+        <li><a href="zlib.html#_CPPv46gzgetc6gzFile">(C++ function)</a>
+</li>
+      </ul></li>
+      <li><a href="zlib.html#_CPPv47gzgetc_6gzFile">gzgetc_ (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv46gzgets6gzFilePci">gzgets (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv48gzoffset6gzFile">gzoffset (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv46gzopenPKcPKc">gzopen (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv48gzprintf6gzFilePKcz">gzprintf (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv46gzputc6gzFilei">gzputc (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv46gzputs6gzFilePKc">gzputs (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv46gzread6gzFile5voidpj">gzread (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv48gzrewind6gzFile">gzrewind (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv46gzseek6gzFile7z_off_ti">gzseek (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv411gzsetparams6gzFileii">gzsetparams (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv46gztell6gzFile">gztell (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv48gzungetci6gzFile">gzungetc (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv49gzvprintf6gzFilePKc7va_list">gzvprintf (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv47gzwrite6gzFile6voidpcj">gzwrite (C++ function)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="I">I</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="zlib.html#_CPPv47inflate9z_streampi">inflate (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv414inflateBackEnd9z_streamp">inflateBackEnd (C++ function)</a>
+</li>
+      <li><a href="zlib.html#c.inflateBackInit">inflateBackInit (C macro)</a>
+</li>
+      <li><a href="zlib.html#_CPPv416inflateCodesUsed9z_streamp">inflateCodesUsed (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv411inflateCopy9z_streamp9z_streamp">inflateCopy (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv410inflateEnd9z_streamp">inflateEnd (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv420inflateGetDictionary9z_streampP5BytefP4uInt">inflateGetDictionary (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv416inflateGetHeader9z_streamp10gz_headerp">inflateGetHeader (C++ function)</a>
+</li>
+      <li><a href="zlib.html#c.inflateInit">inflateInit (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.inflateInit2">inflateInit2 (C macro)</a>
+</li>
+      <li><a href="zlib.html#_CPPv413inflateInit2_9z_streampiPKci">inflateInit2_ (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv412inflateInit_9z_streampPKci">inflateInit_ (C++ function)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="zlib.html#_CPPv411inflateMark9z_streamp">inflateMark (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv412inflatePrime9z_streampii">inflatePrime (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv412inflateReset9z_streamp">inflateReset (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv413inflateReset29z_streampi">inflateReset2 (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv416inflateResetKeep9z_streamp">inflateResetKeep (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv420inflateSetDictionary9z_streampPK5Bytef4uInt">inflateSetDictionary (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv411inflateSync9z_streamp">inflateSync (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv416inflateSyncPoint9z_streamp">inflateSyncPoint (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv416inflateUndermine9z_streampi">inflateUndermine (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv415inflateValidate9z_streampi">inflateValidate (C++ function)</a>
+</li>
+      <li><a href="snappy.html#_CPPv417IsValidCompressedP6Source">IsValidCompressed (C++ function)</a>
+</li>
+      <li><a href="snappy.html#_CPPv423IsValidCompressedBufferPKc6size_t">IsValidCompressedBuffer (C++ function)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="K">K</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="snappy.html#_CPPv410kBlockSize">kBlockSize (C++ member)</a>
+</li>
+      <li><a href="snappy.html#_CPPv417kMaxHashTableBits">kMaxHashTableBits (C++ member)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="snappy.html#_CPPv417kMaxHashTableSize">kMaxHashTableSize (C++ member)</a>
+</li>
+      <li><a href="snappy.html#_CPPv417kMinHashTableBits">kMinHashTableBits (C++ member)</a>
+</li>
+      <li><a href="snappy.html#_CPPv417kMinHashTableSize">kMinHashTableSize (C++ member)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="L">L</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="lz4.html#_CPPv420LZ4_compress_defaultPKcPcii">LZ4_compress_default (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv421LZ4_compress_destSizePKcPcPii">LZ4_compress_destSize (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv417LZ4_compress_fastPKcPciii">LZ4_compress_fast (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv426LZ4_compress_fast_continueP12LZ4_stream_tPKcPciii">LZ4_compress_fast_continue (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv426LZ4_compress_fast_extStatePvPKcPciii">LZ4_compress_fast_extState (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv415LZ4_compress_HCPKcPciii">LZ4_compress_HC (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv424LZ4_compress_HC_continueP14LZ4_streamHC_tPKcPcii">LZ4_compress_HC_continue (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv433LZ4_compress_HC_continue_destSizeP14LZ4_streamHC_tPKcPcPii">LZ4_compress_HC_continue_destSize (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv424LZ4_compress_HC_destSizePvPKcPcPiii">LZ4_compress_HC_destSize (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv426LZ4_compress_HC_extStateHCPvPKcPciii">LZ4_compress_HC_extStateHC (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv424LZ4_compress_HC_internalPKcPciii">LZ4_compress_HC_internal (C++ function)</a>
+</li>
+      <li><a href="lz4.html#c.LZ4_COMPRESSBOUND">LZ4_COMPRESSBOUND (C macro)</a>
+</li>
+      <li><a href="lz4.html#_CPPv417LZ4_compressBoundi">LZ4_compressBound (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv414LZ4_compressHCPKcPci">LZ4_compressHC (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv415LZ4_compressHC2PKcPcii">LZ4_compressHC2 (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv429LZ4_compressHC2_limitedOutputPKcPciii">LZ4_compressHC2_limitedOutput (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv441LZ4_compressHC2_limitedOutput_withStateHCPvPKcPciii">LZ4_compressHC2_limitedOutput_withStateHC (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv427LZ4_compressHC2_withStateHCPvPKcPcii">LZ4_compressHC2_withStateHC (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv423LZ4_compressHC_continueP14LZ4_streamHC_tPKcPci">LZ4_compressHC_continue (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv428LZ4_compressHC_limitedOutputPKcPcii">LZ4_compressHC_limitedOutput (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv437LZ4_compressHC_limitedOutput_continueP14LZ4_streamHC_tPKcPcii">LZ4_compressHC_limitedOutput_continue (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv440LZ4_compressHC_limitedOutput_withStateHCPvPKcPcii">LZ4_compressHC_limitedOutput_withStateHC (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv426LZ4_compressHC_withStateHCPvPKcPci">LZ4_compressHC_withStateHC (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv416LZ4_createStreamv">LZ4_createStream (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv422LZ4_createStreamDecodev">LZ4_createStreamDecode (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv418LZ4_createStreamHCv">LZ4_createStreamHC (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv425LZ4_decoderRingBufferSizei">LZ4_decoderRingBufferSize (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv419LZ4_decompress_safePKcPcii">LZ4_decompress_safe (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv428LZ4_decompress_safe_continueP18LZ4_streamDecode_tPKcPcii">LZ4_decompress_safe_continue (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv427LZ4_decompress_safe_partialPKcPciii">LZ4_decompress_safe_partial (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv429LZ4_decompress_safe_usingDictPKcPciiPKci">LZ4_decompress_safe_usingDict (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv414LZ4_freeStreamP12LZ4_stream_t">LZ4_freeStream (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv420LZ4_freeStreamDecodeP18LZ4_streamDecode_t">LZ4_freeStreamDecode (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv416LZ4_freeStreamHCP14LZ4_streamHC_t">LZ4_freeStreamHC (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv414LZ4_initStreamPv6size_t">LZ4_initStream (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv416LZ4_initStreamHCPv6size_t">LZ4_initStreamHC (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv412LZ4_loadDictP12LZ4_stream_tPKci">LZ4_loadDict (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv414LZ4_loadDictHCP14LZ4_streamHC_tPKci">LZ4_loadDictHC (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv420LZ4_resetStream_fastP12LZ4_stream_t">LZ4_resetStream_fast (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv422LZ4_resetStreamHC_fastP14LZ4_streamHC_ti">LZ4_resetStreamHC_fast (C++ function)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="lz4.html#_CPPv412LZ4_saveDictP12LZ4_stream_tPci">LZ4_saveDict (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv414LZ4_saveDictHCP14LZ4_streamHC_tPci">LZ4_saveDictHC (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv419LZ4_setStreamDecodeP18LZ4_streamDecode_tPKci">LZ4_setStreamDecode (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv415LZ4_sizeofStatev">LZ4_sizeofState (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv417LZ4_sizeofStateHCv">LZ4_sizeofStateHC (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv412LZ4_stream_t">LZ4_stream_t (C++ type)</a>
+</li>
+      <li><a href="lz4.html#_CPPv418LZ4_streamDecode_t">LZ4_streamDecode_t (C++ type)</a>
+</li>
+      <li><a href="lz4.html#_CPPv417LZ4_versionNumberv">LZ4_versionNumber (C++ function)</a>
+</li>
+      <li><a href="lz4.html#_CPPv417LZ4_versionStringv">LZ4_versionString (C++ function)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv419LZ4HC_CCtx_internal">LZ4HC_CCtx_internal (C++ struct)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv4N19LZ4HC_CCtx_internal4baseE">LZ4HC_CCtx_internal::base (C++ member)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv4N19LZ4HC_CCtx_internal16compressionLevelE">LZ4HC_CCtx_internal::compressionLevel (C++ member)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv4N19LZ4HC_CCtx_internal8dictBaseE">LZ4HC_CCtx_internal::dictBase (C++ member)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv4N19LZ4HC_CCtx_internal7dictCtxE">LZ4HC_CCtx_internal::dictCtx (C++ member)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv4N19LZ4HC_CCtx_internal9dictLimitE">LZ4HC_CCtx_internal::dictLimit (C++ member)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv4N19LZ4HC_CCtx_internal5dirtyE">LZ4HC_CCtx_internal::dirty (C++ member)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv4N19LZ4HC_CCtx_internal3endE">LZ4HC_CCtx_internal::end (C++ member)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv4N19LZ4HC_CCtx_internal13favorDecSpeedE">LZ4HC_CCtx_internal::favorDecSpeed (C++ member)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv4N19LZ4HC_CCtx_internal8lowLimitE">LZ4HC_CCtx_internal::lowLimit (C++ member)</a>
+</li>
+      <li><a href="lz4hc.html#_CPPv4N19LZ4HC_CCtx_internal12nextToUpdateE">LZ4HC_CCtx_internal::nextToUpdate (C++ member)</a>
+</li>
+      <li><a href="lzma.html#_CPPv416LzmaDec_AllocateP8CLzmaDecPK4Bytej11ISzAllocPtr">LzmaDec_Allocate (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv421LzmaDec_AllocateProbsP8CLzmaDecPK4Bytej11ISzAllocPtr">LzmaDec_AllocateProbs (C++ function)</a>
+</li>
+      <li><a href="lzma.html#c.LzmaDec_Construct">LzmaDec_Construct (C macro)</a>
+</li>
+      <li><a href="lzma.html#_CPPv419LzmaDec_DecodeToDicP8CLzmaDec5SizeTPK4ByteP5SizeT15ELzmaFinishModeP11ELzmaStatus">LzmaDec_DecodeToDic (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv412LzmaDec_FreeP8CLzmaDec11ISzAllocPtr">LzmaDec_Free (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv417LzmaDec_FreeProbsP8CLzmaDec11ISzAllocPtr">LzmaDec_FreeProbs (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv412LzmaDec_InitP8CLzmaDec">LzmaDec_Init (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv410LzmaDecodeP4ByteP5SizeTPK4ByteP5SizeTPK4Bytej15ELzmaFinishModeP11ELzmaStatus11ISzAllocPtr">LzmaDecode (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv414LzmaEnc_Create11ISzAllocPtr">LzmaEnc_Create (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv415LzmaEnc_Destroy14CLzmaEncHandle11ISzAllocPtr11ISzAllocPtr">LzmaEnc_Destroy (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv422LzmaEnc_IsWriteEndMark14CLzmaEncHandle">LzmaEnc_IsWriteEndMark (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv417LzmaEnc_MemEncode14CLzmaEncHandleP4ByteP5SizeTPK4Byte5SizeTiP17ICompressProgress11ISzAllocPtr11ISzAllocPtr">LzmaEnc_MemEncode (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv419LzmaEnc_SetDataSize14CLzmaEncHandle6UInt64">LzmaEnc_SetDataSize (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv416LzmaEnc_SetProps14CLzmaEncHandlePK13CLzmaEncProps">LzmaEnc_SetProps (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv423LzmaEnc_WriteProperties14CLzmaEncHandleP4ByteP5SizeT">LzmaEnc_WriteProperties (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv410LzmaEncodeP4ByteP5SizeTPK4Byte5SizeTPK13CLzmaEncPropsP4ByteP5SizeTiP17ICompressProgress11ISzAllocPtr11ISzAllocPtr">LzmaEncode (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv424LzmaEncProps_GetDictSizePK13CLzmaEncProps">LzmaEncProps_GetDictSize (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv417LzmaEncProps_InitP13CLzmaEncProps">LzmaEncProps_Init (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv422LzmaEncProps_NormalizeP13CLzmaEncProps">LzmaEncProps_Normalize (C++ function)</a>
+</li>
+      <li><a href="lzma.html#_CPPv416LzmaProps_DecodeP10CLzmaPropsPK4Bytej">LzmaProps_Decode (C++ function)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="M">M</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="snappy.html#_CPPv419MaxCompressedLength6size_t">MaxCompressedLength (C++ function)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="R">R</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="snappy.html#_CPPv411RawCompressPKc6size_tPcP6size_t">RawCompress (C++ function)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="snappy.html#_CPPv413RawUncompressP6SourcePc">RawUncompress (C++ function)</a>, <a href="snappy.html#_CPPv413RawUncompressPKc6size_tPc">[1]</a>
+</li>
+      <li><a href="snappy.html#_CPPv420RawUncompressToIOVecP6SourcePK5iovec6size_t">RawUncompressToIOVec (C++ function)</a>, <a href="snappy.html#_CPPv420RawUncompressToIOVecPKc6size_tPK5iovec6size_t">[1]</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="U">U</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="snappy.html#_CPPv410UncompressP6SourceP4Sink">Uncompress (C++ function)</a>, <a href="snappy.html#_CPPv410UncompressPKc6size_tPNSt6stringE">[1]</a>
+</li>
+      <li><a href="zlib.html#_CPPv410uncompressP5BytefP6uLongfPK5Bytef5uLong">uncompress (C++ function)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="zlib.html#_CPPv411uncompress2P5BytefP6uLongfPK5BytefP5uLong">uncompress2 (C++ function)</a>
+</li>
+      <li><a href="snappy.html#_CPPv426UncompressAsMuchAsPossibleP6SourceP4Sink">UncompressAsMuchAsPossible (C++ function)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="Z">Z</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="zlib.html#c.Z_ASCII">Z_ASCII (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_BEST_COMPRESSION">Z_BEST_COMPRESSION (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_BEST_SPEED">Z_BEST_SPEED (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_BINARY">Z_BINARY (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_BLOCK">Z_BLOCK (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_BUF_ERROR">Z_BUF_ERROR (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_DATA_ERROR">Z_DATA_ERROR (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_DEFAULT_COMPRESSION">Z_DEFAULT_COMPRESSION (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_DEFAULT_STRATEGY">Z_DEFAULT_STRATEGY (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_DEFLATED">Z_DEFLATED (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_ERRNO">Z_ERRNO (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_FILTERED">Z_FILTERED (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_FINISH">Z_FINISH (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_FIXED">Z_FIXED (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_FULL_FLUSH">Z_FULL_FLUSH (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_HUFFMAN_ONLY">Z_HUFFMAN_ONLY (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_MEM_ERROR">Z_MEM_ERROR (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_NEED_DICT">Z_NEED_DICT (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_NO_COMPRESSION">Z_NO_COMPRESSION (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_NO_FLUSH">Z_NO_FLUSH (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_NULL">Z_NULL (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_OK">Z_OK (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_PARTIAL_FLUSH">Z_PARTIAL_FLUSH (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_RLE">Z_RLE (C macro)</a>
+</li>
+      <li><a href="zlib.html#_CPPv48z_stream">z_stream (C++ type)</a>
+</li>
+      <li><a href="zlib.html#c.Z_STREAM_END">Z_STREAM_END (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_STREAM_ERROR">Z_STREAM_ERROR (C macro)</a>
+</li>
+      <li><a href="zlib.html#_CPPv410z_stream_s">z_stream_s (C++ struct)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s5adlerE">z_stream_s::adler (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s8avail_inE">z_stream_s::avail_in (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s9avail_outE">z_stream_s::avail_out (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s9data_typeE">z_stream_s::data_type (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s8next_outE">z_stream_s::next_out (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s6opaqueE">z_stream_s::opaque (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s8reservedE">z_stream_s::reserved (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s8total_inE">z_stream_s::total_in (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s9total_outE">z_stream_s::total_out (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s6zallocE">z_stream_s::zalloc (C++ member)</a>
+</li>
+      <li><a href="zlib.html#_CPPv4N10z_stream_s5zfreeE">z_stream_s::zfree (C++ member)</a>
+</li>
+      <li><a href="zlib.html#c.Z_SYNC_FLUSH">Z_SYNC_FLUSH (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_TEXT">Z_TEXT (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_TREES">Z_TREES (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_UNKNOWN">Z_UNKNOWN (C macro)</a>
+</li>
+      <li><a href="zlib.html#c.Z_VERSION_ERROR">Z_VERSION_ERROR (C macro)</a>
+</li>
+      <li><a href="zlib.html#_CPPv46zErrori">zError (C++ function)</a>
+</li>
+      <li><a href="zlib.html#c.zlib_version">zlib_version (C macro)</a>
+</li>
+      <li><a href="zlib.html#_CPPv416zlibCompileFlagsv">zlibCompileFlags (C++ function)</a>
+</li>
+      <li><a href="zlib.html#_CPPv411zlibVersionv">zlibVersion (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv411ZSTD_bounds">ZSTD_bounds (C++ struct)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N11ZSTD_bounds5errorE">ZSTD_bounds::error (C++ member)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N11ZSTD_bounds10lowerBoundE">ZSTD_bounds::lowerBound (C++ member)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N11ZSTD_bounds10upperBoundE">ZSTD_bounds::upperBound (C++ member)</a>
+</li>
+      <li><a href="zstd.html#_CPPv49ZSTD_CCtx">ZSTD_CCtx (C++ type)</a>
+</li>
+      <li><a href="zstd.html#_CPPv424ZSTD_CCtx_loadDictionaryP9ZSTD_CCtxPKv6size_t">ZSTD_CCtx_loadDictionary (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv418ZSTD_CCtx_refCDictP9ZSTD_CCtxPK10ZSTD_CDict">ZSTD_CCtx_refCDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv419ZSTD_CCtx_refPrefixP9ZSTD_CCtxPKv6size_t">ZSTD_CCtx_refPrefix (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv415ZSTD_CCtx_resetP9ZSTD_CCtx19ZSTD_ResetDirective">ZSTD_CCtx_reset (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv422ZSTD_CCtx_setParameterP9ZSTD_CCtx15ZSTD_cParameteri">ZSTD_CCtx_setParameter (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv427ZSTD_CCtx_setPledgedSrcSizeP9ZSTD_CCtxy">ZSTD_CCtx_setPledgedSrcSize (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv410ZSTD_CDict">ZSTD_CDict (C++ type)</a>
+</li>
+      <li><a href="zstd.html#_CPPv413ZSTD_compressPv6size_tPKv6size_ti">ZSTD_compress (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv414ZSTD_compress2P9ZSTD_CCtxPv6size_tPKv6size_t">ZSTD_compress2 (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv424ZSTD_compress_usingCDictP9ZSTD_CCtxPv6size_tPKv6size_tPK10ZSTD_CDict">ZSTD_compress_usingCDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv423ZSTD_compress_usingDictP9ZSTD_CCtxPv6size_tPKv6size_tPKv6size_ti">ZSTD_compress_usingDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv418ZSTD_compressBound6size_t">ZSTD_compressBound (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv417ZSTD_compressCCtxP9ZSTD_CCtxPv6size_tPKv6size_ti">ZSTD_compressCCtx (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv419ZSTD_compressStreamP12ZSTD_CStreamP14ZSTD_outBufferP13ZSTD_inBuffer">ZSTD_compressStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv420ZSTD_compressStream2P9ZSTD_CCtxP14ZSTD_outBufferP13ZSTD_inBuffer17ZSTD_EndDirective">ZSTD_compressStream2 (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv421ZSTD_cParam_getBounds15ZSTD_cParameter">ZSTD_cParam_getBounds (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv415ZSTD_cParameter">ZSTD_cParameter (C++ enum)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter15ZSTD_c_chainLogE">ZSTD_cParameter::ZSTD_c_chainLog (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter19ZSTD_c_checksumFlagE">ZSTD_cParameter::ZSTD_c_checksumFlag (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter23ZSTD_c_compressionLevelE">ZSTD_cParameter::ZSTD_c_compressionLevel (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter22ZSTD_c_contentSizeFlagE">ZSTD_cParameter::ZSTD_c_contentSizeFlag (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter17ZSTD_c_dictIDFlagE">ZSTD_cParameter::ZSTD_c_dictIDFlag (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter33ZSTD_c_enableLongDistanceMatchingE">ZSTD_cParameter::ZSTD_c_enableLongDistanceMatching (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter14ZSTD_c_hashLogE">ZSTD_cParameter::ZSTD_c_hashLog (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter14ZSTD_c_jobSizeE">ZSTD_cParameter::ZSTD_c_jobSize (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter23ZSTD_c_ldmBucketSizeLogE">ZSTD_cParameter::ZSTD_c_ldmBucketSizeLog (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter17ZSTD_c_ldmHashLogE">ZSTD_cParameter::ZSTD_c_ldmHashLog (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter21ZSTD_c_ldmHashRateLogE">ZSTD_cParameter::ZSTD_c_ldmHashRateLog (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter18ZSTD_c_ldmMinMatchE">ZSTD_cParameter::ZSTD_c_ldmMinMatch (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter15ZSTD_c_minMatchE">ZSTD_cParameter::ZSTD_c_minMatch (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter16ZSTD_c_nbWorkersE">ZSTD_cParameter::ZSTD_c_nbWorkers (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter17ZSTD_c_overlapLogE">ZSTD_cParameter::ZSTD_c_overlapLog (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter16ZSTD_c_searchLogE">ZSTD_cParameter::ZSTD_c_searchLog (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter15ZSTD_c_strategyE">ZSTD_cParameter::ZSTD_c_strategy (C++ enumerator)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter19ZSTD_c_targetLengthE">ZSTD_cParameter::ZSTD_c_targetLength (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_cParameter16ZSTD_c_windowLogE">ZSTD_cParameter::ZSTD_c_windowLog (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv415ZSTD_createCCtxv">ZSTD_createCCtx (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv416ZSTD_createCDictPKv6size_ti">ZSTD_createCDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv418ZSTD_createCStreamv">ZSTD_createCStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv415ZSTD_createDCtxv">ZSTD_createDCtx (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv416ZSTD_createDDictPKv6size_t">ZSTD_createDDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv418ZSTD_createDStreamv">ZSTD_createDStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv412ZSTD_CStream">ZSTD_CStream (C++ type)</a>
+</li>
+      <li><a href="zstd.html#_CPPv418ZSTD_CStreamInSizev">ZSTD_CStreamInSize (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv419ZSTD_CStreamOutSizev">ZSTD_CStreamOutSize (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv49ZSTD_DCtx">ZSTD_DCtx (C++ type)</a>
+</li>
+      <li><a href="zstd.html#_CPPv424ZSTD_DCtx_loadDictionaryP9ZSTD_DCtxPKv6size_t">ZSTD_DCtx_loadDictionary (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv418ZSTD_DCtx_refDDictP9ZSTD_DCtxPK10ZSTD_DDict">ZSTD_DCtx_refDDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv419ZSTD_DCtx_refPrefixP9ZSTD_DCtxPKv6size_t">ZSTD_DCtx_refPrefix (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv415ZSTD_DCtx_resetP9ZSTD_DCtx19ZSTD_ResetDirective">ZSTD_DCtx_reset (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv422ZSTD_DCtx_setParameterP9ZSTD_DCtx15ZSTD_dParameteri">ZSTD_DCtx_setParameter (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv410ZSTD_DDict">ZSTD_DDict (C++ type)</a>
+</li>
+      <li><a href="zstd.html#_CPPv415ZSTD_decompressPv6size_tPKv6size_t">ZSTD_decompress (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv426ZSTD_decompress_usingDDictP9ZSTD_DCtxPv6size_tPKv6size_tPK10ZSTD_DDict">ZSTD_decompress_usingDDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv425ZSTD_decompress_usingDictP9ZSTD_DCtxPv6size_tPKv6size_tPKv6size_t">ZSTD_decompress_usingDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv419ZSTD_decompressDCtxP9ZSTD_DCtxPv6size_tPKv6size_t">ZSTD_decompressDCtx (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv421ZSTD_decompressStreamP12ZSTD_DStreamP14ZSTD_outBufferP13ZSTD_inBuffer">ZSTD_decompressStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv418ZSTD_defaultCLevelv">ZSTD_defaultCLevel (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv421ZSTD_dParam_getBounds15ZSTD_dParameter">ZSTD_dParam_getBounds (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv415ZSTD_dParameter">ZSTD_dParameter (C++ enum)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_dParameter19ZSTD_d_windowLogMaxE">ZSTD_dParameter::ZSTD_d_windowLogMax (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv412ZSTD_DStream">ZSTD_DStream (C++ type)</a>
+</li>
+      <li><a href="zstd.html#_CPPv418ZSTD_DStreamInSizev">ZSTD_DStreamInSize (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv419ZSTD_DStreamOutSizev">ZSTD_DStreamOutSize (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv417ZSTD_EndDirective">ZSTD_EndDirective (C++ enum)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N17ZSTD_EndDirective15ZSTD_e_continueE">ZSTD_EndDirective::ZSTD_e_continue (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N17ZSTD_EndDirective10ZSTD_e_endE">ZSTD_EndDirective::ZSTD_e_end (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N17ZSTD_EndDirective12ZSTD_e_flushE">ZSTD_EndDirective::ZSTD_e_flush (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv414ZSTD_endStreamP12ZSTD_CStreamP14ZSTD_outBuffer">ZSTD_endStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv428ZSTD_findFrameCompressedSizePKv6size_t">ZSTD_findFrameCompressedSize (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv416ZSTD_flushStreamP12ZSTD_CStreamP14ZSTD_outBuffer">ZSTD_flushStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv413ZSTD_freeCCtxP9ZSTD_CCtx">ZSTD_freeCCtx (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv414ZSTD_freeCDictP10ZSTD_CDict">ZSTD_freeCDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv416ZSTD_freeCStreamP12ZSTD_CStream">ZSTD_freeCStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv413ZSTD_freeDCtxP9ZSTD_DCtx">ZSTD_freeDCtx (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv414ZSTD_freeDDictP10ZSTD_DDict">ZSTD_freeDDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv416ZSTD_freeDStreamP12ZSTD_DStream">ZSTD_freeDStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv424ZSTD_getDecompressedSizePKv6size_t">ZSTD_getDecompressedSize (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv424ZSTD_getDictID_fromCDictPK10ZSTD_CDict">ZSTD_getDictID_fromCDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv424ZSTD_getDictID_fromDDictPK10ZSTD_DDict">ZSTD_getDictID_fromDDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv423ZSTD_getDictID_fromDictPKv6size_t">ZSTD_getDictID_fromDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv424ZSTD_getDictID_fromFramePKv6size_t">ZSTD_getDictID_fromFrame (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv417ZSTD_getErrorName6size_t">ZSTD_getErrorName (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv424ZSTD_getFrameContentSizePKv6size_t">ZSTD_getFrameContentSize (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv413ZSTD_inBuffer">ZSTD_inBuffer (C++ type)</a>
+</li>
+      <li><a href="zstd.html#_CPPv415ZSTD_inBuffer_s">ZSTD_inBuffer_s (C++ struct)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_inBuffer_s3posE">ZSTD_inBuffer_s::pos (C++ member)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_inBuffer_s4sizeE">ZSTD_inBuffer_s::size (C++ member)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N15ZSTD_inBuffer_s3srcE">ZSTD_inBuffer_s::src (C++ member)</a>
+</li>
+      <li><a href="zstd.html#_CPPv416ZSTD_initCStreamP12ZSTD_CStreami">ZSTD_initCStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv416ZSTD_initDStreamP12ZSTD_DStream">ZSTD_initDStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv412ZSTD_isError6size_t">ZSTD_isError (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv414ZSTD_maxCLevelv">ZSTD_maxCLevel (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv414ZSTD_minCLevelv">ZSTD_minCLevel (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv414ZSTD_outBuffer">ZSTD_outBuffer (C++ type)</a>
+</li>
+      <li><a href="zstd.html#_CPPv416ZSTD_outBuffer_s">ZSTD_outBuffer_s (C++ struct)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N16ZSTD_outBuffer_s3dstE">ZSTD_outBuffer_s::dst (C++ member)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N16ZSTD_outBuffer_s3posE">ZSTD_outBuffer_s::pos (C++ member)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N16ZSTD_outBuffer_s4sizeE">ZSTD_outBuffer_s::size (C++ member)</a>
+</li>
+      <li><a href="zstd.html#_CPPv419ZSTD_ResetDirective">ZSTD_ResetDirective (C++ enum)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N19ZSTD_ResetDirective21ZSTD_reset_parametersE">ZSTD_ResetDirective::ZSTD_reset_parameters (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N19ZSTD_ResetDirective33ZSTD_reset_session_and_parametersE">ZSTD_ResetDirective::ZSTD_reset_session_and_parameters (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N19ZSTD_ResetDirective23ZSTD_reset_session_onlyE">ZSTD_ResetDirective::ZSTD_reset_session_only (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv416ZSTD_sizeof_CCtxPK9ZSTD_CCtx">ZSTD_sizeof_CCtx (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv417ZSTD_sizeof_CDictPK10ZSTD_CDict">ZSTD_sizeof_CDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv419ZSTD_sizeof_CStreamPK12ZSTD_CStream">ZSTD_sizeof_CStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv416ZSTD_sizeof_DCtxPK9ZSTD_DCtx">ZSTD_sizeof_DCtx (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv417ZSTD_sizeof_DDictPK10ZSTD_DDict">ZSTD_sizeof_DDict (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv419ZSTD_sizeof_DStreamPK12ZSTD_DStream">ZSTD_sizeof_DStream (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv413ZSTD_strategy">ZSTD_strategy (C++ enum)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N13ZSTD_strategy12ZSTD_btlazy2E">ZSTD_strategy::ZSTD_btlazy2 (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N13ZSTD_strategy10ZSTD_btoptE">ZSTD_strategy::ZSTD_btopt (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N13ZSTD_strategy12ZSTD_btultraE">ZSTD_strategy::ZSTD_btultra (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N13ZSTD_strategy13ZSTD_btultra2E">ZSTD_strategy::ZSTD_btultra2 (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N13ZSTD_strategy10ZSTD_dfastE">ZSTD_strategy::ZSTD_dfast (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N13ZSTD_strategy9ZSTD_fastE">ZSTD_strategy::ZSTD_fast (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N13ZSTD_strategy11ZSTD_greedyE">ZSTD_strategy::ZSTD_greedy (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N13ZSTD_strategy9ZSTD_lazyE">ZSTD_strategy::ZSTD_lazy (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv4N13ZSTD_strategy10ZSTD_lazy2E">ZSTD_strategy::ZSTD_lazy2 (C++ enumerator)</a>
+</li>
+      <li><a href="zstd.html#_CPPv418ZSTD_versionNumberv">ZSTD_versionNumber (C++ function)</a>
+</li>
+      <li><a href="zstd.html#_CPPv418ZSTD_versionStringv">ZSTD_versionString (C++ function)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            <p>
+  </p>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=5b4479735964841361fd"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd"></script>
+
+<footer class="rocm-footer">
+    <div class="container-lg">
+        <section class="bottom-menu menu py-45">
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <ul>
+                        <li><a href="https://www.amd.com/en/corporate/copyright" target="_blank">Terms and Conditions</a></li>
+                        
+                        <li><a href="">2020-2024, Advanced Micro Devices, Inc</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/privacy" target="_blank">Privacy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/trademarks" target="_blank">Trademarks</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/statement-human-trafficking-forced-labor.pdf" target="_blank">Statement on Forced Labor</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/competition" target="_blank">Fair and Open Competition</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/amd-uk-tax-strategy.pdf" target="_blank">UK Tax Strategy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/cookies" target="_blank">Cookie Policy</a></li>
+                        <!-- OneTrust Cookies Settings button start -->
+                        <li><a href="#cookie-settings" id="ot-sdk-btn" class="ot-sdk-show-settings">Cookie Settings</a></li>
+                        <!-- OneTrust Cookies Settings button end -->
+                    </ul>
+                </div>
+            </div>
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <div>
+                        <span class="copyright">© 2023 Advanced Micro Devices, Inc</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</footer>
+
+<!-- <div id="rdc-watermark-container">
+    <img id="rdc-watermark" src="_static/images/alpha-watermark.svg" alt="DRAFT watermark"/>
+</div> -->
+  </body>
+</html>

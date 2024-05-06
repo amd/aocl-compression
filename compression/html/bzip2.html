@@ -1,0 +1,1557 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>5. BZIP2 &#8212; AOCL-Compression 4.2 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.1.2/css/all.min.css?digest=5b4479735964841361fd" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_header.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_footer.css" />
+    <link rel="stylesheet" type="text/css" href="_static/fonts.css" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=5b4479735964841361fd" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd" />
+  <script src="_static/vendor/fontawesome/6.1.2/js/all.min.js?digest=5b4479735964841361fd"></script>
+
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
+    <script async="async" src="_static/code_word_breaks.js"></script>
+    <script async="async" src="_static/renameVersionLinks.js"></script>
+    <script async="async" src="_static/rdcMisc.js"></script>
+    <script async="async" src="_static/theme_mode_captions.js"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?digest=5a5c038af52cf7bc1a1ec88eea08e6366ee68824"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'bzip2';</script>
+    <link rel="icon" href="https://www.amd.com/themes/custom/amd/favicon.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="6. SNAPPY" href="snappy.html" />
+    <link rel="prev" title="4. ZSTD" href="zstd.html" />
+    <meta name="google-site-verification" content="ZOn0RZC0Pwzlmf2SaE0bRttWk1YzOhuslbpxUDchQ90" />
+
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+
+<header class="common-header" >
+    <nav class="navbar navbar-expand-xl">
+        <div class="container-fluid main-nav rocm-header">
+            
+            <div class="header-logo">
+                <a class="navbar-brand" href="https://www.amd.com/">
+                    <img src="_static/images/amd-header-logo.svg" alt="AMD Logo" title="AMD Logo" width="90" class="d-inline-block align-text-top hover-opacity"/>
+                </a>
+                <div class="vr vr mx-40 my-25"></div>
+                <a class="klavika-font hover-opacity" href="./index.html">AOCL Compression 4.2</a>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var elements = document.getElementsByClassName('header-all-versions');
+            for (var i = 0; i < elements.length; i++) {
+                elements[i].remove();
+            }
+
+            elements = document.querySelector("body > footer > div > section > div:nth-child(1) > div > ul").children;
+            var removable_items = ['2020-2024, Advanced Micro Devices, Inc', 'Statement on Forced Labor', 'Fair and Open Competition', 'UK Tax Strategy', 'Cookie Policy', 'Cookie Settings'];
+            for(var i = 0; i < elements.length; i++) {
+                if(removable_items.includes(elements[i].innerText)) {
+                    elements[i].remove();
+                    i--;
+                }
+            }
+        })
+    </script>
+                <a class="header-all-versions" href="https://rocm.docs.amd.com/en/latest/release/versions.html">Version List</a>
+            </div>
+            <div class="icon-nav text-center d-flex ms-auto">
+            </div>
+        </div>
+    </nav>
+    
+</header>
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">AOCL-Compression 4.2 documentation</p>
+  
+</a></div>
+        <div class="sidebar-primary-item"><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Table of Contents</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="INSTALLATION.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unified_api.html">Standardized/Unified API</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="algos.html">Algorithms</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="lz4.html">1. LZ4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zlib.html">2. ZLIB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lzma.html">3. LZMA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zstd.html">4. ZSTD</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">5. BZIP2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snappy.html">6. SNAPPY</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lz4hc.html">7. LZ4HC</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="multi-thread.html">Multi-threaded API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="INTRODUCTION.html">Brief Overview of algos</a></li>
+<li class="toctree-l1"><a class="reference internal" href="EXAMPLE_README.html">Example Test Programs</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><label class="sidebar-toggle primary-toggle btn btn-sm" for="__primary" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-angle-right"></span>
+  </label></div>
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="algos.html" class="nav-link">Algorithms</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>BZIP2</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article" role="main">
+                  
+  <section id="bzip2">
+<span id="ref-bzip2"></span><h1><span class="section-number">5. </span>BZIP2<a class="headerlink" href="#bzip2" title="Permalink to this heading">#</a></h1>
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="a00219"></span><em><span class="pre">group</span></em> <span class="sig-name descname"><span class="pre">BZIP2_API</span></span></dt>
+<dd><p>bzip2 compresses files using the Burrows-Wheeler block-sorting text compression algorithm, and Huffman coding. Compression is considerably better than that achieved by more conventional LZ77/LZ78-based compressors, and approaches the performance of the PPM family of statistical compressors. </p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-core-(low-level)-library-functions">Core (low-level) library functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv418BZ2_bzCompressInitP9bz_streamiii">
+<span id="_CPPv318BZ2_bzCompressInitP9bz_streamiii"></span><span id="_CPPv218BZ2_bzCompressInitP9bz_streamiii"></span><span id="BZ2_bzCompressInit__bz_streamP.i.i.i"></span><span class="target" id="a00219_1ga1deeb41fb47ce82c754c829d57e36af4"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzCompressInit</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv49bz_stream" title="bz_stream"><span class="n"><span class="pre">bz_stream</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">strm</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">blockSize100k</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">verbosity</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">workFactor</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv418BZ2_bzCompressInitP9bz_streamiii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Prepares for compression. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>strm</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Holds all data pertaining to the compression activity. It should be allocated and initialised prior to the call.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>blockSize100k</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Specifies the block size to be used for compression. It should be a value between 1 and 9 inclusive, and the actual block size used is 100000 x this figure.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>verbosity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>A number between 0 and 4 inclusive. 0 is silent, and greater numbers give increasingly verbose monitoring/debugging output.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>workFactor</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Controls how the compression phase behaves when presented with worst case, highly repetitive, input data.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">blockSize100k</span></code> = 9 gives the best compression but takes most memory.</p></li>
+<li><p>If the library has been compiled with <code class="docutils literal notranslate"><span class="pre">-DBZ_NO_STDIO</span></code>, no monitoring/debugging output will appear for any verbosity setting.</p></li>
+<li><p>If compression runs into difficulties caused by repetitive data, the library switches from the <strong> standard sorting algorithm </strong> to a <strong> fallback algorithm </strong>. The fallback is slower than the standard algorithm by perhaps a factor of three, but always behaves reasonably, no matter how bad the input.</p></li>
+<li><p>Lower values of <code class="docutils literal notranslate"><span class="pre">workFactor</span></code> reduce the amount of effort the standard algorithm will expend before resorting to the fallback. Set this parameter carefully;<ul class="simple">
+<li><p>too low, and many inputs will be handled by the fallback algorithm and so compress rather slowly,</p></li>
+<li><p>too high, and your average-to-worst case compression times can become very large.</p></li>
+<li><p>The default value of <strong>30</strong><p>gives reasonable behaviour over a wide range of circumstances.</p>
+<p>Allowable values range from</p>
+<strong>0</strong> to <strong>250</strong> inclusive. 0 is a special case, equivalent to using the default value of 30.</p></li>
+</ul>
+</p></li>
+<li><p>Upon return, the internal state will have been allocated and initialised, and <code class="docutils literal notranslate"><span class="pre">total_in_lo32</span></code>, <code class="docutils literal notranslate"><span class="pre">total_in_hi32</span></code>, <code class="docutils literal notranslate"><span class="pre">total_out_lo32</span></code> and <code class="docutils literal notranslate"><span class="pre">total_out_hi32</span></code><p>will have been set to zero. These four fields are used by the library to inform the caller of the total amount of data passed into and out of the library, respectively. You should not try to change them.</p>
+<p>As of version 1.0, 64-bit counts are maintained, even on 32-bit platforms, using the</p>
+<code class="docutils literal notranslate"><span class="pre">_hi32</span></code> fields to store the upper 32 bits of the count. So, for example, the total amount of data in is (total_in_hi32 &lt;&lt; 32) + total_in_lo32. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="3"><p>Fail   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_CONFIG_ERROR</span></code> - If the library has been mis-compiled    </p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code><p>If strm is NULL</p>
+<p>or blockSize &lt; 1 or blockSize &gt; 9</p>
+<p>or verbosity &lt; 0 or verbosity &gt; 4</p>
+<p>or workFactor &lt; 0 or workFactor &gt; 250</p>
+</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code> - If available memory is insufficient.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv414BZ2_bzCompressP9bz_streami">
+<span id="_CPPv314BZ2_bzCompressP9bz_streami"></span><span id="_CPPv214BZ2_bzCompressP9bz_streami"></span><span id="BZ2_bzCompress__bz_streamP.i"></span><span class="target" id="a00219_1ga1175de70cb8e452a56c90970f67d1992"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzCompress</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv49bz_stream" title="bz_stream"><span class="n"><span class="pre">bz_stream</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">strm</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">action</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv414BZ2_bzCompressP9bz_streami" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Provides more input and/or output buffer space for the library. The caller maintains input and output buffers, and calls BZ2_bzCompress to transfer data between them.</p>
+<p>BZ2_bzCompress updates</p>
+<code class="docutils literal notranslate"><span class="pre">next_in</span></code>, <code class="docutils literal notranslate"><span class="pre">avail_in</span></code> and <code class="docutils literal notranslate"><span class="pre">total_in</span></code> to reflect the number of bytes it has read. It also updates <code class="docutils literal notranslate"><span class="pre">next_out</span></code>, <code class="docutils literal notranslate"><span class="pre">avail_out</span></code> and <code class="docutils literal notranslate"><span class="pre">total_out</span></code><p>to reflect the number of bytes output.</p>
+<p>A second purpose of BZ2_bzCompress is to request a change of mode of the compressed stream.</p>
+</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>strm</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Holds all data pertaining to the compression activity.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>action</strong></p></td>
+<td><p>in   </p></td>
+<td><p>An integer value indicating the action to be taken.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<p>
+Here’s a table which shows which actions are allowable in each state, what action will be taken, what the next state is, and what the non-error return values are. Note that you can’t explicitly ask what state the stream is in, but nor do you need to &amp;#8212; it can be inferred from the values returned by BZ2_bzCompress.</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>State/ Action   </p></th>
+<th class="head"><p>Action Taken   </p></th>
+<th class="head"><p>Next State   </p></th>
+<th class="head"><p>Return Value    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>IDLE/any   </p></td>
+<td><p><p>Illegal.</p>
+<p>IDLE state only exists after BZ2_bzCompressEnd or before BZ2_bzCompressInit.</p>
+</p></td>
+<td><p>-   </p></td>
+<td><p>BZ_SEQUENCE_ERROR    </p></td>
+</tr>
+<tr class="row-odd"><td><p>RUNNING/BZ_RUN   </p></td>
+<td><p>Compress from <code class="docutils literal notranslate"><span class="pre">next_in</span></code> to <code class="docutils literal notranslate"><span class="pre">next_out</span></code> as much as possible.   </p></td>
+<td><p>RUNNING   </p></td>
+<td><p>BZ_RUN_OK    </p></td>
+</tr>
+<tr class="row-even"><td><p>RUNNING/BZ_FLUSH   </p></td>
+<td><p>Remember current value of <code class="docutils literal notranslate"><span class="pre">next_in</span></code><p>.</p>
+<p>Compress from</p>
+<code class="docutils literal notranslate"><span class="pre">next_in</span></code> to <code class="docutils literal notranslate"><span class="pre">next_out</span></code> as much as possible, but do not accept any more input.   </p></td>
+<td><p>FLUSHING   </p></td>
+<td><p>BZ_FLUSH_OK    </p></td>
+</tr>
+<tr class="row-odd"><td><p>RUNNING/BZ_FINISH   </p></td>
+<td><p>Remember current value of <code class="docutils literal notranslate"><span class="pre">next_in</span></code><p>.</p>
+<p>Compress from</p>
+<code class="docutils literal notranslate"><span class="pre">next_in</span></code> to <code class="docutils literal notranslate"><span class="pre">next_out</span></code> as much as possible, but do not accept any more input.   </p></td>
+<td><p>FINISHING   </p></td>
+<td><p>BZ_FINISH_OK    </p></td>
+</tr>
+<tr class="row-even"><td rowspan="3"><p>FLUSHING/BZ_FLUSH   </p></td>
+<td><p>Compress from <code class="docutils literal notranslate"><span class="pre">next_in</span></code> to <code class="docutils literal notranslate"><span class="pre">next_out</span></code> as much as possible, but do not accept any more input.   </p></td>
+<td><p></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>If all the existing input has been used up and all compressed output has been removed   </p></td>
+<td><p>RUNNING   </p></td>
+<td><p>BZ_RUN_OK    </p></td>
+</tr>
+<tr class="row-even"><td><p>else   </p></td>
+<td><p>FLUSHING   </p></td>
+<td><p>BZ_FLUSH_OK    </p></td>
+</tr>
+<tr class="row-odd"><td><p>FLUSHING/other   </p></td>
+<td><p>Illegal.   </p></td>
+<td><p>-   </p></td>
+<td><p>BZ_SEQUENCE_ERROR    </p></td>
+</tr>
+<tr class="row-even"><td rowspan="3"><p>FINISHING/BZ_FINISH   </p></td>
+<td><p>Compress from <code class="docutils literal notranslate"><span class="pre">next_in</span></code> to <code class="docutils literal notranslate"><span class="pre">next_out</span></code> as much as possible, but to not accept any more input.   </p></td>
+<td><p></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>If all the existing input has been used up and all compressed output has been removed   </p></td>
+<td><p>IDLE   </p></td>
+<td><p>BZ_STREAM_END    </p></td>
+</tr>
+<tr class="row-even"><td><p>else   </p></td>
+<td><p>FINISHING   </p></td>
+<td><p>BZ_FINISH_OK    </p></td>
+</tr>
+<tr class="row-odd"><td><p>FINISHING/other   </p></td>
+<td><p>Illegal.   </p></td>
+<td><p>-   </p></td>
+<td><p>BZ_SEQUENCE_ERROR   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<p>Trivial other possible return value:<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code> - If strm is NULL, or strm-&gt;s is NULL</p></li>
+</ul>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>Before each call to <code class="docutils literal notranslate"><span class="pre">BZ2_bzCompress</span></code>, <code class="docutils literal notranslate"><span class="pre">next_in</span></code> should point at the data to be compressed, and <code class="docutils literal notranslate"><span class="pre">avail_in</span></code>should indicate the number of bytes the library may read. Similarly, <code class="docutils literal notranslate"><span class="pre">next_out</span></code> should point to a buffer in which the compressed data is to be placed, with <code class="docutils literal notranslate"><span class="pre">avail_out</span></code> indicating the available output space.</p></li>
+<li><p>You may provide and remove as little or as much data as you like on each call of <code class="docutils literal notranslate"><span class="pre">BZ2_bzCompress</span></code>. In the limit, it is acceptable to supply and remove data one byte at a time, although this would be terribly inefficient. You should always ensure that at least one byte of output space is available at each call. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417BZ2_bzCompressEndP9bz_stream">
+<span id="_CPPv317BZ2_bzCompressEndP9bz_stream"></span><span id="_CPPv217BZ2_bzCompressEndP9bz_stream"></span><span id="BZ2_bzCompressEnd__bz_streamP"></span><span class="target" id="a00219_1gae6e3b38ddeb6168f0de7371a1ad0a8dd"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzCompressEnd</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv49bz_stream" title="bz_stream"><span class="n"><span class="pre">bz_stream</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">strm</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417BZ2_bzCompressEndP9bz_stream" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Releases all memory associated with a compression stream. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>strm</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Holds all data pertaining to the compression activity.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code> - If strm is NULL or strm-&gt;s is NULL   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv420BZ2_bzDecompressInitP9bz_streamii">
+<span id="_CPPv320BZ2_bzDecompressInitP9bz_streamii"></span><span id="_CPPv220BZ2_bzDecompressInitP9bz_streamii"></span><span id="BZ2_bzDecompressInit__bz_streamP.i.i"></span><span class="target" id="a00219_1gab53b6a07dadd8d15f0ad5137ebcc4852"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzDecompressInit</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv49bz_stream" title="bz_stream"><span class="n"><span class="pre">bz_stream</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">strm</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">verbosity</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">small</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv420BZ2_bzDecompressInitP9bz_streamii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Prepares for decompression. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>strm</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Holds all data pertaining to the decompression activity. <code class="docutils literal notranslate"><span class="pre">strm</span></code> should be allocated and initialised before the call.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>verbosity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>A number between 0 and 4 inclusive. 0 is silent, and greater numbers give increasingly verbose monitoring/debugging output.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>small</strong></p></td>
+<td><p>in   </p></td>
+<td><p>If <code class="docutils literal notranslate"><span class="pre">small</span></code> is <strong>nonzero</strong> , the library will use an alternative decompression algorithm which uses less memory but at the cost of decompressing more slowly.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>Fields <code class="docutils literal notranslate"><span class="pre">bzalloc</span></code>, <code class="docutils literal notranslate"><span class="pre">bzfree</span></code> and <code class="docutils literal notranslate"><span class="pre">opaque</span></code><p>should be set if a custom memory allocator is required, or made NULL for the normal malloc / free routines.</p>
+<p>Upon return, the internal state will have been initialised, and</p>
+<code class="docutils literal notranslate"><span class="pre">total_in</span></code> and <code class="docutils literal notranslate"><span class="pre">total_out</span></code> will be zero.</p></li>
+<li><p>If the library has been compiled with <code class="docutils literal notranslate"><span class="pre">-DBZ_NO_STDIO</span></code>, no monitoring/debugging output will appear for any verbosity setting.</p></li>
+<li><p>The amount of memory needed to decompress a stream cannot be determined until the stream’s header has been read, so even if <code class="docutils literal notranslate"><span class="pre">BZ2_bzDecompressInit</span></code> succeeds, a subsequent <code class="docutils literal notranslate"><span class="pre">BZ2_bzDecompress</span></code> could fail with <code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code>. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="3"><p>Fail   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_CONFIG_ERROR</span></code> - If the library has been mis-compiled    </p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code> - If ( small != 0 &amp;&amp; small != 1 ) or (verbosity &lt; 0 || verbosity &gt; 4)    </p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code> - If available memory is insufficient.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv416BZ2_bzDecompressP9bz_stream">
+<span id="_CPPv316BZ2_bzDecompressP9bz_stream"></span><span id="_CPPv216BZ2_bzDecompressP9bz_stream"></span><span id="BZ2_bzDecompress__bz_streamP"></span><span class="target" id="a00219_1ga33e81ee995ae4a8c2dc96b47e294dbfb"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzDecompress</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv49bz_stream" title="bz_stream"><span class="n"><span class="pre">bz_stream</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">strm</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv416BZ2_bzDecompressP9bz_stream" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Provides more input and/or output buffer space for the library. The caller maintains input and output buffers, and uses BZ2_bzDecompress to transfer data between them.</p>
+<p>BZ2_bzDecompress updates</p>
+<code class="docutils literal notranslate"><span class="pre">next_in</span></code>, <code class="docutils literal notranslate"><span class="pre">avail_in</span></code> and <code class="docutils literal notranslate"><span class="pre">total_in</span></code> to reflect the number of bytes it has read. It also updates <code class="docutils literal notranslate"><span class="pre">next_out</span></code>, <code class="docutils literal notranslate"><span class="pre">avail_out</span></code> and <code class="docutils literal notranslate"><span class="pre">total_out</span></code> to reflect the number of bytes output. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>strm</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Holds all data pertaining to the decompression activity.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>Before each call to BZ2_bzDecompress, <code class="docutils literal notranslate"><span class="pre">next_in</span></code> should point at the compressed data, and <code class="docutils literal notranslate"><span class="pre">avail_in</span></code> should indicate the number of bytes the library may read. Similarly, <code class="docutils literal notranslate"><span class="pre">next_out</span></code> should point to a buffer in which the uncompressed output is to be placed, with <code class="docutils literal notranslate"><span class="pre">avail_out</span></code> indicating available output space.</p></li>
+<li><p>You may provide and remove as little or as much data as you like on each call of BZ2_bzDecompress. In the limit, it is acceptable to supply and remove data one byte at a time, although this would be terribly inefficient. You should always ensure that at least one byte of output space is available at each call.</p></li>
+<li><p>You should provide input and remove output as described above, and repeatedly call BZ2_bzDecompress until <code class="docutils literal notranslate"><span class="pre">BZ_STREAM_END</span></code> is returned. Appearance of <code class="docutils literal notranslate"><span class="pre">BZ_STREAM_END</span></code> denotes that BZ2_bzDecompress has detected the logical end of the compressed stream. BZ2_bzDecompress will not produce <code class="docutils literal notranslate"><span class="pre">BZ_STREAM_END</span></code> until all output data has been placed into the output buffer, so once <code class="docutils literal notranslate"><span class="pre">BZ_STREAM_END</span></code> appears, you are guaranteed to have available all the decompressed output, and BZ2_bzDecompressEnd can safely be called.</p></li>
+<li><p>If case of an error return value, you should call <code class="docutils literal notranslate"><span class="pre">BZ2_bzDecompressEnd</span></code> to clean up and release memory. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="6"><p>Fail   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code> - If strm is NULL or strm-&gt;s is NULL or strm-&gt;avail_out &lt; 1    </p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_SEQUENCE_ERROR</span></code> - If s-&gt;state is BZ_X_IDLE    </p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_DATA_ERROR</span></code> - If a data integrity error is detected in the compressed stream    </p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_DATA_ERROR_MAGIC</span></code> - If the compressed stream doesn’t begin with the right magic bytes    </p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code> - If available memory is insufficient.    </p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_STREAM_END</span></code> - If the logical end of the data stream was detected and all output in has been consumed, eg s-&gt;avail_out &gt; 0   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv419BZ2_bzDecompressEndP9bz_stream">
+<span id="_CPPv319BZ2_bzDecompressEndP9bz_stream"></span><span id="_CPPv219BZ2_bzDecompressEndP9bz_stream"></span><span id="BZ2_bzDecompressEnd__bz_streamP"></span><span class="target" id="a00219_1ga088d8fe0a8833cc4864bef78323dcb5c"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzDecompressEnd</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv49bz_stream" title="bz_stream"><span class="n"><span class="pre">bz_stream</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">strm</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv419BZ2_bzDecompressEndP9bz_stream" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Releases all memory associated with a decompression stream. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>strm</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Holds all data pertaining to the decompression activity.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code> - If strm is NULL or strm-&gt;s is NULL   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-high(er)-level-library-functions">High(er) level library functions</p>
+<p>This interface provides functions for reading and writing bzip2 format files. First, some general points.</p>
+<p><ol class="arabic simple">
+<li><p>All of the functions take an <code class="docutils literal notranslate"><span class="pre">int*</span></code> first argument, <code class="docutils literal notranslate"><span class="pre">bzerror</span></code>. After each call, <code class="docutils literal notranslate"><span class="pre">bzerror</span></code> should be consulted first to determine the outcome of the call. If <code class="docutils literal notranslate"><span class="pre">bzerror</span></code> is <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code>, the call completed successfully, and only then should the return value of the function (if any) be consulted. If <code class="docutils literal notranslate"><span class="pre">bzerror</span></code> is <code class="docutils literal notranslate"><span class="pre">BZ_IO_ERROR</span></code>, there was an error reading/writing the underlying compressed file, and you should then consult <code class="docutils literal notranslate"><span class="pre">errno</span></code> / <code class="docutils literal notranslate"><span class="pre">perror</span></code> to determine the cause of the difficulty. <code class="docutils literal notranslate"><span class="pre">bzerror</span></code> may also be set to various other values; precise details are given on a per-function basis below.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">bzerror</span></code> indicates an error (ie, anything except <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> and <code class="docutils literal notranslate"><span class="pre">BZ_STREAM_END</span></code>), you should immediately call <code class="docutils literal notranslate"><span class="pre">BZ2_bzReadClose</span></code> (or <code class="docutils literal notranslate"><span class="pre">BZ2_bzWriteClose</span></code>, depending on whether you are attempting to read or to write) to free up all resources associated with the stream. Once an error has been indicated, behaviour of all calls except <code class="docutils literal notranslate"><span class="pre">BZ2_bzReadClose</span></code> / <code class="docutils literal notranslate"><span class="pre">BZ2_bzWriteClose</span></code> is undefined. The implication is that<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bzerror</span></code> should be checked after each call, and</p></li>
+<li><p>if bzerror indicates an error, <code class="docutils literal notranslate"><span class="pre">BZ2_bzReadClose</span></code> / <code class="docutils literal notranslate"><span class="pre">BZ2_bzWriteClose</span></code> should then be called to clean up.</p></li>
+</ul>
+</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">FILE*</span></code> arguments passed to <code class="docutils literal notranslate"><span class="pre">BZ2_bzReadOpen</span></code> / <code class="docutils literal notranslate"><span class="pre">BZ2_bzWriteOpen</span></code> should be set to binary mode. Most Unix systems will do this by default, but other platforms, including Windows and Mac, will not. If you omit this, you may encounter problems when moving code to new platforms.</p></li>
+<li><p>Memory allocation requests are handled by <code class="docutils literal notranslate"><span class="pre">malloc</span></code> / <code class="docutils literal notranslate"><span class="pre">free</span></code>. At present there is no facility for user-defined memory allocators in the file I/O functions (could easily be added, though). </p></li>
+</ol>
+</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv414BZ2_bzReadOpenPiP4FILEiiPvi">
+<span id="_CPPv314BZ2_bzReadOpenPiP4FILEiiPvi"></span><span id="_CPPv214BZ2_bzReadOpenPiP4FILEiiPvi"></span><span id="BZ2_bzReadOpen__iP.FILEP.i.i.voidP.i"></span><span class="target" id="a00219_1gaf32ef009ef3564e457356388b0cce034"></span><span class="n"><span class="pre">BZFILE</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzReadOpen</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">bzerror</span></span>, <span class="n"><span class="pre">FILE</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">f</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">verbosity</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">small</span></span>, <span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">unused</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">nUnused</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv414BZ2_bzReadOpenPiP4FILEiiPvi" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Prepare to read compressed data from file handle f. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>bzerror</strong></p></td>
+<td><p>out   </p></td>
+<td><p>It should be consulted first to determine the outcome of the call. If bzerror is <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code>, the call completed successfully, and only then should the return value of the function (if any) be consulted.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>f</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Refers to a file which has been opened for reading, and for which the error indicator (ferror(f)) is not set.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>verbosity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>A number between 0 and 4 inclusive. 0 is silent, and greater numbers give increasingly verbose monitoring/debugging output.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>small</strong></p></td>
+<td><p>in   </p></td>
+<td><p>If <code class="docutils literal notranslate"><span class="pre">small</span></code> is 1, the library will try to decompress using less memory, at the expense of speed.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>unused</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Points to data that will be decompressed by <code class="docutils literal notranslate"><span class="pre">BZ2_bzRead</span></code> before starting to read from the file f.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>nUnused</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Number of bytes to be decompressed by <code class="docutils literal notranslate"><span class="pre">BZ2_bzRead</span></code> starting at <code class="docutils literal notranslate"><span class="pre">unused</span></code>.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>Possible assignments to bzerror:<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_CONFIG_ERROR</span></code> - If the library has been mis-compiled</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code> - If<ul>
+<li><p>f is NULL</p></li>
+<li><p>or small is neither 0 nor 1</p></li>
+<li><p>or ( unused == NULL &amp;&amp; nUnused != 0 )</p></li>
+<li><p>or ( unused != NULL &amp;&amp; !(0 &lt;= nUnused &lt;= BZ_MAX_UNUSED) )</p></li>
+</ul>
+</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_IO_ERROR</span></code> - If ferror(f) is nonzero</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code> - If available memory is insufficient.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> - otherwise.</p></li>
+</ul>
+</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ2_bzRead</span></code> will decompress the nUnused bytes starting at unused, before starting to read from the file f. At most <code class="docutils literal notranslate"><span class="pre">BZ_MAX_UNUSED</span></code> bytes may be supplied like this. If this facility is not required, you should pass <strong>NULL</strong> and <strong>0</strong> for unused and nUnused respectively.</p></li>
+<li><p>The amount of memory needed to decompress a file cannot be determined until the file’s header has been read. So it is possible that <code class="docutils literal notranslate"><span class="pre">BZ2_bzReadOpen</span></code> returns <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> but a subsequent call of <code class="docutils literal notranslate"><span class="pre">BZ2_bzRead</span></code> will return <code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code>. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Pointer to an abstract BZFILE, if bzerror is <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>NULL   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv415BZ2_bzReadClosePiP6BZFILE">
+<span id="_CPPv315BZ2_bzReadClosePiP6BZFILE"></span><span id="_CPPv215BZ2_bzReadClosePiP6BZFILE"></span><span id="BZ2_bzReadClose__iP.BZFILEP"></span><span class="target" id="a00219_1gab735738ce1ca00a6294d76e3d031cb82"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzReadClose</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">bzerror</span></span>, <span class="n"><span class="pre">BZFILE</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">b</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv415BZ2_bzReadClosePiP6BZFILE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Releases all memory pertaining to the compressed file b. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>bzerror</strong></p></td>
+<td><p>out   </p></td>
+<td><p>It should be consulted first to determine the outcome of the call. If bzerror is <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code>, the call completed successfully, and only then should the return value of the function (if any) be consulted.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>b</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Refers to the compressed file.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>Possible assignments to bzerror:<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_SEQUENCE_ERROR</span></code> - If b was opened with BZ2_bzOpenWrite</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> - otherwise</p></li>
+</ul>
+</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ2_bzReadClose</span></code> does not call fclose on the underlying file handle, so you should do that yourself if appropriate.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ2_bzReadClose</span></code> should be called to clean up after all error situations. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv419BZ2_bzReadGetUnusedPiP6BZFILEPPvPi">
+<span id="_CPPv319BZ2_bzReadGetUnusedPiP6BZFILEPPvPi"></span><span id="_CPPv219BZ2_bzReadGetUnusedPiP6BZFILEPPvPi"></span><span id="BZ2_bzReadGetUnused__iP.BZFILEP.voidPP.iP"></span><span class="target" id="a00219_1ga0fcc64851a98c62911878c9e5a46b619"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzReadGetUnused</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">bzerror</span></span>, <span class="n"><span class="pre">BZFILE</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">b</span></span>, <span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">unused</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">nUnused</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv419BZ2_bzReadGetUnusedPiP6BZFILEPPvPi" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Returns data which was read from the compressed file but was not needed to get to the logical end-of-stream. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>bzerror</strong></p></td>
+<td><p>out   </p></td>
+<td><p>It should be consulted first to determine the outcome of the call. If bzerror is <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code>, the call completed successfully, and only then should the return value of the function (if any) be consulted.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>b</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Refers to the compressed file.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>unused</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>*unused is set to the address of the data.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>nUnused</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>*nUnused is set to the number of bytes. It is a value between <strong>0</strong> and <strong>BZ_MAX_UNUSED</strong> inclusive.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>Possible assignments to bzerror:<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code> - If<ul>
+<li><p>b is NULL or</p></li>
+<li><p>unused is NULL or nUnused is NULL</p></li>
+</ul>
+</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_SEQUENCE_ERROR</span></code> - If<ul>
+<li><p>BZ_STREAM_END has not been signalled or</p></li>
+<li><p>b was opened with BZ2_bzWriteOpen</p></li>
+</ul>
+</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> - otherwise</p></li>
+</ul>
+</p></li>
+<li><p>This function may only be called once <code class="docutils literal notranslate"><span class="pre">BZ2_bzRead</span></code> has signalled BZ_STREAM_END but before <code class="docutils literal notranslate"><span class="pre">BZ2_bzReadClose</span></code>. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv410BZ2_bzReadPiP6BZFILEPvi">
+<span id="_CPPv310BZ2_bzReadPiP6BZFILEPvi"></span><span id="_CPPv210BZ2_bzReadPiP6BZFILEPvi"></span><span id="BZ2_bzRead__iP.BZFILEP.voidP.i"></span><span class="target" id="a00219_1ga6389c0f5ef085a8914c96f19e0409de9"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzRead</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">bzerror</span></span>, <span class="n"><span class="pre">BZFILE</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">b</span></span>, <span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">buf</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">len</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv410BZ2_bzReadPiP6BZFILEPvi" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Reads up to len (uncompressed) bytes from the compressed file b into the buffer buf. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>bzerror</strong></p></td>
+<td><p>out   </p></td>
+<td><p>It should be consulted first to determine the outcome of the call. If bzerror is <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code>, the call completed successfully, and only then should the return value of the function (if any) be consulted.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>b</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Refers to the compressed file.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>buf</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Buffer into which len (uncompressed) bytes is read into.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>len</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Integer variable indicating length.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>Possible assignments to bzerror:<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code> - If b is NULL or buf is NULL or len &lt; 0</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_SEQUENCE_ERROR</span></code> - If b was opened with BZ2_bzWriteOpen</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_IO_ERROR</span></code> - If there is an error reading from the compressed file</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_UNEXPECTED_EOF</span></code> - If the compressed file ended before the logical end-of-stream was detected</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_DATA_ERROR</span></code> - If a data integrity error was detected in the compressed stream</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_DATA_ERROR_MAGIC</span></code> - If the stream does not begin with the requisite header bytes (ie, is not a bzip2 data file). This is really a special case of BZ_DATA_ERROR.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code> - If available memory is insufficient.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_STREAM_END</span></code> - If the logical end of stream was detected.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> - otherwise.</p></li>
+</ul>
+</p></li>
+<li><p>If the read was successful, bzerror is set to <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> and the number of bytes read is returned. If the logical end-of-stream was detected, bzerror will be set to <code class="docutils literal notranslate"><span class="pre">BZ_STREAM_END</span></code>, and the number of bytes read is returned. All other bzerror values denote an error.</p></li>
+<li><p>BZ2_bzRead will supply len bytes, unless the logical stream end is detected or an error occurs. Because of this, it is possible to detect the stream end by observing when the number of bytes returned is less than the number requested. Nevertheless, this is regarded as inadvisable; you should instead check bzerror after every call and watch out for BZ_STREAM_END.</p></li>
+<li><p>Internally, BZ2_bzRead copies data from the compressed file in chunks of size <code class="docutils literal notranslate"><span class="pre">BZ_MAX_UNUSED</span></code> bytes before decompressing it. If the file contains more bytes than strictly needed to reach the logical end-of-stream, BZ2_bzRead will almost certainly read some of the trailing data before signalling <code class="docutils literal notranslate"><span class="pre">BZ_SEQUENCE_END</span></code>. To collect the read but unused data once<code class="docutils literal notranslate"><span class="pre">BZ_SEQUENCE_END</span></code> has appeared, call BZ2_bzReadGetUnused immediately before BZ2_bzReadClose. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>number of bytes read , if bzerror is BZ_OK or BZ_STREAM_END    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>undefined   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv415BZ2_bzWriteOpenPiP4FILEiii">
+<span id="_CPPv315BZ2_bzWriteOpenPiP4FILEiii"></span><span id="_CPPv215BZ2_bzWriteOpenPiP4FILEiii"></span><span id="BZ2_bzWriteOpen__iP.FILEP.i.i.i"></span><span class="target" id="a00219_1ga05926391137017966827f83329b04ae9"></span><span class="n"><span class="pre">BZFILE</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzWriteOpen</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">bzerror</span></span>, <span class="n"><span class="pre">FILE</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">f</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">blockSize100k</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">verbosity</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">workFactor</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv415BZ2_bzWriteOpenPiP4FILEiii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Prepare to write compressed data to file handle f. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>bzerror</strong></p></td>
+<td><p>out   </p></td>
+<td><p>It should be consulted first to determine the outcome of the call. If bzerror is <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code>, the call completed successfully, and only then should the return value of the function (if any) be consulted.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>f</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Refers to a file which has been opened for writing, and for which the error indicator (ferror(f)) is not set.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>blockSize100k</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Specifies the block size to be used for compression. It should be a value between 1 and 9 inclusive, and the actual block size used is 100000 x this figure.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>verbosity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>A number between 0 and 4 inclusive. 0 is silent, and greater numbers give increasingly verbose monitoring/debugging output.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>workFactor</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Controls how the compression phase behaves when presented with worst case, highly repetitive, input data.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>Possible assignments to bzerror:<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_CONFIG_ERROR</span></code> - If the library has been mis-compiled</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code> - If<ul>
+<li><p>f is NULL or</p></li>
+<li><p>blockSize100k &lt; 1 or blockSize100k &gt; 9</p></li>
+</ul>
+</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_IO_ERROR</span></code> - If ferror(f) is nonzero</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code> - If available memory is insufficient</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> - otherwise</p></li>
+</ul>
+</p></li>
+<li><p>All required memory is allocated at this stage, so if the call completes successfully, <code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code> cannot be signalled by a subsequent call to <code class="docutils literal notranslate"><span class="pre">BZ2_bzWrite</span></code>. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>Pointer to an abstract BZFILE, if bzerror is <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>NULL   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv411BZ2_bzWritePiP6BZFILEPvi">
+<span id="_CPPv311BZ2_bzWritePiP6BZFILEPvi"></span><span id="_CPPv211BZ2_bzWritePiP6BZFILEPvi"></span><span id="BZ2_bzWrite__iP.BZFILEP.voidP.i"></span><span class="target" id="a00219_1ga1db27caffcd72148de185c0bb3d76e86"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzWrite</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">bzerror</span></span>, <span class="n"><span class="pre">BZFILE</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">b</span></span>, <span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">buf</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">len</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv411BZ2_bzWritePiP6BZFILEPvi" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Absorbs len bytes from the buffer buf, eventually to be compressed and written to the file. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>bzerror</strong></p></td>
+<td><p>out   </p></td>
+<td><p>It should be consulted first to determine the outcome of the call. If bzerror is <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code>, the call completed successfully, and only then should the return value of the function (if any) be consulted.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>b</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Refers to the file into which compressed data will be written.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>buf</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Buffer that consists the data to be compressed.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>len</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Integer variable indicating length.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>Possible assignments to bzerror:<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code> - If b is NULL or buf is NULL or len &lt; 0</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_SEQUENCE_ERROR</span></code> - If b was opened with BZ2_bzReadOpen</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_IO_ERROR</span></code> - If there is an error writing the compressed file.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> - otherwise </p></li>
+</ul>
+</p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv416BZ2_bzWriteClosePiP6BZFILEiPjPj">
+<span id="_CPPv316BZ2_bzWriteClosePiP6BZFILEiPjPj"></span><span id="_CPPv216BZ2_bzWriteClosePiP6BZFILEiPjPj"></span><span id="BZ2_bzWriteClose__iP.BZFILEP.i.unsigned-iP.unsigned-iP"></span><span class="target" id="a00219_1ga2b1e7af0b57b53c2b36983024b60391f"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzWriteClose</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">bzerror</span></span>, <span class="n"><span class="pre">BZFILE</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">b</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">abandon</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">nbytes_in</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">nbytes_out</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv416BZ2_bzWriteClosePiP6BZFILEiPjPj" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Compresses and flushes to the compressed file all data so far supplied by <code class="docutils literal notranslate"><span class="pre">BZ2_bzWrite</span></code>. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>bzerror</strong></p></td>
+<td><p>out   </p></td>
+<td><p>It should be consulted first to determine the outcome of the call. If bzerror is <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code>, the call completed successfully, and only then should the return value of the function (if any) be consulted.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>b</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Refers to the file into which compressed data will be written.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>abandon</strong></p></td>
+<td><p>in   </p></td>
+<td><p>In case of no error, in order to attempt to complete the compression operation, or to <code class="docutils literal notranslate"><span class="pre">fflush</span></code> the compressed file, pass a nonzero value to abandon.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>nbytes_in</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>If <code class="docutils literal notranslate"><span class="pre">nbytes_in</span></code> is non-null, <code class="docutils literal notranslate"><span class="pre">*nbytes_in</span></code> will be set to be the total volume of uncompressed data handled.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>nbytes_out</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>If <code class="docutils literal notranslate"><span class="pre">nbytes_out</span></code> is non-null, <code class="docutils literal notranslate"><span class="pre">*nbytes_out</span></code> will be set to the total volume of compressed data written.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>Possible assignments to bzerror:<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_SEQUENCE_ERROR</span></code> - If b was opened with BZ2_bzReadOpen</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_IO_ERROR</span></code> - If there is an error writing the compressed file</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> - otherwise</p></li>
+</ul>
+</p></li>
+<li><p>The logical end-of-stream markers are also written, so subsequent calls to <code class="docutils literal notranslate"><span class="pre">BZ2_bzWrite</span></code> are illegal. All memory associated with the compressed file <code class="docutils literal notranslate"><span class="pre">b</span></code> is released. <code class="docutils literal notranslate"><span class="pre">fflush</span></code> is called on the compressed file, but it is not <code class="docutils literal notranslate"><span class="pre">fclose</span></code>’d.</p></li>
+<li><p><p>If BZ2_bzWriteClose is called to clean up after an error, the only action is to release the memory. The library records the error codes issued by previous calls, so this situation will be detected automatically.</p>
+<p>There is no attempt to complete the compression operation, nor to</p>
+<code class="docutils literal notranslate"><span class="pre">fflush</span></code> the compressed file. You can force this behaviour to happen even in the case of no error, by passing a nonzero value to abandon. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv418BZ2_bzWriteClose64PiP6BZFILEiPjPjPjPj">
+<span id="_CPPv318BZ2_bzWriteClose64PiP6BZFILEiPjPjPjPj"></span><span id="_CPPv218BZ2_bzWriteClose64PiP6BZFILEiPjPjPjPj"></span><span id="BZ2_bzWriteClose64__iP.BZFILEP.i.unsigned-iP.unsigned-iP.unsigned-iP.unsigned-iP"></span><span class="target" id="a00219_1gad9e702966da8abb02943b956174aa78b"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzWriteClose64</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">bzerror</span></span>, <span class="n"><span class="pre">BZFILE</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">b</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">abandon</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">nbytes_in_lo32</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">nbytes_in_hi32</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">nbytes_out_lo32</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">nbytes_out_hi32</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv418BZ2_bzWriteClose64PiP6BZFILEiPjPjPjPj" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Compresses and flushes to the compressed file all data so far supplied by <code class="docutils literal notranslate"><span class="pre">BZ2_bzWrite</span></code>. </p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>For compatibility with older versions of the library, <a class="reference internal" href="#a00219_1ga2b1e7af0b57b53c2b36983024b60391f"><span class="std std-ref">BZ2_bzWriteClose()</span></a> only yields the lower 32 bits of these counts. Use <a class="reference internal" href="#a00219_1gad9e702966da8abb02943b956174aa78b"><span class="std std-ref">BZ2_bzWriteClose64()</span></a> if you want the full 64 bit counts. These two functions are otherwise absolutely identical. </p>
+</div>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-utility-functions">Utility functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv424BZ2_bzBuffToBuffCompressPcPjPcjiii">
+<span id="_CPPv324BZ2_bzBuffToBuffCompressPcPjPcjiii"></span><span id="_CPPv224BZ2_bzBuffToBuffCompressPcPjPcjiii"></span><span id="BZ2_bzBuffToBuffCompress__cP.unsigned-iP.cP.unsigned-i.i.i.i"></span><span class="target" id="a00219_1ga656e044687b7a6fba7f477e57a096795"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzBuffToBuffCompress</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dest</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">destLen</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">source</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">sourceLen</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">blockSize100k</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">verbosity</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">workFactor</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv424BZ2_bzBuffToBuffCompressPcPjPcjiii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Attempts to compress the data in <code class="docutils literal notranslate"><span class="pre">source</span></code> into the destination buffer, <code class="docutils literal notranslate"><span class="pre">dest</span></code>. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>dest</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer, compressed data is kept here, memory should be allocated already.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>destLen</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Size of buffer <code class="docutils literal notranslate"><span class="pre">dest</span></code> (which must be already allocated).    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>source</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer, the data to be compressed is copied/or pointed here.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>sourceLen</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of buffer <code class="docutils literal notranslate"><span class="pre">source</span></code>.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>blockSize100k</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Specifies the block size to be used for compression. It should be a value between 1 and 9 inclusive, and the actual block size used is 100000 x this figure.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>verbosity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>A number between 0 and 4 inclusive. 0 is silent, and greater numbers give increasingly verbose monitoring/debugging output.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>workFactor</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Controls how the compression phase behaves when presented with worst case, highly repetitive, input data.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>If the destination buffer is big enough, *destLen is set to the size of the compressed data, and <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> is returned. If the compressed data won’t fit, *destLen is unchanged, and <code class="docutils literal notranslate"><span class="pre">BZ_OUTBUFF_FULL</span></code> is returned.</p></li>
+<li><p>To guarantee that the compressed data will fit in its buffer, allocate an output buffer of size <strong> 1% larger than the uncompressed data, plus six hundred </strong> extra bytes.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">blockSize100k</span></code> = 9 gives the best compression but takes most memory.</p></li>
+<li><p>If compression runs into difficulties caused by repetitive data, the library switches from the <strong> standard sorting algorithm </strong> to a <strong> fallback algorithm </strong>. The fallback is slower than the standard algorithm by perhaps a factor of three, but always behaves reasonably, no matter how bad the input.</p></li>
+<li><p>Lower values of <code class="docutils literal notranslate"><span class="pre">workFactor</span></code> reduce the amount of effort the standard algorithm will expend before resorting to the fallback. Set this parameter carefully;<ul class="simple">
+<li><p>too low, and many inputs will be handled by the fallback algorithm and so compress rather slowly,</p></li>
+<li><p>too high, and your average-to-worst case compression times can become very large.</p></li>
+<li><p>The default value of <strong>30</strong><p>gives reasonable behaviour over a wide range of circumstances.</p>
+<p>Allowable values range from</p>
+<strong>0</strong> to <strong>250</strong> inclusive. 0 is a special case, equivalent to using the default value of 30.</p></li>
+</ul>
+</p></li>
+<li><p>Compression is a one-shot event, done with a single call to this function. The resulting compressed data is a complete bzip2 format data stream. There is no mechanism for making additional calls to provide extra input data. If you want that kind of mechanism, use the low-level interface. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="4"><p>Fail   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_CONFIG_ERROR</span></code> - If the library has been mis-compiled    </p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code><p>If dest is NULL or destLen is NULL or</p>
+<p>blockSize100k &lt; 1 or blockSize100k &gt; 9 or</p>
+<p>verbosity &lt; 0 or verbosity &gt; 4 or</p>
+<p>workFactor &lt; 0 or workFactor &gt; 250</p>
+</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code> - If available memory is insufficient    </p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_OUTBUFF_FULL</span></code> - If the size of the compressed data exceeds *destLen   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv426BZ2_bzBuffToBuffDecompressPcPjPcjii">
+<span id="_CPPv326BZ2_bzBuffToBuffDecompressPcPjPcjii"></span><span id="_CPPv226BZ2_bzBuffToBuffDecompressPcPjPcjii"></span><span id="BZ2_bzBuffToBuffDecompress__cP.unsigned-iP.cP.unsigned-i.i.i"></span><span class="target" id="a00219_1ga4f2dd48eb1dcfd7ce4a92322e477c8de"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BZ2_bzBuffToBuffDecompress</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dest</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">destLen</span></span>, <span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">source</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">sourceLen</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">small</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">verbosity</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv426BZ2_bzBuffToBuffDecompressPcPjPcjii" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Attempts to decompress the data in <code class="docutils literal notranslate"><span class="pre">source</span></code> into the destination buffer, <code class="docutils literal notranslate"><span class="pre">dest</span></code>. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>dest</strong></p></td>
+<td><p>out   </p></td>
+<td><p>This is the destination buffer, the data is decompressed to this buffer.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>destLen</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Size of buffer <code class="docutils literal notranslate"><span class="pre">dest</span></code> (which must be already allocated).    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>source</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer, the data to be decompressed is pointed here.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>sourceLen</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of buffer <code class="docutils literal notranslate"><span class="pre">source</span></code>.    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>small</strong></p></td>
+<td><p>in   </p></td>
+<td><p>If <code class="docutils literal notranslate"><span class="pre">small</span></code> is <strong>nonzero</strong> , the library will use an alternative decompression algorithm which uses less memory but at the cost of decompressing more slowly.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>verbosity</strong></p></td>
+<td><p>in   </p></td>
+<td><p>A number between 0 and 4 inclusive. 0 is silent, and greater numbers give increasingly verbose monitoring/debugging output.   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><ol class="loweralpha simple">
+<li><p>If the destination buffer is big enough, *destLen is set to the size of the uncompressed data, and <code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code> is returned. If the uncompressed data won’t fit, *destLen is unchanged, and <code class="docutils literal notranslate"><span class="pre">BZ_OUTBUFF_FULL</span></code> is returned.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">source</span></code> is assumed to hold a complete bzip2 format data stream. BZ2_bzBuffToBuffDecompress tries to decompress the entirety of the stream into the output buffer.</p></li>
+<li><p>BZ2_bzBuffToBuffDecompress will not write data at or beyond dest[*destLen], even in case of buffer overflow. </p></li>
+</ol>
+</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_OK</span></code></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="7"><p>Fail   </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BZ_CONFIG_ERROR</span></code> - If the library has been mis-compiled    </p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_PARAM_ERROR</span></code><p>if dest is NULL or destLen is NULL or</p>
+<p>small != 0 &amp;&amp; small != 1 or</p>
+
+ verbosity &lt; 0 or verbosity &gt; 4    </p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_MEM_ERROR</span></code> - If available memory is insufficient.    </p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_OUTBUFF_FULL</span></code> - If the size of the uncompressed data exceeds *destLen    </p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_DATA_ERROR</span></code> - If a data integrity error was detected in the compressed data    </p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_DATA_ERROR_MAGIC</span></code> - If the compressed data doesn’t begin with the right magic bytes    </p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BZ_UNEXPECTED_EOF</span></code> - If the compressed data ends unexpectedly   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv49bz_stream">
+<span id="_CPPv39bz_stream"></span><span id="_CPPv29bz_stream"></span><span id="bz_stream"></span><span class="target" id="a00390"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">bz_stream</span></span></span><a class="headerlink" href="#_CPPv49bz_stream" title="Permalink to this definition">#</a><br /></dt>
+<dd><div class="docutils container">
+<em>#include &lt;bzlib.h&gt;</em></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The fields of <code class="docutils literal notranslate"><a class="reference internal" href="#a00390"><span class="std std-ref"><span class="pre">bz_stream</span></span></a></code> comprise the entirety of the user-visible data. </p>
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream8avail_inE">
+<span id="_CPPv3N9bz_stream8avail_inE"></span><span id="_CPPv2N9bz_stream8avail_inE"></span><span id="bz_stream::avail_in__unsigned-i"></span><span class="target" id="a00390_1a3b4296261f93965fc477277c410603af"></span><span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">avail_in</span></span></span><a class="headerlink" href="#_CPPv4N9bz_stream8avail_inE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Indicates the number of bytes the library may read. </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream9avail_outE">
+<span id="_CPPv3N9bz_stream9avail_outE"></span><span id="_CPPv2N9bz_stream9avail_outE"></span><span id="bz_stream::avail_out__unsigned-i"></span><span class="target" id="a00390_1a749a8dd37243c6b76f81de5cd2a24e2e"></span><span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">avail_out</span></span></span><a class="headerlink" href="#_CPPv4N9bz_stream9avail_outE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Indicates the available output space. </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream7bzallocE">
+<span id="_CPPv3N9bz_stream7bzallocE"></span><span id="_CPPv2N9bz_stream7bzallocE"></span><span class="target" id="a00390_1a795468d892d03a809f8ea605dc99ed08"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="p"><span class="pre">(</span></span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">bzalloc</span></span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">(</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">*</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="p"><span class="pre">)</span></span><a class="headerlink" href="#_CPPv4N9bz_stream7bzallocE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Custom memory allocator. The call <code class="docutils literal notranslate"><span class="pre">bzalloc</span> <span class="pre">(</span> <span class="pre">opaque,</span> <span class="pre">n,</span> <span class="pre">m</span> <span class="pre">)</span></code> is expected to return a pointer p to n * m bytes of memory </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream6bzfreeE">
+<span id="_CPPv3N9bz_stream6bzfreeE"></span><span id="_CPPv2N9bz_stream6bzfreeE"></span><span class="target" id="a00390_1a02d0890b69f8f3e07f81ee857e00359c"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">(</span></span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">bzfree</span></span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">(</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">*</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">*</span></span><span class="p"><span class="pre">)</span></span><a class="headerlink" href="#_CPPv4N9bz_stream6bzfreeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">bzfree</span> <span class="pre">(</span> <span class="pre">opaque,</span> <span class="pre">p</span> <span class="pre">)</span></code> is expected to free the memory allocated using <code class="docutils literal notranslate"><span class="pre">bzalloc</span></code>. </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream7next_inE">
+<span id="_CPPv3N9bz_stream7next_inE"></span><span id="_CPPv2N9bz_stream7next_inE"></span><span id="bz_stream::next_in__cP"></span><span class="target" id="a00390_1aa4a76b5c671cc4092ad7417f2731b894"></span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">next_in</span></span></span><a class="headerlink" href="#_CPPv4N9bz_stream7next_inE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Points to the data to be compressed when called during compression,</p>
+<p>whereas when called during decompression, it points to compressed data.</p>
+</p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream8next_outE">
+<span id="_CPPv3N9bz_stream8next_outE"></span><span id="_CPPv2N9bz_stream8next_outE"></span><span id="bz_stream::next_out__cP"></span><span class="target" id="a00390_1ad27d0acafb3b84aada276b157e9aef04"></span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">next_out</span></span></span><a class="headerlink" href="#_CPPv4N9bz_stream8next_outE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Points to a buffer in which the compressed data is to be placed when called during compression,</p>
+<p>whereas when called during decompression, it points to a buffer in which the uncompressed output is to be placed</p>
+</p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream6opaqueE">
+<span id="_CPPv3N9bz_stream6opaqueE"></span><span id="_CPPv2N9bz_stream6opaqueE"></span><span id="bz_stream::opaque__voidP"></span><span class="target" id="a00390_1a8e000913c058c83abd1ec96c6aef302a"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">opaque</span></span></span><a class="headerlink" href="#_CPPv4N9bz_stream6opaqueE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>The value <code class="docutils literal notranslate"><span class="pre">opaque</span></code> is passed to as the first argument to all calls to <code class="docutils literal notranslate"><span class="pre">bzalloc</span></code> and <code class="docutils literal notranslate"><span class="pre">bzfree</span></code>, but is otherwise ignored by the library. </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream5stateE">
+<span id="_CPPv3N9bz_stream5stateE"></span><span id="_CPPv2N9bz_stream5stateE"></span><span id="bz_stream::state__voidP"></span><span class="target" id="a00390_1a7b976d082aba4d851eea25a308d96ee8"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">state</span></span></span><a class="headerlink" href="#_CPPv4N9bz_stream5stateE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>A pointer, pointing to the private data structures. </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream13total_in_hi32E">
+<span id="_CPPv3N9bz_stream13total_in_hi32E"></span><span id="_CPPv2N9bz_stream13total_in_hi32E"></span><span id="bz_stream::total_in_hi32__unsigned-i"></span><span class="target" id="a00390_1af5833cfbe5e07a89c9f33783f323c218"></span><span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">total_in_hi32</span></span></span><a class="headerlink" href="#_CPPv4N9bz_stream13total_in_hi32E" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Used to store upper 32 bits of the total number of input bytes processed. </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream13total_in_lo32E">
+<span id="_CPPv3N9bz_stream13total_in_lo32E"></span><span id="_CPPv2N9bz_stream13total_in_lo32E"></span><span id="bz_stream::total_in_lo32__unsigned-i"></span><span class="target" id="a00390_1aacacdc7f753d7eab8652592bd15dbe6e"></span><span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">total_in_lo32</span></span></span><a class="headerlink" href="#_CPPv4N9bz_stream13total_in_lo32E" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Used to store lower 32 bits of the total number of input bytes processed. </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream14total_out_hi32E">
+<span id="_CPPv3N9bz_stream14total_out_hi32E"></span><span id="_CPPv2N9bz_stream14total_out_hi32E"></span><span id="bz_stream::total_out_hi32__unsigned-i"></span><span class="target" id="a00390_1a8906ddf3e4fcc6963ef6680157647001"></span><span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">total_out_hi32</span></span></span><a class="headerlink" href="#_CPPv4N9bz_stream14total_out_hi32E" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Used to store upper 32 bits of the total number of output bytes processed. </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N9bz_stream14total_out_lo32E">
+<span id="_CPPv3N9bz_stream14total_out_lo32E"></span><span id="_CPPv2N9bz_stream14total_out_lo32E"></span><span id="bz_stream::total_out_lo32__unsigned-i"></span><span class="target" id="a00390_1a7befd6f6ace94f7df3aac07ad48f944b"></span><span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">total_out_lo32</span></span></span><a class="headerlink" href="#_CPPv4N9bz_stream14total_out_lo32E" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Used to store lower 32 bits of the total number of output bytes processed. </p>
+</dd></dl>
+
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="zstd.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title"><span class="section-number">4. </span>ZSTD</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="snappy.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title"><span class="section-number">6. </span>SNAPPY</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            <p>
+  </p>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=5b4479735964841361fd"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd"></script>
+
+<footer class="rocm-footer">
+    <div class="container-lg">
+        <section class="bottom-menu menu py-45">
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <ul>
+                        <li><a href="https://www.amd.com/en/corporate/copyright" target="_blank">Terms and Conditions</a></li>
+                        
+                        <li><a href="">2020-2024, Advanced Micro Devices, Inc</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/privacy" target="_blank">Privacy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/trademarks" target="_blank">Trademarks</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/statement-human-trafficking-forced-labor.pdf" target="_blank">Statement on Forced Labor</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/competition" target="_blank">Fair and Open Competition</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/amd-uk-tax-strategy.pdf" target="_blank">UK Tax Strategy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/cookies" target="_blank">Cookie Policy</a></li>
+                        <!-- OneTrust Cookies Settings button start -->
+                        <li><a href="#cookie-settings" id="ot-sdk-btn" class="ot-sdk-show-settings">Cookie Settings</a></li>
+                        <!-- OneTrust Cookies Settings button end -->
+                    </ul>
+                </div>
+            </div>
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <div>
+                        <span class="copyright">© 2023 Advanced Micro Devices, Inc</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</footer>
+
+<!-- <div id="rdc-watermark-container">
+    <img id="rdc-watermark" src="_static/images/alpha-watermark.svg" alt="DRAFT watermark"/>
+</div> -->
+  </body>
+</html>

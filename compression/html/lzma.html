@@ -1,0 +1,1680 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>3. LZMA &#8212; AOCL-Compression 4.2 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.1.2/css/all.min.css?digest=5b4479735964841361fd" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_header.css" />
+    <link rel="stylesheet" type="text/css" href="_static/rocm_footer.css" />
+    <link rel="stylesheet" type="text/css" href="_static/fonts.css" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=5b4479735964841361fd" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd" />
+  <script src="_static/vendor/fontawesome/6.1.2/js/all.min.js?digest=5b4479735964841361fd"></script>
+
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
+    <script async="async" src="_static/code_word_breaks.js"></script>
+    <script async="async" src="_static/renameVersionLinks.js"></script>
+    <script async="async" src="_static/rdcMisc.js"></script>
+    <script async="async" src="_static/theme_mode_captions.js"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?digest=5a5c038af52cf7bc1a1ec88eea08e6366ee68824"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'lzma';</script>
+    <link rel="icon" href="https://www.amd.com/themes/custom/amd/favicon.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="4. ZSTD" href="zstd.html" />
+    <link rel="prev" title="2. ZLIB" href="zlib.html" />
+    <meta name="google-site-verification" content="ZOn0RZC0Pwzlmf2SaE0bRttWk1YzOhuslbpxUDchQ90" />
+
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+
+<header class="common-header" >
+    <nav class="navbar navbar-expand-xl">
+        <div class="container-fluid main-nav rocm-header">
+            
+            <div class="header-logo">
+                <a class="navbar-brand" href="https://www.amd.com/">
+                    <img src="_static/images/amd-header-logo.svg" alt="AMD Logo" title="AMD Logo" width="90" class="d-inline-block align-text-top hover-opacity"/>
+                </a>
+                <div class="vr vr mx-40 my-25"></div>
+                <a class="klavika-font hover-opacity" href="./index.html">AOCL Compression 4.2</a>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var elements = document.getElementsByClassName('header-all-versions');
+            for (var i = 0; i < elements.length; i++) {
+                elements[i].remove();
+            }
+
+            elements = document.querySelector("body > footer > div > section > div:nth-child(1) > div > ul").children;
+            var removable_items = ['2020-2024, Advanced Micro Devices, Inc', 'Statement on Forced Labor', 'Fair and Open Competition', 'UK Tax Strategy', 'Cookie Policy', 'Cookie Settings'];
+            for(var i = 0; i < elements.length; i++) {
+                if(removable_items.includes(elements[i].innerText)) {
+                    elements[i].remove();
+                    i--;
+                }
+            }
+        })
+    </script>
+                <a class="header-all-versions" href="https://rocm.docs.amd.com/en/latest/release/versions.html">Version List</a>
+            </div>
+            <div class="icon-nav text-center d-flex ms-auto">
+            </div>
+        </div>
+    </nav>
+    
+</header>
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">AOCL-Compression 4.2 documentation</p>
+  
+</a></div>
+        <div class="sidebar-primary-item"><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Table of Contents</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="INSTALLATION.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unified_api.html">Standardized/Unified API</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="algos.html">Algorithms</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="lz4.html">1. LZ4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zlib.html">2. ZLIB</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">3. LZMA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zstd.html">4. ZSTD</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bzip2.html">5. BZIP2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snappy.html">6. SNAPPY</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lz4hc.html">7. LZ4HC</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="multi-thread.html">Multi-threaded API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="INTRODUCTION.html">Brief Overview of algos</a></li>
+<li class="toctree-l1"><a class="reference internal" href="EXAMPLE_README.html">Example Test Programs</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><label class="sidebar-toggle primary-toggle btn btn-sm" for="__primary" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-angle-right"></span>
+  </label></div>
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="algos.html" class="nav-link">Algorithms</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>LZMA</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article" role="main">
+                  
+  <section id="lzma">
+<span id="ref-lzma"></span><h1><span class="section-number">3. </span>LZMA<a class="headerlink" href="#lzma" title="Permalink to this heading">#</a></h1>
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="a00220"></span><em><span class="pre">group</span></em> <span class="sig-name descname"><span class="pre">LZMA_API</span></span></dt>
+<dd><p>LZMA is a lossless compression algorithm that provides a high degree of compression. Its compression ratios are lower than other LZ77 based methods for most inputs (in the range of 25-30 for Silesia dataset). The lower compression ratio comes at the expense of lower compression speed. However, it provides good decompression speed (better than BZIP2, which can give compression ratios close to LZMA). </p>
+<p>The LZMA compression library provides in-memory compression and decompression functions. Typical usage is as follows :<ol class="arabic simple">
+<li><p>Call <a class="reference internal" href="#a00220_1ga336bf0e92adf6ff680547c58fd60baa6"><span class="std std-ref">LzmaEncProps_Init()</span></a> to initialize CLzmaEncProps object.</p></li>
+<li><p>Update <a class="reference internal" href="#a00494"><span class="std std-ref">_CLzmaEncProps</span></a>, if any specific user settings are desired, such as compression level.</p></li>
+<li><p>To compress a file, load file to a source buffer and pass this and a destination buffer to <a class="reference internal" href="#a00220_1ga369b49babf7d6f577fe223a6832c15cb"><span class="std std-ref">LzmaEncode()</span></a>. <a class="reference internal" href="#a00220_1ga369b49babf7d6f577fe223a6832c15cb"><span class="std std-ref">LzmaEncode()</span></a> performs in-memory compression and writes the compressed data to the destination buffer.</p></li>
+<li><p>To decompress, call <a class="reference internal" href="#a00220_1ga52a3a67503881c081fead1ada69501e8"><span class="std std-ref">LzmaDecode()</span></a> by passing compressed data as source and a destination buffer to hold uncompressed bytes. </p></li>
+</ol>
+</p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-decode-functions">Decode Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv416LzmaProps_DecodeP10CLzmaPropsPK4Bytej">
+<span id="_CPPv316LzmaProps_DecodeP10CLzmaPropsPK4Bytej"></span><span id="_CPPv216LzmaProps_DecodeP10CLzmaPropsPK4Bytej"></span><span id="LzmaProps_Decode__CLzmaPropsP.ByteCP.unsigned"></span><span class="target" id="a00220_1gae49727972cd1f8d5384dc4c29f42d97d"></span><span class="n"><span class="pre">SRes</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaProps_Decode</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv410CLzmaProps" title="CLzmaProps"><span class="n"><span class="pre">CLzmaProps</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">p</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">data</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">size</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv416LzmaProps_DecodeP10CLzmaPropsPK4Bytej" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>decodes header bytes in <code class="docutils literal notranslate"><span class="pre">data</span></code> and sets properties in <code class="docutils literal notranslate"><span class="pre">p</span></code>. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Properties object to be set    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>data</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Header bytes from compressed stream    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>size</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of header in bytes   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>SZ_OK    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>SZ_ERROR_UNSUPPORTED - Unsupported properties   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv412LzmaDec_InitP8CLzmaDec">
+<span id="_CPPv312LzmaDec_InitP8CLzmaDec"></span><span id="_CPPv212LzmaDec_InitP8CLzmaDec"></span><span id="LzmaDec_Init__CLzmaDecP"></span><span class="target" id="a00220_1gaf78fa82d5ea8c08fdfbc5d8d7a73a127"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaDec_Init</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv48CLzmaDec" title="CLzmaDec"><span class="n"><span class="pre">CLzmaDec</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">p</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv412LzmaDec_InitP8CLzmaDec" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Initialize LZMA decoder. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Decoder object to be initialized   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv421LzmaDec_AllocateProbsP8CLzmaDecPK4Bytej11ISzAllocPtr">
+<span id="_CPPv321LzmaDec_AllocateProbsP8CLzmaDecPK4Bytej11ISzAllocPtr"></span><span id="_CPPv221LzmaDec_AllocateProbsP8CLzmaDecPK4Bytej11ISzAllocPtr"></span><span id="LzmaDec_AllocateProbs__CLzmaDecP.ByteCP.unsigned.ISzAllocPtr"></span><span class="target" id="a00220_1ga59eb05a682aad001c4dbd843b32fbccf"></span><span class="n"><span class="pre">SRes</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaDec_AllocateProbs</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv48CLzmaDec" title="CLzmaDec"><span class="n"><span class="pre">CLzmaDec</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">p</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">props</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">propsSize</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">alloc</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv421LzmaDec_AllocateProbsP8CLzmaDecPK4Bytej11ISzAllocPtr" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Allocate probability tables in decoder object. Sets properties in p by calling <a class="reference internal" href="#a00220_1gae49727972cd1f8d5384dc4c29f42d97d"><span class="std std-ref">LzmaProps_Decode()</span></a>. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Decoder object that holds prob tables    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>props</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Header bytes from compressed stream    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>propsSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of header in bytes    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>alloc</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>SZ_OK    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="3"><p>Fail   </p></td>
+<td><p>SZ_ERROR_MEM - Memory allocation error    </p></td>
+</tr>
+<tr class="row-even"><td><p>SZ_ERROR_PARAM - Incorrect parameter    </p></td>
+</tr>
+<tr class="row-odd"><td><p>SZ_ERROR_UNSUPPORTED - Unsupported properties   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417LzmaDec_FreeProbsP8CLzmaDec11ISzAllocPtr">
+<span id="_CPPv317LzmaDec_FreeProbsP8CLzmaDec11ISzAllocPtr"></span><span id="_CPPv217LzmaDec_FreeProbsP8CLzmaDec11ISzAllocPtr"></span><span id="LzmaDec_FreeProbs__CLzmaDecP.ISzAllocPtr"></span><span class="target" id="a00220_1ga2873f200cd9448962dd68519434ad619"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaDec_FreeProbs</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv48CLzmaDec" title="CLzmaDec"><span class="n"><span class="pre">CLzmaDec</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">p</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">alloc</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417LzmaDec_FreeProbsP8CLzmaDec11ISzAllocPtr" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Free probability tables in decoder object. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Decoder object that holds prob tables    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>alloc</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv416LzmaDec_AllocateP8CLzmaDecPK4Bytej11ISzAllocPtr">
+<span id="_CPPv316LzmaDec_AllocateP8CLzmaDecPK4Bytej11ISzAllocPtr"></span><span id="_CPPv216LzmaDec_AllocateP8CLzmaDecPK4Bytej11ISzAllocPtr"></span><span id="LzmaDec_Allocate__CLzmaDecP.ByteCP.unsigned.ISzAllocPtr"></span><span class="target" id="a00220_1ga0b30779aa0589c8b3ad0b9c854e41457"></span><span class="n"><span class="pre">SRes</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaDec_Allocate</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv48CLzmaDec" title="CLzmaDec"><span class="n"><span class="pre">CLzmaDec</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">p</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">props</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">propsSize</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">alloc</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv416LzmaDec_AllocateP8CLzmaDecPK4Bytej11ISzAllocPtr" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Allocate probability tables in decoder object. Sets properties in p by calling <a class="reference internal" href="#a00220_1gae49727972cd1f8d5384dc4c29f42d97d"><span class="std std-ref">LzmaProps_Decode()</span></a>. Allocate dictionary buffer. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Decoder object that holds prob tables and dictionary    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>props</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Header bytes from compressed stream    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>propsSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of header in bytes    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>alloc</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>SZ_OK    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="3"><p>Fail   </p></td>
+<td><p>SZ_ERROR_MEM - Memory allocation error    </p></td>
+</tr>
+<tr class="row-even"><td><p>SZ_ERROR_PARAM - Incorrect parameter    </p></td>
+</tr>
+<tr class="row-odd"><td><p>SZ_ERROR_UNSUPPORTED - Unsupported properties   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv412LzmaDec_FreeP8CLzmaDec11ISzAllocPtr">
+<span id="_CPPv312LzmaDec_FreeP8CLzmaDec11ISzAllocPtr"></span><span id="_CPPv212LzmaDec_FreeP8CLzmaDec11ISzAllocPtr"></span><span id="LzmaDec_Free__CLzmaDecP.ISzAllocPtr"></span><span class="target" id="a00220_1ga678073fbf52c63f34e9b8323c660dec3"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaDec_Free</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv48CLzmaDec" title="CLzmaDec"><span class="n"><span class="pre">CLzmaDec</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">p</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">alloc</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv412LzmaDec_FreeP8CLzmaDec11ISzAllocPtr" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Free probability tables and dictionary in decoder object. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Decoder object that holds prob tables and dictionary    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>alloc</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv419LzmaDec_DecodeToDicP8CLzmaDec5SizeTPK4ByteP5SizeT15ELzmaFinishModeP11ELzmaStatus">
+<span id="_CPPv319LzmaDec_DecodeToDicP8CLzmaDec5SizeTPK4ByteP5SizeT15ELzmaFinishModeP11ELzmaStatus"></span><span id="_CPPv219LzmaDec_DecodeToDicP8CLzmaDec5SizeTPK4ByteP5SizeT15ELzmaFinishModeP11ELzmaStatus"></span><span id="LzmaDec_DecodeToDic__CLzmaDecP.SizeT.ByteCP.SizeTP.ELzmaFinishMode.ELzmaStatusP"></span><span class="target" id="a00220_1gab3474d4a12b60cff20299518f94677c7"></span><span class="n"><span class="pre">SRes</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaDec_DecodeToDic</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv48CLzmaDec" title="CLzmaDec"><span class="n"><span class="pre">CLzmaDec</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">p</span></span>, <span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">dicLimit</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">srcLen</span></span>, <a class="reference internal" href="#_CPPv415ELzmaFinishMode" title="ELzmaFinishMode"><span class="n"><span class="pre">ELzmaFinishMode</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">finishMode</span></span>, <a class="reference internal" href="#_CPPv411ELzmaStatus" title="ELzmaStatus"><span class="n"><span class="pre">ELzmaStatus</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">status</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv419LzmaDec_DecodeToDicP8CLzmaDec5SizeTPK4ByteP5SizeT15ELzmaFinishModeP11ELzmaStatus" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Decode src and write decompressed data into internal dictionary buffer. You can use it, if you want to eliminate the overhead for data copying from dictionary to some other external buffer. You must work with <a class="reference internal" href="#a00462"><span class="std std-ref">CLzmaDec</span></a> variables directly in this interface. </p>
+<p>STEPS: <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">LzmaDec_Construct</span><span class="p">()</span>
+<span class="n">LzmaDec_Allocate</span><span class="p">()</span>
+<span class="k">for</span> <span class="p">(</span><span class="n">each</span> <span class="n">new</span> <span class="n">stream</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="n">LzmaDec_Init</span><span class="p">()</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">it</span> <span class="n">needs</span> <span class="n">more</span> <span class="n">decompression</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="n">LzmaDec_DecodeToDic</span><span class="p">()</span>
+    <span class="n">use</span> <span class="n">data</span> <span class="kn">from</span> <span class="nn">CLzmaDec</span><span class="p">::</span><span class="n">dic</span> <span class="ow">and</span> <span class="n">update</span> <span class="n">CLzmaDec</span><span class="p">::</span><span class="n">dicPos</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">LzmaDec_Free</span><span class="p">()</span>
+</pre></div>
+</div>
+</p>
+<p>When decoding to internal dictionary buffer (<a class="reference internal" href="#a00462_1a96fec5fe0d8d718e82cae44978b4f2d6"><span class="std std-ref">CLzmaDec::dic</span></a>), you must manually update <a class="reference internal" href="#a00462_1a3a4fc3b29c04e66e0484607b518661af"><span class="std std-ref">CLzmaDec::dicPos</span></a>, if it reaches <a class="reference internal" href="#a00462_1a1c80f71aedd8cfb55536d33f463cba48"><span class="std std-ref">CLzmaDec::dicBufSize</span></a> !!!</p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Decoder object that contains properties and dictionary buffer    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dicLimit</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Max number of bytes that can be decompressed and saved in dictionary    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer containing compressed data    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>srcLen</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Length of source buffer    </p></td>
+</tr>
+<tr class="row-even"><td rowspan="3"><p><strong>finishMode</strong></p></td>
+<td rowspan="3"><p></p></td>
+<td><p>It has meaning only if the decoding reaches output limit (dicLimit).    </p></td>
+</tr>
+<tr class="row-odd"><td><p>- LZMA_FINISH_ANY - Decode just dicLimit bytes.    </p></td>
+</tr>
+<tr class="row-even"><td><p>- LZMA_FINISH_END - Stream must be finished after dicLimit.    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>status</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Decompression status at the end of current operation   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>SZ_OK    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="3"><p>Fail   </p></td>
+<td><p>SZ_ERROR_DATA - Data error    </p></td>
+</tr>
+<tr class="row-even"><td><p>SZ_ERROR_PARAM - Incorrect parameter    </p></td>
+</tr>
+<tr class="row-odd"><td><p>SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-decode-one-call-interface">Decode One Call Interface</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv410LzmaDecodeP4ByteP5SizeTPK4ByteP5SizeTPK4Bytej15ELzmaFinishModeP11ELzmaStatus11ISzAllocPtr">
+<span id="_CPPv310LzmaDecodeP4ByteP5SizeTPK4ByteP5SizeTPK4Bytej15ELzmaFinishModeP11ELzmaStatus11ISzAllocPtr"></span><span id="_CPPv210LzmaDecodeP4ByteP5SizeTPK4ByteP5SizeTPK4Bytej15ELzmaFinishModeP11ELzmaStatus11ISzAllocPtr"></span><span id="LzmaDecode__ByteP.SizeTP.ByteCP.SizeTP.ByteCP.unsigned.ELzmaFinishMode.ELzmaStatusP.ISzAllocPtr"></span><span class="target" id="a00220_1ga52a3a67503881c081fead1ada69501e8"></span><span class="n"><span class="pre">SRes</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaDecode</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dest</span></span>, <span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">destLen</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">srcLen</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">propData</span></span>, <span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">propSize</span></span>, <a class="reference internal" href="#_CPPv415ELzmaFinishMode" title="ELzmaFinishMode"><span class="n"><span class="pre">ELzmaFinishMode</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">finishMode</span></span>, <a class="reference internal" href="#_CPPv411ELzmaStatus" title="ELzmaStatus"><span class="n"><span class="pre">ELzmaStatus</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">status</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">alloc</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv410LzmaDecodeP4ByteP5SizeTPK4ByteP5SizeTPK4Bytej15ELzmaFinishModeP11ELzmaStatus11ISzAllocPtr" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Decode compressed data in <code class="docutils literal notranslate"><span class="pre">src</span></code> and save result to <code class="docutils literal notranslate"><span class="pre">dest</span></code></p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>dest</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer to save decompressed data    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>destLen</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Size of decompressed data    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer containing compressed data    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>srcLen</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Length of source buffer    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>propData</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Header bytes in compressed source data    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>propSize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of header    </p></td>
+</tr>
+<tr class="row-even"><td rowspan="3"><p><strong>finishMode</strong></p></td>
+<td rowspan="3"><p></p></td>
+<td><p>It has meaning only if the decoding reaches output limit (*destLen).    </p></td>
+</tr>
+<tr class="row-odd"><td><p>- LZMA_FINISH_ANY - Decode just destLen bytes.    </p></td>
+</tr>
+<tr class="row-even"><td><p>- LZMA_FINISH_END - Stream must be finished after (*destLen).    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>status</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Decompression status at the end of current operation    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>alloc</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Memory allocator object   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>SZ_OK    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="6"><p>Fail   </p></td>
+<td><p>SZ_ERROR_DATA - Data error    </p></td>
+</tr>
+<tr class="row-even"><td><p>SZ_ERROR_MEM - Memory allocation error    </p></td>
+</tr>
+<tr class="row-odd"><td><p>SZ_ERROR_PARAM - Incorrect parameter    </p></td>
+</tr>
+<tr class="row-even"><td><p>SZ_ERROR_UNSUPPORTED - Unsupported properties    </p></td>
+</tr>
+<tr class="row-odd"><td><p>SZ_ERROR_INPUT_EOF - It needs more bytes in input buffer (src)    </p></td>
+</tr>
+<tr class="row-even"><td><p>SZ_ERROR_FAIL - Some unexpected error: internal error of code, memory corruption or hardware failure   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-encode-functions">Encode Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417LzmaEncProps_InitP13CLzmaEncProps">
+<span id="_CPPv317LzmaEncProps_InitP13CLzmaEncProps"></span><span id="_CPPv217LzmaEncProps_InitP13CLzmaEncProps"></span><span id="LzmaEncProps_Init__CLzmaEncPropsP"></span><span class="target" id="a00220_1ga336bf0e92adf6ff680547c58fd60baa6"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEncProps_Init</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv413CLzmaEncProps" title="CLzmaEncProps"><span class="n"><span class="pre">CLzmaEncProps</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">p</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417LzmaEncProps_InitP13CLzmaEncProps" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Init properties. Properties are set to auto select mode. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Lzma encode properties object   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv422LzmaEncProps_NormalizeP13CLzmaEncProps">
+<span id="_CPPv322LzmaEncProps_NormalizeP13CLzmaEncProps"></span><span id="_CPPv222LzmaEncProps_NormalizeP13CLzmaEncProps"></span><span id="LzmaEncProps_Normalize__CLzmaEncPropsP"></span><span class="target" id="a00220_1gacd23d29a44a6a248851b7e0ef8016d87"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEncProps_Normalize</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv413CLzmaEncProps" title="CLzmaEncProps"><span class="n"><span class="pre">CLzmaEncProps</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">p</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv422LzmaEncProps_NormalizeP13CLzmaEncProps" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Set default values for properties in auto select mode. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Lzma encode properties object   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv424LzmaEncProps_GetDictSizePK13CLzmaEncProps">
+<span id="_CPPv324LzmaEncProps_GetDictSizePK13CLzmaEncProps"></span><span id="_CPPv224LzmaEncProps_GetDictSizePK13CLzmaEncProps"></span><span id="LzmaEncProps_GetDictSize__CLzmaEncPropsCP"></span><span class="target" id="a00220_1ga07825840b48dc66de5b55dd05b93c1a2"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEncProps_GetDictSize</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv413CLzmaEncProps" title="CLzmaEncProps"><span class="n"><span class="pre">CLzmaEncProps</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">props2</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv424LzmaEncProps_GetDictSizePK13CLzmaEncProps" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Normalize props2 and return dictionary size. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>props2</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Lzma encode properties object   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dictionary size </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv414LzmaEnc_Create11ISzAllocPtr">
+<span id="_CPPv314LzmaEnc_Create11ISzAllocPtr"></span><span id="_CPPv214LzmaEnc_Create11ISzAllocPtr"></span><span id="LzmaEnc_Create__ISzAllocPtr"></span><span class="target" id="a00220_1ga45f31cbbf37de3606090134c379b374c"></span><a class="reference internal" href="#_CPPv414CLzmaEncHandle" title="CLzmaEncHandle"><span class="n"><span class="pre">CLzmaEncHandle</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEnc_Create</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">alloc</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv414LzmaEnc_Create11ISzAllocPtr" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Construct Lzma encoder. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>alloc</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Lzma encoder handle </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv415LzmaEnc_Destroy14CLzmaEncHandle11ISzAllocPtr11ISzAllocPtr">
+<span id="_CPPv315LzmaEnc_Destroy14CLzmaEncHandle11ISzAllocPtr11ISzAllocPtr"></span><span id="_CPPv215LzmaEnc_Destroy14CLzmaEncHandle11ISzAllocPtr11ISzAllocPtr"></span><span id="LzmaEnc_Destroy__CLzmaEncHandle.ISzAllocPtr.ISzAllocPtr"></span><span class="target" id="a00220_1ga1421fc08981a39918cd891cc052a8ebc"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEnc_Destroy</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv414CLzmaEncHandle" title="CLzmaEncHandle"><span class="n"><span class="pre">CLzmaEncHandle</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">p</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">alloc</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">allocBig</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv415LzmaEnc_Destroy14CLzmaEncHandle11ISzAllocPtr11ISzAllocPtr" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Free Lzma encoder. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Lzma encoder handle    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>alloc</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>allocBig</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object for large blocks   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv416LzmaEnc_SetProps14CLzmaEncHandlePK13CLzmaEncProps">
+<span id="_CPPv316LzmaEnc_SetProps14CLzmaEncHandlePK13CLzmaEncProps"></span><span id="_CPPv216LzmaEnc_SetProps14CLzmaEncHandlePK13CLzmaEncProps"></span><span id="LzmaEnc_SetProps__CLzmaEncHandle.CLzmaEncPropsCP"></span><span class="target" id="a00220_1ga77b1a646fa5bce68b703922d745ceaec"></span><span class="n"><span class="pre">SRes</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEnc_SetProps</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv414CLzmaEncHandle" title="CLzmaEncHandle"><span class="n"><span class="pre">CLzmaEncHandle</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">p</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv413CLzmaEncProps" title="CLzmaEncProps"><span class="n"><span class="pre">CLzmaEncProps</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">props</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv416LzmaEnc_SetProps14CLzmaEncHandlePK13CLzmaEncProps" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Update properties in p with values in props. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Lzma encoder handle    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>props</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Lzma encoder properties   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>SZ_OK    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>SZ_ERROR_PARAM - Incorrect parameter in props   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv419LzmaEnc_SetDataSize14CLzmaEncHandle6UInt64">
+<span id="_CPPv319LzmaEnc_SetDataSize14CLzmaEncHandle6UInt64"></span><span id="_CPPv219LzmaEnc_SetDataSize14CLzmaEncHandle6UInt64"></span><span id="LzmaEnc_SetDataSize__CLzmaEncHandle.UInt64"></span><span class="target" id="a00220_1ga00c10a434addd503bc9e136cb2552601"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEnc_SetDataSize</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv414CLzmaEncHandle" title="CLzmaEncHandle"><span class="n"><span class="pre">CLzmaEncHandle</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">p</span></span>, <span class="n"><span class="pre">UInt64</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">expectedDataSiize</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv419LzmaEnc_SetDataSize14CLzmaEncHandle6UInt64" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Set expected data size in p to expectedDataSiize. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Lzma encoder handle    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>expectedDataSiize</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Expected size of data   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>void </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv423LzmaEnc_WriteProperties14CLzmaEncHandleP4ByteP5SizeT">
+<span id="_CPPv323LzmaEnc_WriteProperties14CLzmaEncHandleP4ByteP5SizeT"></span><span id="_CPPv223LzmaEnc_WriteProperties14CLzmaEncHandleP4ByteP5SizeT"></span><span id="LzmaEnc_WriteProperties__CLzmaEncHandle.ByteP.SizeTP"></span><span class="target" id="a00220_1gab18bd44a926d0a9405bca886822c4a29"></span><span class="n"><span class="pre">SRes</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEnc_WriteProperties</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv414CLzmaEncHandle" title="CLzmaEncHandle"><span class="n"><span class="pre">CLzmaEncHandle</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">p</span></span>, <span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">properties</span></span>, <span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">size</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv423LzmaEnc_WriteProperties14CLzmaEncHandleP4ByteP5SizeT" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Build header bytes and save in properties. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Lzma encoder handle    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>properties</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Buffer to write header bytes into    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>size</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Number of bytes saved in properties   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>SZ_OK    </p></td>
+</tr>
+<tr class="row-odd"><td><p>Fail   </p></td>
+<td><p>SZ_ERROR_PARAM - Incorrect parameter in props   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv422LzmaEnc_IsWriteEndMark14CLzmaEncHandle">
+<span id="_CPPv322LzmaEnc_IsWriteEndMark14CLzmaEncHandle"></span><span id="_CPPv222LzmaEnc_IsWriteEndMark14CLzmaEncHandle"></span><span id="LzmaEnc_IsWriteEndMark__CLzmaEncHandle"></span><span class="target" id="a00220_1ga884497db6167cdb12e62298d145cba76"></span><span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEnc_IsWriteEndMark</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv414CLzmaEncHandle" title="CLzmaEncHandle"><span class="n"><span class="pre">CLzmaEncHandle</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">p</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv422LzmaEnc_IsWriteEndMark14CLzmaEncHandle" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Get write end mark saved within p. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Lzma encoder handle   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>writeEndMark </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417LzmaEnc_MemEncode14CLzmaEncHandleP4ByteP5SizeTPK4Byte5SizeTiP17ICompressProgress11ISzAllocPtr11ISzAllocPtr">
+<span id="_CPPv317LzmaEnc_MemEncode14CLzmaEncHandleP4ByteP5SizeTPK4Byte5SizeTiP17ICompressProgress11ISzAllocPtr11ISzAllocPtr"></span><span id="_CPPv217LzmaEnc_MemEncode14CLzmaEncHandleP4ByteP5SizeTPK4Byte5SizeTiP17ICompressProgress11ISzAllocPtr11ISzAllocPtr"></span><span id="LzmaEnc_MemEncode__CLzmaEncHandle.ByteP.SizeTP.ByteCP.SizeT.i.ICompressProgressP.ISzAllocPtr.ISzAllocPtr"></span><span class="target" id="a00220_1ga4f3231a255dda3fe992c90906431ebc0"></span><span class="n"><span class="pre">SRes</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEnc_MemEncode</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv414CLzmaEncHandle" title="CLzmaEncHandle"><span class="n"><span class="pre">CLzmaEncHandle</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">p</span></span>, <span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dest</span></span>, <span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">destLen</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">srcLen</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">writeEndMark</span></span>, <span class="n"><span class="pre">ICompressProgress</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">progress</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">alloc</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">allocBig</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417LzmaEnc_MemEncode14CLzmaEncHandleP4ByteP5SizeTPK4Byte5SizeTiP17ICompressProgress11ISzAllocPtr11ISzAllocPtr" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Encode src in-memory and save compressed data to dest. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>in,out   </p></td>
+<td><p>Lzma encoder handle    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>dest</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer to hold compressed data    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>destLen</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Size of compressed data written to dest    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer with uncompressed data    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>srcLen</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of uncompressed data in src    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>writeEndMark</strong></p></td>
+<td><p>in   </p></td>
+<td><p>If non-0, finish stream with end mark    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>progress</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Compression progress indicator    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>alloc</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>allocBig</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object for large blocks   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>SZ_OK    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="5"><p>Fail   </p></td>
+<td><p>SZ_ERROR_MEM - Memory allocation error    </p></td>
+</tr>
+<tr class="row-even"><td><p>SZ_ERROR_PARAM - Incorrect parameter in props    </p></td>
+</tr>
+<tr class="row-odd"><td><p>SZ_ERROR_WRITE - ISeqOutStream write callback error    </p></td>
+</tr>
+<tr class="row-even"><td><p>SZ_ERROR_OUTPUT_EOF - output buffer overflow - version with (Byte *) output    </p></td>
+</tr>
+<tr class="row-odd"><td><p>SZ_ERROR_PROGRESS - some break from progress callback   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-encode-one-call-interface">Encode One Call Interface</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv410LzmaEncodeP4ByteP5SizeTPK4Byte5SizeTPK13CLzmaEncPropsP4ByteP5SizeTiP17ICompressProgress11ISzAllocPtr11ISzAllocPtr">
+<span id="_CPPv310LzmaEncodeP4ByteP5SizeTPK4Byte5SizeTPK13CLzmaEncPropsP4ByteP5SizeTiP17ICompressProgress11ISzAllocPtr11ISzAllocPtr"></span><span id="_CPPv210LzmaEncodeP4ByteP5SizeTPK4Byte5SizeTPK13CLzmaEncPropsP4ByteP5SizeTiP17ICompressProgress11ISzAllocPtr11ISzAllocPtr"></span><span id="LzmaEncode__ByteP.SizeTP.ByteCP.SizeT.CLzmaEncPropsCP.ByteP.SizeTP.i.ICompressProgressP.ISzAllocPtr.ISzAllocPtr"></span><span class="target" id="a00220_1ga369b49babf7d6f577fe223a6832c15cb"></span><span class="n"><span class="pre">SRes</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LzmaEncode</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">dest</span></span>, <span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">destLen</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">src</span></span>, <span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">srcLen</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv413CLzmaEncProps" title="CLzmaEncProps"><span class="n"><span class="pre">CLzmaEncProps</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">props</span></span>, <span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">propsEncoded</span></span>, <span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">propsSize</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">writeEndMark</span></span>, <span class="n"><span class="pre">ICompressProgress</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">progress</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">alloc</span></span>, <span class="n"><span class="pre">ISzAllocPtr</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">allocBig</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv410LzmaEncodeP4ByteP5SizeTPK4Byte5SizeTPK13CLzmaEncPropsP4ByteP5SizeTiP17ICompressProgress11ISzAllocPtr11ISzAllocPtr" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Encode data in src and save compressed data to dest. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>dest</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Destination buffer to hold compressed data    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>destLen</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Size of compressed data written to dest    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>src</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Source buffer with uncompressed data    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>srcLen</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Size of uncompressed data in src    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>props</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Properties to control compression method    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>propsEncoded</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Buffer to save header bytes    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>propsSize</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Size of header bytes    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>writeEndMark</strong></p></td>
+<td><p>in   </p></td>
+<td><p>If non-0, finish stream with end mark    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>progress</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Compression progress indicator    </p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>alloc</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object    </p></td>
+</tr>
+<tr class="row-even"><td><p><strong>allocBig</strong></p></td>
+<td><p>in   </p></td>
+<td><p>Allocator object for large blocks   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Result   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Success   </p></td>
+<td><p>SZ_OK    </p></td>
+</tr>
+<tr class="row-odd"><td rowspan="5"><p>Fail   </p></td>
+<td><p>SZ_ERROR_MEM - Memory allocation error    </p></td>
+</tr>
+<tr class="row-even"><td><p>SZ_ERROR_PARAM - Incorrect parameter in props    </p></td>
+</tr>
+<tr class="row-odd"><td><p>SZ_ERROR_WRITE - ISeqOutStream write callback error    </p></td>
+</tr>
+<tr class="row-even"><td><p>SZ_ERROR_OUTPUT_EOF - output buffer overflow - version with (Byte *) output    </p></td>
+</tr>
+<tr class="row-odd"><td><p>SZ_ERROR_PROGRESS - some break from progress callback   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-defines">Defines</p>
+<dl class="cpp macro">
+<dt class="sig sig-object cpp" id="c.LzmaDec_Construct">
+<span class="target" id="a00220_1ga9abe67ff289f835ce6f6f1ce876fa899"></span><span class="sig-name descname"><span class="n"><span class="pre">LzmaDec_Construct</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">p</span></span><span class="sig-paren">)</span><a class="headerlink" href="#c.LzmaDec_Construct" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>First operation to call before setting up <a class="reference internal" href="#a00462"><span class="std std-ref">CLzmaDec</span></a>. </p>
+<p><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameters   </p></th>
+<th class="head"><p>Direction   </p></th>
+<th class="head"><p>Description    </p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>p</strong></p></td>
+<td><p>out   </p></td>
+<td><p>Decoder object to be initialized   </p></td>
+</tr>
+</tbody>
+</table>
+</p>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-typedefs">Typedefs</p>
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv414CLzmaEncHandle">
+<span id="_CPPv314CLzmaEncHandle"></span><span id="_CPPv214CLzmaEncHandle"></span><span id="CLzmaEncHandle"></span><span class="target" id="a00220_1ga8918974dc58e65ece361825e560a91f3"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">CLzmaEncHandle</span></span></span><a class="headerlink" href="#_CPPv414CLzmaEncHandle" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Pointer to context object that maintains state of LZMA encoder. </p>
+</dd></dl>
+
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv413CLzmaEncProps">
+<span id="_CPPv313CLzmaEncProps"></span><span id="_CPPv213CLzmaEncProps"></span><span id="CLzmaEncProps"></span><span class="target" id="a00220_1gaa8d89dd524afb76f169c22b06fea1924"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv414_CLzmaEncProps" title="_CLzmaEncProps"><span class="n"><span class="pre">_CLzmaEncProps</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">CLzmaEncProps</span></span></span><a class="headerlink" href="#_CPPv413CLzmaEncProps" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Structure to hold configurable parameters that can be used by LZMA encoder. </p>
+</dd></dl>
+
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv410CLzmaProps">
+<span id="_CPPv310CLzmaProps"></span><span id="_CPPv210CLzmaProps"></span><span id="CLzmaProps"></span><span class="target" id="a00220_1ga73932089e2c643b0c44c95784cfa5bd3"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv411_CLzmaProps" title="_CLzmaProps"><span class="n"><span class="pre">_CLzmaProps</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">CLzmaProps</span></span></span><a class="headerlink" href="#_CPPv410CLzmaProps" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>Structure to hold header parameters that are stored in LZMA compressed streams. </p>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-enums">Enums</p>
+<dl class="cpp enum">
+<dt class="sig sig-object cpp" id="_CPPv415ELzmaFinishMode">
+<span id="_CPPv315ELzmaFinishMode"></span><span id="_CPPv215ELzmaFinishMode"></span><span class="target" id="a00220_1ga61326609cb619c55df7de7377082b79a"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ELzmaFinishMode</span></span></span><a class="headerlink" href="#_CPPv415ELzmaFinishMode" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>There are two types of LZMA streams: </p>
+<p><ul class="simple">
+<li><p>Stream with end mark. That end mark adds about 6 bytes to compressed size.</p></li>
+<li><p>Stream without end mark. You must know exact uncompressed size to decompress such stream.</p></li>
+</ul>
+</p>
+<p>ELzmaFinishMode has meaning only if the decoding reaches output limit.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>1. You must use <code class="docutils literal notranslate"><span class="pre">LZMA_FINISH_END</span></code>, when you know that current output buffer covers last bytes of block. In other cases you must use <code class="docutils literal notranslate"><span class="pre">LZMA_FINISH_ANY</span></code>. </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>2. If LZMA decoder sees end marker before reaching output limit, it returns <code class="docutils literal notranslate"><span class="pre">SZ_OK</span></code>, and output value of destLen will be less than output buffer size limit. You can check status result also. </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>3. You can use multiple checks to test data integrity after full decompression: <ul class="simple">
+<li><p>Check Result and “status” variable. </p></li>
+<li><p>Check that output(destLen) = uncompressedSize, if you know real uncompressedSize. </p></li>
+<li><p><p>Check that output(srcLen) = compressedSize, if you know real compressedSize.</p>
+<p>You must use correct finish mode in that case.</p>
+</p></li>
+</ul>
+</p>
+</div>
+<p><em>Values:</em></p>
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N15ELzmaFinishMode15LZMA_FINISH_ANYE">
+<span id="_CPPv3N15ELzmaFinishMode15LZMA_FINISH_ANYE"></span><span id="_CPPv2N15ELzmaFinishMode15LZMA_FINISH_ANYE"></span><span class="target" id="a00220_1gga61326609cb619c55df7de7377082b79aade31ebed62495f3f6d18f82ce99f1258"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZMA_FINISH_ANY</span></span></span><a class="headerlink" href="#_CPPv4N15ELzmaFinishMode15LZMA_FINISH_ANYE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>finish at any point </p>
+</dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N15ELzmaFinishMode15LZMA_FINISH_ENDE">
+<span id="_CPPv3N15ELzmaFinishMode15LZMA_FINISH_ENDE"></span><span id="_CPPv2N15ELzmaFinishMode15LZMA_FINISH_ENDE"></span><span class="target" id="a00220_1gga61326609cb619c55df7de7377082b79aaf2b4f6aae3a9c175852310dc8ab8095e"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZMA_FINISH_END</span></span></span><a class="headerlink" href="#_CPPv4N15ELzmaFinishMode15LZMA_FINISH_ENDE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>block must be finished at the end </p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="cpp enum">
+<dt class="sig sig-object cpp" id="_CPPv411ELzmaStatus">
+<span id="_CPPv311ELzmaStatus"></span><span id="_CPPv211ELzmaStatus"></span><span class="target" id="a00220_1gaec5f6be8053dbbef6f7117ffb81aea6a"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ELzmaStatus</span></span></span><a class="headerlink" href="#_CPPv411ELzmaStatus" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>ELzmaStatus is used as output status of decode function call. </p>
+<p><em>Values:</em></p>
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N11ELzmaStatus25LZMA_STATUS_NOT_SPECIFIEDE">
+<span id="_CPPv3N11ELzmaStatus25LZMA_STATUS_NOT_SPECIFIEDE"></span><span id="_CPPv2N11ELzmaStatus25LZMA_STATUS_NOT_SPECIFIEDE"></span><span class="target" id="a00220_1ggaec5f6be8053dbbef6f7117ffb81aea6aa83aa6bb894c51a56c416f3a5d6c92a78"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZMA_STATUS_NOT_SPECIFIED</span></span></span><a class="headerlink" href="#_CPPv4N11ELzmaStatus25LZMA_STATUS_NOT_SPECIFIEDE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>use main error code instead </p>
+</dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N11ELzmaStatus30LZMA_STATUS_FINISHED_WITH_MARKE">
+<span id="_CPPv3N11ELzmaStatus30LZMA_STATUS_FINISHED_WITH_MARKE"></span><span id="_CPPv2N11ELzmaStatus30LZMA_STATUS_FINISHED_WITH_MARKE"></span><span class="target" id="a00220_1ggaec5f6be8053dbbef6f7117ffb81aea6aaa776302a9c5bc959e5931e72f33e23c6"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZMA_STATUS_FINISHED_WITH_MARK</span></span></span><a class="headerlink" href="#_CPPv4N11ELzmaStatus30LZMA_STATUS_FINISHED_WITH_MARKE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>stream was finished with end mark. </p>
+</dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N11ELzmaStatus24LZMA_STATUS_NOT_FINISHEDE">
+<span id="_CPPv3N11ELzmaStatus24LZMA_STATUS_NOT_FINISHEDE"></span><span id="_CPPv2N11ELzmaStatus24LZMA_STATUS_NOT_FINISHEDE"></span><span class="target" id="a00220_1ggaec5f6be8053dbbef6f7117ffb81aea6aa4b9af85d66f26d74ad6d00d93d707252"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZMA_STATUS_NOT_FINISHED</span></span></span><a class="headerlink" href="#_CPPv4N11ELzmaStatus24LZMA_STATUS_NOT_FINISHEDE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>stream was not finished </p>
+</dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N11ELzmaStatus28LZMA_STATUS_NEEDS_MORE_INPUTE">
+<span id="_CPPv3N11ELzmaStatus28LZMA_STATUS_NEEDS_MORE_INPUTE"></span><span id="_CPPv2N11ELzmaStatus28LZMA_STATUS_NEEDS_MORE_INPUTE"></span><span class="target" id="a00220_1ggaec5f6be8053dbbef6f7117ffb81aea6aa2dc75ba007203e4bbfdd4147905d4be2"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZMA_STATUS_NEEDS_MORE_INPUT</span></span></span><a class="headerlink" href="#_CPPv4N11ELzmaStatus28LZMA_STATUS_NEEDS_MORE_INPUTE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>you must provide more input bytes </p>
+</dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N11ELzmaStatus39LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARKE">
+<span id="_CPPv3N11ELzmaStatus39LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARKE"></span><span id="_CPPv2N11ELzmaStatus39LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARKE"></span><span class="target" id="a00220_1ggaec5f6be8053dbbef6f7117ffb81aea6aa3e3e3de2e99cd66e7af024bd391050d6"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK</span></span></span><a class="headerlink" href="#_CPPv4N11ELzmaStatus39LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARKE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>there is probability that stream was finished without end mark </p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv414_CLzmaEncProps">
+<span id="_CPPv314_CLzmaEncProps"></span><span id="_CPPv214_CLzmaEncProps"></span><span id="_CLzmaEncProps"></span><span class="target" id="a00494"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">_CLzmaEncProps</span></span></span><a class="headerlink" href="#_CPPv414_CLzmaEncProps" title="Permalink to this definition">#</a><br /></dt>
+<dd><div class="docutils container">
+<em>#include &lt;LzmaEnc.h&gt;</em></div>
+<p>Structure to hold configurable parameters that can be used by LZMA encoder. </p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps4algoE">
+<span id="_CPPv3N14_CLzmaEncProps4algoE"></span><span id="_CPPv2N14_CLzmaEncProps4algoE"></span><span id="_CLzmaEncProps::algo__i"></span><span class="target" id="a00494_1a7f0f5097ea57a20235dd8fde67cb21e0"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">algo</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps4algoE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Dictionary search algo to use: 0 - fast (hash chain), 1 - normal (binary search tree).</p>
+<p>0 - fast, 1 - normal,</p>
+<strong>default</strong> = 1 </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps6btModeE">
+<span id="_CPPv3N14_CLzmaEncProps6btModeE"></span><span id="_CPPv2N14_CLzmaEncProps6btModeE"></span><span id="_CLzmaEncProps::btMode__i"></span><span class="target" id="a00494_1a43f6e9aec36e824f75d2c50753b437a7"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">btMode</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps6btModeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>0 - hashChain Mode, 1 - binTree mode - normal, <strong>default</strong> = 1 </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps8dictSizeE">
+<span id="_CPPv3N14_CLzmaEncProps8dictSizeE"></span><span id="_CPPv2N14_CLzmaEncProps8dictSizeE"></span><span id="_CLzmaEncProps::dictSize__UInt32"></span><span class="target" id="a00494_1a2d3bdb23c31e1a27333f85c1fd1fbb60"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dictSize</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps8dictSizeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>size of dictionary / search buffer</p>
+<p>(1 &lt;&lt; 12) &lt;= dictSize &lt;= (1 &lt;&lt; 27) for 32-bit version</p>
+
+(1 &lt;&lt; 12) &lt;= dictSize &lt;= (3 &lt;&lt; 29) for 64-bit version <strong>default</strong> = (1 &lt;&lt; 24) </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps2fbE">
+<span id="_CPPv3N14_CLzmaEncProps2fbE"></span><span id="_CPPv2N14_CLzmaEncProps2fbE"></span><span id="_CLzmaEncProps::fb__i"></span><span class="target" id="a00494_1abc44b9026c4edba45c8aef3f4131407d"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">fb</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps2fbE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Number of fast bytes.</p>
+<p>5 &lt;= fb &lt;= 273,</p>
+<strong>default</strong> = 32 </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps2lcE">
+<span id="_CPPv3N14_CLzmaEncProps2lcE"></span><span id="_CPPv2N14_CLzmaEncProps2lcE"></span><span id="_CLzmaEncProps::lc__i"></span><span class="target" id="a00494_1aeeacd1d7984b6ef217d094e2ef6adf45"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">lc</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps2lcE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Number of high bits of the previous byte to use as a context for literal encoding.</p>
+<p>0 &lt;= lc &lt;= 8,</p>
+<strong>default</strong> = 3 </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps5levelE">
+<span id="_CPPv3N14_CLzmaEncProps5levelE"></span><span id="_CPPv2N14_CLzmaEncProps5levelE"></span><span id="_CLzmaEncProps::level__i"></span><span class="target" id="a00494_1a5e5052efe520ba12f9135e3573c904f7"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">level</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps5levelE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Control degree of compression. Lower level gives less compression at higher speed.</p>
+<p>0 &lt;= level &lt;= 9</p>
+</p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps2lpE">
+<span id="_CPPv3N14_CLzmaEncProps2lpE"></span><span id="_CPPv2N14_CLzmaEncProps2lpE"></span><span id="_CLzmaEncProps::lp__i"></span><span class="target" id="a00494_1a3f67284251cee171929c806df1a52ad4"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">lp</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps2lpE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Number of low bits of the dictionary position to include in literal posState.</p>
+<p>0 &lt;= lp &lt;= 4,</p>
+<strong>default</strong> = 0 </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps2mcE">
+<span id="_CPPv3N14_CLzmaEncProps2mcE"></span><span id="_CPPv2N14_CLzmaEncProps2mcE"></span><span id="_CLzmaEncProps::mc__UInt32"></span><span class="target" id="a00494_1aee0052797f2116178f4431e27e0d8057"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">mc</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps2mcE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Cut value, limit on number of nodes to search in dictionary.</p>
+<p>1 &lt;= mc &lt;= (1 &lt;&lt; 30),</p>
+<strong>default</strong> = 32 </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps12numHashBytesE">
+<span id="_CPPv3N14_CLzmaEncProps12numHashBytesE"></span><span id="_CPPv2N14_CLzmaEncProps12numHashBytesE"></span><span id="_CLzmaEncProps::numHashBytes__i"></span><span class="target" id="a00494_1aeb2d74921eca7e9bbbdc45cfc6c3014f"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">numHashBytes</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps12numHashBytesE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Number of bytes used to compute hash.</p>
+<p>2, 3 or 4,</p>
+<strong>default</strong> = 4 </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps10numThreadsE">
+<span id="_CPPv3N14_CLzmaEncProps10numThreadsE"></span><span id="_CPPv2N14_CLzmaEncProps10numThreadsE"></span><span id="_CLzmaEncProps::numThreads__i"></span><span class="target" id="a00494_1a1e64cefdc7909da1b65db1bf692a2b14"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">numThreads</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps10numThreadsE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Threads used for processing.</p>
+<p>1 or 2,</p>
+<strong>default</strong> = 1 </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps2pbE">
+<span id="_CPPv3N14_CLzmaEncProps2pbE"></span><span id="_CPPv2N14_CLzmaEncProps2pbE"></span><span id="_CLzmaEncProps::pb__i"></span><span class="target" id="a00494_1aa1d9d0c7c3adccb35410fdbe8f102d5b"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">pb</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps2pbE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>Number of low bits of processedPos to include in posState.</p>
+<p>0 &lt;= pb &lt;= 4,</p>
+<strong>default</strong> = 2 </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps10reduceSizeE">
+<span id="_CPPv3N14_CLzmaEncProps10reduceSizeE"></span><span id="_CPPv2N14_CLzmaEncProps10reduceSizeE"></span><span id="_CLzmaEncProps::reduceSize__UInt64"></span><span class="target" id="a00494_1a61306f79a95187b8fae7fdedbf82c108"></span><span class="n"><span class="pre">UInt64</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">reduceSize</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps10reduceSizeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>estimated size of data that will be compressed. default = (UInt64)(Int64)-1.</p>
+<p>Encoder uses this value to reduce dictionary size</p>
+</p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N14_CLzmaEncProps12writeEndMarkE">
+<span id="_CPPv3N14_CLzmaEncProps12writeEndMarkE"></span><span id="_CPPv2N14_CLzmaEncProps12writeEndMarkE"></span><span id="_CLzmaEncProps::writeEndMark__unsigned"></span><span class="target" id="a00494_1a5dbb3c603287d5de9073b291f3b1c52a"></span><span class="kt"><span class="pre">unsigned</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">writeEndMark</span></span></span><a class="headerlink" href="#_CPPv4N14_CLzmaEncProps12writeEndMarkE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>0 - do not write EOPM, 1 - write EOPM, <strong>default</strong> = 0 </p>
+</dd></dl>
+
+</div>
+</dd></dl>
+
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv411_CLzmaProps">
+<span id="_CPPv311_CLzmaProps"></span><span id="_CPPv211_CLzmaProps"></span><span id="_CLzmaProps"></span><span class="target" id="a00458"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">_CLzmaProps</span></span></span><a class="headerlink" href="#_CPPv411_CLzmaProps" title="Permalink to this definition">#</a><br /></dt>
+<dd><div class="docutils container">
+<em>#include &lt;LzmaDec.h&gt;</em></div>
+<p>Structure to hold header parameters that are stored in LZMA compressed streams. </p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N11_CLzmaProps7dicSizeE">
+<span id="_CPPv3N11_CLzmaProps7dicSizeE"></span><span id="_CPPv2N11_CLzmaProps7dicSizeE"></span><span id="_CLzmaProps::dicSize__UInt32"></span><span class="target" id="a00458_1a97fdae5df88d2932a279c9c5a638569a"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dicSize</span></span></span><a class="headerlink" href="#_CPPv4N11_CLzmaProps7dicSizeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>size of dictionary / search buffer to use to find matches </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N11_CLzmaProps2lcE">
+<span id="_CPPv3N11_CLzmaProps2lcE"></span><span id="_CPPv2N11_CLzmaProps2lcE"></span><span id="_CLzmaProps::lc__Byte"></span><span class="target" id="a00458_1a8d636d4356f3ff3ca9aa2c7db24f6750"></span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">lc</span></span></span><a class="headerlink" href="#_CPPv4N11_CLzmaProps2lcE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>number of high bits of the previous byte to use as a context for literal encoding (default 3). </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N11_CLzmaProps2lpE">
+<span id="_CPPv3N11_CLzmaProps2lpE"></span><span id="_CPPv2N11_CLzmaProps2lpE"></span><span id="_CLzmaProps::lp__Byte"></span><span class="target" id="a00458_1a082192c6297531c9d8683c1861889863"></span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">lp</span></span></span><a class="headerlink" href="#_CPPv4N11_CLzmaProps2lpE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>number of low bits of the dictionary position to include in literal posState (default 0). </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N11_CLzmaProps2pbE">
+<span id="_CPPv3N11_CLzmaProps2pbE"></span><span id="_CPPv2N11_CLzmaProps2pbE"></span><span id="_CLzmaProps::pb__Byte"></span><span class="target" id="a00458_1a07206e94258db1c60a1bfffbc76536b3"></span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">pb</span></span></span><a class="headerlink" href="#_CPPv4N11_CLzmaProps2pbE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>number of low bits of processedPos to include in posState (default 2). </p>
+</dd></dl>
+
+</div>
+</dd></dl>
+
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv48CLzmaDec">
+<span id="_CPPv38CLzmaDec"></span><span id="_CPPv28CLzmaDec"></span><span id="CLzmaDec"></span><span class="target" id="a00462"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">CLzmaDec</span></span></span><a class="headerlink" href="#_CPPv48CLzmaDec" title="Permalink to this definition">#</a><br /></dt>
+<dd><div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec3bufE">
+<span id="_CPPv3N8CLzmaDec3bufE"></span><span id="_CPPv2N8CLzmaDec3bufE"></span><span id="CLzmaDec::buf__ByteCP"></span><span class="target" id="a00462_1a8befb478bce8563de4496cc2367b61c4"></span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">buf</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec3bufE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>input stream of compressed bytes </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec12checkDicSizeE">
+<span id="_CPPv3N8CLzmaDec12checkDicSizeE"></span><span id="_CPPv2N8CLzmaDec12checkDicSizeE"></span><span id="CLzmaDec::checkDicSize__UInt32"></span><span class="target" id="a00462_1ad002c2ca2ad3cbc37edcc43c28c629ae"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">checkDicSize</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec12checkDicSizeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>indicator for situation where bytes to be processed is more than bytes that can fit in dest buffer </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec4codeE">
+<span id="_CPPv3N8CLzmaDec4codeE"></span><span id="_CPPv2N8CLzmaDec4codeE"></span><span id="CLzmaDec::code__UInt32"></span><span class="target" id="a00462_1a9325e6773644aa90504a1207c5d4d562"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">code</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec4codeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>range coder: encoded point within range </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec3dicE">
+<span id="_CPPv3N8CLzmaDec3dicE"></span><span id="_CPPv2N8CLzmaDec3dicE"></span><span id="CLzmaDec::dic__ByteP"></span><span class="target" id="a00462_1a96fec5fe0d8d718e82cae44978b4f2d6"></span><span class="n"><span class="pre">Byte</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">dic</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec3dicE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>circular buffer of decompressed bytes. Used as reference to copy from for future matches </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec10dicBufSizeE">
+<span id="_CPPv3N8CLzmaDec10dicBufSizeE"></span><span id="_CPPv2N8CLzmaDec10dicBufSizeE"></span><span id="CLzmaDec::dicBufSize__SizeT"></span><span class="target" id="a00462_1a1c80f71aedd8cfb55536d33f463cba48"></span><span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dicBufSize</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec10dicBufSizeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>dictionary size </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec6dicPosE">
+<span id="_CPPv3N8CLzmaDec6dicPosE"></span><span id="_CPPv2N8CLzmaDec6dicPosE"></span><span id="CLzmaDec::dicPos__SizeT"></span><span class="target" id="a00462_1a3a4fc3b29c04e66e0484607b518661af"></span><span class="n"><span class="pre">SizeT</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dicPos</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec6dicPosE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>current position in dictionary </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec8numProbsE">
+<span id="_CPPv3N8CLzmaDec8numProbsE"></span><span id="_CPPv2N8CLzmaDec8numProbsE"></span><span id="CLzmaDec::numProbs__UInt32"></span><span class="target" id="a00462_1ad70fead1e2cd3b144579890a370980fe"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">numProbs</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec8numProbsE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>number of items in probs table </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec5probsE">
+<span id="_CPPv3N8CLzmaDec5probsE"></span><span id="_CPPv2N8CLzmaDec5probsE"></span><span id="CLzmaDec::probs__CLzmaProbP"></span><span class="target" id="a00462_1a2fa5d54beac01c4a314a95a6b1aeea09"></span><span class="n"><span class="pre">CLzmaProb</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">probs</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec5probsE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>all context model probabilities </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec10probs_1664E">
+<span id="_CPPv3N8CLzmaDec10probs_1664E"></span><span id="_CPPv2N8CLzmaDec10probs_1664E"></span><span id="CLzmaDec::probs_1664__CLzmaProbP"></span><span class="target" id="a00462_1a3abf50e926f48142073677a6bf56891b"></span><span class="n"><span class="pre">CLzmaProb</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">probs_1664</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec10probs_1664E" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>all context model probabilities </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec12processedPosE">
+<span id="_CPPv3N8CLzmaDec12processedPosE"></span><span id="_CPPv2N8CLzmaDec12processedPosE"></span><span id="CLzmaDec::processedPos__UInt32"></span><span class="target" id="a00462_1ad466ce9f0fdd3c18b34d920433cf324e"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">processedPos</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec12processedPosE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>indicator of bytes decompressed until now. Incremented by 1 or incremented by len based on type of decompress operation performed </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec4propE">
+<span id="_CPPv3N8CLzmaDec4propE"></span><span id="_CPPv2N8CLzmaDec4propE"></span><span id="CLzmaDec::prop__CLzmaProps"></span><span class="target" id="a00462_1a1060ffc045d00995bb061c488ed442ee"></span><a class="reference internal" href="#_CPPv410CLzmaProps" title="CLzmaProps"><span class="n"><span class="pre">CLzmaProps</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">prop</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec4propE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>properties read from header bytes in compressed data </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec5rangeE">
+<span id="_CPPv3N8CLzmaDec5rangeE"></span><span id="_CPPv2N8CLzmaDec5rangeE"></span><span id="CLzmaDec::range__UInt32"></span><span class="target" id="a00462_1aabb2c6e9b9c6722d813132d03c59ae34"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">range</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec5rangeE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>range coder: range size </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec9remainLenE">
+<span id="_CPPv3N8CLzmaDec9remainLenE"></span><span id="_CPPv2N8CLzmaDec9remainLenE"></span><span id="CLzmaDec::remainLen__UInt32"></span><span class="target" id="a00462_1afc9cef02db3ecb7d189da2458cebcc28"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">remainLen</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec9remainLenE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p><p>shows status of LZMA decoder:</p>
+<p>&lt; kMatchSpecLenStart : the number of bytes to be copied with (rep0) offset</p>
+<p>= kMatchSpecLenStart : the LZMA stream was finished with end mark</p>
+<p>= kMatchSpecLenStart + 1 : need init range coder</p>
+<p>= kMatchSpecLenStart + 2 : need init range coder and state</p>
+<p>= kMatchSpecLen_Error_Fail : Internal Code Failure</p>
+
+ = kMatchSpecLen_Error_Data + [0 … 273] : LZMA Data Error </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec4repsE">
+<span id="_CPPv3N8CLzmaDec4repsE"></span><span id="_CPPv2N8CLzmaDec4repsE"></span><span id="CLzmaDec::reps__UInt32A"></span><span class="target" id="a00462_1a7270fb4457b9b9249d0d12a4e03d6c6a"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">reps</span></span></span><span class="p"><span class="pre">[</span></span><span class="m"><span class="pre">4</span></span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec4repsE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>offsets for repeated matches rep0-3 </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N8CLzmaDec5stateE">
+<span id="_CPPv3N8CLzmaDec5stateE"></span><span id="_CPPv2N8CLzmaDec5stateE"></span><span id="CLzmaDec::state__UInt32"></span><span class="target" id="a00462_1a84905893aef9d44d0296114f8362b4f5"></span><span class="n"><span class="pre">UInt32</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">state</span></span></span><a class="headerlink" href="#_CPPv4N8CLzmaDec5stateE" title="Permalink to this definition">#</a><br /></dt>
+<dd><p>current state in state machine </p>
+</dd></dl>
+
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="zlib.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title"><span class="section-number">2. </span>ZLIB</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="zstd.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title"><span class="section-number">4. </span>ZSTD</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            <p>
+  </p>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=5b4479735964841361fd"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd"></script>
+
+<footer class="rocm-footer">
+    <div class="container-lg">
+        <section class="bottom-menu menu py-45">
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <ul>
+                        <li><a href="https://www.amd.com/en/corporate/copyright" target="_blank">Terms and Conditions</a></li>
+                        
+                        <li><a href="">2020-2024, Advanced Micro Devices, Inc</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/privacy" target="_blank">Privacy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/trademarks" target="_blank">Trademarks</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/statement-human-trafficking-forced-labor.pdf" target="_blank">Statement on Forced Labor</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/competition" target="_blank">Fair and Open Competition</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/amd-uk-tax-strategy.pdf" target="_blank">UK Tax Strategy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/cookies" target="_blank">Cookie Policy</a></li>
+                        <!-- OneTrust Cookies Settings button start -->
+                        <li><a href="#cookie-settings" id="ot-sdk-btn" class="ot-sdk-show-settings">Cookie Settings</a></li>
+                        <!-- OneTrust Cookies Settings button end -->
+                    </ul>
+                </div>
+            </div>
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <div>
+                        <span class="copyright">© 2023 Advanced Micro Devices, Inc</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</footer>
+
+<!-- <div id="rdc-watermark-container">
+    <img id="rdc-watermark" src="_static/images/alpha-watermark.svg" alt="DRAFT watermark"/>
+</div> -->
+  </body>
+</html>
