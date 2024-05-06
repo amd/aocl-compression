@@ -110,6 +110,112 @@ size_t Test_ZSTD_decompress_usingDict(ZSTD_DCtx* dctx, void* dst, size_t dstCapa
     return ZSTD_decompress_usingDict(dctx, dst, dstCapacity, src, srcSize, dict, dictSize);
 }
 
+size_t Test_ZSTD_decompress_usingDDict(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity,
+    const void* src, size_t srcSize, const ZSTD_DDict* ddict) {
+    return ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ddict);
+}
+
+size_t Test_ZSTD_decompressBegin_usingDict(ZSTD_DCtx* dctx, const void* dict, size_t dictSize) {
+    return ZSTD_decompressBegin_usingDict(dctx, dict, dictSize);
+}
+
+unsigned Test_ZSTD_getDictID_fromDict(const void* dict, size_t dictSize) {
+    return ZSTD_getDictID_fromDict(dict, dictSize);
+}
+
+unsigned Test_ZSTD_getDictID_fromCDict(const ZSTD_CDict* cdict) {
+    return ZSTD_getDictID_fromCDict(cdict);
+}
+
+unsigned Test_ZSTD_getDictID_fromDDict(const ZSTD_DDict* ddict) {
+    return ZSTD_getDictID_fromDDict(ddict);
+}
+
+unsigned Test_ZSTD_getDictID_fromFrame(const void* src, size_t srcSize) {
+    return ZSTD_getDictID_fromFrame(src, srcSize);
+}
+
+size_t Test_ZSTD_sizeof_CDict(const ZSTD_CDict* cdict) {
+    return ZSTD_sizeof_CDict(cdict);
+}
+
+size_t Test_ZSTD_sizeof_DDict(const ZSTD_DDict* ddict) {
+    return ZSTD_sizeof_DDict(ddict);
+}
+
+size_t Test_ZSTD_estimateCDictSize(size_t dictSize, int compressionLevel) {
+    return ZSTD_estimateCDictSize(dictSize, compressionLevel);
+}
+
+size_t Test_ZSTD_estimateCDictSize_advanced(
+    size_t dictSize, ZSTD_compressionParameters cParams,
+    ZSTD_dictLoadMethod_e dictLoadMethod) {
+    return ZSTD_estimateCDictSize_advanced(dictSize, cParams, dictLoadMethod);
+}
+
+size_t Test_ZSTD_estimateDDictSize(size_t dictSize, ZSTD_dictLoadMethod_e dictLoadMethod) {
+    return ZSTD_estimateDDictSize(dictSize, dictLoadMethod);
+}
+
+const ZSTD_CDict* Test_ZSTD_initStaticCDict(void* workspace, size_t workspaceSize,
+    const void* dict, size_t dictSize, ZSTD_dictLoadMethod_e dictLoadMethod,
+    ZSTD_dictContentType_e dictContentType, ZSTD_compressionParameters cParams) {
+    return ZSTD_initStaticCDict(workspace, workspaceSize, dict, dictSize, dictLoadMethod, dictContentType, cParams);
+}
+
+const ZSTD_DDict* Test_ZSTD_initStaticDDict(void* workspace, size_t workspaceSize,
+    const void* dict, size_t dictSize, ZSTD_dictLoadMethod_e dictLoadMethod,
+    ZSTD_dictContentType_e dictContentType) {
+    return ZSTD_initStaticDDict(workspace, workspaceSize, dict, dictSize, dictLoadMethod, dictContentType);
+}
+
+size_t Test_ZSTD_CCtx_loadDictionary(ZSTD_CCtx* cctx, const void* dict, size_t dictSize) {
+    return ZSTD_CCtx_loadDictionary(cctx, dict, dictSize);
+}
+
+size_t Test_ZSTD_CCtx_loadDictionary_advanced(ZSTD_CCtx* cctx, const void* dict, size_t dictSize,
+    ZSTD_dictLoadMethod_e dictLoadMethod, ZSTD_dictContentType_e dictContentType) {
+    return ZSTD_CCtx_loadDictionary_advanced(cctx, dict, dictSize, dictLoadMethod, dictContentType);
+}
+
+size_t Test_ZSTD_CCtx_loadDictionary_byReference(ZSTD_CCtx* cctx, const void* dict, size_t dictSize) {
+    return ZSTD_CCtx_loadDictionary_byReference(cctx, dict, dictSize);
+}
+
+size_t Test_ZSTD_CCtx_refCDict(ZSTD_CCtx* cctx, const ZSTD_CDict* cdict) {
+    return ZSTD_CCtx_refCDict(cctx, cdict);
+}
+
+size_t Test_ZSTD_CCtx_refPrefix(ZSTD_CCtx* cctx, const void* prefix, size_t prefixSize) {
+    return ZSTD_CCtx_refPrefix(cctx, prefix, prefixSize);
+}
+
+size_t Test_ZSTD_CCtx_refPrefix_advanced(ZSTD_CCtx* cctx, const void* prefix, size_t prefixSize,
+    ZSTD_dictContentType_e dictContentType) {
+    return ZSTD_CCtx_refPrefix_advanced(cctx, prefix, prefixSize, dictContentType);
+}
+
+size_t Test_ZSTD_DCtx_loadDictionary(ZSTD_DCtx* dctx, const void* dict, size_t dictSize) {
+    return ZSTD_DCtx_loadDictionary(dctx, dict, dictSize);
+}
+
+size_t Test_ZSTD_DCtx_loadDictionary_byReference(ZSTD_DCtx* dctx, const void* dict, size_t dictSize) {
+    return ZSTD_DCtx_loadDictionary_byReference(dctx, dict, dictSize);
+}
+
+size_t Test_ZSTD_DCtx_refDDict(ZSTD_DCtx* dctx, const ZSTD_DDict* ddict) {
+    return ZSTD_DCtx_refDDict(dctx, ddict);
+}
+
+size_t Test_ZSTD_DCtx_refPrefix(ZSTD_DCtx* dctx, const void* prefix, size_t prefixSize) {
+    return ZSTD_DCtx_refPrefix(dctx, prefix, prefixSize);
+}
+
+size_t Test_ZSTD_DCtx_refPrefix_advanced(ZSTD_DCtx* dctx, const void* prefix, size_t prefixSize,
+    ZSTD_dictContentType_e dictContentType) {
+    return ZSTD_DCtx_refPrefix_advanced(dctx, prefix, prefixSize, dictContentType);
+}
+
 /* This struct mimics ZSTD_CDict_s.
 * As ZSTD_CDict_s members are inaccesible, we copy its contents to this struct
 * to access/validate struct members */
@@ -1320,3 +1426,1915 @@ TEST_F(ZSTD_ZSTD_compress_usingDict, AOCL_Compression_zstd_ZSTD_compress_usingDi
 /***********************************************
  * End of ZSTD_ZSTD_compress_usingDict
  ***********************************************/
+
+/***********************************************
+* Begin of ZSTD_ZSTD_CCtx_loadDictionary
+***********************************************/
+class ZSTD_CCtx_loadDictionary_base : public ZSTD_ZSTD_compress_usingDict_base {
+
+public:
+    void load_dict_pass(ZSTD_loadDict_type type, ZSTD_dictLoadMethod_e dictLoadMethod = ZSTD_dlm_byCopy,
+        ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // pass and validate compress:decompress using dict
+        TestLoad_2 d(8000, gtest_data_gen_type::repeated);
+        create_dict_raw(d.getOrigSize());
+        EXPECT_EQ(run_load_dict(type, getCtx(), getDictBuffer(), getDictSize(), dictLoadMethod, dictContentType), 0); // load dict into cctx
+
+        // compress using dict within cctx and validate
+        size_t outLen = run_compress(ZSTD_Compress_API::compress2, getCtx(), ZSTD_CLEVEL_DEFAULT,
+            d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), NULL);
+        validate_compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, d.getCompressedSize(),
+            getDictBuffer(), getDictSize());
+        counter_validate_compress_no_dict(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(),
+            outLen, d.getCompressedSize()); // ensure test doesn't pass silently due to no dict dependency
+    }
+
+    void load_dict_pass_formatted(ZSTD_loadDict_type type, ZSTD_dictLoadMethod_e dictLoadMethod = ZSTD_dlm_byCopy,
+        ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // pass and validate compress:decompress using formatted dict
+        TestLoad_2 d(8000, gtest_data_gen_type::repeated);
+        create_dict_formatted(d.getOrigSize());
+        EXPECT_EQ(run_load_dict(type, getCtx(), getDictBuffer(), getDictSize(), dictLoadMethod, dictContentType), 0); // load dict into cctx
+
+        // compress using dict within cctx and validate
+        size_t outLen = run_compress(ZSTD_Compress_API::compress2, getCtx(), ZSTD_CLEVEL_DEFAULT,
+            d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), NULL);
+        validate_compress(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen, d.getCompressedSize(),
+            getDictBuffer(), getDictSize());
+        counter_validate_compress_no_dict(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(),
+            outLen, d.getCompressedSize()); // ensure test doesn't pass silently due to no dict dependency
+    }
+
+    void load_dict_is_null(ZSTD_loadDict_type type, ZSTD_dictLoadMethod_e dictLoadMethod = ZSTD_dlm_byCopy,
+        ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // dict is null
+        create_dict_raw(100);
+        EXPECT_EQ(run_load_dict(type, getCtx(), NULL, getDictSize(), dictLoadMethod, dictContentType), 0); // equivalent to dict reset
+    }
+
+    void load_dict_dictsize_0(ZSTD_loadDict_type type, ZSTD_dictLoadMethod_e dictLoadMethod = ZSTD_dlm_byCopy,
+        ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // dictSize is 0
+        create_dict_raw(100);
+        EXPECT_EQ(run_load_dict(type, getCtx(), getDictBuffer(), 0, dictLoadMethod, dictContentType), 0); // equivalent to dict reset
+    }
+
+    void load_dict_is_null_dictsize_0(ZSTD_loadDict_type type, ZSTD_dictLoadMethod_e dictLoadMethod = ZSTD_dlm_byCopy,
+        ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // dict is null and dictSize is 0
+        EXPECT_EQ(run_load_dict(type, getCtx(), NULL, 0, dictLoadMethod, dictContentType), 0); // equivalent to dict reset
+    }
+
+    void load_dict_cctx_null(ZSTD_loadDict_type type, ZSTD_dictLoadMethod_e dictLoadMethod = ZSTD_dlm_byCopy,
+        ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // cctx null
+        create_dict_raw(100);
+        EXPECT_EQ(run_load_dict(type, NULL, getDictBuffer(), getDictSize(), dictLoadMethod, dictContentType),
+            ERROR(GENERIC));
+    }
+
+    void load_dict_cctx_streamStage_not_init(ZSTD_loadDict_type type, ZSTD_dictLoadMethod_e dictLoadMethod = ZSTD_dlm_byCopy,
+        ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // cctx streamStage not init
+        create_dict_raw(100);
+        ZSTD_CCtx* cctx_not_init = getCtx();
+        cctx_not_init->streamStage = zcss_flush; // modify streamStage
+        EXPECT_EQ(run_load_dict(type, cctx_not_init, getDictBuffer(), getDictSize(), dictLoadMethod, dictContentType),
+            ERROR(stage_wrong));
+    }
+
+private:
+    size_t run_load_dict(ZSTD_loadDict_type type, ZSTD_CCtx* cctx, const void* dict, size_t dictSize,
+        ZSTD_dictLoadMethod_e dictLoadMethod, ZSTD_dictContentType_e dictContentType) {
+        switch (type) {
+        case ZSTD_loadDict_type::byValue:
+            return Test_ZSTD_CCtx_loadDictionary(cctx, dict, dictSize);
+        case ZSTD_loadDict_type::byReference:
+            return Test_ZSTD_CCtx_loadDictionary_byReference(cctx, dict, dictSize);
+        case ZSTD_loadDict_type::advanced:
+            return Test_ZSTD_CCtx_loadDictionary_advanced(cctx, dict, dictSize, dictLoadMethod, dictContentType);
+        case ZSTD_loadDict_type::refcdict:
+        {
+            if (dict == NULL || dictSize == 0) {
+                ZSTD_compressionParameters cparams = Test_Get_ZSTD_defaultCParameters(UINT_MAX, ZSTD_CLEVEL_DEFAULT, 1);
+                ZSTD_CDict* cdict = run_create_cdict(ZSTD_Compress_API::compress_cdict, dict, dictSize,
+                    ZSTD_dlm_byCopy, ZSTD_dct_auto, cparams, ZSTD_defaultCMem);
+                size_t ret = Test_ZSTD_CCtx_refCDict(cctx, cdict);
+                Test_ZSTD_freeCDict(cdict);
+                return ret;
+            }
+            else
+                return Test_ZSTD_CCtx_refCDict(cctx, getCDict());
+        }
+        case ZSTD_loadDict_type::refprefix:
+            return Test_ZSTD_CCtx_refPrefix(cctx, dict, dictSize);
+        case ZSTD_loadDict_type::refprefixAdv:
+            return Test_ZSTD_CCtx_refPrefix_advanced(cctx, dict, dictSize, dictContentType);
+        default:
+            return ERROR(GENERIC);
+        }
+    }
+};
+
+
+class ZSTD_CCtx_loadDictionary : public ZSTD_CCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_CCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_pass_common_1)
+{
+    load_dict_pass(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_pass_common_2)
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_pass_common_3)
+{
+    load_dict_is_null(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_pass_common_4)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_pass_common_5)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_fail_common_6)
+{
+    load_dict_cctx_null(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_fail_common_7)
+{
+    load_dict_cctx_streamStage_not_init(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_fail_common_8) // cctx static
+{
+    create_dict_raw(100);
+
+    // create static cctx
+    size_t const workspaceSize = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
+    void* workspace = malloc(workspaceSize);
+    ZSTD_CCtx* cctx_static = Test_ZSTD_initStaticCCtx(workspace, workspaceSize);
+    ASSERT_NE(cctx_static, nullptr);
+
+    EXPECT_EQ(Test_ZSTD_CCtx_loadDictionary(cctx_static, getDictBuffer(), getDictSize()), ERROR(memory_allocation));
+    free(workspace);
+}
+/***********************************************
+ * End of ZSTD_ZSTD_CCtx_loadDictionary
+ ***********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_CCtx_loadDictionary_byReference
+  ***********************************************/
+class ZSTD_CCtx_loadDictionary_byReference : public ZSTD_CCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_CCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_byReference_pass_common_1)
+{
+    load_dict_pass(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_byReference_pass_common_2)
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_byReference_pass_common_3)
+{
+    load_dict_is_null(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_byReference_pass_common_4)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_byReference_pass_common_5)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_byReference_fail_common_6)
+{
+    load_dict_cctx_null(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_byReference_fail_common_7)
+{
+    load_dict_cctx_streamStage_not_init(ZSTD_loadDict_type::byReference);
+}
+/***********************************************
+ * End of ZSTD_ZSTD_CCtx_loadDictionary_byReference
+ ***********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_CCtx_loadDictionary_advanced
+  ***********************************************/
+class ZSTD_CCtx_loadDictionary_advanced : public ZSTD_CCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_CCtx_loadDictionary_advanced, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_advanced_pass_common_1)
+{
+    load_dict_pass(ZSTD_loadDict_type::advanced, ZSTD_dlm_byCopy, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_advanced, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_advanced_pass_common_2)
+{
+    load_dict_pass(ZSTD_loadDict_type::advanced, ZSTD_dlm_byRef, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_advanced, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_advanced_pass_common_3)
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::advanced, ZSTD_dlm_byCopy, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_advanced, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_advanced_pass_common_4)
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::advanced, ZSTD_dlm_byRef, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_advanced, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_advanced_pass_common_5)
+{
+    load_dict_is_null(ZSTD_loadDict_type::advanced);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_advanced, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_advanced_pass_common_6)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::advanced);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_advanced, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_advanced_pass_common_7)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::advanced);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_advanced, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_advanced_fail_common_8)
+{
+    load_dict_cctx_null(ZSTD_loadDict_type::advanced);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_advanced, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_advanced_fail_common_9)
+{
+    load_dict_cctx_streamStage_not_init(ZSTD_loadDict_type::advanced);
+}
+
+TEST_F(ZSTD_CCtx_loadDictionary_advanced, AOCL_Compression_zstd_ZSTD_CCtx_loadDictionary_advanced_fail_common_10) // cctx static with ZSTD_dlm_byCopy
+{
+    create_dict_raw(100);
+
+    // create static cctx
+    size_t const workspaceSize = Test_ZSTD_estimateCCtxSize(ZSTD_CLEVEL_DEFAULT);
+    void* workspace = malloc(workspaceSize);
+    ZSTD_CCtx* cctx_static = Test_ZSTD_initStaticCCtx(workspace, workspaceSize);
+    ASSERT_NE(cctx_static, nullptr);
+
+    EXPECT_EQ(Test_ZSTD_CCtx_loadDictionary_advanced(cctx_static, getDictBuffer(), getDictSize(),
+        ZSTD_dlm_byCopy, ZSTD_dct_auto), ERROR(memory_allocation));
+    free(workspace);
+}
+/***********************************************
+ * End of ZSTD_ZSTD_CCtx_loadDictionary_advanced
+ ***********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_CCtx_refCDict
+  ***********************************************/
+class ZSTD_CCtx_refCDict : public ZSTD_CCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_CCtx_refCDict, AOCL_Compression_zstd_ZSTD_CCtx_refCDict_pass_common_1)
+{
+    load_dict_pass(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_CCtx_refCDict, AOCL_Compression_zstd_ZSTD_CCtx_refCDict_pass_common_2)
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_CCtx_refCDict, AOCL_Compression_zstd_ZSTD_CCtx_refCDict_pass_common_3)
+{
+    load_dict_is_null(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_CCtx_refCDict, AOCL_Compression_zstd_ZSTD_CCtx_refCDict_pass_common_4)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_CCtx_refCDict, AOCL_Compression_zstd_ZSTD_CCtx_refCDict_pass_common_5)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_CCtx_refCDict, AOCL_Compression_zstd_ZSTD_CCtx_refCDict_fail_common_6) // cdict is NULL
+{
+    EXPECT_EQ(Test_ZSTD_CCtx_refCDict(getCtx(), NULL), 0);
+}
+
+TEST_F(ZSTD_CCtx_refCDict, AOCL_Compression_zstd_ZSTD_CCtx_refCDict_fail_common_7)
+{
+    load_dict_cctx_null(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_CCtx_refCDict, AOCL_Compression_zstd_ZSTD_CCtx_refCDict_fail_common_8)
+{
+    load_dict_cctx_streamStage_not_init(ZSTD_loadDict_type::refcdict);
+}
+/***********************************************
+ * End of ZSTD_ZSTD_CCtx_refCDict
+ ***********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_CCtx_refPrefix
+  ***********************************************/
+class ZSTD_CCtx_refPrefix : public ZSTD_CCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_CCtx_refPrefix, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_pass_common_1)
+{
+    load_dict_pass(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_pass_common_2)
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_pass_common_3)
+{
+    load_dict_is_null(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_pass_common_4)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_pass_common_5)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_fail_common_6)
+{
+    load_dict_cctx_null(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_fail_common_7)
+{
+    load_dict_cctx_streamStage_not_init(ZSTD_loadDict_type::refprefix);
+}
+/***********************************************
+ * End of ZSTD_ZSTD_CCtx_refPrefix
+ ***********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_CCtx_refPrefix_advanced
+  ***********************************************/
+class ZSTD_CCtx_refPrefix_advanced : public ZSTD_CCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_CCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_advanced_pass_common_1)
+{
+    load_dict_pass(ZSTD_loadDict_type::refprefixAdv, (ZSTD_dictLoadMethod_e)100, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_advanced_pass_common_2)
+{
+    load_dict_pass(ZSTD_loadDict_type::refprefixAdv, (ZSTD_dictLoadMethod_e)100, ZSTD_dct_rawContent);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_advanced_pass_common_3)
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::refprefixAdv, (ZSTD_dictLoadMethod_e)100, ZSTD_dct_fullDict);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_advanced_pass_common_4)
+{
+    load_dict_is_null(ZSTD_loadDict_type::refprefixAdv);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_advanced_pass_common_5)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::refprefixAdv);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_advanced_pass_common_6)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::refprefixAdv);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_advanced_fail_common_7)
+{
+    load_dict_cctx_null(ZSTD_loadDict_type::refprefixAdv);
+}
+
+TEST_F(ZSTD_CCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_CCtx_refPrefix_advanced_fail_common_8)
+{
+    load_dict_cctx_streamStage_not_init(ZSTD_loadDict_type::refprefixAdv);
+}
+/***********************************************
+ * End of ZSTD_ZSTD_CCtx_refPrefix_advanced
+ ***********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_decompress_usingDDict
+  ***********************************************/
+class ZSTD_decompress_usingDict_base : public ZSTD_dict_creator {
+public:
+    ZSTD_decompress_usingDict_base() {
+        cctx = Test_ZSTD_createCCtx();
+        dctx = Test_ZSTD_createDCtx();
+    }
+
+    virtual ~ZSTD_decompress_usingDict_base() {
+        if (output)
+            free(output);
+        delete d;
+
+        Test_ZSTD_freeCDict(cdict);
+        Test_ZSTD_freeCCtx(cctx);
+        Test_ZSTD_freeDDict(ddict);
+        Test_ZSTD_freeDCtx(dctx);
+    }
+
+    void validate_decompress(const char* original, unsigned origLen, const char* output, unsigned outputLen) {
+        EXPECT_EQ(origLen, outputLen);
+        EXPECT_EQ(0, memcmp(output, original, origLen));
+    }
+
+    void decompress_pass(ZSTD_Decompress_API api, ZSTD_DCtx* dctx) { // pass
+        compress_repeated(800);
+        size_t decLen = run_decompress(api, dctx, output, outLen, d->getCompressedBuff(), compressedLen, ddict);
+        CHECK_PASS_ZSTD(decLen);
+        validate_decompress(d->getOrigData(), d->getOrigSize(), output, decLen);
+    }
+
+    void decompress_src_null(ZSTD_Decompress_API api, ZSTD_DCtx* dctx) { // decompress src null
+        compress_repeated(800);
+        size_t decLen = run_decompress(api, dctx, output, outLen, NULL, compressedLen, ddict);
+        CHECK_FAIL_ZSTD(decLen);
+        EXPECT_EQ(decLen, ERROR(srcSize_wrong));
+    }
+
+    void decompress_dst_null(ZSTD_Decompress_API api, ZSTD_DCtx* dctx) { // decompress dst null
+        compress_repeated(800);
+        size_t decLen = run_decompress(api, dctx, NULL, outLen, d->getCompressedBuff(), compressedLen, ddict);
+        CHECK_FAIL_ZSTD(decLen);
+        EXPECT_EQ(decLen, ERROR(dstSize_tooSmall)); //FIXME: input type being repeated or random change the error code!!!
+    }
+
+    void decompress_insufficient_dstCapacity(ZSTD_Decompress_API api, ZSTD_DCtx* dctx) { // decompress dstCapacity insufficient
+        compress_repeated(800);
+        size_t dstCapacity = outLen - 1; // insufficient dst
+        size_t decLen = run_decompress(api, dctx, output, dstCapacity, d->getCompressedBuff(), compressedLen, ddict);
+        CHECK_FAIL_ZSTD(decLen);
+        EXPECT_EQ(decLen, ERROR(dstSize_tooSmall));
+    }
+
+    void decompress_srcsize_0(ZSTD_Decompress_API api, ZSTD_DCtx* dctx) { // decompress src size 0
+        compress_repeated(800);
+        size_t decLen = run_decompress(api, dctx, output, outLen, d->getCompressedBuff(), 0, ddict);
+        CHECK_PASS_ZSTD(decLen);
+        EXPECT_EQ(decLen, 0);
+    }
+
+    void decompress_src_null_srcsize_0(ZSTD_Decompress_API api, ZSTD_DCtx* dctx) { // decompress src null and src size 0
+        compress_repeated(800);
+        size_t decLen = run_decompress(api, dctx, output, outLen, NULL, 0, ddict);
+        CHECK_PASS_ZSTD(decLen);
+        EXPECT_EQ(decLen, 0);
+    }
+
+    void decompress_src_null_srcsize_0_dstsize_0(ZSTD_Decompress_API api, ZSTD_DCtx* dctx) { // decompress src null and src size 0 and dst size 0
+        compress_repeated(800);
+        size_t decLen = run_decompress(api, dctx, output, 0, NULL, 0, ddict);
+        CHECK_PASS_ZSTD(decLen);
+        EXPECT_EQ(decLen, 0);
+    }
+
+    void decompress_dctx_null(ZSTD_Decompress_API api) { // decompress dctx null
+        compress_repeated(800);
+        size_t decLen = run_decompress(api, NULL, output, outLen, d->getCompressedBuff(), compressedLen, ddict);
+        EXPECT_EQ(decLen, ERROR(GENERIC));
+    }
+
+    void decompress_ddict_null(ZSTD_Decompress_API api, ZSTD_DCtx* dctx) { // decompress ddict null
+        // create cdict
+        EXPECT_TRUE(create_raw_content_dict(900));
+        cdict = Test_ZSTD_createCDict(getDictBuffer(), getDictSize(), ZSTD_CLEVEL_DEFAULT);
+        ASSERT_NE(cdict, nullptr);
+
+        // compress using cdict
+        d = new TestLoad_2(800);
+        outLen = d->getOrigSize();
+        output = (char*)malloc(outLen);
+        compressedLen = Test_ZSTD_compress_usingDict(cctx, d->getCompressedBuff(), d->getCompressedSize(),
+            d->getOrigData(), d->getOrigSize(), getDictBuffer(), getDictSize(), ZSTD_CLEVEL_DEFAULT);
+        CHECK_PASS_ZSTD(compressedLen);
+
+        // run without ddict
+        /* output of run_decompress() is dependent on nature of input.
+        * If the input stream has matches in dictionary, then passing NULL here will result in
+        * the API returning data_corruption error.
+        * If no such matches are found, then dictionary is not required and it will pass and
+        * provide valid decompressed output.
+        * Hence only checking for no crash here and not validating the returned result. */
+        run_decompress(api, dctx, output, outLen, d->getCompressedBuff(), compressedLen, NULL);
+    }
+
+    void decompress_cdict_ddict_null(ZSTD_Decompress_API api, ZSTD_DCtx* dctx) { // decompress ddict null, no dict used to compress
+        // compress without dict
+        d = new TestLoad_2(800);
+        outLen = d->getOrigSize();
+        output = (char*)malloc(outLen);
+        compressedLen = Test_ZSTD_compress2(cctx, d->getCompressedBuff(), d->getCompressedSize(),
+            d->getOrigData(), d->getOrigSize());
+        CHECK_PASS_ZSTD(compressedLen);
+
+        // run without ddict
+        size_t decLen = run_decompress(api, dctx, output, outLen, d->getCompressedBuff(), compressedLen, NULL);
+        CHECK_PASS_ZSTD(decLen);
+        validate_decompress(d->getOrigData(), d->getOrigSize(), output, decLen);
+    }
+
+    ZSTD_DCtx* getDCtx() {
+        return dctx;
+    }
+
+    ZSTD_DDict* getDDict() {
+        return ddict;
+    }
+
+protected:
+    void compress_repeated(size_t sz) { // compress using a raw content dictionary
+        create_dict_raw();
+
+        d = new TestLoad_2(sz, gtest_data_gen_type::repeated);
+        outLen = d->getOrigSize();
+        output = (char*)malloc(outLen);
+
+        compressedLen = Test_ZSTD_compress_usingDict(cctx, d->getCompressedBuff(), d->getCompressedSize(),
+            d->getOrigData(), d->getOrigSize(), getDictBuffer(), getDictSize(), ZSTD_CLEVEL_DEFAULT);
+        CHECK_PASS_ZSTD(compressedLen);
+    }
+
+    void compress_repeated_formatted(size_t sz) { // compress using a format compilant dictionary
+        create_dict_formatted();
+
+        d = new TestLoad_2(sz, gtest_data_gen_type::repeated);
+        outLen = d->getOrigSize();
+        output = (char*)malloc(outLen);
+
+        compressedLen = Test_ZSTD_compress_usingDict(cctx, d->getCompressedBuff(), d->getCompressedSize(),
+            d->getOrigData(), d->getOrigSize(), getDictBuffer(), getDictSize(), ZSTD_CLEVEL_DEFAULT);
+        CHECK_PASS_ZSTD(compressedLen);
+    }
+
+    void compress_no_dict(size_t sz) { // compress without dict
+        d = new TestLoad_2(sz);
+        outLen = d->getOrigSize();
+        output = (char*)malloc(outLen);
+
+        compressedLen = Test_ZSTD_compress2(cctx, d->getCompressedBuff(), d->getCompressedSize(),
+            d->getOrigData(), d->getOrigSize());
+        CHECK_PASS_ZSTD(compressedLen);
+    }
+
+
+    char* get_output_buf() {
+        return output;
+    }
+
+    size_t get_output_capacity() {
+        return outLen;
+    }
+
+    char* get_orig_data()
+    {
+        return d->getOrigData();
+    }
+
+    size_t get_orig_size()
+    {
+        return d->getOrigSize();
+    }
+
+    char* get_compressed_buff()
+    {
+        return d->getCompressedBuff();
+    }
+
+    size_t get_compressed_capacity()
+    {
+        return d->getCompressedSize();
+    }
+
+    size_t get_compressed_len() {
+        return compressedLen;
+    }
+
+protected:
+    size_t run_decompress(ZSTD_Decompress_API api, ZSTD_DCtx* dctx, void* dst, size_t dstCapacity,
+        const void* src, size_t srcSize, ZSTD_DDict* ddict) {
+        switch (api) {
+        case ZSTD_Decompress_API::decompress_ddict:
+        {
+            return Test_ZSTD_decompress_usingDDict(dctx, dst, dstCapacity, src, srcSize, ddict);
+        }
+        case ZSTD_Decompress_API::decompress_dict:
+        {
+            return Test_ZSTD_decompress_usingDict(dctx, dst, dstCapacity, src, srcSize, getDictBuffer(), getDictSize());
+        }
+        case ZSTD_Decompress_API::decompress_dctx:
+        {
+            return Test_ZSTD_decompressDCtx(dctx, dst, dstCapacity, src, srcSize);
+        }
+        default:
+            return ERROR(GENERIC);
+        }
+    }
+
+private:
+    void create_dict_raw() {
+        EXPECT_TRUE(create_raw_content_dict(900));
+        cdict = Test_ZSTD_createCDict(getDictBuffer(), getDictSize(), ZSTD_CLEVEL_DEFAULT);
+        ddict = Test_ZSTD_createDDict(getDictBuffer(), getDictSize()); // created using same dictBuffer as cdict
+        ASSERT_NE(cdict, nullptr);
+        ASSERT_NE(ddict, nullptr);
+    }
+
+    void create_dict_formatted() {
+        EXPECT_TRUE(create_train_from_buffer_dict(900));
+        cdict = Test_ZSTD_createCDict(getDictBuffer(), getDictSize(), ZSTD_CLEVEL_DEFAULT);
+        ddict = Test_ZSTD_createDDict(getDictBuffer(), getDictSize()); // created using same dictBuffer as cdict
+        ASSERT_NE(cdict, nullptr);
+        ASSERT_NE(ddict, nullptr);
+    }
+
+    // Decompressed data will be stored in the buffer `output`.
+    char* output = NULL;
+    size_t outLen;
+    size_t compressedLen;
+    TestLoad_2* d = NULL;
+
+    ZSTD_CDict* cdict = NULL;
+    ZSTD_CCtx* cctx = NULL;
+    ZSTD_DDict* ddict = NULL;
+    ZSTD_DCtx* dctx = NULL;
+
+};
+
+class ZSTD_ZSTD_decompress_usingDDict : public ZSTD_decompress_usingDict_base {};
+
+TEST_F(ZSTD_ZSTD_decompress_usingDDict, AOCL_Compression_zstd_ZSTD_decompress_usingDDict_pass_common_1)
+{
+    decompress_pass(ZSTD_Decompress_API::decompress_ddict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDDict, AOCL_Compression_zstd_ZSTD_decompress_usingDDict_fail_common_2)
+{
+    decompress_src_null(ZSTD_Decompress_API::decompress_ddict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDDict, AOCL_Compression_zstd_ZSTD_decompress_usingDDict_fail_common_3)
+{
+    decompress_dst_null(ZSTD_Decompress_API::decompress_ddict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDDict, AOCL_Compression_zstd_ZSTD_decompress_usingDDict_fail_common_4)
+{
+    decompress_insufficient_dstCapacity(ZSTD_Decompress_API::decompress_ddict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDDict, AOCL_Compression_zstd_ZSTD_decompress_usingDDict_pass_common_5)
+{
+    decompress_srcsize_0(ZSTD_Decompress_API::decompress_ddict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDDict, AOCL_Compression_zstd_ZSTD_decompress_usingDDict_pass_common_6)
+{
+    decompress_src_null_srcsize_0(ZSTD_Decompress_API::decompress_ddict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDDict, AOCL_Compression_zstd_ZSTD_decompress_usingDDict_pass_common_7)
+{
+    decompress_src_null_srcsize_0_dstsize_0(ZSTD_Decompress_API::decompress_ddict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDDict, AOCL_Compression_zstd_ZSTD_decompress_usingDDict_fail_common_8)
+{
+    decompress_dctx_null(ZSTD_Decompress_API::decompress_ddict);
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDDict, AOCL_Compression_zstd_ZSTD_decompress_usingDDict_pass_common_9)
+{
+    decompress_ddict_null(ZSTD_Decompress_API::decompress_ddict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDDict, AOCL_Compression_zstd_ZSTD_decompress_usingDDict_pass_common_10)
+{
+    decompress_cdict_ddict_null(ZSTD_Decompress_API::decompress_ddict, getDCtx());
+}
+/***********************************************
+ * End of ZSTD_ZSTD_decompress_usingDDict
+ ***********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_decompress_usingDict
+  ***********************************************/
+class ZSTD_ZSTD_decompress_usingDict : public ZSTD_decompress_usingDict_base {};
+
+TEST_F(ZSTD_ZSTD_decompress_usingDict, AOCL_Compression_zstd_ZSTD_decompress_usingDict_pass_common_1)
+{
+    decompress_pass(ZSTD_Decompress_API::decompress_dict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDict, AOCL_Compression_zstd_ZSTD_decompress_usingDict_fail_common_2)
+{
+    decompress_src_null(ZSTD_Decompress_API::decompress_dict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDict, AOCL_Compression_zstd_ZSTD_decompress_usingDict_fail_common_3)
+{
+    decompress_dst_null(ZSTD_Decompress_API::decompress_dict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDict, AOCL_Compression_zstd_ZSTD_decompress_usingDict_fail_common_4)
+{
+    decompress_insufficient_dstCapacity(ZSTD_Decompress_API::decompress_dict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDict, AOCL_Compression_zstd_ZSTD_decompress_usingDict_pass_common_5)
+{
+    decompress_srcsize_0(ZSTD_Decompress_API::decompress_dict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDict, AOCL_Compression_zstd_ZSTD_decompress_usingDict_pass_common_6)
+{
+    decompress_src_null_srcsize_0(ZSTD_Decompress_API::decompress_dict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDict, AOCL_Compression_zstd_ZSTD_decompress_usingDict_pass_common_7)
+{
+    decompress_src_null_srcsize_0_dstsize_0(ZSTD_Decompress_API::decompress_dict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDict, AOCL_Compression_zstd_ZSTD_decompress_usingDict_fail_common_8)
+{
+    decompress_dctx_null(ZSTD_Decompress_API::decompress_dict);
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDict, AOCL_Compression_zstd_ZSTD_decompress_usingDict_pass_common_9)
+{
+    decompress_ddict_null(ZSTD_Decompress_API::decompress_dict, getDCtx());
+}
+
+TEST_F(ZSTD_ZSTD_decompress_usingDict, AOCL_Compression_zstd_ZSTD_decompress_usingDict_pass_common_10)
+{
+    decompress_cdict_ddict_null(ZSTD_Decompress_API::decompress_dict, getDCtx());
+}
+/***********************************************
+ * End of ZSTD_ZSTD_decompress_usingDict
+ ***********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_decompressBegin_usingDict
+  *********************************************/
+class ZSTD_ZSTD_decompressBegin_usingDict : public ZSTD_dict_creator {};
+TEST_F(ZSTD_ZSTD_decompressBegin_usingDict, AOCL_Compression_zstd_ZSTD_decompressBegin_usingDict_fail_common_1) // dctx is null
+{
+    EXPECT_TRUE(create_raw_content_dict(800));
+    size_t ret = Test_ZSTD_decompressBegin_usingDict(NULL, getDictBuffer(), getDictSize());
+    EXPECT_EQ(ret, ERROR(GENERIC));
+}
+
+TEST_F(ZSTD_ZSTD_decompressBegin_usingDict, AOCL_Compression_zstd_ZSTD_decompressBegin_usingDict_pass_common_2) // dict is null
+{
+    EXPECT_TRUE(create_raw_content_dict(800));
+    ZSTD_DCtx* dctx = Test_ZSTD_createDCtx();
+    size_t ret = Test_ZSTD_decompressBegin_usingDict(dctx, NULL, getDictSize());
+    EXPECT_EQ(ret, 0);
+    Test_ZSTD_freeDCtx(dctx);
+}
+
+TEST_F(ZSTD_ZSTD_decompressBegin_usingDict, AOCL_Compression_zstd_ZSTD_decompressBegin_usingDict_pass_common_3) // dictSize is 0
+{
+    EXPECT_TRUE(create_raw_content_dict(800));
+    ZSTD_DCtx* dctx = Test_ZSTD_createDCtx();
+    size_t ret = Test_ZSTD_decompressBegin_usingDict(dctx, getDictBuffer(), 0);
+    EXPECT_EQ(ret, 0);
+    Test_ZSTD_freeDCtx(dctx);
+}
+// other cases tested as part of ZSTD_ZSTD_decompressContinue_usingDict
+/*********************************************
+ * End of ZSTD_ZSTD_decompressBegin_usingDict
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_decompressContinue_usingDict
+  *********************************************/
+class ZSTD_ZSTD_decompressContinue_usingDict : public ZSTD_decompress_usingDict_base {
+public:
+    ZSTD_ZSTD_decompressContinue_usingDict()
+    {
+        dctx = ZSTD_createDCtx();
+    }
+
+    ~ZSTD_ZSTD_decompressContinue_usingDict()
+    {
+        if (dctx)
+            ZSTD_freeDCtx(dctx);
+    }
+
+    void decompress_pass() { // pass
+        compress_repeated(800);
+        size_t decLen = buffer_less_streaming_pass();
+        CHECK_PASS_ZSTD(decLen);
+        validate_decompress(get_orig_data(), get_orig_size(), get_output_buf(), decLen);
+    }
+
+    void decompress_src_null() { // decompress src null
+        compress_repeated(800);
+        CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin_usingDict(dctx, getDictBuffer(), getDictSize()));
+        size_t const srcSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+        size_t const dprSize = Test_ZSTD_decompressContinue(dctx, get_output_buf(), get_output_capacity(), NULL, srcSize);
+        EXPECT_EQ(dprSize, ERROR(srcSize_wrong));
+    }
+
+    void decompress_dst_null() { // decompress dst null
+        compress_repeated(800);
+        CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin_usingDict(dctx, getDictBuffer(), getDictSize()));
+        size_t const srcSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+        size_t const dprSize = Test_ZSTD_decompressContinue(dctx, NULL, get_output_capacity(), get_orig_data(), srcSize);
+        EXPECT_EQ(dprSize, ERROR(dstBuffer_null));
+    }
+
+    void decompress_dstCapacity_insufficient() { // decompress dstCapacity insufficient
+        compress_repeated(800);
+        size_t curCprLen = 0;
+        size_t dstCapacity = get_output_capacity() / 10;
+        size_t curDprLen = buffer_less_streaming_multiple(curCprLen, get_output_buf(), dstCapacity,
+            get_compressed_buff(), get_compressed_len());
+        EXPECT_EQ(curDprLen, ERROR(dstSize_tooSmall));
+    }
+
+    void decompress_srcSize_0() { // decompress srcSize is 0
+        compress_repeated(800);
+        CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin_usingDict(dctx, getDictBuffer(), getDictSize()));
+        size_t const dprSize = Test_ZSTD_decompressContinue(dctx, get_output_buf(), get_output_capacity(), get_orig_data(), 0);
+        EXPECT_EQ(dprSize, ERROR(srcSize_wrong));
+    }
+
+    void decompress_src_null_srcSize_0() { // decompress src null and srcSize is 0
+        compress_repeated(800);
+        CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin_usingDict(dctx, getDictBuffer(), getDictSize()));
+        size_t const dprSize = Test_ZSTD_decompressContinue(dctx, get_output_buf(), get_output_capacity(), NULL, 0);
+        EXPECT_EQ(dprSize, ERROR(srcSize_wrong));
+    }
+
+private:
+    size_t buffer_less_streaming_multiple(size_t& curCprLen,
+        void* dst, size_t dstCapacity, const void* src, size_t srcSize) {
+        CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin_usingDict(dctx, getDictBuffer(), getDictSize()));
+        curCprLen = 0;
+        size_t curDprLen = 0;
+        while (curCprLen < srcSize) {
+            size_t const cprSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+            size_t const dprSize = Test_ZSTD_decompressContinue(dctx, (char*)dst + curDprLen,
+                dstCapacity - curDprLen, (char*)src + curCprLen, cprSize);
+            if (ZSTD_isError(dprSize)) return dprSize;
+            curDprLen += dprSize;
+            curCprLen += cprSize;
+        }
+        return curDprLen;
+    }
+
+    size_t buffer_less_streaming_pass() {
+        size_t curCprLen = 0;
+         size_t curDprLen = buffer_less_streaming_multiple(curCprLen, get_output_buf(), get_output_capacity(),
+                                       get_compressed_buff(), get_compressed_len());
+        EXPECT_FALSE(ZSTD_isError(curDprLen));
+        EXPECT_EQ(Test_ZSTD_nextSrcSizeToDecompress(dctx), 0); // frame fully decoded
+        EXPECT_EQ(curCprLen, get_compressed_len()); // compressed data fully read
+        return curDprLen;
+    }
+
+    ZSTD_DCtx* dctx = NULL;
+};
+
+TEST_F(ZSTD_ZSTD_decompressContinue_usingDict, AOCL_Compression_zstd_ZSTD_decompressContinue_pass_common_1)
+{
+    decompress_pass();
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue_usingDict, AOCL_Compression_zstd_ZSTD_decompressContinue_fail_common_2)
+{
+    decompress_src_null();
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue_usingDict, AOCL_Compression_zstd_ZSTD_decompressContinue_fail_common_3)
+{
+    decompress_dst_null();
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue_usingDict, AOCL_Compression_zstd_ZSTD_decompressContinue_fail_common_4)
+{
+    decompress_dstCapacity_insufficient();
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue_usingDict, AOCL_Compression_zstd_ZSTD_decompressContinue_fail_common_5)
+{
+    decompress_srcSize_0();
+}
+
+TEST_F(ZSTD_ZSTD_decompressContinue_usingDict, AOCL_Compression_zstd_ZSTD_decompressContinue_fail_common_6)
+{
+    decompress_src_null_srcSize_0();
+}
+/*********************************************
+ * End of ZSTD_ZSTD_decompressContinue_usingDict
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_DCtx_loadDictionary
+  ***********************************************/
+class ZSTD_ZSTD_DCtx_loadDictionary_base : public ZSTD_decompress_usingDict_base {
+public:
+    void load_dict_pass(ZSTD_loadDict_type type, ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // pass and validate compress & decompress using dict
+        compress_repeated(8000);
+        EXPECT_EQ(run_load_dict(type, getDCtx(), getDictBuffer(), getDictSize(), dictContentType), 0); // load dict into cctx
+
+        // compress using dict within dctx and validate
+        size_t decLen = run_decompress(ZSTD_Decompress_API::decompress_dctx, getDCtx(), get_output_buf(),
+            get_output_capacity(), get_compressed_buff(), get_compressed_len(), NULL);
+        CHECK_PASS_ZSTD(decLen);
+        validate_decompress(get_orig_data(), get_orig_size(), get_output_buf(), decLen);
+    }
+
+    void load_dict_pass_formatted(ZSTD_loadDict_type type, ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // pass and validate compress & decompress using formatted dict
+        compress_repeated_formatted(8000);
+        EXPECT_EQ(run_load_dict(type, getDCtx(), getDictBuffer(), getDictSize(), dictContentType), 0); // load dict into cctx
+
+        // compress using dict within dctx and validate
+        size_t decLen = run_decompress(ZSTD_Decompress_API::decompress_dctx, getDCtx(), get_output_buf(),
+            get_output_capacity(), get_compressed_buff(), get_compressed_len(), NULL);
+        CHECK_PASS_ZSTD(decLen);
+        validate_decompress(get_orig_data(), get_orig_size(), get_output_buf(), decLen);
+    }
+
+    void load_dict_is_null(ZSTD_loadDict_type type, ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // dict is null
+        compress_repeated(100);
+        EXPECT_EQ(run_load_dict(type, getDCtx(), NULL, getDictSize(), dictContentType), 0); // equivalent to dict reset
+    }
+
+    void load_dict_dictsize_0(ZSTD_loadDict_type type, ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // dictSize is 0
+        compress_repeated(100);
+        EXPECT_EQ(run_load_dict(type, getDCtx(), getDictBuffer(), 0, dictContentType), 0); // equivalent to dict reset
+    }
+
+    void load_dict_is_null_dictsize_0(ZSTD_loadDict_type type, ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // dict is null and dictSize is 0
+        compress_repeated(100);
+        EXPECT_EQ(run_load_dict(type, getDCtx(), NULL, 0, dictContentType), 0); // equivalent to dict reset
+    }
+
+    void load_dict_dctx_null(ZSTD_loadDict_type type, ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // dctx is null
+        compress_repeated(100);
+        EXPECT_EQ(run_load_dict(type, NULL, getDictBuffer(), getDictSize(), dictContentType), ERROR(GENERIC));
+    }
+
+    void load_dict_dctx_streamStage_not_init(ZSTD_loadDict_type type, ZSTD_dictContentType_e dictContentType = ZSTD_dct_auto) { // dctx streamStage not init
+        compress_repeated(100);
+        ZSTD_DCtx* dctx_no_init = getDCtx();
+        dctx_no_init->streamStage = zdss_flush; // modify streamStage
+        EXPECT_EQ(run_load_dict(type, dctx_no_init, getDictBuffer(), getDictSize(), dictContentType), ERROR(stage_wrong));
+    }
+
+private:
+    size_t run_load_dict(ZSTD_loadDict_type type, ZSTD_DCtx* dctx, const void* dict, size_t dictSize,
+        ZSTD_dictContentType_e dictContentType) {
+        switch (type) {
+        case ZSTD_loadDict_type::byValue:
+            return Test_ZSTD_DCtx_loadDictionary(dctx, dict, dictSize);
+        case ZSTD_loadDict_type::byReference:
+            return Test_ZSTD_DCtx_loadDictionary_byReference(dctx, dict, dictSize);
+        case ZSTD_loadDict_type::refcdict:
+        {
+            if (dict == NULL || dictSize == 0) {
+                ZSTD_DDict* ddict = Test_ZSTD_createDDict(dict, dictSize);
+                size_t ret =  Test_ZSTD_DCtx_refDDict(dctx, ddict);
+                Test_ZSTD_freeDDict(ddict);
+                return ret;
+            }
+            else
+                return Test_ZSTD_DCtx_refDDict(dctx, getDDict());
+        }
+        case ZSTD_loadDict_type::refprefix:
+            return Test_ZSTD_DCtx_refPrefix(dctx, dict, dictSize);
+        case ZSTD_loadDict_type::refprefixAdv:
+            return Test_ZSTD_DCtx_refPrefix_advanced(dctx, dict, dictSize, dictContentType);
+        default:
+            return ERROR(GENERIC);
+        }
+    }
+};
+
+class ZSTD_ZSTD_DCtx_loadDictionary : public ZSTD_ZSTD_DCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_pass_common_1)
+{
+    load_dict_pass(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_pass_common_2)
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_pass_common_3)
+{
+    load_dict_is_null(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_pass_common_4)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_pass_common_5)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_fail_common_6)
+{
+    load_dict_dctx_null(ZSTD_loadDict_type::byValue);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_fail_common_7)
+{
+    load_dict_dctx_streamStage_not_init(ZSTD_loadDict_type::byValue);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_DCtx_loadDictionary
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_DCtx_loadDictionary_byReference
+  ***********************************************/
+class ZSTD_ZSTD_DCtx_loadDictionary_byReference : public ZSTD_ZSTD_DCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_byReference_pass_common_1)
+{
+    load_dict_pass(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_byReference_pass_common_2)
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_byReference_pass_common_3)
+{
+    load_dict_is_null(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_byReference_pass_common_4)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_byReference_pass_common_5)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_byReference_fail_common_6)
+{
+    load_dict_dctx_null(ZSTD_loadDict_type::byReference);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_loadDictionary_byReference, AOCL_Compression_zstd_ZSTD_DCtx_loadDictionary_byReference_fail_common_7)
+{
+    load_dict_dctx_streamStage_not_init(ZSTD_loadDict_type::byReference);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_DCtx_loadDictionary_byReference
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_DCtx_refDDict
+  ***********************************************/
+class ZSTD_ZSTD_DCtx_refDDict : public ZSTD_ZSTD_DCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_ZSTD_DCtx_refDDict, AOCL_Compression_zstd_ZSTD_DCtx_refDDict_pass_common_1)
+{
+    load_dict_pass(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refDDict, AOCL_Compression_zstd_ZSTD_DCtx_refDDict_pass_common_2)
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refDDict, AOCL_Compression_zstd_ZSTD_DCtx_refDDict_pass_common_3)
+{
+    load_dict_is_null(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refDDict, AOCL_Compression_zstd_ZSTD_DCtx_refDDict_pass_common_4)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refDDict, AOCL_Compression_zstd_ZSTD_DCtx_refDDict_pass_common_5)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refDDict, AOCL_Compression_zstd_ZSTD_DCtx_refDDict_pass_common_6) // ddict is NULL
+{
+    EXPECT_EQ(Test_ZSTD_DCtx_refDDict(getDCtx(), NULL), 0);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refDDict, AOCL_Compression_zstd_ZSTD_DCtx_refDDict_fail_common_7)
+{
+    load_dict_dctx_null(ZSTD_loadDict_type::refcdict);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refDDict, AOCL_Compression_zstd_ZSTD_DCtx_refDDict_fail_common_8)
+{
+    load_dict_dctx_streamStage_not_init(ZSTD_loadDict_type::refcdict);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_DCtx_refDDict
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_DCtx_refPrefix
+  ***********************************************/
+class ZSTD_ZSTD_DCtx_refPrefix : public ZSTD_ZSTD_DCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_pass_common_1)
+{
+    // By default, the prefix is treated as raw content. Hence no load_dict_pass_formatted() test added here.
+    load_dict_pass(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_pass_common_2)
+{
+    load_dict_is_null(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_pass_common_3)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_pass_common_4)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_fail_common_5)
+{
+    load_dict_dctx_null(ZSTD_loadDict_type::refprefix);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_fail_common_6)
+{
+    load_dict_dctx_streamStage_not_init(ZSTD_loadDict_type::refprefix);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_DCtx_refPrefix
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_DCtx_refPrefix_advanced
+  ***********************************************/
+class ZSTD_ZSTD_DCtx_refPrefix_advanced : public ZSTD_ZSTD_DCtx_loadDictionary_base {};
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_advanced_pass_common_1) // pass ZSTD_dct_auto raw
+{
+    load_dict_pass(ZSTD_loadDict_type::refprefixAdv, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_advanced_pass_common_2) // pass ZSTD_dct_auto formatted
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::refprefixAdv, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_advanced_pass_common_3) // pass ZSTD_dct_rawContent
+{
+    load_dict_pass(ZSTD_loadDict_type::refprefixAdv, ZSTD_dct_rawContent);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_advanced_pass_common_4) // pass ZSTD_dct_fullDict
+{
+    load_dict_pass_formatted(ZSTD_loadDict_type::refprefixAdv, ZSTD_dct_fullDict);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_advanced_pass_common_5)
+{
+    load_dict_is_null(ZSTD_loadDict_type::refprefixAdv, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_advanced_pass_common_6)
+{
+    load_dict_dictsize_0(ZSTD_loadDict_type::refprefixAdv, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_advanced_pass_common_7)
+{
+    load_dict_is_null_dictsize_0(ZSTD_loadDict_type::refprefixAdv, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_advanced_fail_common_8)
+{
+    load_dict_dctx_null(ZSTD_loadDict_type::refprefixAdv, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_ZSTD_DCtx_refPrefix_advanced, AOCL_Compression_zstd_ZSTD_DCtx_refPrefix_advanced_fail_common_9)
+{
+    load_dict_dctx_streamStage_not_init(ZSTD_loadDict_type::refprefixAdv, ZSTD_dct_auto);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_DCtx_refPrefix_advanced
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_getDictID_fromDict
+  ***********************************************/
+class ZSTD_ZSTD_getDictID_fromDict : public ZSTD_dict_creator {};
+TEST_F(ZSTD_ZSTD_getDictID_fromDict, AOCL_Compression_zstd_ZSTD_getDictID_fromDict_pass_common_1) // create format compliant dictionary
+{
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    size_t dictID = Test_ZSTD_getDictID_fromDict(getDictBuffer(), getDictSize());
+    EXPECT_NE(dictID, 0);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromDict, AOCL_Compression_zstd_ZSTD_getDictID_fromDict_fail_common_2) // create non-format compliant dictionary
+{
+    EXPECT_TRUE(create_raw_content_dict(800));
+    size_t dictID = Test_ZSTD_getDictID_fromDict(getDictBuffer(), getDictSize());
+    EXPECT_EQ(dictID, 0);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromDict, AOCL_Compression_zstd_ZSTD_getDictID_fromDict_fail_common_3) // dict is null
+{
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    size_t dictID = Test_ZSTD_getDictID_fromDict(NULL, getDictSize());
+    EXPECT_EQ(dictID, 0);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromDict, AOCL_Compression_zstd_ZSTD_getDictID_fromDict_fail_common_4) // dictSize < 8
+{
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    size_t dictID = Test_ZSTD_getDictID_fromDict(getDictBuffer(), 7);
+    EXPECT_EQ(dictID, 0);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_getDictID_fromDict
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_getDictID_fromCDict
+  ***********************************************/
+class ZSTD_ZSTD_getDictID_fromCDict : public ZSTD_dict_creator {};
+TEST_F(ZSTD_ZSTD_getDictID_fromCDict, AOCL_Compression_zstd_ZSTD_getDictID_fromCDict_pass_common_1) // create format compliant dictionary
+{
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    ZSTD_CDict* cdict = Test_ZSTD_createCDict(getDictBuffer(), getDictSize(), ZSTD_CLEVEL_DEFAULT);
+    ASSERT_NE(cdict, nullptr);
+    size_t dictID = Test_ZSTD_getDictID_fromCDict(cdict);
+    EXPECT_NE(dictID, 0);
+    Test_ZSTD_freeCDict(cdict);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromCDict, AOCL_Compression_zstd_ZSTD_getDictID_fromCDict_fail_common_2) // create non-format compliant dictionary
+{
+    EXPECT_TRUE(create_raw_content_dict(800));
+    ZSTD_CDict* cdict = Test_ZSTD_createCDict(getDictBuffer(), getDictSize(), ZSTD_CLEVEL_DEFAULT);
+    ASSERT_NE(cdict, nullptr);
+    size_t dictID = Test_ZSTD_getDictID_fromCDict(cdict);
+    EXPECT_EQ(dictID, 0);
+    Test_ZSTD_freeCDict(cdict);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromCDict, AOCL_Compression_zstd_ZSTD_getDictID_fromCDict_fail_common_3) // cdict is null
+{
+    size_t dictID = Test_ZSTD_getDictID_fromCDict(NULL);
+    EXPECT_EQ(dictID, 0);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_getDictID_fromCDict
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_getDictID_fromDDict
+  ***********************************************/
+class ZSTD_ZSTD_getDictID_fromDDict : public ZSTD_dict_creator {};
+TEST_F(ZSTD_ZSTD_getDictID_fromDDict, AOCL_Compression_zstd_ZSTD_getDictID_fromDDict_pass_common_1) // create format compliant dictionary
+{
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    ZSTD_DDict* ddict = Test_ZSTD_createDDict(getDictBuffer(), getDictSize());
+    ASSERT_NE(ddict, nullptr);
+    size_t dictID = Test_ZSTD_getDictID_fromDDict(ddict);
+    EXPECT_NE(dictID, 0);
+    Test_ZSTD_freeDDict(ddict);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromDDict, AOCL_Compression_zstd_ZSTD_getDictID_fromDDict_fail_common_2) // create non-format compliant dictionary
+{
+    EXPECT_TRUE(create_raw_content_dict(800));
+    ZSTD_DDict* ddict = Test_ZSTD_createDDict(getDictBuffer(), getDictSize());
+    ASSERT_NE(ddict, nullptr);
+    size_t dictID = Test_ZSTD_getDictID_fromDDict(ddict);
+    EXPECT_EQ(dictID, 0);
+    Test_ZSTD_freeDDict(ddict);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromDDict, AOCL_Compression_zstd_ZSTD_getDictID_fromDDict_fail_common_3) // ddict is null
+{
+    size_t dictID = Test_ZSTD_getDictID_fromDDict(NULL);
+    EXPECT_EQ(dictID, 0);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_getDictID_fromDDict
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_getDictID_fromFrame
+  ***********************************************/
+class ZSTD_ZSTD_getDictID_fromFrame : public ZSTD_decompress_usingDict_base {};
+TEST_F(ZSTD_ZSTD_getDictID_fromFrame, AOCL_Compression_zstd_ZSTD_getDictID_fromFrame_pass_common_1) // create format compliant dictionary
+{
+    compress_repeated_formatted(800);
+    size_t dictID = Test_ZSTD_getDictID_fromFrame(get_compressed_buff(), get_compressed_capacity());
+    EXPECT_NE(dictID, 0);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromFrame, AOCL_Compression_zstd_ZSTD_getDictID_fromFrame_fail_common_2) // create non-format compliant dictionary
+{
+    compress_repeated(800);
+    size_t dictID = Test_ZSTD_getDictID_fromFrame(get_compressed_buff(), get_compressed_capacity());
+    EXPECT_EQ(dictID, 0);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromFrame, AOCL_Compression_zstd_ZSTD_getDictID_fromFrame_fail_common_3) // compressed stream requires no dictionary
+{
+    compress_no_dict(800);
+    size_t dictID = Test_ZSTD_getDictID_fromFrame(get_compressed_buff(), get_compressed_capacity());
+    EXPECT_EQ(dictID, 0);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromFrame, AOCL_Compression_zstd_ZSTD_getDictID_fromFrame_fail_common_4) // compressed stream is null
+{
+    compress_repeated_formatted(800);
+    size_t dictID = Test_ZSTD_getDictID_fromFrame(NULL, get_compressed_capacity());
+    EXPECT_EQ(dictID, 0);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromFrame, AOCL_Compression_zstd_ZSTD_getDictID_fromFrame_fail_common_5) // compressed stream size too small
+{
+    compress_repeated_formatted(800);
+    size_t dictID = Test_ZSTD_getDictID_fromFrame(get_compressed_buff(), 4); // size < ZSTD_FRAMEHEADERSIZE_PREFIX(ZSTD_f_zstd1) 
+    EXPECT_EQ(dictID, 0);
+}
+
+TEST_F(ZSTD_ZSTD_getDictID_fromFrame, AOCL_Compression_zstd_ZSTD_getDictID_fromFrame_fail_common_6) // non zstd frame
+{
+    char* non_zstd_frame = (char*)malloc(800);
+    memset(non_zstd_frame, 0, 800);
+    size_t dictID = Test_ZSTD_getDictID_fromFrame(non_zstd_frame, 800);
+    EXPECT_EQ(dictID, 0);
+    free(non_zstd_frame);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_getDictID_fromFrame
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_sizeof_CDict
+  ***********************************************/
+class ZSTD_ZSTD_sizeof_CDict : public ZSTD_dict_creator {};
+TEST_F(ZSTD_ZSTD_sizeof_CDict, AOCL_Compression_zstd_ZSTD_sizeof_CDict_pass_common_1) // create format compliant dictionary
+{
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    ZSTD_CDict* cdict = Test_ZSTD_createCDict(getDictBuffer(), getDictSize(), ZSTD_CLEVEL_DEFAULT);
+    ASSERT_NE(cdict, nullptr);
+    size_t cdictSize = Test_ZSTD_sizeof_CDict(cdict);
+    EXPECT_NE(cdictSize, 0);
+    Test_ZSTD_freeCDict(cdict);
+}
+
+TEST_F(ZSTD_ZSTD_sizeof_CDict, AOCL_Compression_zstd_ZSTD_sizeof_CDict_pass_common_2) // create non-format compliant dictionary
+{
+    EXPECT_TRUE(create_raw_content_dict(800));
+    ZSTD_CDict* cdict = Test_ZSTD_createCDict(getDictBuffer(), getDictSize(), ZSTD_CLEVEL_DEFAULT);
+    ASSERT_NE(cdict, nullptr);
+    size_t cdictSize = Test_ZSTD_sizeof_CDict(cdict);
+    EXPECT_NE(cdictSize, 0);
+    Test_ZSTD_freeCDict(cdict);
+}
+
+TEST_F(ZSTD_ZSTD_sizeof_CDict, AOCL_Compression_zstd_ZSTD_sizeof_CDict_pass_common_3) // cdict is null
+{
+    size_t cdictSize = Test_ZSTD_sizeof_CDict(NULL);
+    EXPECT_EQ(cdictSize, 0);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_sizeof_CDict
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_sizeof_DDict
+  ***********************************************/
+class ZSTD_ZSTD_sizeof_DDict : public ZSTD_dict_creator {};
+TEST_F(ZSTD_ZSTD_sizeof_DDict, AOCL_Compression_zstd_ZSTD_sizeof_DDict_pass_common_1) // create format compliant dictionary
+{
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    ZSTD_DDict* ddict = Test_ZSTD_createDDict(getDictBuffer(), getDictSize());
+    ASSERT_NE(ddict, nullptr);
+    size_t ddictSize = Test_ZSTD_sizeof_DDict(ddict);
+    EXPECT_NE(ddictSize, 0);
+    Test_ZSTD_freeDDict(ddict);
+}
+
+TEST_F(ZSTD_ZSTD_sizeof_DDict, AOCL_Compression_zstd_ZSTD_sizeof_DDict_pass_common_2) // create non-format compliant dictionary
+{
+    EXPECT_TRUE(create_raw_content_dict(800));
+    ZSTD_DDict* ddict = Test_ZSTD_createDDict(getDictBuffer(), getDictSize());
+    ASSERT_NE(ddict, nullptr);
+    size_t ddictSize = Test_ZSTD_sizeof_DDict(ddict);
+    EXPECT_NE(ddictSize, 0);
+    Test_ZSTD_freeDDict(ddict);
+}
+
+TEST_F(ZSTD_ZSTD_sizeof_DDict, AOCL_Compression_zstd_ZSTD_sizeof_DDict_pass_common_3) // ddict is null
+{
+    size_t ddictSize = Test_ZSTD_sizeof_DDict(NULL);
+    EXPECT_EQ(ddictSize, 0);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_sizeof_DDict
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_estimateCDictSize_advanced
+  ***********************************************/
+TEST(ZSTD_ZSTD_estimateCDictSize_advanced, AOCL_Compression_zstd_ZSTD_estimateCDictSize_advanced_pass_common_1) // pass
+{
+    ZSTD_compressionParameters cparams = Test_Get_ZSTD_defaultCParameters(256 KB, ZSTD_CLEVEL_DEFAULT, 0);
+    size_t cdictSize = Test_ZSTD_estimateCDictSize_advanced(800, cparams, ZSTD_dlm_byCopy);
+    EXPECT_GT(cdictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateCDictSize_advanced, AOCL_Compression_zstd_ZSTD_estimateCDictSize_advanced_pass_common_2) // pass
+{
+    ZSTD_compressionParameters cparams = Test_Get_ZSTD_defaultCParameters(1 MB, 9, 1);
+    size_t cdictSize = Test_ZSTD_estimateCDictSize_advanced(UINT64_MAX, cparams, ZSTD_dlm_byRef);
+    EXPECT_GT(cdictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateCDictSize_advanced, AOCL_Compression_zstd_ZSTD_estimateCDictSize_advanced_pass_common_3) // invalid dictLoadMethod
+{
+    ZSTD_compressionParameters cparams = Test_Get_ZSTD_defaultCParameters(256 KB, ZSTD_CLEVEL_DEFAULT, 0);
+    size_t cdictSize = Test_ZSTD_estimateCDictSize_advanced(800, cparams, (ZSTD_dictLoadMethod_e)3);
+    EXPECT_GT(cdictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateCDictSize_advanced, AOCL_Compression_zstd_ZSTD_estimateCDictSize_advanced_pass_common_4) // dictSize is 0
+{
+    ZSTD_compressionParameters cparams = Test_Get_ZSTD_defaultCParameters(256 KB, ZSTD_CLEVEL_DEFAULT, 0);
+    size_t cdictSize = Test_ZSTD_estimateCDictSize_advanced(0, cparams, ZSTD_dlm_byCopy);
+    EXPECT_GT(cdictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateCDictSize_advanced, AOCL_Compression_zstd_ZSTD_estimateCDictSize_advanced_pass_common_5) // cparams empty
+{
+    ZSTD_compressionParameters cparams;
+    memset(&cparams, 0, sizeof(ZSTD_compressionParameters));
+    size_t cdictSize = Test_ZSTD_estimateCDictSize_advanced(800, cparams, ZSTD_dlm_byCopy);
+    EXPECT_GT(cdictSize, 0);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_estimateCDictSize_advanced
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_estimateCDictSize
+  ***********************************************/
+TEST(ZSTD_ZSTD_estimateCDictSize, AOCL_Compression_zstd_ZSTD_estimateCDictSize_pass_common_1) // pass
+{
+    size_t cdictSize = Test_ZSTD_estimateCDictSize(800, ZSTD_CLEVEL_DEFAULT);
+    EXPECT_GT(cdictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateCDictSize, AOCL_Compression_zstd_ZSTD_estimateCDictSize_pass_common_2) // pass
+{
+    size_t cdictSize = Test_ZSTD_estimateCDictSize(UINT64_MAX, 9);
+    EXPECT_GT(cdictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateCDictSize, AOCL_Compression_zstd_ZSTD_estimateCDictSize_pass_common_3) // cLevel minimum
+{
+    size_t cdictSize = Test_ZSTD_estimateCDictSize(800, Test_ZSTD_minCLevel());
+    EXPECT_GT(cdictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateCDictSize, AOCL_Compression_zstd_ZSTD_estimateCDictSize_pass_common_4) // cLevel > maximum
+{
+    size_t cdictSize = Test_ZSTD_estimateCDictSize(800, Test_ZSTD_maxCLevel() + 1);
+    EXPECT_GT(cdictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateCDictSize, AOCL_Compression_zstd_ZSTD_estimateCDictSize_pass_common_5) // dictSize is 0
+{
+    size_t cdictSize = Test_ZSTD_estimateCDictSize(0, ZSTD_CLEVEL_DEFAULT);
+    EXPECT_GT(cdictSize, 0);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_estimateCDictSize
+ *********************************************/
+
+ /***********************************************
+  * Begin of ZSTD_ZSTD_estimateDDictSize
+  ***********************************************/
+TEST(ZSTD_ZSTD_estimateDDictSize, AOCL_Compression_zstd_ZSTD_estimateDDictSize_pass_common_1) // pass
+{
+    size_t ddictSize = Test_ZSTD_estimateDDictSize(800, ZSTD_dlm_byCopy);
+    EXPECT_GT(ddictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateDDictSize, AOCL_Compression_zstd_ZSTD_estimateDDictSize_pass_common_2) // pass
+{
+    size_t ddictSize = Test_ZSTD_estimateDDictSize(UINT64_MAX, ZSTD_dlm_byRef);
+    EXPECT_GT(ddictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateDDictSize, AOCL_Compression_zstd_ZSTD_estimateDDictSize_pass_common_3) // invalid dictLoadMethod
+{
+    size_t ddictSize = Test_ZSTD_estimateDDictSize(800, (ZSTD_dictLoadMethod_e)3);
+    EXPECT_GT(ddictSize, 0);
+}
+
+TEST(ZSTD_ZSTD_estimateDDictSize, AOCL_Compression_zstd_ZSTD_estimateDDictSize_pass_common_4) // dictSize is 0
+{
+    size_t ddictSize = Test_ZSTD_estimateDDictSize(0, ZSTD_dlm_byCopy);
+    EXPECT_GT(ddictSize, 0);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_estimateDDictSize
+ *********************************************/
+
+ /*********************************************
+  * Begin of ZSTD_ZSTD_initStaticCDict
+  * *********************************************/
+class ZSTD_ZSTD_initStaticCDict : public ZSTD_dict_creator {
+public:
+    ~ZSTD_ZSTD_initStaticCDict() {
+        if (workspace)
+            free(workspace);
+    }
+
+    void create_dict_copy() {
+        EXPECT_TRUE(create_train_from_buffer_dict(800));
+        cparams = Test_Get_ZSTD_defaultCParameters(256 KB, ZSTD_CLEVEL_DEFAULT, 0);
+        workspaceSize = Test_ZSTD_estimateCDictSize_advanced(getDictSize(), cparams, ZSTD_dlm_byCopy);
+        workspace = malloc(workspaceSize);
+    }
+
+    Test_ZSTD_CDict_s get_cdict(const ZSTD_CDict* cdict) {
+        EXPECT_NE(cdict, nullptr);
+        Test_ZSTD_CDict_s tcdict;
+        memcpy((void*)(&tcdict), cdict, sizeof(Test_ZSTD_CDict_s));
+        return tcdict;
+    }
+
+    void validate_cdict(const ZSTD_CDict* cdict, ZSTD_dictContentType_e type) {
+        ASSERT_NE(cdict, nullptr);
+        Test_ZSTD_CDict_s tcdict;
+        memcpy((void*)(&tcdict), cdict, sizeof(Test_ZSTD_CDict_s));
+
+        EXPECT_EQ(tcdict.dictContentSize, getDictSize());
+        EXPECT_EQ(memcmp(tcdict.dictContent, getDictBuffer(), getDictSize()), 0);
+        EXPECT_EQ(tcdict.dictContentType, type);
+    }
+
+
+    void* workspace = NULL;
+    size_t workspaceSize = 0;
+    ZSTD_compressionParameters cparams;
+};
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_pass_common_1) { // large enough workspace ZSTD_dlm_byCopy
+    create_dict_copy();
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict(workspace, workspaceSize, getDictBuffer(), getDictSize(),
+        ZSTD_dlm_byCopy, ZSTD_dct_auto, cparams);
+    validate_cdict(cdict, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_pass_common_2) { // large enough workspace ZSTD_dlm_byRef
+    EXPECT_TRUE(create_raw_content_dict(100));
+    cparams = Test_Get_ZSTD_defaultCParameters(1 MB, 9, 1);
+    workspaceSize = Test_ZSTD_estimateCDictSize_advanced(getDictSize(), cparams, ZSTD_dlm_byRef);
+    workspace = malloc(workspaceSize);
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict(workspace, workspaceSize, getDictBuffer(), getDictSize(),
+        ZSTD_dlm_byRef, ZSTD_dct_rawContent, cparams);
+    validate_cdict(cdict, ZSTD_dct_rawContent);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_fail_common_3) { // workspace is null
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    cparams = Test_Get_ZSTD_defaultCParameters(256 KB, ZSTD_CLEVEL_DEFAULT, 0);
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict(NULL, 0, getDictBuffer(), getDictSize(),
+        ZSTD_dlm_byCopy, ZSTD_dct_auto, cparams);
+    EXPECT_EQ(cdict, nullptr);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_fail_common_4) { // workspaceSize is too small
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    cparams = Test_Get_ZSTD_defaultCParameters(256 KB, ZSTD_CLEVEL_DEFAULT, 0);
+    workspaceSize = Test_ZSTD_estimateCDictSize_advanced(getDictSize(), cparams, ZSTD_dlm_byCopy);
+    workspaceSize /= 2; // insufficient workspace
+    workspace = malloc(workspaceSize);
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict(workspace, workspaceSize, getDictBuffer(), getDictSize(),
+        ZSTD_dlm_byCopy, ZSTD_dct_auto, cparams);
+    EXPECT_EQ(cdict, nullptr);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_fail_common_5) { // workspace not 8-byte aligned
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    cparams = Test_Get_ZSTD_defaultCParameters(256 KB, ZSTD_CLEVEL_DEFAULT, 0);
+    workspaceSize = Test_ZSTD_estimateCDictSize_advanced(getDictSize(), cparams, ZSTD_dlm_byCopy);
+    workspace = malloc(workspaceSize + 1);
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict((void*)((size_t)workspace + 1), workspaceSize, getDictBuffer(), getDictSize(),
+        ZSTD_dlm_byCopy, ZSTD_dct_auto, cparams);
+    EXPECT_EQ(cdict, nullptr);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_fail_common_6) { // dict is null
+    create_dict_copy();
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict(workspace, workspaceSize, NULL, getDictSize(),
+        ZSTD_dlm_byCopy, ZSTD_dct_auto, cparams);
+    Test_ZSTD_CDict_s tcdict = get_cdict(cdict);
+    EXPECT_EQ(tcdict.dictContent, nullptr);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_fail_common_7) { // dictSize is 0
+    create_dict_copy();
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict(workspace, workspaceSize, getDictBuffer(), 0,
+        ZSTD_dlm_byCopy, ZSTD_dct_auto, cparams);
+    Test_ZSTD_CDict_s tcdict = get_cdict(cdict);
+    EXPECT_EQ(tcdict.dictContentSize, 0);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_fail_common_8) { // dict is null and dictSize is 0
+    create_dict_copy();
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict(workspace, workspaceSize, NULL, 0,
+        ZSTD_dlm_byCopy, ZSTD_dct_auto, cparams);
+    Test_ZSTD_CDict_s tcdict = get_cdict(cdict);
+    EXPECT_EQ(tcdict.dictContent, nullptr);
+    EXPECT_EQ(tcdict.dictContentSize, 0);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_pass_common_9) { // dictLoadMethod invalid
+    create_dict_copy();
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict(workspace, workspaceSize, getDictBuffer(), getDictSize(),
+        (ZSTD_dictLoadMethod_e)100, ZSTD_dct_auto, cparams);
+    validate_cdict(cdict, ZSTD_dct_auto);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_pass_common_10) { // dictContentType invalid
+    create_dict_copy();
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict(workspace, workspaceSize, getDictBuffer(), getDictSize(),
+        ZSTD_dlm_byCopy, (ZSTD_dictContentType_e)100, cparams);
+    validate_cdict(cdict, (ZSTD_dictContentType_e)100); // does not fail. accepts invalid value
+}
+
+TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_pass_common_11) { // cparams empty
+    create_dict_copy();
+    memset(&cparams, 0, sizeof(ZSTD_compressionParameters));
+    const ZSTD_CDict* cdict = Test_ZSTD_initStaticCDict(workspace, workspaceSize, getDictBuffer(), getDictSize(),
+        ZSTD_dlm_byCopy, ZSTD_dct_auto, cparams);
+    validate_cdict(cdict, ZSTD_dct_auto);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_initStaticCDict
+ *********************************************/
+
+ /*********************************************
+  * Begin of ZSTD_ZSTD_initStaticDDict
+  **********************************************/
+class ZSTD_ZSTD_initStaticDDict : public ZSTD_dict_creator {
+public:
+    ~ZSTD_ZSTD_initStaticDDict() {
+        if (workspace)
+            free(workspace);
+    }
+
+    void create_dict_copy() {
+        EXPECT_TRUE(create_train_from_buffer_dict(800));
+        workspaceSize = Test_ZSTD_estimateDDictSize(getDictSize(), ZSTD_dlm_byCopy);
+        workspace = malloc(workspaceSize);
+    }
+
+    Test_ZSTD_DDict_s get_ddict(const ZSTD_DDict* ddict) {
+        EXPECT_NE(ddict, nullptr);
+        Test_ZSTD_DDict_s tddict;
+        memcpy((void*)(&tddict), ddict, sizeof(Test_ZSTD_DDict_s));
+        return tddict;
+    }
+
+    void validate_ddict(const ZSTD_DDict* ddict) {
+        ASSERT_NE(ddict, nullptr);
+        Test_ZSTD_DDict_s tddict;
+        memcpy((void*)(&tddict), ddict, sizeof(Test_ZSTD_DDict_s));
+
+        EXPECT_EQ(tddict.dictSize, getDictSize());
+        EXPECT_EQ(memcmp(tddict.dictContent, getDictBuffer(), getDictSize()), 0);
+    }
+
+    void* workspace = NULL;
+    size_t workspaceSize = 0;
+};
+
+TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDict_pass_common_1) { // large enough workspace ZSTD_dlm_byCopy
+    create_dict_copy();
+    const ZSTD_DDict* ddict = Test_ZSTD_initStaticDDict(workspace, workspaceSize, getDictBuffer(),
+        getDictSize(), ZSTD_dlm_byCopy, ZSTD_dct_auto);
+    validate_ddict(ddict);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDict_pass_common_2) { // large enough workspace ZSTD_dlm_byRef
+    EXPECT_TRUE(create_raw_content_dict(100));
+    workspaceSize = Test_ZSTD_estimateDDictSize(getDictSize(), ZSTD_dlm_byRef);
+    workspace = malloc(workspaceSize);
+    const ZSTD_DDict* ddict = Test_ZSTD_initStaticDDict(workspace, workspaceSize, getDictBuffer(),
+        getDictSize(), ZSTD_dlm_byRef, ZSTD_dct_rawContent);
+    validate_ddict(ddict);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDict_fail_common_3) { // workspace is null
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    const ZSTD_DDict* ddict = Test_ZSTD_initStaticDDict(NULL, 0, getDictBuffer(),
+        getDictSize(), ZSTD_dlm_byCopy, ZSTD_dct_auto);
+    EXPECT_EQ(ddict, nullptr);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDict_fail_common_4) { // workspaceSize is too small
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    workspaceSize = Test_ZSTD_estimateDDictSize(getDictSize(), ZSTD_dlm_byCopy);
+    workspaceSize /= 2; // insufficient workspace
+    workspace = malloc(workspaceSize);
+    const ZSTD_DDict* ddict = Test_ZSTD_initStaticDDict(workspace, workspaceSize, getDictBuffer(),
+        getDictSize(), ZSTD_dlm_byCopy, ZSTD_dct_auto);
+    EXPECT_EQ(ddict, nullptr);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDict_fail_common_5) { // workspace not 8-byte aligned
+    EXPECT_TRUE(create_train_from_buffer_dict(800));
+    workspaceSize = Test_ZSTD_estimateDDictSize(getDictSize(), ZSTD_dlm_byCopy);
+    workspace = malloc(workspaceSize + 1);
+    const ZSTD_DDict* ddict = Test_ZSTD_initStaticDDict((void*)((size_t)workspace + 1), workspaceSize, getDictBuffer(),
+        getDictSize(), ZSTD_dlm_byCopy, ZSTD_dct_auto);
+    EXPECT_EQ(ddict, nullptr);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDict_fail_common_6) { // dict is null
+    create_dict_copy();
+    const ZSTD_DDict* ddict = Test_ZSTD_initStaticDDict(workspace, workspaceSize, NULL,
+        getDictSize(), ZSTD_dlm_byCopy, ZSTD_dct_auto);
+    EXPECT_EQ(ddict, nullptr);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDict_fail_common_7) { // dictSize is 0
+    create_dict_copy();
+    const ZSTD_DDict* ddict = Test_ZSTD_initStaticDDict(workspace, workspaceSize, getDictBuffer(),
+        0, ZSTD_dlm_byCopy, ZSTD_dct_auto);
+    Test_ZSTD_DDict_s tddict = get_ddict(ddict);
+    EXPECT_EQ(tddict.dictSize, 0);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDict_fail_common_8) { // dict is null and dictSize is 0
+    create_dict_copy();
+    const ZSTD_DDict* ddict = Test_ZSTD_initStaticDDict(workspace, workspaceSize, NULL,
+        0, ZSTD_dlm_byCopy, ZSTD_dct_auto);
+    EXPECT_EQ(ddict, nullptr);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDict_pass_common_9) { // dictLoadMethod invalid
+    create_dict_copy();
+    const ZSTD_DDict* ddict = Test_ZSTD_initStaticDDict(workspace, workspaceSize, getDictBuffer(),
+        getDictSize(), (ZSTD_dictLoadMethod_e)100, ZSTD_dct_auto);
+    validate_ddict(ddict);
+}
+
+TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDict_pass_common_10) { // dictContentType invalid
+    create_dict_copy();
+    const ZSTD_DDict* ddict = Test_ZSTD_initStaticDDict(workspace, workspaceSize, getDictBuffer(),
+        getDictSize(), ZSTD_dlm_byCopy, (ZSTD_dictContentType_e)100);
+    validate_ddict(ddict);
+}
+/*********************************************
+ * End of ZSTD_ZSTD_initStaticDDict
+ *********************************************/
+
+ /***********************************************
+ * Begin of ZSTD_ZSTD_compress_extDict
+ ***********************************************/
+#define FIRST_BLOCK_SIZE 8
+class ZSTD_ZSTD_compress_extDict : public AOCL_setup_zstd {
+public:
+    ~ZSTD_ZSTD_compress_extDict() {
+        if (g_zcc)
+            ZSTD_freeCCtx(g_zcc);
+    }
+
+    ZSTD_parameters setup(int level, int opt_on) {
+        ZSTD_compressionParameters cparams = Test_Get_ZSTD_defaultCParameters(512 KB, level, opt_on);
+        if (g_zcc == NULL) g_zcc = ZSTD_createCCtx();
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_compressionLevel, level);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_windowLog, (int)cparams.windowLog);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_hashLog, (int)cparams.hashLog);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_chainLog, (int)cparams.chainLog);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_searchLog, (int)cparams.searchLog);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_minMatch, (int)cparams.minMatch);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_targetLength, (int)cparams.targetLength);
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_strategy, cparams.strategy);
+
+        ZSTD_parameters p;
+        ZSTD_frameParameters f = { 1 /* contentSizeHeader*/, 0, 0 };
+        p.fParams = f;
+        p.cParams = cparams;
+
+        return p;
+    }
+
+    /* compress in multiple blocks. 1st block gets used as dict for 2nd block and
+    *_extDict functions gets called for the 2nd block */
+    size_t multi_block_compress(ZSTD_parameters p, void* dst, size_t dstCapacity, void* src, size_t srcSize) {
+        BYTE firstBlockBuf[FIRST_BLOCK_SIZE];
+        size_t ret = ZSTD_compressBegin_advanced(g_zcc, NULL, 0, p, srcSize);
+        if (Test_ZSTD_isError(ret)) {
+            EXPECT_EQ(ret, 0); //ret > 0 if error. Test should fail.
+            return 0;
+        }
+        memcpy(firstBlockBuf, src, FIRST_BLOCK_SIZE);
+
+        size_t outLen = 0;
+        //compress first block
+        //first block acts as extDict for 2nd block
+        {
+            ret = ZSTD_compressContinue(g_zcc,
+                dst, dstCapacity,
+                firstBlockBuf, FIRST_BLOCK_SIZE);
+            if (Test_ZSTD_isError(ret)) {
+                EXPECT_EQ(ret, 0); //ret > 0 if error. Test should fail.
+                return 0;
+            }
+            dst = (BYTE*)dst + ret;
+            dstCapacity -= ret;
+            outLen += ret;
+        }
+
+        //compress second block
+        ret = ZSTD_compressEnd(g_zcc, dst, dstCapacity,
+            (const BYTE*)src + FIRST_BLOCK_SIZE,
+            srcSize - FIRST_BLOCK_SIZE);
+        if (Test_ZSTD_isError(ret)) {
+            EXPECT_EQ(ret, 0); //ret > 0 if error. Test should fail.
+            return 0;
+        }
+        outLen += ret;
+
+        return outLen;
+    }
+
+private:
+    ZSTD_CCtx* g_zcc = NULL;
+};
+
+
+TEST_F(ZSTD_ZSTD_compress_extDict, AOCL_Compression_zstd_ZSTD_compressStream_common_1) //compress multiple blocks
+{
+    for (int level = 0; level <= 22; ++level) {
+        for (int opt_on = 0; opt_on <= 1; ++opt_on) {
+            //setup
+            TestLoad_2 d(1024);
+            void* src = d.getOrigData();
+            size_t srcSize = d.getOrigSize();
+            void* dst = d.getCompressedBuff();
+            size_t dstCapacity = d.getCompressedSize();
+            ZSTD_parameters p = setup(level, opt_on);
+
+            //compress
+            size_t outLen = multi_block_compress(p, dst, dstCapacity, src, srcSize);
+
+            //validate
+            EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(),
+                d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+        }
+    }
+}
+/*********************************************
+ * End of ZSTD_ZSTD_compress_extDict
+ *********************************************/
