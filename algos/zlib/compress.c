@@ -27,7 +27,52 @@ static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE()
 #endif /* AOCL_ZLIB_OPT */
 
+/* AOCL-Compression defined setup function that sets up ZLIB with the right
+*  AMD optimized zlib routines depending upon the CPU features. */
+ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
+    int level, int windowLog)
+{
+#ifdef AOCL_ZLIB_OPT
+    AOCL_ENTER_CRITICAL(setup_zlib)
+    if (!setup_ok_zlib) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        zlibOptOff = optOff;
+        aocl_setup_deflate(optOff, optLevel);
+        aocl_setup_inflate(optOff, optLevel);
+        aocl_setup_adler32(optOff, optLevel);
+        setup_ok_zlib = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib)
+#endif /* AOCL_ZLIB_OPT */
+    return NULL;
+}
 
+#ifdef AOCL_ZLIB_OPT
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib)
+    if (!setup_ok_zlib) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        zlibOptOff = optOff;
+        aocl_setup_deflate(optOff, optLevel);
+        aocl_setup_inflate(optOff, optLevel);
+        aocl_setup_adler32(optOff, optLevel);
+        setup_ok_zlib = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib)
+}
+#endif
+
+ZEXTERN void ZEXPORT aocl_destroy_zlib (void) {
+#ifdef AOCL_ZLIB_OPT
+    AOCL_ENTER_CRITICAL(setup_zlib)
+    setup_ok_zlib = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib)
+    aocl_destroy_adler32();
+    aocl_destroy_deflate();
+    aocl_destroy_inflate();
+#endif /* AOCL_ZLIB_OPT */
+}
 
 #ifdef AOCL_ENABLE_THREADS
 #define ZLIB_MT_WINDOW_LEN 32768
@@ -98,13 +143,12 @@ static inline int compress2_ST(aocl_thread_info_t *cThread, int level, int final
     deflateEnd(&stream);
     return err == Z_STREAM_END ? Z_OK : err;
 }
-#endif /* AOCL_ENABLE_THREADS */
 
 uLong ZEXPORT compressBound_ST(uLong sourceLen) {
     return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
            (sourceLen >> 25) + 13;
 }
-#ifdef AOCL_ENABLE_THREADS
+
 uLong ZEXPORT compressBound_MT(uLong sourceLen) {
 
     uLong sz1 = compressBound_ST(sourceLen);
@@ -113,7 +157,7 @@ uLong ZEXPORT compressBound_MT(uLong sourceLen) {
 
    return sz2;
 }
-#endif
+#endif /* AOCL_ENABLE_THREADS */
 
 int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
                       uLong sourceLen, int level) {
@@ -123,11 +167,6 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
     {
         LOG_UNFORMATTED(INFO, logCtx, "Exit");
         return Z_BUF_ERROR;
-    }
-    if(dest == NULL)
-    {
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
-        return Z_STREAM_ERROR;
     }
 #ifndef AOCL_ENABLE_THREADS //Non threaded
     z_stream stream;
@@ -313,53 +352,7 @@ uLong ZEXPORT compressBound(uLong sourceLen) {
 #ifdef AOCL_ENABLE_THREADS
     return compressBound_MT(sourceLen);
 #else
-    return compressBound_ST(sourceLen);
+    return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
+           (sourceLen >> 25) + 13;
 #endif
-}
-
-/* AOCL-Compression defined setup function that sets up ZLIB with the right
-*  AMD optimized zlib routines depending upon the CPU features. */
-ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
-    int level, int windowLog)
-{
-#ifdef AOCL_ZLIB_OPT
-    AOCL_ENTER_CRITICAL(setup_zlib)
-    if (!setup_ok_zlib) {
-        optOff = optOff ? 1 : get_disable_opt_flags(0);
-        zlibOptOff = optOff;
-        aocl_setup_deflate(optOff, optLevel);
-        aocl_setup_inflate(optOff, optLevel);
-        aocl_setup_adler32(optOff, optLevel);
-        setup_ok_zlib = 1;
-    }
-    AOCL_EXIT_CRITICAL(setup_zlib)
-#endif /* AOCL_ZLIB_OPT */
-    return NULL;
-}
-
-#ifdef AOCL_ZLIB_OPT
-static void aocl_setup_native(void) {
-    AOCL_ENTER_CRITICAL(setup_zlib)
-    if (!setup_ok_zlib) {
-        int optLevel = get_cpu_opt_flags(0);
-        int optOff = get_disable_opt_flags(0);
-        zlibOptOff = optOff;
-        aocl_setup_deflate(optOff, optLevel);
-        aocl_setup_inflate(optOff, optLevel);
-        aocl_setup_adler32(optOff, optLevel);
-        setup_ok_zlib = 1;
-    }
-    AOCL_EXIT_CRITICAL(setup_zlib)
-}
-#endif
-
-ZEXTERN void ZEXPORT aocl_destroy_zlib (void) {
-#ifdef AOCL_ZLIB_OPT
-    AOCL_ENTER_CRITICAL(setup_zlib)
-    setup_ok_zlib = 0;
-    AOCL_EXIT_CRITICAL(setup_zlib)
-    aocl_destroy_adler32();
-    aocl_destroy_deflate();
-    aocl_destroy_inflate();
-#endif /* AOCL_ZLIB_OPT */
 }
