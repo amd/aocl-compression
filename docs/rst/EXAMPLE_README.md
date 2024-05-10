@@ -42,6 +42,15 @@ int main (int argc, char **argv)
     aocl_compression_handle->optVar = 0;
     aocl_compression_handle->optOff = 0;
     aocl_compression_handle->measureStats = 0;
+
+    // 1. setup and create a handle
+    if (aocl_llc_setup(aocl_compression_handle, method) != 0)
+    {
+        printf("Setup: failed\n");
+        goto error_exit;
+    }
+
+    // 2. allocate buffers
     aocl_compression_handle->inSize = file_size;
     resultCompBound = aocl_llc_compressBound(method, aocl_compression_handle->inSize);
     if (resultCompBound < 0)
@@ -57,10 +66,7 @@ int main (int argc, char **argv)
     aocl_compression_handle->outBuf = compPtr;
     file_size = fread(inPtr, 1, file_size, inFp);
 
-    // 1. setup and create a handle
-    aocl_llc_setup(aocl_compression_handle, method);
-
-    // 2. compress
+    // 3. compress
     resultComp = aocl_llc_compress(aocl_compression_handle, method);
     
     if (resultComp <= 0)
@@ -70,7 +76,7 @@ int main (int argc, char **argv)
     }
     printf("Compression: done\n");
 
-    // decompress
+    // 4. decompress
     aocl_compression_handle->inSize = resultComp;
     aocl_compression_handle->outSize = file_size;
     aocl_compression_handle->inBuf = compPtr;
@@ -85,7 +91,7 @@ int main (int argc, char **argv)
     }
     printf("Decompression: done\n");
 
-    // destroy handle
+    // 5. destroy handle
     aocl_llc_destroy(aocl_compression_handle, method);
     error_exit:
     if (inPtr)
@@ -139,6 +145,15 @@ int main (int argc, char **argv)
     aocl_compression_handle->optVar = 0;
     aocl_compression_handle->optOff = 0;
     aocl_compression_handle->measureStats = 0;
+
+    // 1. setup and create a handle
+    if (aocl_llc_setup(aocl_compression_handle, method) != 0)
+    {
+        printf("Setup: failed\n");
+        goto error_exit;
+    }
+
+    // 2. allocate buffers
     aocl_compression_handle->inSize = file_size;
     resultCompBound = aocl_llc_compressBound(method, aocl_compression_handle->inSize);
     if (resultCompBound < 0)
@@ -154,10 +169,8 @@ int main (int argc, char **argv)
     aocl_compression_handle->outBuf = compPtr;
     file_size = fread(inPtr, 1, file_size, inFp);
 
-    // 1. setup and create a handle
-    aocl_llc_setup(aocl_compression_handle, method);
 
-    // 2. MT compress
+    // 3. MT compress
     resultComp = aocl_llc_compress(aocl_compression_handle, method);
     
     if (resultComp <= 0)
@@ -167,7 +180,7 @@ int main (int argc, char **argv)
     }
     printf("Compression: done\n");
 
-    //3. ST decompress
+    //4. ST decompress
     // Get number of bytes for the RAP frame
     int rap_frame_len = aocl_llc_skip_rap_frame((char *)compPtr, resultComp);
 
@@ -187,7 +200,7 @@ int main (int argc, char **argv)
     }
     printf("Decompression: done\n");
 
-    // destroy handle
+    // 5. destroy handle
     aocl_llc_destroy(aocl_compression_handle, method);
     error_exit:
     if (inPtr)

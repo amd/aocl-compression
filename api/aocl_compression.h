@@ -162,6 +162,7 @@ typedef struct
  * | \b codec_type | in      | Select the algorithm to be used for compression, choose from aocl_compression_type. |
  * | \b inSize     | in      | The size of input data to be compressed in bytes. |
  * 
+ * @note inSize cannot exceed maximum supported value for respective codec_type.
  * 
  * @return 
  * | Result     | Description |
@@ -257,7 +258,7 @@ EXPORT_SYM_DYN const char *aocl_llc_version(void);
  * Legacy single threaded decompressors can call this API to know how many bytes of the compressed
  * stream to skip to get the format compliant compressed stream that they can decompress.
  * 
- * Note : Presence of RAP frame is determined by checking for the magic word: 0x434C4C5F4C434F41 
+ * @note  Presence of RAP frame is determined by checking for the magic word: 0x434C4C5F4C434F41 
  *        (ASCII encoding of AOCL_LLC) at the start of the stream.
  *
  * | Parameters      | Direction   | Description |

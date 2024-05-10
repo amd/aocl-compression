@@ -81,6 +81,9 @@ static const algo_level_t algo_levels[AOCL_COMPRESSOR_ALGOS_NUM] =
     {1, 22, 9}  //"ZSTD",
 };
 
+#define LZ4_MAX_INPUT_SIZE  0x7E000000
+#define ZSTD_MAX_INPUT_SIZE ((sizeof(size_t)==8) ? 0xFF00FF00FF00FF00LLU : 0xFF00FF00U)
+
 #define MAX_MEM_SIZE_FOR_FILE_READ 1073741824 //(1024 MBs)
 #define DEFAULT_OPT_LEVEL 2
 #define MAX_OPT_LEVEL 2 // Set to test AVX code paths. If your system supports AVX2, AVX-512 this can be increased to 3, 4.
@@ -484,7 +487,80 @@ TEST(API_setup, AOCL_Compression_api_aocl_llc_setup_excludedMethod_common_1) //e
  * End Setup/Destroy Tests
  ********************************************/
 
+ /*********************************************
+  * Begin compressBound Tests
+  *********************************************/
+class API_compressBound : public ::testing::TestWithParam<ATP> {
+public:
+    void SetUp() override {
+        atp = GetParam();
+        set_opt_off(atp.optOff);
+        set_opt_level(atp.optLevel);
+        clear_test_log_counter();
+    }
 
+    void TearDown() override {
+        if (atp.algo < AOCL_COMPRESSOR_ALGOS_NUM)
+            aocl_llc_destroy(&desc, atp.algo);
+    }
+
+    int64_t compressBound() {
+        return aocl_llc_compressBound(atp.algo, desc.inSize);
+    }
+
+    ATP atp;
+    ACD desc;
+};
+
+TEST_P(API_compressBound, AOCL_Compression_api_aocl_llc_compressBound_common_1) // valid
+{
+    skip_test_if_algo_invalid(atp.algo)
+    reset_ACD(&desc, algo_levels[atp.algo].def);
+    
+    desc.inSize = 0;
+    EXPECT_GT(compressBound(), desc.inSize);
+
+    desc.inSize = 800;
+    EXPECT_GT(compressBound(), desc.inSize);
+}
+
+TEST_P(API_compressBound, AOCL_Compression_api_aocl_llc_compressBound_common_2) // invalid
+{
+    skip_test_if_algo_invalid(atp.algo)
+    reset_ACD(&desc, algo_levels[atp.algo].def);
+    // input size too large
+    switch (atp.algo) {
+    case LZ4:
+    case LZ4HC:
+        // input size negative or too large (> LZ4_MAX_INPUT_SIZE)  
+        desc.inSize = -1;
+        EXPECT_EQ(compressBound(), ERR_COMPRESSION_FAILED);
+        
+        desc.inSize = LZ4_MAX_INPUT_SIZE + 1;
+        EXPECT_EQ(compressBound(), ERR_COMPRESSION_FAILED);
+        break;
+    case ZSTD:
+        // input size >= ZSTD_MAX_INPUT_SIZE
+        desc.inSize = ZSTD_MAX_INPUT_SIZE;
+        EXPECT_EQ(compressBound(), ERR_COMPRESSION_FAILED);
+        break;    
+    case BZIP2:
+    case ZLIB:
+    case LZMA:
+    case SNAPPY:       
+    default:
+        break;
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    API_TEST,
+    API_compressBound,
+    ::testing::ValuesIn(get_api_test_params()));
+
+ /*********************************************
+  * End compressBound Tests
+  *********************************************/
 
  /*********************************************
   * Begin Compress Tests
