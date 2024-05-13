@@ -145,8 +145,7 @@ size_t ZSTD_compressBound_mt(size_t srcSize) {
      *  Hence, need to test with winLog in the range [ZSTD_WINDOWLOG_MIN, ZSTD_WINDOWLOG_MAX)
      *  to get the maximum upper bound. */
     for(winLog = ZSTD_WINDOWLOG_MIN; winLog < ZSTD_WINDOWLOG_MAX; ++winLog) {
-        if (((size_t)(1u << winLog) * window_factor) > INT_MAX)
-            break;
+        assert((size_t)1<<winLog <= INT_MAX); 
         COMPRESS_BOUND_MT(srcSize, ZSTD_compressBound_st, 1u << winLog, window_factor, sz1, sz2, ERROR(srcSize_wrong))
         if(ZSTD_isError(sz2)) return sz2;
         szMax = (sz2 > szMax)? sz2 : szMax;
@@ -165,10 +164,6 @@ size_t AOCL_ZSTD_compressBound(size_t srcSize, ZSTD_parameters params) {
     size_t sz2 = 0;
     AOCL_INT32 window_len = 1U << params.cParams.windowLog;
     AOCL_UINT32 window_factor = ZSTD_GET_WINDOW_FACTOR(srcSize);
-    if (((size_t)(window_len) * window_factor) > INT_MAX) {
-        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
-        return ERROR(GENERIC);
-    }
     COMPRESS_BOUND_MT(srcSize, ZSTD_compressBound_st, window_len, window_factor, sz1, sz2, ERROR(srcSize_wrong))
     if(ZSTD_isError(sz2)) return sz2;
     return ((sz2 > sz1) ? sz2 : sz1);

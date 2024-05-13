@@ -44,8 +44,8 @@
 #include "utils/utils.h"
 
 AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp, 
-                                      AOCL_CHAR *src, AOCL_CHAR *dst, AOCL_INT32 in_size,
-                                      AOCL_INT32 out_size, AOCL_INT32 window_len,
+                                      AOCL_CHAR *src, AOCL_CHAR *dst, AOCL_UINTP in_size,
+                                      AOCL_UINTP out_size, AOCL_INT32 window_len,
                                       AOCL_INT32 window_factor)
 {
     assert(thread_grp != NULL);
@@ -55,7 +55,7 @@ AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp,
     }
 
     AOCL_UINT32 max_threads = omp_get_max_threads();
-    AOCL_INT32 chunk_size = window_len * window_factor;
+    AOCL_UINTP chunk_size =  (AOCL_UINTP)window_len * window_factor;
 
     thread_grp->src = src;
     thread_grp->dst = dst;
@@ -73,8 +73,8 @@ AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp,
     else
     {
         //Find number of partitions in the src stream
-        AOCL_INT32 num_parallel_partitions = thread_grp->src_size / chunk_size;
-        AOCL_INT32 leftover_size = thread_grp->src_size % chunk_size;
+        AOCL_UINTP num_parallel_partitions = thread_grp->src_size / chunk_size;
+        AOCL_UINTP leftover_size = thread_grp->src_size % chunk_size;
         
         //Sufficiently large leftover bytes adds another thread for processing
         if (leftover_size >= 
@@ -100,8 +100,8 @@ AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp,
 }
 
 AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp, 
-                                      AOCL_CHAR *src, AOCL_CHAR *dst, AOCL_INT32 in_size,
-                                      AOCL_INT32 out_size, AOCL_INT32 window_len,
+                                      AOCL_CHAR *src, AOCL_CHAR *dst, AOCL_UINTP in_size,
+                                      AOCL_UINTP out_size, AOCL_INT32 window_len,
                                       AOCL_INT32 window_factor)
 {
     if (dst == NULL) {
@@ -143,7 +143,7 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
 
 AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t *thread_grp,
                                    aocl_thread_info_t *cur_thread_info,
-                                   AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id)
+                                   AOCL_UINTP cmpr_bound_pad, AOCL_UINT32 thread_id)
 {
     assert(thread_grp != NULL);
     assert(cur_thread_info != NULL);
@@ -197,8 +197,8 @@ void aocl_destroy_parallel_compress_mt(aocl_thread_group_t *thread_grp)
 }
 
 AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
-                                        AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_INT32 in_size,
-                                        AOCL_INT32 out_size, AOCL_INT32 use_ST_decompressor)
+                                        AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_UINTP in_size,
+                                        AOCL_UINTP out_size, AOCL_INT32 use_ST_decompressor)
 {
     assert(thread_grp != NULL);
     if (src == NULL) {
@@ -282,7 +282,7 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
 
 AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
                                       aocl_thread_info_t* cur_thread_info,
-                                      AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id)
+                                      AOCL_UINTP cmpr_bound_pad, AOCL_UINT32 thread_id)
 {
     assert(thread_grp != NULL);
     assert(cur_thread_info != NULL);
@@ -352,7 +352,7 @@ AOCL_INT32 aocl_get_rap_frame_bound_mt(void) {
     return RAP_FRAME_LEN_WITH_DECOMP_LENGTH(max_threads, 0); // upper bound of rap frame length in bytes based on max threads possible
 }
 
-AOCL_INT32 aocl_skip_rap_frame_mt(AOCL_CHAR* src, AOCL_INT32 src_size)
+AOCL_INT32 aocl_skip_rap_frame_mt(AOCL_CHAR* src, AOCL_UINTP src_size)
 {
     if (src == NULL)
         return ERR_INVALID_INPUT;
@@ -371,7 +371,7 @@ AOCL_INT32 aocl_skip_rap_frame_mt(AOCL_CHAR* src, AOCL_INT32 src_size)
 }
 
 AOCL_INT32 aocl_set_partition_stats_mt(aocl_thread_group_t *thread_grp,
-                                    AOCL_INT32 in_size, AOCL_INT32 window_len, AOCL_INT32 window_factor){
+                                    AOCL_UINTP in_size, AOCL_INT32 window_len, AOCL_INT32 window_factor){
         
     return aocl_setup_partition_internal(thread_grp, NULL /* src */, NULL /* dst */, in_size, 0 /* out_size */, window_len, window_factor);
 }
