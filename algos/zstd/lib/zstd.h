@@ -48,6 +48,7 @@ extern "C" {
 #include <stddef.h>   /* size_t */
 
 #include "aoclAlgoOpt.h" /* AOCL Optimization flags */
+#include "aoclFds.h" /* AOCL FDS flags */
 
 /* =====   ZSTDLIB_API : control library symbols visibility   ===== */
 #ifndef ZSTDLIB_VISIBLE
@@ -505,7 +506,7 @@ ZSTDLIB_API void aocl_destroy_zstd_decode(void);
  */
  /// @cond DOXYGEN_SHOULD_SKIP_THIS
 #define ZSTD_MAX_INPUT_SIZE ((sizeof(size_t)==8) ? 0xFF00FF00FF00FF00LLU : 0xFF00FF00U)
-#define ZSTD_COMPRESSBOUND(srcSize)   (((size_t)(srcSize) >= ZSTD_MAX_INPUT_SIZE) ? 0 : (srcSize) + ((srcSize)>>8) + (((srcSize) < (128<<10)) ? (((128<<10) - (srcSize)) >> 11) /* margin, from 64 to 0 */ : 0))  /* this formula ensures that bound(A) + bound(B) <= bound(A+B) as long as A and B >= 128 KB */
+#define ZSTD_COMPRESSBOUND_ORG(srcSize)   (((size_t)(srcSize) >= ZSTD_MAX_INPUT_SIZE) ? 0 : (srcSize) + ((srcSize)>>8) + (((srcSize) < (128<<10)) ? (((128<<10) - (srcSize)) >> 11) /* margin, from 64 to 0 */ : 0))  /* this formula ensures that bound(A) + bound(B) <= bound(A+B) as long as A and B >= 128 KB */
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 /*!
  * @name Helper functions
@@ -2397,6 +2398,15 @@ ZSTDLIB_API size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 #define ZSTD_FRAMEHEADERSIZE_MAX   18   /* can be useful for static allocation */
 #define ZSTD_SKIPPABLEHEADERSIZE    8
 
+#if AOCL_DECOMPRESS_FAST > 1
+#define ZSTD_COMPRESSBOUND(srcSize)   (((size_t)(srcSize) >= ZSTD_MAX_INPUT_SIZE) ? 0 : \
+                                      ((ZSTD_COMPRESSBOUND_ORG(srcSize) > (SIZE_MAX - (FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE))) ? 0 : \
+                                      ((FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE) + ZSTD_COMPRESSBOUND_ORG(srcSize)) /* with additional bytes for FDS skippable frame */ \
+                                      ))
+#else
+#define ZSTD_COMPRESSBOUND(srcSize)   ZSTD_COMPRESSBOUND_ORG(srcSize)
+#endif
+
 /* compression parameter bounds */
 #define ZSTD_WINDOWLOG_MAX_32    30
 #define ZSTD_WINDOWLOG_MAX_64    31
@@ -3000,12 +3010,17 @@ ZSTDLIB_API unsigned ZSTD_isSkippableFrame(const void* buffer, size_t size);
 ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag);
 ZSTDLIB_API size_t Test_ZSTD_decompressDCtxRef(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 ZSTDLIB_API ZSTD_compressionParameters Test_Get_ZSTD_defaultCParameters(size_t srcSize, int level, int opt_on);
+ZSTDLIB_API void Test_AOCL_ZSTD_storeSequences(void* seqStore, const unsigned char* ip, const unsigned char* anchor,
+                                               const unsigned char* const iend, unsigned offBase, size_t mLength);                                   
+#if AOCL_DECOMPRESS_FAST > 1
+ZSTDLIB_API void Test_AOCL_ZSTD_readFdsFrame(ZSTD_DCtx* dctx, void const* src, size_t srcSize);
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 #ifdef AOCL_ENABLE_THREADS
 ZSTDLIB_API int Test_ZSTD_getWindowFactor(size_t srcSize);
 ZSTDLIB_API size_t Test_AOCL_ZSTD_readSkippableRAPFrameHeader(const void* src, size_t srcSize);
 ZSTDLIB_API size_t Test_AOCL_ZSTD_writeSkippableFrameHeader(void* dst, size_t dstCapacity, size_t srcSize, unsigned magicVariant);
-#endif
-#endif
+#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_UNIT_TEST */
 
 /***************************************
 *  Memory management

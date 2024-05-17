@@ -298,6 +298,9 @@ static void ZSTD_DCtx_resetParameters(ZSTD_DCtx* dctx)
     dctx->forceIgnoreChecksum = ZSTD_d_validateChecksum;
     dctx->refMultipleDDicts = ZSTD_rmd_refSingleDDict;
     dctx->disableHufAsm = 0;
+#if AOCL_DECOMPRESS_FAST > 1
+    dctx->fds = 0;
+#endif /* AOCL_DECOMPRESS_FAST */
 }
 
 static void ZSTD_initDCtx_internal(ZSTD_DCtx* dctx)
@@ -1026,6 +1029,26 @@ static void ZSTD_DCtx_trace_end(ZSTD_DCtx const* dctx, U64 uncompressedSize, U64
 #endif
 }
 
+/* Read AOCL fast decompress settings (FDS)
+ * Set dctx->fds if src contains supported FDS data. */
+#if AOCL_DECOMPRESS_FAST > 1
+FORCE_INLINE_TEMPLATE
+void AOCL_ZSTD_readFdsFrame(ZSTD_DCtx* dctx, void const* src, size_t srcSize) {
+    /* read skippable frame */
+    if (srcSize < FDS_FRAME_LENGTH) return;
+
+    /* read FDS frame content */
+    if (MEM_read64(src) != FDS_MAGIC_WORD) return; // ignore other skip frames
+    src = (char*)src + FDS_MAGIC_WORD_BYTES;
+
+    U64 metadata = MEM_read64(src);
+    if (metadata == FDS_FAST2_NOTB_SO4_NOEXT_REP2) { 
+        dctx->fds = FDS_FAST2_NOTB_SO4_NOEXT_REP2;
+    } else {  // if fds setting is not supported, reset flag.
+        dctx->fds = 0;
+    }
+}
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 
 /*! ZSTD_decompressFrame() :
  * @dctx must be properly initialized
@@ -1200,6 +1223,10 @@ static size_t ZSTD_decompressMultiFrame(ZSTD_DCtx* dctx,
                 size_t const skippableSize = readSkippableFrameSize(src, srcSize);
                 FORWARD_IF_ERROR(skippableSize, "invalid skippable frame");
                 assert(skippableSize <= srcSize);
+
+#if AOCL_DECOMPRESS_FAST > 1
+                AOCL_ZSTD_readFdsFrame(dctx, (char*)src + ZSTD_SKIPPABLEHEADERSIZE, srcSize - ZSTD_SKIPPABLEHEADERSIZE);
+#endif
 
                 src = (const BYTE *)src + skippableSize;
                 srcSize -= skippableSize;
@@ -2731,6 +2758,12 @@ void aocl_destroy_zstd_decode(void)
 }
 
 #ifdef AOCL_UNIT_TEST
+#if AOCL_DECOMPRESS_FAST > 1
+void Test_AOCL_ZSTD_readFdsFrame(ZSTD_DCtx* dctx, void const* src, size_t srcSize) {
+    AOCL_ZSTD_readFdsFrame(dctx, src, srcSize);
+}
+#endif
+
 /* Test wrapper to call reference decompress function irresptive of user/env/thread settings */
 size_t Test_ZSTD_decompressDCtxRef(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize)
 {

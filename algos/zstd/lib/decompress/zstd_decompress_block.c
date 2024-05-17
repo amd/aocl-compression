@@ -803,6 +803,16 @@ typedef struct {
     size_t prevOffset[ZSTD_REP_NUM];
 } seqState_t;
 
+#if AOCL_DECOMPRESS_FAST == 2
+typedef struct {
+    BIT_DStream_t DStream;
+    ZSTD_fseState stateLL;
+    ZSTD_fseState stateOffb;
+    ZSTD_fseState stateML;
+    size_t prevOffset; //single offset value for rep1
+} aocl_fast2_seqState_t;
+#endif /* AOCL_DECOMPRESS_FAST == 2 */
+
 /*! ZSTD_overlapCopy8() :
  *  Copies 8 bytes from ip to op and updates op and ip where ip <= op.
  *  If the offset is < 8 then the offset is spread to at least 8 bytes.
@@ -1547,6 +1557,213 @@ AOCL_ZSTD_decodeSequence_gcc(seqState_t* seqState, const ZSTD_longOffset_e longO
 }
 #endif
 
+#if AOCL_DECOMPRESS_FAST == 2
+/*
+* For AOCL_ZSTD_decodeSequence_mem64_fast2, AOCL_ZSTD_decodeSequence_mem64_gcc_fast2, AOCL_ZSTD_execSequence_mem64_fast2
+* Stream is expected to provide following guarentees:
+*   totalBits < (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)
+*   no Repeated_Offset2 and Repeated_Offset3
+*   no offsets go into extDict (no offset beyond prefix)
+*   offset >= WILDCOPY_VECLEN
+*/
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(__clang__)
+/*
+* Derived from AOCL_ZSTD_decodeSequence_gcc. Faster decompression for streams with
+* above constraints.
+*/
+FORCE_INLINE_TEMPLATE seq_t
+AOCL_ZSTD_decodeSequence_mem64_gcc_fast2(aocl_fast2_seqState_t* seqState, const ZSTD_longOffset_e longOffsets)
+{
+    seq_t seq;
+    const ZSTD_seqSymbol* const llDInfo = seqState->stateLL.table + seqState->stateLL.state;
+    const ZSTD_seqSymbol* const mlDInfo = seqState->stateML.table + seqState->stateML.state;
+    const ZSTD_seqSymbol* const ofDInfo = seqState->stateOffb.table + seqState->stateOffb.state;
+
+    seq.matchLength = mlDInfo->baseValue;
+    seq.litLength = llDInfo->baseValue;
+    {
+        BYTE const llBits = llDInfo->nbAdditionalBits;
+        BYTE const mlBits = mlDInfo->nbAdditionalBits;
+        BYTE const ofBits = ofDInfo->nbAdditionalBits;
+
+        assert(llBits <= MaxLLBits);
+        assert(mlBits <= MaxMLBits);
+        assert(ofBits <= MaxOff);
+
+#if (DEBUGLEVEL>=1)
+        BYTE const totalBits = llBits + mlBits + ofBits;
+        assert(totalBits < (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)));
+#endif
+
+        /* sequence */
+        {   size_t offset;
+        if (ofBits > 1) {
+            ZSTD_STATIC_ASSERT(ZSTD_lo_isLongOffset == 1);
+            ZSTD_STATIC_ASSERT(LONG_OFFSETS_MAX_EXTRA_BITS_32 == 5);
+            ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 > LONG_OFFSETS_MAX_EXTRA_BITS_32);
+            ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 - LONG_OFFSETS_MAX_EXTRA_BITS_32 >= MaxMLBits);
+
+            offset = ofDInfo->baseValue + BIT_readBitsFast(&seqState->DStream, ofBits/*>0*/);   /* <=  (ZSTD_WINDOWLOG_MAX-1) bits */
+            seqState->prevOffset = offset;
+        }
+        else {
+            offset = seqState->prevOffset;
+        }
+        seq.offset = offset;
+        }
+
+        if (mlBits > 0)
+            seq.matchLength += BIT_readBitsFast(&seqState->DStream, mlBits/*>0*/);
+
+        /* Ensure there are enough bits to read the rest of data in 64-bit mode. */
+        ZSTD_STATIC_ASSERT(16 + LLFSELog + MLFSELog + OffFSELog < STREAM_ACCUMULATOR_MIN_64);
+
+        if (llBits > 0)
+            seq.litLength += BIT_readBitsFast(&seqState->DStream, llBits/*>0*/);
+
+        ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llDInfo->nextState, llDInfo->nbBits);    /* <=  9 bits */
+        ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlDInfo->nextState, mlDInfo->nbBits);    /* <=  9 bits */
+        ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofDInfo->nextState, ofDInfo->nbBits);  /* <=  8 bits */
+    }
+
+    return seq;
+}
+#else
+FORCE_INLINE_TEMPLATE seq_t
+AOCL_ZSTD_decodeSequence_mem64_fast2(aocl_fast2_seqState_t* seqState, const ZSTD_longOffset_e longOffsets)
+{
+    seq_t seq;
+    const ZSTD_seqSymbol* const llDInfo = seqState->stateLL.table + seqState->stateLL.state;
+    const ZSTD_seqSymbol* const mlDInfo = seqState->stateML.table + seqState->stateML.state;
+    const ZSTD_seqSymbol* const ofDInfo = seqState->stateOffb.table + seqState->stateOffb.state;
+
+    seq.matchLength = mlDInfo->baseValue;
+    seq.litLength = llDInfo->baseValue;
+    {
+        BYTE const llBits = llDInfo->nbAdditionalBits;
+        BYTE const mlBits = mlDInfo->nbAdditionalBits;
+        BYTE const ofBits = ofDInfo->nbAdditionalBits;
+
+        U16 const llNext = llDInfo->nextState;
+        U16 const mlNext = mlDInfo->nextState;
+        U16 const ofNext = ofDInfo->nextState;
+        U32 const llnbBits = llDInfo->nbBits;
+        U32 const mlnbBits = mlDInfo->nbBits;
+        U32 const ofnbBits = ofDInfo->nbBits;
+ 
+        assert(llBits <= MaxLLBits);
+        assert(mlBits <= MaxMLBits);
+        assert(ofBits <= MaxOff);
+
+#if (DEBUGLEVEL>=1)
+        BYTE const totalBits = llBits + mlBits + ofBits;
+        assert(totalBits < (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)));
+#endif
+
+        /* sequence */
+        {   size_t offset;
+        if (ofBits > 1) {
+            ZSTD_STATIC_ASSERT(ZSTD_lo_isLongOffset == 1);
+            ZSTD_STATIC_ASSERT(LONG_OFFSETS_MAX_EXTRA_BITS_32 == 5);
+            ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 > LONG_OFFSETS_MAX_EXTRA_BITS_32);
+            ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 - LONG_OFFSETS_MAX_EXTRA_BITS_32 >= MaxMLBits);
+
+            offset = ofDInfo->baseValue + BIT_readBitsFast(&seqState->DStream, ofBits/*>0*/);   /* <=  (ZSTD_WINDOWLOG_MAX-1) bits */
+            seqState->prevOffset = offset;
+        }
+        else {
+            assert(ofBits == 0); // Repeated_Offset1
+            offset = seqState->prevOffset;
+        }
+        seq.offset = offset;
+        }
+
+        if (mlBits > 0)
+            seq.matchLength += BIT_readBitsFast(&seqState->DStream, mlBits/*>0*/);
+
+        /* Ensure there are enough bits to read the rest of data in 64-bit mode. */
+        ZSTD_STATIC_ASSERT(16 + LLFSELog + MLFSELog + OffFSELog < STREAM_ACCUMULATOR_MIN_64);
+
+        if (llBits > 0)
+            seq.litLength += BIT_readBitsFast(&seqState->DStream, llBits/*>0*/);
+
+        ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llNext, llnbBits);    /* <=  9 bits */
+        ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlNext, mlnbBits);    /* <=  9 bits */
+        ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofNext, ofnbBits);  /* <=  8 bits */
+    }
+
+    return seq;
+}
+#endif /* __GNUC__ && __x86_64__ && !__clang__ */
+
+/* Derived from AOCL_ZSTD_execSequence. 
+ * Faster decompression of streams compressed as per fast decompression 
+ * rules : FDS_fast2_NOTB_SO4_NOEXT_REP2 */
+HINT_INLINE
+size_t AOCL_ZSTD_execSequence_mem64_fast2(BYTE* op,
+    BYTE* const oend, seq_t sequence,
+    const BYTE** litPtr, const BYTE* const litLimit,
+    const BYTE* const prefixStart, const BYTE* const virtualStart, const BYTE* const dictEnd)
+{
+    size_t const sequenceLength = sequence.litLength + sequence.matchLength;
+    BYTE* const oMatchEnd = op + sequenceLength;   /* risk : address space overflow (32-bits) */
+    BYTE* const oend_w = oend - WILDCOPY_OVERLENGTH;   /* risk : address space underflow on oend=NULL */
+    const BYTE* const iLitEnd = *litPtr + sequence.litLength;
+
+    assert(op != NULL /* Precondition */);
+    assert(oend_w < oend /* No underflow */);
+
+    /* Handle edge cases in a slow path:
+     *   - Read beyond end of literals
+     *   - Match end is within WILDCOPY_OVERLIMIT of oend
+     *   - 32-bit mode and the match length overflows
+     */
+    if (UNLIKELY(iLitEnd > litLimit || oMatchEnd > oend_w))
+        return ZSTD_execSequenceEnd(op, oend, sequence, litPtr, litLimit, prefixStart, virtualStart, dictEnd);
+
+    BYTE* const oLitEnd = op + sequence.litLength;
+    const BYTE* match = oLitEnd - sequence.offset;
+
+    /* Assumptions (everything else goes into ZSTD_execSequenceEnd()) */
+    assert(op <= oLitEnd /* No overflow */);
+    assert(oLitEnd < oMatchEnd /* Non-zero match & no overflow */);
+    assert(oMatchEnd <= oend /* No underflow */);
+    assert(iLitEnd <= litLimit /* Literal length is in bounds */);
+    assert(oLitEnd <= oend_w /* Can wildcopy literals */);
+    assert(oMatchEnd <= oend_w /* Can wildcopy matches */);
+
+    /* Copy Literals:
+     * Split out litLength <= 16 since it is nearly always true. +1.6% on gcc-9.
+     * We likely don't need the full 32-byte wildcopy.
+     */
+    assert(WILDCOPY_OVERLENGTH >= 16);
+    ZSTD_copy16(op, (*litPtr));
+    if (UNLIKELY(sequence.litLength > 16)) {
+        ZSTD_wildcopy(op + 16, (*litPtr) + 16, sequence.litLength - 16, ZSTD_no_overlap);
+    }
+    op = oLitEnd;
+    *litPtr = iLitEnd;   /* update for next sequence */
+
+    /* Copy Match */
+    assert(sequence.offset <= (size_t)(oLitEnd - prefixStart));
+    
+    /* Match within prefix of 1 or more bytes */
+    assert(op <= oMatchEnd);
+    assert(oMatchEnd <= oend_w);
+    assert(match >= prefixStart);
+    assert(sequence.matchLength >= 1);
+
+    assert(sequence.offset >= WILDCOPY_VECLEN);
+
+#ifdef AOCL_ZSTD_WILDCOPY_LONG
+    AOCL_ZSTD_wildcopy_long(op, match, (ptrdiff_t)sequence.matchLength, ZSTD_no_overlap);
+#else
+    ZSTD_wildcopy(op, match, (ptrdiff_t)sequence.matchLength, ZSTD_no_overlap);
+#endif
+    return sequenceLength;
+}
+#endif /* AOCL_DECOMPRESS_FAST == 2 */
+
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 MEM_STATIC int ZSTD_dictionaryIsActive(ZSTD_DCtx const* dctx, BYTE const* prefixStart, BYTE const* oLitEnd)
 {
@@ -1998,7 +2215,108 @@ AOCL_ZSTD_decompressSequences_body(ZSTD_DCtx* dctx,
 
     return op-ostart;
 }
+
+#if AOCL_DECOMPRESS_FAST == 2
+/*
+* Decompression of streams compressed as per fast decompression rules : FDS_fast2_NOTB_SO4_NOEXT_REP2
+*
+* Change wrt ZSTD_decompressSequences_body:
+*  + Calls AOCL_ZSTD_decodeSequence_mem64_gcc_fast2 / AOCL_ZSTD_decodeSequence_mem64_fast2
+*  + Calls AOCL_ZSTD_execSequence_mem64_fast2
+*/
+FORCE_INLINE_TEMPLATE size_t
+DONT_VECTORIZE
+AOCL_ZSTD_decompressSequences_body_mem64_fast2(ZSTD_DCtx* dctx,
+    void* dst, size_t maxDstSize,
+    const void* seqStart, size_t seqSize, int nbSeq,
+    const ZSTD_longOffset_e isLongOffset,
+    const int frame)
+{
+    const BYTE* ip = (const BYTE*)seqStart;
+    const BYTE* const iend = ip + seqSize;
+    BYTE* const ostart = (BYTE*)dst;
+    BYTE* const oend = dctx->litBufferLocation == ZSTD_not_in_dst ? ostart + maxDstSize : dctx->litBuffer;
+    BYTE* op = ostart;
+    const BYTE* litPtr = dctx->litPtr;
+    const BYTE* const litEnd = litPtr + dctx->litSize;
+    const BYTE* const prefixStart = (const BYTE*)(dctx->prefixStart);
+    const BYTE* const vBase = (const BYTE*)(dctx->virtualStart);
+    const BYTE* const dictEnd = (const BYTE*)(dctx->dictEnd);
+    DEBUGLOG(5, "AOCL_ZSTD_decompressSequences_body_mem64_fast2: nbSeq = %d", nbSeq);
+    (void)frame;
+
+    /* Regen sequences */
+    if (nbSeq) {
+        aocl_fast2_seqState_t seqState;
+        dctx->fseEntropy = 1;
+        seqState.prevOffset = dctx->entropy.rep[0];
+        RETURN_ERROR_IF(
+            ERR_isError(BIT_initDStream(&seqState.DStream, ip, iend - ip)),
+            corruption_detected, "");
+        ZSTD_initFseState(&seqState.stateLL, &seqState.DStream, dctx->LLTptr);
+        ZSTD_initFseState(&seqState.stateOffb, &seqState.DStream, dctx->OFTptr);
+        ZSTD_initFseState(&seqState.stateML, &seqState.DStream, dctx->MLTptr);
+        assert(dst != NULL);
+
+        ZSTD_STATIC_ASSERT(
+            BIT_DStream_unfinished < BIT_DStream_completed&&
+            BIT_DStream_endOfBuffer < BIT_DStream_completed&&
+            BIT_DStream_completed < BIT_DStream_overflow);
+
+#if defined(__GNUC__) && defined(__x86_64__)
+        __asm__(".p2align 6");
+        __asm__("nop");
+#  if __GNUC__ >= 7
+        __asm__(".p2align 5");
+        __asm__("nop");
+        __asm__(".p2align 3");
+#  else
+        __asm__(".p2align 4");
+        __asm__("nop");
+        __asm__(".p2align 3");
+#  endif
 #endif
+        for (; ; ) {
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(__clang__)
+            seq_t const sequence = AOCL_ZSTD_decodeSequence_mem64_gcc_fast2(&seqState, isLongOffset);
+#else
+            seq_t const sequence = AOCL_ZSTD_decodeSequence_mem64_fast2(&seqState, isLongOffset);
+#endif
+            size_t const oneSeqSize = AOCL_ZSTD_execSequence_mem64_fast2(op, oend, sequence, &litPtr, litEnd, prefixStart, vBase, dictEnd);
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) && defined(FUZZING_ASSERT_VALID_SEQUENCE)
+            assert(!ZSTD_isError(oneSeqSize));
+            if (frame) ZSTD_assertValidSequence(dctx, op, oend, sequence, prefixStart, vBase);
+#endif
+            if (UNLIKELY(ZSTD_isError(oneSeqSize))) {
+                return oneSeqSize;
+            }
+            DEBUGLOG(6, "regenerated sequence size : %u", (U32)oneSeqSize);
+            op += oneSeqSize;
+            if (UNLIKELY(!--nbSeq))
+                break;
+            BIT_reloadDStream(&(seqState.DStream));
+        }
+        /* check if reached exact end */
+        DEBUGLOG(5, "AOCL_ZSTD_decompressSequences_body_mem64_fast2: after decode loop, remaining nbSeq : %i", nbSeq);
+        RETURN_ERROR_IF(nbSeq, corruption_detected, "");
+        RETURN_ERROR_IF(BIT_reloadDStream(&seqState.DStream) < BIT_DStream_completed, corruption_detected, "");
+        /* save reps for next block */
+        dctx->entropy.rep[0] = (U32)(seqState.prevOffset);
+    }
+
+    /* last literal segment */
+    {   size_t const lastLLSize = litEnd - litPtr;
+        RETURN_ERROR_IF(lastLLSize > (size_t)(oend-op), dstSize_tooSmall, "");
+        if (op != NULL) {
+            ZSTD_memcpy(op, litPtr, lastLLSize);
+            op += lastLLSize;
+        }
+    }
+
+    return op-ostart;
+}
+#endif /* AOCL_DECOMPRESS_FAST == 2 */
+#endif /* AOCL_ZSTD_OPT */
 
 static size_t
 ZSTD_decompressSequences_default(ZSTD_DCtx* dctx,
@@ -2018,7 +2336,16 @@ AOCL_ZSTD_decompressSequences_default(ZSTD_DCtx* dctx,
     const ZSTD_longOffset_e isLongOffset,
     const int frame)
 {
+#if AOCL_DECOMPRESS_FAST == 2
+    if (MEM_64bits() && (dctx->fds == FDS_FAST2_NOTB_SO4_NOEXT_REP2)) {
+        return AOCL_ZSTD_decompressSequences_body_mem64_fast2(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
+    }
+    else {
+        return AOCL_ZSTD_decompressSequences_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
+    }
+#else
     return AOCL_ZSTD_decompressSequences_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
+#endif /* AOCL_DECOMPRESS_FAST == 2 */
 }
 #endif
 
@@ -2259,7 +2586,16 @@ AOCL_ZSTD_decompressSequences_bmi2(ZSTD_DCtx* dctx,
     const ZSTD_longOffset_e isLongOffset,
     const int frame)
 {
+#if AOCL_DECOMPRESS_FAST == 2
+    if (MEM_64bits() && (dctx->fds == FDS_FAST2_NOTB_SO4_NOEXT_REP2)) {
+        return AOCL_ZSTD_decompressSequences_body_mem64_fast2(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
+    }
+    else {
+        return AOCL_ZSTD_decompressSequences_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
+    }
+#else
     return AOCL_ZSTD_decompressSequences_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
+#endif /* AOCL_DECOMPRESS_FAST == 2 */
 }
 #endif
 

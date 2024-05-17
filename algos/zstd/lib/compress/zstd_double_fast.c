@@ -346,6 +346,266 @@ _match_stored:
 #define PREFETCH_MATCH_L(ip) PREFETCH_MATCH(ip, hBitsL, 8, hashLong) // prefetch match candidate stored in hashLong 
 #define PREFETCH_MATCH_S(ip) PREFETCH_MATCH(ip, hBitsS, mls, hashSmall) // prefetch match candidate stored in hashSmall 
 
+#if AOCL_DECOMPRESS_FAST == 2
+/*
+* Derived from AOCL_ZSTD_compressBlock_doubleFast_noDict_generic, but enforces :
+*   totalBits < (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)
+*   no Repeated_Offset2 and Repeated_Offset3
+*   no offsets go into extDict (no offset beyond prefix)
+*   offset >= WILDCOPY_VECLEN
+* Calls AOCL_ZSTD_storeSequences to store sequences
+*/
+FORCE_INLINE_TEMPLATE
+size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
+    ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+    void const* src, size_t srcSize, U32 const mls /* template */)
+{
+    ZSTD_compressionParameters const* cParams = &ms->cParams;
+    U32* const hashLong = ms->hashTable;
+    const U32 hBitsL = cParams->hashLog;
+    U32* const hashSmall = ms->chainTable;
+    const U32 hBitsS = cParams->chainLog;
+    const BYTE* const base = ms->window.base;
+    const BYTE* const istart = (const BYTE*)src;
+    const BYTE* anchor = istart;
+    const U32 endIndex = (U32)((size_t)(istart - base) + srcSize);
+    /* presumes that, if there is a dictionary, it must be using Attach mode */
+    const U32 prefixLowestIndex = ZSTD_getLowestPrefixIndex(ms, endIndex, cParams->windowLog);
+    const BYTE* const prefixLowest = base + prefixLowestIndex;
+    const BYTE* const iend = istart + srcSize;
+    const BYTE* const ilimit = iend - HASH_READ_SIZE - PREFETCH_SAFETY;
+    U32 offset_1 = rep[0];
+    U32 offsetSaved1 = 0;
+
+    size_t mLength;
+    U32 offset;
+    U32 curr;
+
+    /* how many positions to search before increasing step size */
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+    const size_t kStepIncr = 1 << kSearchStrengthDoubleFast;
+#else
+    const size_t kStepIncr = 1 << kSearchStrength;
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+
+    const BYTE* nextStep;
+    size_t step; /* the current step size */
+
+    size_t hl0; /* the long hash at ip */
+    size_t hl1; /* the long hash at ip1 */
+
+    U32 idxl0; /* the long match index for ip */
+    U32 idxl1; /* the long match index for ip1 */
+
+    const BYTE* matchl0; /* the long match for ip */
+    const BYTE* matchs0; /* the short match for ip */
+    const BYTE* matchl1; /* the long match for ip1 */
+
+    /* the position at which to increment the step size if no match is found */
+    const BYTE* ip = istart; /* the current position */
+    const BYTE* ip1; /* the next position */
+    const BYTE* ipfwd;
+
+    DEBUGLOG(5, "AOCL_ZSTD_compressBlock_doubleFast_noDict_generic");
+
+    /* init */
+    ip += ((ip - prefixLowest) == 0);
+    {
+        U32 const current = (U32)(ip - base);
+        U32 const windowLow = ZSTD_getLowestPrefixIndex(ms, current, cParams->windowLog);
+        U32 const maxRep = current - windowLow;
+        if (offset_1 > maxRep) offsetSaved1 = offset_1, offset_1 = 0;
+    }
+
+    /* Outer Loop: one iteration per match found and stored */
+    while (1) {
+        step = 1;
+        nextStep = ip + kStepIncr;
+        ip1 = ip + step;
+
+        if (ip1 > ilimit) {
+            goto _cleanup;
+        }
+
+        hl0 = ZSTD_hashPtr(ip, hBitsL, 8);
+        PREFETCH_MATCH_L(ip);
+        idxl0 = hashLong[hl0];
+        matchl0 = base + idxl0;
+
+        /* Inner Loop: one iteration per search / position */
+        do {
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+            // Alternate between values 1 and 2 for step while searching for a match. In case
+            // the value of step exceeds 2 (this happens when the value of step is incremented
+            // when ip1 exceeds nextStep), we let step retain its value.
+            step = (step > 2) ? step : step ^ 3;
+#endif
+            const size_t hs0 = ZSTD_hashPtr(ip, hBitsS, mls);
+            const U32 idxs0 = hashSmall[hs0];
+            curr = (U32)(ip - base);
+            matchs0 = base + idxs0;
+
+            hashLong[hl0] = hashSmall[hs0] = curr;   /* update hash tables */
+
+            /* check noDict repcode
+             * (offset_1 > 0) changed to (offset_1 >= WILDCOPY_VECLEN) as initial rep codes
+             * can be < WILDCOPY_VECLEN and offsets < WILDCOPY_VECLEN should not be included in the sequences
+            */
+            if ((offset_1 >= WILDCOPY_VECLEN) & (MEM_read32(ip + 1 - offset_1) == MEM_read32(ip + 1))) {
+                PREFETCH_MATCH_L(ip + 1 + 4);
+                mLength = AOCL_ZSTD_count(ip + 1 + 4, ip + 1 + 4 - offset_1, iend) + 4;
+                ip++;
+
+                if (is_totalbits_limited_seq_possible(ip, anchor, mLength, 1 /* Repeated_Offset1 */)) {
+                    ZSTD_STORE_SEQ(seqStore, (size_t)(ip - anchor), anchor, iend, REPCODE1_TO_OFFBASE, mLength);
+                    goto _match_stored;
+                }
+            }
+
+            hl1 = ZSTD_hashPtr(ip1, hBitsL, 8);
+
+            if (idxl0 > prefixLowestIndex) {
+                /* check prefix long match */
+                if (((ip - matchl0) >= WILDCOPY_VECLEN) && (MEM_read64(matchl0) == MEM_read64(ip))) {
+                    PREFETCH_MATCH_L(ip1 + 8);
+                    PREFETCH_MATCH_L(ip1 + 9);
+                    PREFETCH_MATCH_L(ip1 + 10);
+                    PREFETCH_MATCH_L(ip1 + 11);
+                    mLength = AOCL_ZSTD_count(ip + 8, matchl0 + 8, iend) + 8;
+                    offset = (U32)(ip - matchl0);
+                    ipfwd = ip;
+                    while (((ip > anchor) & (matchl0 > prefixLowest)) && (ip[-1] == matchl0[-1])) { ip--; matchl0--; mLength++; } /* catch up */
+
+                    if (is_totalbits_limited_seq_possible(ip, anchor, mLength, offset)) {
+                        goto _match_found;
+                    }
+                    else {
+                        ip = ipfwd; //revert
+                    }
+                }
+            }
+
+            idxl1 = hashLong[hl1];
+            matchl1 = base + idxl1;
+
+            if (idxs0 > prefixLowestIndex) {
+                /* check prefix short match */
+                if (((ip - matchs0) >= WILDCOPY_VECLEN) && (MEM_read32(matchs0) == MEM_read32(ip))) {
+                    PREFETCH_MATCH_S(ip + 4);
+                    goto _search_next_long;
+                }
+            }
+
+_revert_back_point :
+            if (ip1 >= nextStep) {
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+                step += 3;
+                LOG_FORMATTED(DEBUG, logCtx, "step = %zu", step);
+#else
+                PREFETCH_L1(ip1 + 64);
+                PREFETCH_L1(ip1 + 128);
+                step++;
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+                nextStep += kStepIncr;
+            }
+            ip = ip1;
+            ip1 += step;
+
+            hl0 = hl1;
+            idxl0 = idxl1;
+            matchl0 = matchl1;
+#if defined(__aarch64__)
+            PREFETCH_L1(ip + 256);
+#endif
+        } while (ip1 <= ilimit);
+
+    _cleanup:
+        /* save reps for next block */
+        rep[0] = offset_1 ? offset_1 : offsetSaved1;
+
+        /* Return the last literals size */
+        return (size_t)(iend - anchor);
+
+    _search_next_long:
+        /* check prefix long +1 match */
+        if (idxl1 > prefixLowestIndex) {
+            if (((ip - matchl1) >= WILDCOPY_VECLEN) && (MEM_read64(matchl1) == MEM_read64(ip1))) {
+                ipfwd = ip;
+                ip = ip1;
+                mLength = AOCL_ZSTD_count(ip + 8, matchl1 + 8, iend) + 8;
+                offset = (U32)(ip - matchl1);
+                while (((ip > anchor) & (matchl1 > prefixLowest)) && (ip[-1] == matchl1[-1])) { ip--; matchl1--; mLength++; } /* catch up */
+
+                if (is_totalbits_limited_seq_possible(ip, anchor, mLength, offset)) {
+                    goto _match_found;
+                }
+                else {
+                    ip = ipfwd; //revert
+                }
+            }
+        }
+
+        /* if no long +1 match, explore the short match we found */
+        mLength = AOCL_ZSTD_count(ip + 4, matchs0 + 4, iend) + 4;
+        offset = (U32)(ip - matchs0);
+        if (offset < WILDCOPY_VECLEN)
+            goto _revert_back_point;
+        while (((ip > anchor) & (matchs0 > prefixLowest)) && (ip[-1] == matchs0[-1])) { ip--; matchs0--; mLength++; } /* catch up */
+
+        if (!is_totalbits_limited_seq_possible(ip, anchor, mLength, offset)) {
+            goto _revert_back_point;
+        }
+
+        /* fall-through */
+
+    _match_found: /* requires ip, offset, mLength */
+        offset_1 = offset;
+
+        if (step < 4) {
+            /* It is unsafe to write this value back to the hashtable when ip1 is
+             * greater than or equal to the new ip we will have after we're done
+             * processing this match. Rather than perform that test directly
+             * (ip1 >= ip + mLength), which costs speed in practice, we do a simpler
+             * more predictable test. The minmatch even if we take a short match is
+             * 4 bytes, so as long as step, the distance between ip and ip1
+             * (initially) is less than 4, we know ip1 < new ip. */
+            hashLong[hl1] = (U32)(ip1 - base);
+        }
+
+        //store sequences such that totalbits for each sequence is < MAX_TOTAL_BITS
+        AOCL_ZSTD_storeSequences(seqStore, ip, anchor, iend, OFFSET_TO_OFFBASE(offset), mLength);
+
+    _match_stored:
+        /* match found */
+        ip += mLength;
+        anchor = ip;
+
+        if (ip <= ilimit) {
+            /* Complementary insertion */
+            /* done after iLimit test, as candidates could be > iend-8 */
+            {   U32 const indexToInsert = curr + 2;
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+            /* More complementary insertions to improve ratio */
+            hashLong[ZSTD_hashPtr(base + indexToInsert, hBitsL, 8)] = indexToInsert;
+            hashLong[ZSTD_hashPtr(ip - 3, hBitsL, 8)] = (U32)(ip - 3 - base);
+            hashLong[ZSTD_hashPtr(ip - 2, hBitsL, 8)] = (U32)(ip - 2 - base);
+            hashLong[ZSTD_hashPtr(ip - 1, hBitsL, 8)] = (U32)(ip - 1 - base);
+            hashSmall[ZSTD_hashPtr(base + indexToInsert, hBitsS, mls)] = indexToInsert;
+            hashSmall[ZSTD_hashPtr(ip - 4, hBitsS, mls)] = (U32)(ip - 4 - base);
+            hashSmall[ZSTD_hashPtr(ip - 3, hBitsS, mls)] = (U32)(ip - 3 - base);
+            hashSmall[ZSTD_hashPtr(ip - 2, hBitsS, mls)] = (U32)(ip - 2 - base);
+            hashSmall[ZSTD_hashPtr(ip - 1, hBitsS, mls)] = (U32)(ip - 1 - base);
+#else
+            hashLong[ZSTD_hashPtr(base + indexToInsert, hBitsL, 8)] = indexToInsert;
+            hashLong[ZSTD_hashPtr(ip - 2, hBitsL, 8)] = (U32)(ip - 2 - base);
+            hashSmall[ZSTD_hashPtr(base + indexToInsert, hBitsS, mls)] = indexToInsert;
+            hashSmall[ZSTD_hashPtr(ip - 1, hBitsS, mls)] = (U32)(ip - 1 - base);
+#endif
+            }
+        }
+    }
+}
+#else
 /* The following optimizations have been included in the optimized function:
     - when the AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST flag is enabled,
         - the search tolerance is reduced to 2^5 (32) instead of 2^8 (256)
@@ -600,6 +860,7 @@ _match_stored:
         }
     }
 }
+#endif /* AOCL_DECOMPRESS_FAST == 2 */
 #endif /* AOCL_ZSTD_OPT */
 
 FORCE_INLINE_TEMPLATE

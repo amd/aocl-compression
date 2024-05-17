@@ -1597,17 +1597,6 @@ public:
         }
     }
 
-    size_t run_decompress_iter(ZSTD_Decompress_API api, bool reset_buffers, void* dst, size_t dstCapacity,
-        const void* src, size_t srcSize, size_t* flushed) {
-        size_t ret = run_decompress(api, true, dst, dstCapacity, src, srcSize, flushed);
-        if (Test_ZSTD_isError(ret)) return ret;
-        while (ret) { // ret == 0, frame is completely decoded and fully flushed
-            ret = run_decompress(api, false, dst, dstCapacity, src, srcSize, flushed);
-            if (Test_ZSTD_isError(ret)) return ret;
-        }
-        return ret;
-    }
-
     size_t run_decompress_iter_multi_frame(ZSTD_Decompress_API api, bool reset_buffers, void* dst, size_t dstCapacity,
         const void* src, size_t srcSize, size_t* flushed) {
         size_t ret = run_decompress(api, true, dst, dstCapacity, src, srcSize, flushed);
@@ -1629,26 +1618,26 @@ public:
     void decompress_pass(ZSTD_Decompress_API api) { // pass
         create_frame();
         size_t flushed = 0;
-        size_t ret = run_decompress_iter(api, true, output, outLen, src, srcLen, &flushed);
+        size_t ret = run_decompress_iter_multi_frame(api, true, output, outLen, src, srcLen, &flushed);
         validate_decompress(original, origLen, output, flushed, ret);
     }
 
     void decompress_src_null(ZSTD_Decompress_API api) { // decompress src null
         create_frame();
         size_t flushed = 0;
-        size_t ret = run_decompress(api, true, output, outLen, NULL, srcLen, &flushed);
+        size_t ret = run_decompress_iter_multi_frame(api, true, output, outLen, NULL, srcLen, &flushed);
         EXPECT_EQ(ret, ERROR(srcSize_wrong));
     }
 
     void decompress_dst_null(ZSTD_Decompress_API api) { // decompress dst null
         create_frame();
         size_t flushed = 0;
-        size_t ret = run_decompress(api, true, NULL, outLen, src, srcLen, &flushed);
+        size_t ret = run_decompress_iter_multi_frame(api, true, NULL, outLen, src, srcLen, &flushed);
         EXPECT_EQ(ret, ERROR(dstBuffer_null));
     }
 
     void decompress_buffer_inadequate(ZSTD_Decompress_API api) { // decompression buffer inadequate
-        create_frame();
+        create_frame_reference(); /* testing for buffer being inadequate to hold decompressed zstd frame */
         size_t flushed = 0;
         size_t ret = run_decompress(api, true, output, srcLen / 20, src, srcLen, &flushed);
         EXPECT_GT(ret, 0); // not all bytes flushed
@@ -1658,7 +1647,7 @@ public:
     void decompress_srcsize_0(ZSTD_Decompress_API api) { // decompress src 0
         create_frame();
         size_t flushed = 0;
-        size_t ret = run_decompress(api, true, output, outLen, src, 0, &flushed);
+        size_t ret = run_decompress_iter_multi_frame(api, true, output, outLen, src, 0, &flushed);
         CHECK_PASS_ZSTD(ret);
         EXPECT_EQ(flushed, 0);
     }
@@ -1666,7 +1655,7 @@ public:
     void decompress_src_null_srcsize_0(ZSTD_Decompress_API api) { // decompress src 0 and src null
         create_frame();
         size_t flushed = 0;
-        size_t ret = run_decompress(api, true, output, outLen, NULL, 0, &flushed);
+        size_t ret = run_decompress_iter_multi_frame(api, true, output, outLen, NULL, 0, &flushed);
         CHECK_PASS_ZSTD(ret);
         EXPECT_EQ(flushed, 0);
     }
@@ -1682,7 +1671,7 @@ public:
     }
 
     void decompress_corrupt_frame_header(ZSTD_Decompress_API api) { // decompress corrupt frame : Frame_Header
-        create_frame();
+        create_frame_reference();
         size_t frameHeaderSize = Test_ZSTD_frameHeaderSize(src, srcLen);
         size_t decompress_bound = Test_ZSTD_decompressBound(src, srcLen);
 
@@ -1700,7 +1689,7 @@ public:
     }
 
     void decompress_corrupt_data_block(ZSTD_Decompress_API api) { // decompress corrupt frame : Data_block 
-        create_frame();
+        create_frame_reference();
         size_t frameHeaderSize = Test_ZSTD_frameHeaderSize(src, srcLen);
         size_t decompress_bound = Test_ZSTD_decompressBound(src, srcLen);
         src[frameHeaderSize + 1] = 'e'; //corrupt data succeeding frame header
@@ -1746,7 +1735,7 @@ public:
         create_frame_with_params(fparams);
 
         size_t flushed = 0;
-        size_t ret = run_decompress_iter(api, true, output, outLen, src, srcLen, &flushed);
+        size_t ret = run_decompress_iter_multi_frame(api, true, output, outLen, src, srcLen, &flushed);
         CHECK_PASS_ZSTD(ret);
         validate_decompress(original, origLen, output, flushed, ret);
     }
@@ -1760,7 +1749,7 @@ public:
         MEM_write32((src + srcLen - 4), 0); // corrupt checksum
 
         size_t flushed = 0;
-        size_t ret = run_decompress(api, true, output, outLen, src, srcLen, &flushed);
+        size_t ret = run_decompress_iter_multi_frame(api, true, output, outLen, src, srcLen, &flushed);
         EXPECT_EQ(ret, ERROR(checksum_wrong));
     }
 
@@ -1772,7 +1761,7 @@ public:
         create_frame_with_params(fparams);
 
         size_t flushed = 0;
-        size_t ret = run_decompress_iter(api, true, output, outLen, src, srcLen, &flushed);
+        size_t ret = run_decompress_iter_multi_frame(api, true, output, outLen, src, srcLen, &flushed);
         CHECK_PASS_ZSTD(ret);
         validate_decompress(original, origLen, output, flushed, ret);
     }
@@ -1785,7 +1774,7 @@ public:
         create_frame_with_params(fparams);
 
         size_t flushed = 0;
-        size_t ret = run_decompress_iter(api, true, output, outLen, src, srcLen, &flushed);
+        size_t ret = run_decompress_iter_multi_frame(api, true, output, outLen, src, srcLen, &flushed);
         CHECK_PASS_ZSTD(ret);
         validate_decompress(original, origLen, output, flushed, ret);
     }
@@ -1904,10 +1893,12 @@ TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_p
     buffOut.size = stepSz;
     size_t ret = 0;
     do {
-        ret = Test_ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
-        buffIn.size  += stepSz;
-        buffOut.size += stepSz;
-    } while (ret);
+        do {
+            ret = Test_ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
+            buffIn.size += stepSz;
+            buffOut.size += stepSz;
+        } while (ret);
+    } while (buffIn.size < srcLen); /* until all input is fed */
     validate_decompress(original, origLen, output, buffOut.pos, ret);
 }
 
@@ -1920,10 +1911,12 @@ TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_p
     buffOut.size = 0;
     size_t ret = 0;
     do {
-        if (buffIn.size < srcLen) buffIn.size += stepSzIn;
-        if (buffOut.size < outLen)buffOut.size += stepSzOut;
-        ret = Test_ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
-    } while (ret);
+        do {
+            if (buffIn.size < srcLen) buffIn.size += stepSzIn;
+            if (buffOut.size < outLen)buffOut.size += stepSzOut;
+            ret = Test_ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
+        } while (ret);
+    } while (buffIn.size < srcLen); /* until all input is fed */
     validate_decompress(original, origLen, output, buffOut.pos, ret);
 }
 
@@ -1936,10 +1929,12 @@ TEST_F(ZSTD_ZSTD_decompressStream, AOCL_Compression_zstd_ZSTD_decompressStream_p
     buffOut.size = 0;
     size_t ret = 0;
     do {
-        if (buffIn.size < srcLen) buffIn.size += stepSzIn;
-        if (buffOut.size < outLen)buffOut.size += stepSzOut;
-        ret = Test_ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
-    } while (ret);
+        do {
+            if (buffIn.size < srcLen) buffIn.size += stepSzIn;
+            if (buffOut.size < outLen)buffOut.size += stepSzOut;
+            ret = Test_ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
+        } while (ret);
+    } while (buffIn.size < srcLen); /* until all input is fed */
     validate_decompress(original, origLen, output, buffOut.pos, ret);
 }
 /*********************************************
@@ -2009,7 +2004,7 @@ public:
 
     void run_and_validate_decompress(TestLoad_2& d, size_t dstCapacity) //dstCapacity must be >= hintDOutSize
     {
-        create_frame();
+        create_frame_reference();
         size_t flushed = 0;
         size_t ret = run_decompress(ZSTD_Decompress_API::decompress_stream, true, output, outLen, src, srcLen, &flushed);
         CHECK_PASS_ZSTD(ret);
@@ -2020,7 +2015,7 @@ public:
 
     void run_and_decompress(TestLoad_2& d, size_t dstCapacity)
     {
-        create_frame();
+        create_frame_reference();
         size_t flushed = 0;
         size_t ret = run_decompress(ZSTD_Decompress_API::decompress_stream, true, output, outLen, src, srcLen, &flushed);
         CHECK_PASS_ZSTD(ret);
@@ -2106,22 +2101,6 @@ public:
             ZSTD_freeDCtx(dctx);
     }
 
-    size_t buffer_less_streaming_pass() {
-        CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin(dctx));
-        size_t curCprLen = 0;
-        size_t curDprLen = 0;
-        while (curCprLen < srcLen) {
-            size_t const srcSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
-            size_t const dprSize = Test_ZSTD_decompressContinue(dctx, output + curDprLen, outLen - curDprLen, src + curCprLen, srcSize);
-            CHECK_PASS_ZSTD(dprSize);
-            curDprLen += dprSize;
-            curCprLen += srcSize;
-        }
-        EXPECT_EQ(Test_ZSTD_nextSrcSizeToDecompress(dctx), 0); // frame fully decoded
-        EXPECT_EQ(curCprLen, srcLen); // compressed data fully read
-        return curDprLen;
-    }
-
     void buffer_less_streaming_multi_frame_iter(size_t& curCprLen, size_t& curDprLen) {
         CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin(dctx));
         while (curCprLen < srcLen) {
@@ -2152,14 +2131,14 @@ public:
 TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_pass_common_1) //zstd frame
 {
     create_frame();
-    size_t curDprLen = buffer_less_streaming_pass();
+    size_t curDprLen = buffer_less_streaming_multi_frame_pass();
     validate_decompress(original, origLen, output, curDprLen);
 }
 
 TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_pass_common_2) //skippable frame
 {
     create_frame_skippable(rand() % 15);
-    buffer_less_streaming_pass();
+    buffer_less_streaming_multi_frame_pass();
 }
 
 TEST_F(ZSTD_ZSTD_decompressContinue, AOCL_Compression_zstd_ZSTD_decompressContinue_pass_common_3) //multiple frames

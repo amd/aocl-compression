@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -36,8 +36,8 @@
  *  @author Ashish Sriram
  */
 
-#ifndef __COMMON_ALGOS_H
-#define __COMMON_ALGOS_H
+#ifndef __COMMON_HASH_CHAIN_H
+#define __COMMON_HASH_CHAIN_H
 typedef size_t chain_t;
 
 /******************************************************************************
@@ -164,4 +164,4 @@ typedef size_t chain_t;
 * End of cache efficient hash chains
 ******************************************************************************/
 
-#endif
+#endif /* __COMMON_HASH_CHAIN_H */

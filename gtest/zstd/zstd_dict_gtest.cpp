@@ -1078,7 +1078,7 @@ public:
 
     void validate_compress_format(char* compressed, unsigned compressedLen, unsigned dstCapacity) {
         EXPECT_LE(compressedLen, dstCapacity);
-        EXPECT_TRUE(is_valid_zstd_frame(compressed, compressedLen));
+        EXPECT_TRUE(has_valid_frames(compressed, compressedLen));
         EXPECT_TRUE(has_valid_frame_content_size(compressed, compressedLen));
     }
 

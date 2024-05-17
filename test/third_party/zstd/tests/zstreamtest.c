@@ -38,9 +38,11 @@
 
 /* AOCL changes:
  *  + renamed main() to zstd_zstreamtest_main().
- *  + In "test : ZSTD_compress2() uses stable input and output", checks for 
- *    outputs of ZSTD_compress2() and ZSTD_compress_advanced() being the same 
- *    are skipped when AOCL_ENABLE_THREADS is set.
+ *  + NO_THREADS_NO_AOCL_DFS checks added to exclude tests that are not suitable
+ *    when library is built in MT or FDS modes.
+ *  + AOCL_DFS_CORRECTION sections introduced to adjust test cases to
+ *    account for skip frames being present in the compressed output when library
+ *    is built in FDS mode.
 */
 
 /*-************************************
@@ -293,6 +295,30 @@ static U32 badParameters(ZSTD_CCtx* zc, ZSTD_parameters const savedParams)
     CHECK_RET(9, params.fParams.noDictIDFlag != savedParams.fParams.noDictIDFlag, "noDictIDFlag");
     return 0;
 }
+
+#ifdef AOCL_DFS_CORRECTION
+/* Decompress until all input is consumed. Multiple frames may be present. */
+static size_t Test_decompressStreamMultiple(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input) {
+    size_t ret = 0;
+    while (input->pos < input->size) { // as multiple frames are present, exiting on ret == 0 will return on 1st frame. Instead consume all input.
+        ret = ZSTD_decompressStream(zds, output, input);
+        if (ZSTD_isError(ret)) return ret;
+    }
+    return ret;
+}
+
+/* Skip skippable frames if any until a zstd frame is found. */
+static size_t Test_skipSkippableFrames(const BYTE* src, size_t srcSize) {
+    const BYTE* cur = src;
+    while (ZSTD_isSkippableFrame(cur, srcSize)) {
+        ZSTD_frameHeader zfh;
+        size_t ret = ZSTD_getFrameHeader(&zfh, cur, srcSize);
+        if (ZSTD_isError(ret)) return ret;
+        cur += (zfh.frameContentSize + ZSTD_SKIPPABLEHEADERSIZE);
+    }
+    return (size_t)(cur - src);
+}
+#endif /* AOCL_DFS_CORRECTION */
 
 static int basicUnitTests(U32 seed, double compressibility, int bigTests)
 {
@@ -763,15 +789,24 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
         size_t const dctxSize0 = ZSTD_sizeof_DCtx(dctx);
         size_t dctxSize1;
         CHECK_Z(ZSTD_DCtx_setParameter(dctx, ZSTD_d_stableOutBuffer, 1));
-
+    
         outBuff.dst = decodedBuffer;
         outBuff.pos = 0;
         outBuff.size = CNBufferSize;
-
-        DISPLAYLEVEL(3, "test%3i : ZSTD_decompressStream() single pass : ", testNb++);
+    
+        DISPLAYLEVEL(3, "test%3i : ZSTD_decompressStream() single pass not possible : ", testNb++); // single pass not possible as multiple frames exist in the stream
         inBuff.src = compressedBuffer;
         inBuff.size = cSize;
         inBuff.pos = 0;
+#ifdef AOCL_DFS_CORRECTION   
+        {   size_t const r = Test_decompressStreamMultiple(dctx, &outBuff, &inBuff);
+            CHECK_Z(r);
+            CHECK(r != 0, "Entire frame must be decompressed");
+            CHECK(outBuff.pos != CNBufferSize, "Wrong size!");
+            CHECK(memcmp(CNBuffer, outBuff.dst, CNBufferSize) != 0, "Corruption!");
+        }
+        //CHECK(dctxSize0 != ZSTD_sizeof_DCtx(dctx), "No buffers allocated"); // buffers will be allocated as "single-pass mode opportunity" does not exist
+#else
         {   size_t const r = ZSTD_decompressStream(dctx, &outBuff, &inBuff);
             CHECK_Z(r);
             CHECK(r != 0, "Entire frame must be decompressed");
@@ -779,6 +814,7 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
             CHECK(memcmp(CNBuffer, outBuff.dst, CNBufferSize) != 0, "Corruption!");
         }
         CHECK(dctxSize0 != ZSTD_sizeof_DCtx(dctx), "No buffers allocated");
+#endif
         DISPLAYLEVEL(3, "OK \n");
 
         DISPLAYLEVEL(3, "test%3i : ZSTD_decompressStream() stable out buffer : ", testNb++);
@@ -794,7 +830,7 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
         dctxSize1 = ZSTD_sizeof_DCtx(dctx);
         CHECK(!(dctxSize0 < dctxSize1), "Input buffer allocated");
         DISPLAYLEVEL(3, "OK \n");
-
+    
         DISPLAYLEVEL(3, "test%3i : ZSTD_decompressStream() stable out buffer too small : ", testNb++);
         ZSTD_DCtx_reset(dctx, ZSTD_reset_session_only);
         CHECK_Z(ZSTD_DCtx_setParameter(dctx, ZSTD_d_stableOutBuffer, 1));
@@ -803,11 +839,17 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
         inBuff.pos = 0;
         outBuff.pos = 0;
         outBuff.size = CNBufferSize - 1;
+#ifdef AOCL_DFS_CORRECTION
+        {   size_t const r = Test_decompressStreamMultiple(dctx, &outBuff, &inBuff);
+            CHECK(ZSTD_getErrorCode(r) != ZSTD_error_dstSize_tooSmall, "Must error but got %s", ZSTD_getErrorName(r));
+        }
+#else
         {   size_t const r = ZSTD_decompressStream(dctx, &outBuff, &inBuff);
             CHECK(ZSTD_getErrorCode(r) != ZSTD_error_dstSize_tooSmall, "Must error but got %s", ZSTD_getErrorName(r));
         }
+#endif
         DISPLAYLEVEL(3, "OK \n");
-
+    
         DISPLAYLEVEL(3, "test%3i : ZSTD_decompressStream() stable out buffer modified : ", testNb++);
         ZSTD_DCtx_reset(dctx, ZSTD_reset_session_only);
         CHECK_Z(ZSTD_DCtx_setParameter(dctx, ZSTD_d_stableOutBuffer, 1));
@@ -816,14 +858,23 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
         inBuff.pos = 0;
         outBuff.pos = 0;
         outBuff.size = CNBufferSize;
+#ifdef AOCL_DFS_CORRECTION
+        CHECK_Z(Test_decompressStreamMultiple(dctx, &outBuff, &inBuff)); // process valid compressed frames
+        ++inBuff.size;
+        outBuff.pos = 0;
+        {   size_t const r = ZSTD_decompressStream(dctx, &outBuff, &inBuff); // process beyond valid data
+            CHECK(ZSTD_getErrorCode(r) != ZSTD_error_dstBuffer_wrong, "Must error but got %s", ZSTD_getErrorName(r));
+        }
+#else
         CHECK_Z(ZSTD_decompressStream(dctx, &outBuff, &inBuff));
         ++inBuff.size;
         outBuff.pos = 0;
         {   size_t const r = ZSTD_decompressStream(dctx, &outBuff, &inBuff);
             CHECK(ZSTD_getErrorCode(r) != ZSTD_error_dstBuffer_wrong, "Must error but got %s", ZSTD_getErrorName(r));
         }
+#endif
         DISPLAYLEVEL(3, "OK \n");
-
+    
         DISPLAYLEVEL(3, "test%3i : ZSTD_decompressStream() buffered output : ", testNb++);
         ZSTD_DCtx_reset(dctx, ZSTD_reset_session_only);
         CHECK_Z(ZSTD_DCtx_setParameter(dctx, ZSTD_d_stableOutBuffer, 0));
@@ -838,7 +889,7 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
         CHECK(memcmp(CNBuffer, outBuff.dst, CNBufferSize) != 0, "Corruption!");
         CHECK(!(dctxSize1 < ZSTD_sizeof_DCtx(dctx)), "Output buffer allocated");
         DISPLAYLEVEL(3, "OK \n");
-
+    
         ZSTD_freeDCtx(dctx);
     }
 
@@ -857,7 +908,11 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
         DISPLAYLEVEL(3, "test%3i : ZSTD_compress2() uses stable input and output : ", testNb++);
         CHECK_Z(cSize = ZSTD_compress2(cctx, compressedBuffer, compressedBufferSize, CNBuffer, CNBufferSize));
         CHECK(!(cSize < ZSTD_compressBound(CNBufferSize)), "cSize too large for test");
+#ifdef AOCL_DFS_CORRECTION
+        CHECK_Z(cSize = ZSTD_compress2(cctx, compressedBuffer, ZSTD_compressBound(CNBufferSize), CNBuffer, CNBufferSize)); // compressBound guarantees output will fit
+#else
         CHECK_Z(cSize = ZSTD_compress2(cctx, compressedBuffer, cSize + 4, CNBuffer, CNBufferSize));
+#endif
         CHECK_Z(cctxSize1 = ZSTD_sizeof_CCtx(cctx));
         /* @cctxSize2 : sizeof_CCtx when doing full streaming (no stable in/out) */
         {   ZSTD_CCtx* const cctx2 = ZSTD_createCCtx();
@@ -876,21 +931,20 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
             params.fParams.checksumFlag = 1;
             cSize3 = ZSTD_compress_advanced(cctx1, compressedBuffer, compressedBufferSize, CNBuffer, CNBufferSize, NULL, 0, params);
             CHECK_Z(cSize3);
-#ifndef AOCL_ENABLE_THREADS
-            /* When multi-threading is enabled, ZSTD_compress_advanced() does MT compression. 
-            * Resulting output has a different size compared to the single-threaded version,
-            * due to compression ratio change and additional RAP frame being present.
-            * However, ZSTD_compress2() does not have MT support yet.
-            * Hence, cSize3 set by ZSTD_compress_advanced() is different from cSize set by ZSTD_compress2().
-            * So, following checks are skipped when AOCL_ENABLE_THREADS is set.
-            */
+#ifdef NO_THREADS_NO_AOCL_DFS
+            /* AOCL_ENABLE_THREADS and AOCL_DECOMPRESS_FAST > 1 optimizations are currently not supported for ZSTD_compress2()
+             * Hence, cSize3 produced by ZSTD_compress_advanced() can be different from cSize produced by ZSTD_compress2(), */
             CHECK(!(cSize == cSize3), "Must be same compressed size");
             CHECK(!(cctxSize1 == ZSTD_sizeof_CCtx(cctx1)), "Must be same CCtx size");
+#else
+            CHECK_Z(ZSTD_decompress(decodedBuffer, CNBufferSize, compressedBuffer, cSize3));
 #endif
             ZSTD_freeCCtx(cctx1);
         }
         CHECK(!(cctxSize1 < cctxSize2), "Stable buffers means less allocated size");
+#ifdef NO_THREADS_NO_AOCL_DFS
         CHECK_Z(ZSTD_decompress(decodedBuffer, CNBufferSize, compressedBuffer, cSize));
+#endif
         DISPLAYLEVEL(3, "OK \n");
 
         DISPLAYLEVEL(3, "test%3i : ZSTD_compress2() doesn't modify user parameters : ", testNb++);
@@ -1787,6 +1841,13 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
             ZSTD_outBuffer out = { decomp, 0, 0 };
             CHECK_Z(compSize);
             CHECK_Z( ZSTD_DCtx_reset(zd, ZSTD_reset_session_and_parameters) );
+#ifdef AOCL_DFS_CORRECTION
+            {   // process skippable frame in advance
+                size_t skipBytes = Test_skipSkippableFrames(comp, compSize);
+                in.size = skipBytes;
+                CHECK_Z(ZSTD_decompressStream(zd, &out, &in));
+            }
+#endif
             while (in.size < compSize) {
                 in.size = MIN(in.size + 100, compSize);
                 while (in.pos < in.size) {
@@ -1875,6 +1936,11 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
         CHECK_Z(ZSTD_CCtx_reset(zc, ZSTD_reset_session_and_parameters));
         CHECK_Z(ZSTD_CCtx_refCDict(zc, cdict));
         CHECK_Z(ZSTD_CCtx_setParameter(zc, ZSTD_c_checksumFlag, 1));
+#ifdef AOCL_DFS_CORRECTION
+        /* reset decompressor context as well. Else, previous FDS settings
+         * are retained. */
+        CHECK_Z(ZSTD_DCtx_reset(zd, ZSTD_reset_session_and_parameters));
+#endif
         /* Write a bunch of 6 byte blocks */
         while (remainingInput > 0) {
           char testBuffer[6] = "\xAA\xAA\xAA\xAA\xAA\xAA";
@@ -2081,7 +2147,9 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
             CHECK_Z(ZSTD_decompress(checkBuf, srcSize, dst2, size2));
             CHECK(memcmp(src, checkBuf, srcSize) != 0, "Corruption!");
 
+#ifdef NO_AOCL_DFS
             assert(size1 - size2 == 4); /* We add another RLE block with header + character */
+#endif
             assert(memcmp(dst1, dst2, size2) != 0); /* Compressed output should not be equal */
 
             /* maxBlockSize = 1KB, windowLog = 10 */
@@ -2584,6 +2652,13 @@ static int fuzzerTests(U32 seed, unsigned nbTests, unsigned startTest, double co
         {   size_t decompressionResult = 1;
             ZSTD_inBuffer  inBuff = { cBuffer, cSize, 0 };
             ZSTD_outBuffer outBuff= { dstBuffer, dstBufferSize, 0 };
+#ifdef AOCL_DFS_CORRECTION
+            {   // process skippable frame in advance
+                size_t skipBytes = Test_skipSkippableFrames(cBuffer, cSize);
+                inBuff.size = skipBytes;
+                CHECK_Z(ZSTD_decompressStream(zd, &outBuff, &inBuff));
+            }
+#endif
             for (totalGenSize = 0 ; decompressionResult ; ) {
                 size_t const readCSrcSize = FUZ_randomLength(&lseed, maxSampleLog);
                 size_t const randomDstSize = FUZ_randomLength(&lseed, maxSampleLog);

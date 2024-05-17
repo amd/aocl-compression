@@ -2268,6 +2268,201 @@ _storeSequence:
 }
 
 #ifdef AOCL_ZSTD_OPT
+#if AOCL_DECOMPRESS_FAST == 2
+/*
+* Derived from AOCL_ZSTD_compressBlock_lazy_generic for ZSTD_noDict case only. Also enforces :
+*   totalBits < (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)
+*   no Repeated_Offset2 and Repeated_Offset3
+*   no offsets go into extDict (no offset beyond prefix)
+*   offset >= WILDCOPY_VECLEN
+*/
+FORCE_INLINE_TEMPLATE size_t
+AOCL_ZSTD_compressBlock_lazy_noDict_generic(
+    ZSTD_matchState_t* ms, seqStore_t* seqStore,
+    U32 rep[ZSTD_REP_NUM],
+    const void* src, size_t srcSize,
+    const searchMethod_e searchMethod, const U32 depth)
+{
+    const BYTE* const istart = (const BYTE*)src;
+    const BYTE* ip = istart;
+    const BYTE* anchor = istart;
+    const BYTE* const iend = istart + srcSize;
+    const BYTE* const ilimit = (searchMethod == search_rowHash) ? iend - 8 - ZSTD_ROW_HASH_CACHE_SIZE : iend - 8;
+    const BYTE* const base = ms->window.base;
+    const U32 prefixLowestIndex = ms->window.dictLimit;
+    const BYTE* const prefixLowest = base + prefixLowestIndex;
+    const U32 mls = BOUNDED(4, ms->cParams.minMatch, 6);
+    const U32 rowLog = BOUNDED(4, ms->cParams.searchLog, 6);
+
+    U32 offset_1 = rep[0];
+    U32 offsetSaved1 = 0;
+
+    const U32 dictAndPrefixLength = (U32)(ip - prefixLowest);
+
+    DEBUGLOG(5, "AOCL_ZSTD_compressBlock_lazy_noDict_generic (searchFunc=%u)", (U32)searchMethod);
+    ip += (dictAndPrefixLength == 0);
+    
+    U32 const curr = (U32)(ip - base);
+    U32 const windowLow = ZSTD_getLowestPrefixIndex(ms, curr, ms->cParams.windowLog);
+    U32 const maxRep = curr - windowLow;
+    if (offset_1 > maxRep) offsetSaved1 = offset_1, offset_1 = 0;
+
+    /* Reset the lazy skipping state */
+    ms->lazySkipping = 0;
+
+    if (searchMethod == search_rowHash) {
+        ZSTD_row_fillHashCache(ms, base, rowLog, mls, ms->nextToUpdate, ilimit);
+    }
+
+    /* Match Loop */
+#if defined(__GNUC__) && defined(__x86_64__)
+    /* I've measured random a 5% speed loss on levels 5 & 6 (greedy) when the
+     * code alignment is perturbed. To fix the instability align the loop on 32-bytes.
+     */
+    __asm__(".p2align 5");
+#endif
+    while (ip < ilimit) {
+        size_t matchLength = 0;
+        size_t offBase = REPCODE1_TO_OFFBASE;
+        const BYTE* start = ip + 1;
+        DEBUGLOG(7, "search baseline (depth 0)");
+
+        /* check repCode 
+         * (offset_1 > 0) changed to (offset_1 >= WILDCOPY_VECLEN) as initial rep codes 
+         * can be < WILDCOPY_VECLEN and offsets < WILDCOPY_VECLEN should not be included in the sequences
+        */
+        if ((offset_1 >= WILDCOPY_VECLEN) & (MEM_read32(ip + 1 - offset_1) == MEM_read32(ip + 1))) {
+            matchLength = ZSTD_count(ip + 1 + 4, ip + 1 + 4 - offset_1, iend) + 4;
+            if ((depth == 0) && is_totalbits_limited_seq_possible(ip, anchor, matchLength, 1 /* Repeated_Offset1 */))
+                goto _storeSequence;
+        }
+
+        /* first search (depth 0) */
+        {   size_t offbaseFound = 999999999;
+        size_t const ml2 = AOCL_ZSTD_searchMax(ms, ip, iend, &offbaseFound, mls, rowLog, searchMethod, ZSTD_noDict);
+        if (ml2 > matchLength)
+            matchLength = ml2, start = ip, offBase = offbaseFound;
+        }
+
+        if (matchLength < 4) {
+            size_t const step = ((size_t)(ip - anchor) >> kSearchStrength) + 1;   /* jump faster over incompressible sections */;
+            ip += step;
+            /* Enter the lazy skipping mode once we are skipping more than 8 bytes at a time.
+             * In this mode we stop inserting every position into our tables, and only insert
+             * positions that we search, which is one in step positions.
+             * The exact cutoff is flexible, I've just chosen a number that is reasonably high,
+             * so we minimize the compression ratio loss in "normal" scenarios. This mode gets
+             * triggered once we've gone 2KB without finding any matches.
+             */
+            ms->lazySkipping = step > kLazySkippingStep;
+            continue;
+        }
+
+        /* let's try to find a better solution */
+        if (depth >= 1)
+            while (ip < ilimit) {
+                DEBUGLOG(7, "search depth 1");
+                ip++;
+                if ((offBase) && ((offset_1 >= WILDCOPY_VECLEN) & (MEM_read32(ip) == MEM_read32(ip - offset_1)))) {
+                    size_t const mlRep = ZSTD_count(ip + 4, ip + 4 - offset_1, iend) + 4;
+                    int const gain2 = (int)(mlRep * 3);
+                    int const gain1 = (int)(matchLength * 3 - ZSTD_highbit32((U32)offBase) + 1);
+                    if ((mlRep >= 4) && (gain2 > gain1))
+                        matchLength = mlRep, offBase = REPCODE1_TO_OFFBASE, start = ip;
+                }
+                {   size_t ofbCandidate = 999999999;
+                size_t const ml2 = AOCL_ZSTD_searchMax(ms, ip, iend, &ofbCandidate, mls, rowLog, searchMethod, ZSTD_noDict);
+                int const gain2 = (int)(ml2 * 4 - ZSTD_highbit32((U32)ofbCandidate));   /* raw approx */
+                int const gain1 = (int)(matchLength * 4 - ZSTD_highbit32((U32)offBase) + 4);
+                if ((ml2 >= 4) && (gain2 > gain1)) {
+                    matchLength = ml2, offBase = ofbCandidate, start = ip;
+                    continue;   /* search a better one */
+                }   }
+
+                /* let's find an even better one */
+                if ((depth == 2) && (ip < ilimit)) {
+                    DEBUGLOG(7, "search depth 2");
+                    ip++;
+                    if ((offBase) && ((offset_1 >= WILDCOPY_VECLEN) & (MEM_read32(ip) == MEM_read32(ip - offset_1)))) {
+                        size_t const mlRep = ZSTD_count(ip + 4, ip + 4 - offset_1, iend) + 4;
+                        int const gain2 = (int)(mlRep * 4);
+                        int const gain1 = (int)(matchLength * 4 - ZSTD_highbit32((U32)offBase) + 1);
+                        if ((mlRep >= 4) && (gain2 > gain1))
+                            matchLength = mlRep, offBase = REPCODE1_TO_OFFBASE, start = ip;
+                    }
+                    {   size_t ofbCandidate = 999999999;
+                    size_t const ml2 = AOCL_ZSTD_searchMax(ms, ip, iend, &ofbCandidate, mls, rowLog, searchMethod, ZSTD_noDict);
+                    int const gain2 = (int)(ml2 * 4 - ZSTD_highbit32((U32)ofbCandidate));   /* raw approx */
+                    int const gain1 = (int)(matchLength * 4 - ZSTD_highbit32((U32)offBase) + 7);
+                    if ((ml2 >= 4) && (gain2 > gain1)) {
+                        matchLength = ml2, offBase = ofbCandidate, start = ip;
+                        continue;
+                    }   }
+                }
+                break;  /* nothing found : store previous solution */
+            }
+        
+        if (OFFBASE_IS_OFFSET(offBase) && OFFBASE_TO_OFFSET(offBase) < WILDCOPY_VECLEN) {
+            //step by step or 1???
+            size_t const step = ((size_t)(ip - anchor) >> kSearchStrength) + 1;   /* jump faster over incompressible sections */;
+            ip += step;
+            ms->lazySkipping = step > kLazySkippingStep;
+            continue;
+        }
+
+        /* NOTE:
+         * Pay attention that `start[-value]` can lead to strange undefined behavior
+         * notably if `value` is unsigned, resulting in a large positive `-value`.
+         */
+         /* catch up */
+        U32 prev_offset_1 = offset_1;
+        if (OFFBASE_IS_OFFSET(offBase)) {
+            while (((start > anchor) & (start - OFFBASE_TO_OFFSET(offBase) > prefixLowest))
+                && (start[-1] == (start - OFFBASE_TO_OFFSET(offBase))[-1]))  /* only search for offset within prefix */
+            {
+                start--; matchLength++;
+            }
+            offset_1 = (U32)OFFBASE_TO_OFFSET(offBase);
+        }
+
+        {
+            U32 offset_t = OFFBASE_IS_OFFSET(offBase) ? (U32)OFFBASE_TO_OFFSET(offBase) : 1;
+            if (!is_totalbits_limited_seq_possible(start, anchor, matchLength, offset_t)) {
+                offset_1 = prev_offset_1; //revert
+                //step by step or 1???
+                size_t const step = ((size_t)(ip - anchor) >> kSearchStrength) + 1;   /* jump faster over incompressible sections */;
+                ip += step;
+                ms->lazySkipping = step > kLazySkippingStep;
+                continue;
+            }
+        }
+
+        /* store sequence */
+    _storeSequence:
+        {   //size_t const litLength = (size_t)(start - anchor);
+        //ZSTD_storeSeq(seqStore, litLength, anchor, iend, (U32)offBase, matchLength);
+        AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength);
+        
+
+        anchor = ip = start + matchLength;
+        }
+        if (ms->lazySkipping) {
+            /* We've found a match, disable lazy skipping mode, and refill the hash cache. */
+            if (searchMethod == search_rowHash) {
+                ZSTD_row_fillHashCache(ms, base, rowLog, mls, ms->nextToUpdate, ilimit);
+            }
+            ms->lazySkipping = 0;
+        }
+    }
+
+    /* save reps for next block */
+    rep[0] = offset_1 ? offset_1 : offsetSaved1;
+
+    /* Return the last literals size */
+    return (size_t)(iend - anchor);
+}
+#endif /* AOCL_DECOMPRESS_FAST == 2 */
+
 /* Change wrt ZSTD_compressBlock_lazy_generic :
 * calls AOCL_ZSTD_searchMax */
 FORCE_INLINE_TEMPLATE size_t
@@ -2626,21 +2821,33 @@ size_t AOCL_ZSTD_compressBlock_lazy2_row(
     ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
     void const* src, size_t srcSize)
 {
+    #if AOCL_DECOMPRESS_FAST == 2
+    return AOCL_ZSTD_compressBlock_lazy_noDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 2);
+    #else
     return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 2, ZSTD_noDict);
+    #endif
 }
 
 size_t AOCL_ZSTD_compressBlock_lazy_row(
     ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
     void const* src, size_t srcSize)
 {
+    #if AOCL_DECOMPRESS_FAST == 2
+    return AOCL_ZSTD_compressBlock_lazy_noDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 1);
+    #else
     return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 1, ZSTD_noDict);
+    #endif
 }
 
 size_t AOCL_ZSTD_compressBlock_greedy_row(
     ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
     void const* src, size_t srcSize)
 {
+    #if AOCL_DECOMPRESS_FAST == 2
+    return AOCL_ZSTD_compressBlock_lazy_noDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 0);
+    #else
     return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 0, ZSTD_noDict);
+    #endif
 }
 #endif
 

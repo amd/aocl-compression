@@ -1232,8 +1232,7 @@ TEST_F(ZSTD_ZSTD_DCtx_reset, AOCL_Compression_zstd_ZSTD_DCtx_reset_pass_common_1
 }
 
 TEST_F(ZSTD_ZSTD_DCtx_reset, AOCL_Compression_zstd_ZSTD_DCtx_reset_fail_common_2) { // reset parameter during active session
-    TestLoad_2 d(800);
-    setup_session(&d);
+    dctx->streamStage = zdss_flush;
     CHECK_FAIL_ZSTD(Test_ZSTD_DCtx_reset(dctx, ZSTD_reset_parameters)); // reset parameter fails as session is active
 }
 
@@ -1880,6 +1879,11 @@ TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_pass_
 TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_fail_common_19)
 {
     decompress_dctx_null(ZSTD_Decompress_API::decompress_dctx);
+}
+
+TEST_F(ZSTD_ZSTD_decompressDCtx, AOCL_Compression_zstd_ZSTD_decompressDCtx_pass_common_20)
+{
+    decompress_skip(ZSTD_Decompress_API::decompress_dctx, dctx);
 }
 /*********************************************
  * End of ZSTD_ZSTD_decompressDCtx

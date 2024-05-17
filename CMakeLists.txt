@@ -63,7 +63,6 @@ option (AOCL_LZ4_OPT_PREFETCH_BACKWARDS "Enable LZ4 optimizations related to bac
 option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Disabled by default)" OFF)
 option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Enabled by default)" ON)
 option (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST "Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Disabled by default)" OFF)
-option (AOCL_ZSTD_WILDCOPY_LONG "Faster wildcopy when match lengths are long in ZSTD decompression (Disabled by default) " OFF)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option (AOCL_TEST_COVERAGE "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" OFF)
 if(UNIX)
@@ -98,6 +97,19 @@ set_property(
     PROPERTY STRINGS
     "OFF" "LOW" "HIGH"
 )
+
+set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for ZSTD" )
+set_property(
+    CACHE AOCL_DECOMPRESS_FAST
+    PROPERTY STRINGS
+    "OFF" "1" "2" # higher generally leads to faster decompression with larger compromise on compression speed/ratio
+)
+# Faster decompress settings for supported methods
+if(NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF")
+    # ZSTD
+    set(AOCL_ZSTD_WILDCOPY_LONG "ON") # >= 1 
+    # AOCL_DECOMPRESS_FAST = 2 is supported when compression is performed using ZSTD_compress, ZSTD_compressCCtx, ZSTD_compress_advanced or aocl_llc_compress APIs.
+endif()
 
 # setup to get source code coverage(GCOV)
 if (CODE_COVERAGE)
@@ -286,7 +298,8 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
 set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h
-                      ${ALGOS_PATH}/common/aoclAlgoOpt.h)
+                      ${ALGOS_PATH}/common/aoclAlgoOpt.h
+                      ${ALGOS_PATH}/common/aoclFds.h)
 set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.cpp
 						utils/utils.h)
@@ -303,7 +316,8 @@ set(DEST_INC_PATH include)
 set(DEST_BIN_PATH bin)
 
 set(INC_FILES api/aocl_compression.h
-              ${ALGOS_PATH}/common/aoclAlgoOpt.h)
+              ${ALGOS_PATH}/common/aoclAlgoOpt.h
+              ${ALGOS_PATH}/common/aoclFds.h)
 if (NOT AOCL_EXCLUDE_BZIP2)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/bzip2/bzlib.h)
 endif ()
@@ -456,6 +470,9 @@ if (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS)
 endif()
 if (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST")
+endif()
+if (AOCL_DECOMPRESS_FAST)
+    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
 endif()
 if (AOCL_ZSTD_WILDCOPY_LONG)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_WILDCOPY_LONG")

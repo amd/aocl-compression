@@ -167,6 +167,8 @@ public:
     void create_frame_invalid_data_block();
     void create_empty_frame();
     void create_stream_frame();
+    void create_frame_reference();
+    void skip_until_zstd_frame();
 
 protected:
     // Compressed data is stored in the buffer `src`.
@@ -201,6 +203,7 @@ public:
 
     // tests for different decompress use cases
     void decompress_pass(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
+    void decompress_skip(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
     void decompress_src_null(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
     void decompress_dst_null(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
     void decompress_buffer_inadequate(ZSTD_Decompress_API api, ZSTD_DCtx* dctx);
@@ -227,7 +230,7 @@ protected:
 
     size_t run_decompress(ZSTD_Decompress_API api, ZSTD_DCtx* dctx,
         void* dst, size_t dstCapacity, const void* src, size_t srcSize);
-    void validate_decompress(const char* original, unsigned origLen, const char* output, unsigned outputLen);    
+    void validate_decompress(const char* original, unsigned origLen, const char* output, unsigned outputLen);
 };
 
 typedef size_t(*ZSTD_decompress_fp)(ZSTD_DCtx* dctx,
@@ -319,7 +322,7 @@ int get_cparam_within_bounds(ZSTD_cParameter param);
 int get_dparam_below_lower(ZSTD_dParameter param);
 int get_dparam_above_upper(ZSTD_dParameter param);
 int get_dparam_within_bounds(ZSTD_dParameter param);
-bool is_valid_zstd_frame(char* compressed, unsigned compressedLen);
+bool has_valid_frames(char* compressed, unsigned compressedLen);
 void* Test_ZSTD_custom_alloc_pass(void* opaque, size_t size);
 void Test_ZSTD_custom_free_pass(void* opaque, void* address);
 void* Test_ZSTD_custom_alloc_fail(void* opaque, size_t size);

@@ -153,6 +153,9 @@ struct ZSTD_DCtx_s
     size_t litSize;
     size_t rleSize;
     size_t staticSize;
+#if AOCL_DECOMPRESS_FAST > 1
+    size_t fds;                   /* fast decompress settings flag */
+#endif
 #if DYNAMIC_BMI2 != 0
     int bmi2;                     /* == 1 if the CPU supports BMI2 and 0 otherwise. CPU support is determined dynamically once per context lifetime. */
 #endif

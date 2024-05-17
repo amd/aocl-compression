@@ -357,6 +357,514 @@ TEST_F(ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long, AOCL_Compression_zstd_AOCL_ZSTD_wildco
 /*********************************************
 * End of ZSTD_ZSTD_AOCL_ZSTD_wildcopy_long
 *********************************************/
+
+#if AOCL_DECOMPRESS_FAST > 1
+/*********************************************
+* Begin of ZSTD_get_lit_bits, ZSTD_get_mat_bits, ZSTD_get_off_bits, ZSTD_get_mat_len
+*********************************************/
+#define MAX_LIT_LENGTH 131071
+#define MAX_MAT_LENGTH 131071
+#define MAX_OFF_LENGTH 536870908
+#define MAX_SMALL_LENGTH 128
+#define MAX_SEQUENCES_POSSIBLE 4096 /* tests should ensure this is large enough */
+#define MAX_MAT_BITS 16
+
+TEST(ZSTD_get_lit_bits, AOCL_Compression_zstd_get_lit_bits_common_1) { // Optimized get_*_bits must be >= actual bits
+    for (size_t len = 0; len < MAX_LIT_LENGTH; ++len) {
+        EXPECT_GE(Test_get_lit_bits(len), Test_assert_get_lit_bits(len));
+    }
+}
+
+TEST(ZSTD_get_mat_bits, AOCL_Compression_zstd_get_mat_bits_common_1) { // Optimized get_*_bits must be >= actual bits
+    for (size_t len = 0; len < MAX_LIT_LENGTH; ++len) {
+        EXPECT_GE(Test_get_mat_bits(len), Test_assert_get_mat_bits(len));
+    }
+}
+
+TEST(ZSTD_get_off_bits, AOCL_Compression_zstd_get_off_bits_common_1) { // Optimized get_*_bits must be >= actual bits
+    for (size_t len = 1; len < MAX_SMALL_LENGTH; ++len) {
+        EXPECT_GE(Test_get_off_bits(len), Test_assert_get_off_bits(len));
+    }
+    for (size_t len = MAX_SMALL_LENGTH; len < MAX_OFF_LENGTH; len <<= 1) { // step faster
+        EXPECT_GE(Test_get_mat_bits(len - 1), Test_assert_get_mat_bits(len - 1));
+        EXPECT_GE(Test_get_mat_bits(len), Test_assert_get_mat_bits(len));
+        EXPECT_GE(Test_get_mat_bits(len + 1), Test_assert_get_mat_bits(len + 1));
+    }
+}
+
+TEST(ZSTD_get_mat_len, AOCL_Compression_zstd_get_mat_len_common_1) { // Optimized get_*_len must be <= actual len
+    for (int bits = 0; bits < MAX_MAT_BITS; bits++) {
+        EXPECT_LE(Test_get_mat_len(bits, MAX_MAT_LENGTH), assert_get_mat_len(bits, MAX_MAT_LENGTH));
+    }
+}
+/*********************************************
+* End of ZSTD_get_lit_bits, ZSTD_get_mat_bits, ZSTD_get_off_bits, ZSTD_get_mat_len
+*********************************************/
+
+/*********************************************
+* Begin of ZSTD_is_totalbits_limited_seq_possible
+*********************************************/
+class ZSTD_is_totalbits_limited_seq_possible : public AOCL_setup_zstd
+{
+public:
+    ZSTD_is_totalbits_limited_seq_possible() {
+        anchor = (BYTE*)calloc(MAX_LIT_LENGTH, 1);
+        iend = anchor + MAX_LIT_LENGTH;
+
+        seqStore.litStart = (BYTE*)calloc(MAX_LIT_LENGTH, 1);
+        seqStore.lit = seqStore.litStart;
+        seqStore.maxNbLit = MAX_LIT_LENGTH;
+
+        seqStore.sequencesStart = (seqDef*)calloc(MAX_SEQUENCES_POSSIBLE, sizeof(seqDef));
+        seqStore.sequences = seqStore.sequencesStart;
+        seqStore.maxNbSeq = MAX_SEQUENCES_POSSIBLE;
+    }
+
+    ~ZSTD_is_totalbits_limited_seq_possible() {
+        if (anchor) free(anchor);
+        if (seqStore.litStart) free(seqStore.litStart);
+        if (seqStore.sequencesStart) free(seqStore.sequencesStart);
+    }
+
+    void reset_sequences() {
+        seqStore.sequences = seqStore.sequencesStart;
+        seqStore.lit = seqStore.litStart;
+    }
+
+    void evalute_sequences(size_t lit, size_t mat, size_t off) {
+        const BYTE* ip = anchor + lit;
+        int res = Test_is_totalbits_limited_seq_possible(ip, anchor, mat, off);
+        if (res) { // if claim is possible, validate generated sequence to see if it is within bounds
+            reset_sequences();
+            Test_AOCL_ZSTD_storeSequences(&seqStore, ip, anchor, iend, (U32)OFFSET_TO_OFFBASE(off), mat);
+            size_t seqCnt = seqStore.sequences - seqStore.sequencesStart;
+            seqDef* curSeq = seqStore.sequencesStart;
+            for (size_t i = 0; i < seqCnt; ++i) { // for each sequence validate if total_bits is within bounds
+                U32 offBase = curSeq[0].offBase;
+                if (OFFBASE_IS_OFFSET(offBase)) {
+                    U32 offset = OFFBASE_TO_OFFSET(offBase);
+                    U16 litLength = curSeq[0].litLength;
+                    U16 matchLength = curSeq[0].mlBase + MINMATCH;
+                    U32 total_bits = Test_assert_get_lit_bits(litLength) + Test_assert_get_mat_bits(matchLength) + Test_assert_get_off_bits(offset);
+                    EXPECT_LT(total_bits, MAX_TOTAL_BITS);
+                }
+            }
+        }
+    }
+
+    BYTE* anchor;
+    const BYTE* iend;
+    seqStore_t seqStore;
+};
+
+TEST_F(ZSTD_is_totalbits_limited_seq_possible, AOCL_Compression_zstd_is_totalbits_limited_seq_possible_common_1) { // specific cases
+    evalute_sequences(0, MINMATCH, 1); // minimum values. totalbits < MAX_TOTAL_BITS.
+    evalute_sequences((size_t)1 << 10, MINMATCH, (size_t)1 << 20); // (llbits + ofbits) >= MAX_TOTAL_BITS.
+    evalute_sequences(1, MINMATCH, (size_t)1 << 25); // totalbits > MAX_TOTAL_BITS. unable to split match.
+    evalute_sequences(1, 2 * MINMATCH, (size_t)1 << 25);  // totalbits > MAX_TOTAL_BITS. able to split match.
+    evalute_sequences(1, (size_t)1 << 8, (size_t)1 << 20);  // totalbits > MAX_TOTAL_BITS. split multiple.
+}
+
+TEST_F(ZSTD_is_totalbits_limited_seq_possible, AOCL_Compression_zstd_is_totalbits_limited_seq_possible_common_2) { // small sizes
+    // Test for all combinations of small lit, match and offset values
+    for (size_t lit = 0; lit < MAX_SMALL_LENGTH; lit++) {
+        for (size_t mat = 0; mat < MAX_SMALL_LENGTH; mat++) {
+            for (size_t off = 1; off < MAX_SMALL_LENGTH; off++) {
+                evalute_sequences(lit, mat, off);
+            }
+        }
+    }
+}
+
+TEST_F(ZSTD_is_totalbits_limited_seq_possible, AOCL_Compression_zstd_is_totalbits_limited_seq_possible_common_3) { // large sizes
+    // Larger strides for large lit, match and offset values
+    for (size_t lit = MAX_SMALL_LENGTH; lit < MAX_LIT_LENGTH; lit <<= 1) {
+        for (size_t mat = MAX_SMALL_LENGTH; mat < MAX_MAT_LENGTH; mat <<= 1) {
+            for (size_t off = MAX_SMALL_LENGTH; off < MAX_OFF_LENGTH; off <<= 1) {
+                evalute_sequences(lit, mat, off);
+                evalute_sequences(lit - 1, mat - 1, off - 1);
+                evalute_sequences(lit + 1, mat + 1, off + 1);
+            }
+        }
+    }
+    // Small lit, larger strides for rest
+    for (size_t lit = 0; lit < MAX_SMALL_LENGTH; lit++) {
+        for (size_t mat = 1; mat < MAX_MAT_LENGTH; mat <<= 1) {
+            for (size_t off = 1; off < MAX_OFF_LENGTH; off <<= 1) {
+                evalute_sequences(lit, mat, off);
+            }
+        }
+    }
+    // Small mat, larger strides for rest
+    for (size_t lit = 1; lit < MAX_LIT_LENGTH; lit <<= 1) {
+        for (size_t mat = 0; mat < MAX_SMALL_LENGTH; mat++) {
+            for (size_t off = 1; off < MAX_OFF_LENGTH; off <<= 1) {
+                evalute_sequences(lit, mat, off);
+            }
+        }
+    }
+    // Small off, larger strides for rest
+    for (size_t lit = 1; lit < MAX_LIT_LENGTH; lit <<= 1) {
+        for (size_t mat = 1; mat < MAX_MAT_LENGTH; mat <<= 1) {
+            for (size_t off = 1; off < MAX_SMALL_LENGTH; off++) {
+                evalute_sequences(lit, mat, off);
+            }
+        }
+    }
+}
+/*********************************************
+* End of ZSTD_is_totalbits_limited_seq_possible
+*********************************************/
+
+/*********************************************
+* Begin of ZSTD_AOCL_is_FdsSupported
+*********************************************/
+class ZSTD_AOCL_is_FdsSupported : public AOCL_setup_zstd
+{
+public:
+    ZSTD_AOCL_is_FdsSupported() {
+        zc = ZSTD_createCCtx();
+    }
+
+    ~ZSTD_AOCL_is_FdsSupported() {
+        ZSTD_freeCCtx(zc);
+    }
+
+    ZSTD_CCtx* zc;
+};
+
+TEST_F(ZSTD_AOCL_is_FdsSupported, AOCL_Compression_zstd_AOCL_is_FdsSupported_common_pass_1) { // all true cases
+    // ZSTD_noDict
+    zc->blockState.matchState.dictMatchState = NULL;
+    int hasExtDict = 0;
+    // test for all supported strategies
+    for (int strat = (int)ZSTD_fast; strat <= (int)ZSTD_lazy2; strat++) {
+        zc->appliedParams.cParams.strategy = (ZSTD_strategy)strat;
+        zc->appliedParams.useRowMatchFinder = ZSTD_ps_enable;
+        EXPECT_TRUE(Test_AOCL_is_FdsSupported(hasExtDict, zc));
+    }
+}
+
+TEST_F(ZSTD_AOCL_is_FdsSupported, AOCL_Compression_zstd_AOCL_is_FdsSupported_common_pass_2) { // false cases dict modes
+    // ZSTD_extDict
+    zc->blockState.matchState.dictMatchState = NULL;
+    int hasExtDict = 1;
+    for (int strat = (int)ZSTD_fast; strat <= (int)ZSTD_btultra2; strat++) { // all strats
+        zc->appliedParams.cParams.strategy = (ZSTD_strategy)strat;
+        EXPECT_FALSE(Test_AOCL_is_FdsSupported(hasExtDict, zc));
+    }
+
+    // ZSTD_dictMatchState
+    ZSTD_matchState_t ms;
+    ms.dedicatedDictSearch = ZSTD_dictMatchState;
+    zc->blockState.matchState.dictMatchState = &ms;
+    hasExtDict = 0;
+    for (int strat = (int)ZSTD_fast; strat <= (int)ZSTD_btultra2; strat++) { // all strats
+        zc->appliedParams.cParams.strategy = (ZSTD_strategy)strat;
+        EXPECT_FALSE(Test_AOCL_is_FdsSupported(hasExtDict, zc));
+    }
+
+    // ZSTD_dedicatedDictSearch
+    ms.dedicatedDictSearch = ZSTD_dedicatedDictSearch;
+    zc->blockState.matchState.dictMatchState = &ms;
+    hasExtDict = 0;
+    for (int strat = ZSTD_fast; strat <= ZSTD_btultra2; strat++) { // all strats
+        zc->appliedParams.cParams.strategy = (ZSTD_strategy)strat;
+        EXPECT_FALSE(Test_AOCL_is_FdsSupported(hasExtDict, zc));
+    }
+}
+
+TEST_F(ZSTD_AOCL_is_FdsSupported, AOCL_Compression_zstd_AOCL_is_FdsSupported_common_pass_3) { // useRowMatchFinder
+    // ZSTD_noDict
+    zc->blockState.matchState.dictMatchState = NULL;
+    int hasExtDict = 0;
+    // test fast and dfast. useRowMatchFinder does not matter
+    for (int strat = (int)ZSTD_fast; strat <= (int)ZSTD_dfast; strat++) {
+        zc->appliedParams.cParams.strategy = (ZSTD_strategy)strat;
+        for (int rmf = (int)ZSTD_ps_auto; rmf <= (int)ZSTD_ps_disable; rmf++) {
+            zc->appliedParams.useRowMatchFinder = (ZSTD_paramSwitch_e)rmf;
+            EXPECT_TRUE(Test_AOCL_is_FdsSupported(hasExtDict, zc));
+        }
+    }
+    // test greedy, lazy and lazy2. useRowMatchFinder needed.
+    for (int strat = (int)ZSTD_greedy; strat <= (int)ZSTD_lazy2; strat++) {
+        zc->appliedParams.cParams.strategy = (ZSTD_strategy)strat;
+        {
+            zc->appliedParams.useRowMatchFinder = ZSTD_ps_auto;
+            EXPECT_FALSE(Test_AOCL_is_FdsSupported(hasExtDict, zc));
+        }
+        {
+            zc->appliedParams.useRowMatchFinder = ZSTD_ps_disable;
+            EXPECT_FALSE(Test_AOCL_is_FdsSupported(hasExtDict, zc));
+        }
+    }
+}
+/*********************************************
+* End of ZSTD_AOCL_is_FdsSupported
+*********************************************/
+
+/*********************************************
+* Begin of ZSTD_AOCL_ZSTD_window_needsExtDict
+*********************************************/
+class ZSTD_AOCL_ZSTD_window_needsExtDict : public AOCL_setup_zstd
+{
+public:
+    ZSTD_AOCL_ZSTD_window_needsExtDict() {
+        buffer = (BYTE*)calloc(bufferSz, 1);
+    }
+
+    ~ZSTD_AOCL_ZSTD_window_needsExtDict() {
+        if(buffer) free(buffer);
+    }
+
+    void validate(int needsExtDict, int forceNonContiguous) {
+        Test_ZSTD_window_update(&win, src, srcSize, forceNonContiguous);
+        EXPECT_EQ(needsExtDict, (win.lowLimit < win.dictLimit)); // needsExtDict obtained from AOCL_ZSTD_window_needsExtDict() must match ZSTD_window_update() settings
+    }
+
+    BYTE* get_ptr(size_t pos) {
+        EXPECT_LT(pos, bufferSz);
+        if (pos >= bufferSz) return nullptr;
+        return buffer + pos;
+    }
+
+    void set_inp_and_dict_no_overlap_contig() {
+        win.base = get_ptr(0);
+        win.dictBase = get_ptr(0);
+        win.dictLimit = 512;
+        win.nextSrc = get_ptr(513); //input and dictionary dont overlap
+        win.nbOverflowCorrections = 0;
+        src = win.nextSrc;
+        srcSize = 10;
+    }
+
+    void set_inp_and_dict_no_overlap_noncontig() {
+        win.base = get_ptr(0);
+        win.dictBase = get_ptr(0);
+        win.dictLimit = 512;
+        win.nextSrc = get_ptr(513); //input and dictionary dont overlap
+        win.nbOverflowCorrections = 0;
+        src = win.nextSrc + 1;
+        srcSize = 10;
+    }
+
+    void set_inp_and_dict_overlap(int ll_lt_dl) {
+        //input and dictionary overlap
+        win.base = get_ptr(0);
+        win.dictBase = get_ptr(10);
+        win.nextSrc = get_ptr(50);
+        src = win.nextSrc;
+        if (ll_lt_dl) 
+        { //dB----ip-----dB+lL----dB+dL----ip+srcSize
+            win.dictLimit = 120;
+            win.lowLimit = 100;
+        }
+        else 
+        { //dB----ip----dB+dL----dB+lL----ip+srcSize
+            win.dictLimit = 100;
+            win.lowLimit = 120;
+        }
+        srcSize = 100; //ip+srcSize = 150
+        win.nbOverflowCorrections = 0;
+    }
+
+    const BYTE* src;
+    ZSTD_window_t win;
+    size_t srcSize;
+
+private:
+    BYTE* buffer;
+    const size_t bufferSz = 1024;
+};
+
+TEST_F(ZSTD_AOCL_ZSTD_window_needsExtDict, AOCL_Compression_zstd_AOCL_ZSTD_window_needsExtDict_common_pass_1) { //src = window->nextSrc, input and dictionary dont overlap
+    {  // lowLimit < dictLimit
+        set_inp_and_dict_no_overlap_contig();
+        int forceNonContiguous = 0;
+        win.lowLimit = win.dictLimit - 1;
+        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
+        validate(needsExtDict, forceNonContiguous);
+    }
+    {  // lowLimit >= dictLimit
+        set_inp_and_dict_no_overlap_contig();
+        int forceNonContiguous = 0;
+        win.lowLimit = win.dictLimit;
+        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
+        validate(needsExtDict, forceNonContiguous);
+    }
+    {  // forceNonContiguous
+        set_inp_and_dict_no_overlap_contig();
+        int forceNonContiguous = 1;
+        win.lowLimit = win.dictLimit;
+        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
+        validate(needsExtDict, forceNonContiguous);
+    }
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_window_needsExtDict, AOCL_Compression_zstd_AOCL_ZSTD_window_needsExtDict_common_pass_2) { //src != window->nextSrc, input and dictionary dont overlap
+    {  // lowLimit < dictLimit
+        set_inp_and_dict_no_overlap_noncontig();
+        int forceNonContiguous = 0;
+        win.lowLimit = win.dictLimit - 1;
+        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
+        validate(needsExtDict, forceNonContiguous);
+    }
+    {  // lowLimit >= dictLimit
+        set_inp_and_dict_no_overlap_noncontig();
+        int forceNonContiguous = 0;
+        win.lowLimit = win.dictLimit;
+        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
+        validate(needsExtDict, forceNonContiguous);
+    }
+    {  // forceNonContiguous
+        set_inp_and_dict_no_overlap_noncontig();
+        int forceNonContiguous = 1;
+        win.lowLimit = win.dictLimit;
+        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
+        validate(needsExtDict, forceNonContiguous);
+    }
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_window_needsExtDict, AOCL_Compression_zstd_AOCL_ZSTD_window_needsExtDict_common_pass_3) { //input and dictionary overlap
+    {  // lowLimit < dictLimit
+        set_inp_and_dict_overlap(1);
+        int forceNonContiguous = 0;
+        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
+        validate(needsExtDict, forceNonContiguous);
+    }
+    {  // lowLimit >= dictLimit
+        set_inp_and_dict_overlap(0);
+        int forceNonContiguous = 0;
+        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
+        validate(needsExtDict, forceNonContiguous);
+    }
+    {  // forceNonContiguous
+        set_inp_and_dict_overlap(1);
+        int forceNonContiguous = 1;
+        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
+        validate(needsExtDict, forceNonContiguous);
+    }
+}
+/*********************************************
+* End of ZSTD_AOCL_ZSTD_window_needsExtDict
+*********************************************/
+
+/*********************************************
+* Begin of ZSTD_AOCL_ZSTD_writeFdsFrame
+*********************************************/
+class ZSTD_AOCL_ZSTD_writeFdsFrame : public AOCL_setup_zstd
+{
+public:
+    void alloc_dst(size_t sz) {
+        dst = calloc(sz, 1);
+    }
+
+    ~ZSTD_AOCL_ZSTD_writeFdsFrame() {
+        if (dst) free(dst);
+    }
+
+    void validate_fds_frame() {
+        char* cur = (char*)dst;
+        cur += ZSTD_SKIPPABLEHEADERSIZE;
+        EXPECT_EQ(*((U64*)cur), FDS_MAGIC_WORD);
+#if AOCL_DECOMPRESS_FAST == 2
+        EXPECT_EQ(*((U64*)(cur + FDS_MAGIC_WORD_BYTES)), FDS_FAST2_NOTB_SO4_NOEXT_REP2);
+#endif
+    }
+    void* dst;
+};
+
+TEST_F(ZSTD_AOCL_ZSTD_writeFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_pass_1) { // dstCapacity sufficient
+    size_t dstCapacity = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE;
+    alloc_dst(dstCapacity);
+    EXPECT_EQ(dstCapacity, Test_AOCL_ZSTD_writeFdsFrame(dst, dstCapacity));
+    validate_fds_frame();
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_writeFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_fail_2) { // dstCapacity insufficient
+    size_t dstCapacity = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE - 1;
+    alloc_dst(dstCapacity);
+    EXPECT_EQ(Test_AOCL_ZSTD_writeFdsFrame(dst, dstCapacity), ERROR(dstSize_tooSmall));
+}
+/*********************************************
+* End of ZSTD_AOCL_ZSTD_writeFdsFrame
+*********************************************/
+
+/*********************************************
+* Begin of ZSTD_AOCL_ZSTD_readFdsFrame
+*********************************************/
+class ZSTD_AOCL_ZSTD_readFdsFrame : public AOCL_setup_zstd
+{
+public:
+    ZSTD_AOCL_ZSTD_readFdsFrame() {
+        dctx = ZSTD_createDCtx();
+        dctx->fds = 0;
+    }
+
+    void alloc_src(size_t sz) {
+        src = calloc(sz, 1);
+    }
+
+    ~ZSTD_AOCL_ZSTD_readFdsFrame() {
+        if (src) free(src);
+        ZSTD_freeDCtx(dctx);
+    }
+
+    void write_valid_fds_frame(size_t sz) {
+        EXPECT_FALSE(ZSTD_isError(Test_AOCL_ZSTD_writeFdsFrame(src, sz)));
+    }
+
+    ZSTD_DCtx* dctx;
+    void* src;
+};
+
+TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_readFdsFrame_common_pass_1) { // read valid FDS frame
+    size_t srcSz = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE;
+    alloc_src(srcSz);
+    write_valid_fds_frame(srcSz);
+    Test_AOCL_ZSTD_readFdsFrame(dctx, (char*)src + ZSTD_SKIPPABLEHEADERSIZE, srcSz - ZSTD_SKIPPABLEHEADERSIZE);
+    EXPECT_EQ(dctx->fds, FDS_FAST2_NOTB_SO4_NOEXT_REP2);
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_fail_2) { // srcSize insufficient
+    size_t srcSz = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE;
+    alloc_src(srcSz);
+    write_valid_fds_frame(srcSz);
+    Test_AOCL_ZSTD_readFdsFrame(dctx, (char*)src + ZSTD_SKIPPABLEHEADERSIZE, srcSz - ZSTD_SKIPPABLEHEADERSIZE - 1); // srcSize insufficient
+    EXPECT_EQ(dctx->fds, 0);
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_fail_3) { // not an FDS frame
+    size_t srcSz = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE;
+    alloc_src(srcSz);
+    
+    //write non FDS frame
+    char fds[FDS_FRAME_LENGTH];
+    *((U64*)fds) = FDS_MAGIC_WORD - 1; // wrong magic word
+    *((U64*)(fds + FDS_MAGIC_WORD_BYTES)) = FDS_FAST2_NOTB_SO4_NOEXT_REP2;
+    EXPECT_FALSE(ZSTD_isError(ZSTD_writeSkippableFrame(src, srcSz, fds, FDS_FRAME_LENGTH, 0)));
+
+    Test_AOCL_ZSTD_readFdsFrame(dctx, (char*)src + ZSTD_SKIPPABLEHEADERSIZE, srcSz - ZSTD_SKIPPABLEHEADERSIZE);
+    EXPECT_EQ(dctx->fds, 0);
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_fail_4) { // type not FDS_FAST2_NOTB_SO4_NOEXT_REP2
+    size_t srcSz = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE;
+    alloc_src(srcSz);
+    
+    //write non FDS frame
+    char fds[FDS_FRAME_LENGTH];
+    *((U64*)fds) = FDS_MAGIC_WORD;
+    *((U64*)(fds + FDS_MAGIC_WORD_BYTES)) = FDS_FAST2_NOTB_SO4_NOEXT_REP2 - 1; // wrong type
+    EXPECT_FALSE(ZSTD_isError(ZSTD_writeSkippableFrame(src, srcSz, fds, FDS_FRAME_LENGTH, 0)));
+
+    Test_AOCL_ZSTD_readFdsFrame(dctx, (char*)src + ZSTD_SKIPPABLEHEADERSIZE, srcSz - ZSTD_SKIPPABLEHEADERSIZE);
+    EXPECT_EQ(dctx->fds, 0);
+}
+/*********************************************
+* End of ZSTD_AOCL_ZSTD_readFdsFrame
+*********************************************/
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 #endif /* AOCL_ZSTD_OPT */
 
 #ifdef AOCL_ENABLE_THREADS

@@ -40,6 +40,7 @@
 *  Dependencies
 ***************************************/
 #include "utils/utils.h"
+
 #ifdef ERROR
 #undef ERROR /* Conflict with ERROR defined in zstd reference code */
 #endif
@@ -5493,6 +5494,10 @@ size_t ZSTD_compressEnd(ZSTD_CCtx* cctx,
     return ZSTD_compressEnd_public(cctx, dst, dstCapacity, src, srcSize);
 }
 
+static size_t(*ZSTD_compress_advanced_internal_fp)(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity,
+    const void* src, size_t srcSize, const void* dict, size_t dictSize,
+    const ZSTD_CCtx_params* params) = ZSTD_compress_advanced_internal;
+
 #ifdef AOCL_ENABLE_THREADS
 /* Write skippable frame header to dst */
 size_t AOCL_ZSTD_writeSkippableFrameHeader(void* dst, size_t dstCapacity, size_t srcSize, unsigned magicVariant) {
@@ -5728,7 +5733,7 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
 
 #else //Non-threaded
     ZSTD_CCtxParams_init_internal(&cctx->simpleApiParams, &params, ZSTD_NO_CLEVEL);
-    size_t result = ZSTD_compress_advanced_internal(cctx,
+    size_t result = ZSTD_compress_advanced_internal_fp(cctx,
                                            dst, dstCapacity,
                                            src, srcSize,
                                            dict, dictSize,
@@ -5736,6 +5741,121 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return result;
 #endif //AOCL_ENABLE_THREADS
+}
+
+#if AOCL_DECOMPRESS_FAST > 1
+/* Write FDS frame to dst.
+ * return number of bytes written or a ZSTD error. */
+MEM_STATIC size_t AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity) {
+    char src[FDS_FRAME_LENGTH];
+    *((U64*)src) = FDS_MAGIC_WORD;
+#if AOCL_DECOMPRESS_FAST == 2
+    *((U64*)(src + FDS_MAGIC_WORD_BYTES)) = FDS_FAST2_NOTB_SO4_NOEXT_REP2;
+#endif
+    return ZSTD_writeSkippableFrame(dst, dstCapacity, src, FDS_FRAME_LENGTH, 0);
+}
+
+/* If the block compressor that will be used supports fast decompression mode (FDS)
+ * return 1, else return 0. */
+MEM_STATIC int AOCL_is_FdsSupported(int hasExtDict, ZSTD_CCtx* zc) {
+    ZSTD_matchState_t* const ms = &zc->blockState.matchState;
+    ZSTD_dictMode_e const dictMode = hasExtDict ? ZSTD_extDict : ms->dictMatchState != NULL ?
+        (ms->dictMatchState->dedicatedDictSearch ? ZSTD_dedicatedDictSearch : ZSTD_dictMatchState) :
+        ZSTD_noDict; // ZSTD_matchState_dictMode(ms);
+    ZSTD_strategy strat = zc->appliedParams.cParams.strategy;
+    return ((dictMode == ZSTD_noDict) && (
+            /* ZSTD_fast, ZSTD_dfast : AOCL_ZSTD_compressBlock_doubleFast_noDict_generic */
+            strat == ZSTD_fast || 
+            strat == ZSTD_dfast ||
+            /* ZSTD_greedy, ZSTD_lazy, ZSTD_lazy2 : AOCL_ZSTD_compressBlock_lazy_noDict_generic */
+            (strat >= ZSTD_greedy && strat <= ZSTD_lazy2 && zc->appliedParams.useRowMatchFinder == ZSTD_ps_enable)
+           )
+           );
+}
+
+/* Derived from ZSTD_window_update. Does not modify window but checks if 
+ * extDict will be needed based on whether [src, src + srcSize) is contiguous with 
+ * data in the window. Return 1 if needed (window.lowLimit < window.dictLimit), else 0. */
+MEM_STATIC int AOCL_ZSTD_window_needsExtDict(const ZSTD_window_t* window,
+    void const* src, size_t srcSize,
+    int forceNonContiguous)
+{
+    BYTE const* const ip = (BYTE const*)src;
+    DEBUGLOG(5, "AOCL_ZSTD_window_needsExtDict");
+    if (srcSize == 0)
+        return 0;
+    assert(window->base != NULL);
+    assert(window->dictBase != NULL);
+    U32 lowLimit         = window->lowLimit;
+    U32 dictLimit        = window->dictLimit;
+    const BYTE* dictBase = window->dictBase;
+    /* Check if blocks follow each other */
+    if (src != window->nextSrc || forceNonContiguous) {
+        /* not contiguous */
+        size_t const distanceFromBase = (size_t)(window->nextSrc - window->base);
+        DEBUGLOG(5, "Non contiguous blocks, new segment starts at %u", dictLimit);
+        lowLimit = dictLimit;
+        assert(distanceFromBase == (size_t)(U32)distanceFromBase);  /* should never overflow */
+        dictLimit = (U32)distanceFromBase;
+        dictBase = window->base;
+        if (dictLimit - lowLimit < HASH_READ_SIZE) lowLimit = dictLimit;   /* too small extDict */
+    }
+    /* if input and dictionary overlap : reduce dictionary (area presumed modified by input) */
+    if ((ip + srcSize > dictBase + lowLimit)
+        & (ip < dictBase + dictLimit)) {
+        ptrdiff_t const highInputIdx = (ip + srcSize) - dictBase;
+        U32 const lowLimitMax = (highInputIdx > (ptrdiff_t)dictLimit) ? dictLimit : (U32)highInputIdx;
+        lowLimit = lowLimitMax;
+        DEBUGLOG(5, "Overlapping extDict and input : new lowLimit = %u", lowLimit);
+    }
+    return (lowLimit < dictLimit);
+}
+
+/* Write FDS frame to dst if support is available for the given context */
+MEM_STATIC size_t AOCL_ZSTD_writeFdsFrameIfSupported(ZSTD_CCtx* cctx,
+    void** dst, size_t* dstCapacity, const void* src, size_t srcSize) {
+    size_t fds = 0;
+    if (srcSize) { /* insert only if input exists */
+        ZSTD_matchState_t* const ms = &cctx->blockState.matchState;
+        int hasExtDict = AOCL_ZSTD_window_needsExtDict(&ms->window, src, srcSize, ms->forceNonContiguous);
+        /* Insert an FDS frame before writing the ZSTD frame, if FDS mode is supported for selected compressor */
+        if (AOCL_is_FdsSupported(hasExtDict, cctx))
+        {
+            fds = AOCL_ZSTD_writeFdsFrame(*dst, *dstCapacity);
+            if (ZSTD_isError(fds)) {
+                return fds;
+            }
+            *dstCapacity -= fds;
+            *dst = (char*)(*dst) + fds;
+        }
+    }
+    return fds;
+}
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
+
+size_t AOCL_ZSTD_compress_advanced_internal(
+    ZSTD_CCtx* cctx,
+    void* dst, size_t dstCapacity,
+    const void* src, size_t srcSize,
+    const void* dict, size_t dictSize,
+    const ZSTD_CCtx_params* params)
+{
+    LOG_FORMATTED(DEBUG, logCtx, "AOCL_ZSTD_compress_advanced_internal (srcSize:%u)", (unsigned)srcSize);
+    DEBUGLOG(4, "AOCL_ZSTD_compress_advanced_internal (srcSize:%u)", (unsigned)srcSize);
+    FORWARD_IF_ERROR(ZSTD_compressBegin_internal(cctx,
+        dict, dictSize, ZSTD_dct_auto, ZSTD_dtlm_fast, NULL,
+        params, srcSize, ZSTDb_not_buffered), "");
+
+#if AOCL_DECOMPRESS_FAST > 1
+    size_t fds = AOCL_ZSTD_writeFdsFrameIfSupported(cctx, &dst, &dstCapacity, src, srcSize);
+    FORWARD_IF_ERROR(fds, "");
+    size_t ret = ZSTD_compressEnd_public(cctx, dst, dstCapacity, src, srcSize);
+    FORWARD_IF_ERROR(ret, "");
+    ret += fds;
+    return ret;
+#else
+    return ZSTD_compressEnd_public(cctx, dst, dstCapacity, src, srcSize);
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 }
 
 /* Internal */
@@ -5773,7 +5893,7 @@ size_t ZSTD_compress_usingDict(ZSTD_CCtx* cctx,
     }
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_compress_usingDict (srcSize=%u)", (unsigned)srcSize);
     DEBUGLOG(4, "ZSTD_compress_usingDict (srcSize=%u)", (unsigned)srcSize);
-    return ZSTD_compress_advanced_internal(cctx, dst, dstCapacity, src, srcSize, dict, dictSize, &cctx->simpleApiParams);
+    return ZSTD_compress_advanced_internal_fp(cctx, dst, dstCapacity, src, srcSize, dict, dictSize, &cctx->simpleApiParams);
 }
 
 size_t ZSTD_compressCCtx(ZSTD_CCtx* cctx,
@@ -7674,6 +7794,7 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
         //Unoptimized C version
         aoclOptFlag = 0;
         AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
+        ZSTD_compress_advanced_internal_fp = ZSTD_compress_advanced_internal;
     }
     else
     {
@@ -7687,9 +7808,11 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
 #ifdef AOCL_ZSTD_OPT
                 aoclOptFlag = 1;
                 AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
+                ZSTD_compress_advanced_internal_fp = AOCL_ZSTD_compress_advanced_internal;
 #else
                 aoclOptFlag = 0;
                 AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
+                ZSTD_compress_advanced_internal_fp = ZSTD_compress_advanced_internal;
 #endif /* AOCL_ZSTD_OPT */
                 break;
         }
@@ -7735,6 +7858,67 @@ void aocl_destroy_zstd_encode(void) {
 }
 
 #ifdef AOCL_UNIT_TEST
+#if AOCL_DECOMPRESS_FAST > 1
+int Test_is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset) {
+    return is_totalbits_limited_seq_possible(ip, anchor, mLength, offset);
+}
+
+int Test_get_lit_bits(size_t len) {
+    return get_lit_bits(len);
+}
+
+int Test_get_mat_bits(size_t len) {
+    return get_mat_bits(len);
+}
+
+int Test_get_off_bits(size_t len) {
+    return get_off_bits(len);
+}
+
+size_t Test_get_mat_len(int bits, int max_len) {
+    return get_mat_len(bits, max_len);
+}
+
+int Test_assert_get_lit_bits(size_t len) {
+    return assert_get_lit_bits(len);
+}
+
+int Test_assert_get_mat_bits(size_t len) {
+    return assert_get_mat_bits(len);
+}
+
+int Test_assert_get_off_bits(size_t len) {
+    return assert_get_off_bits(len);
+}
+
+size_t Test_assert_get_mat_len(int bits, int max_len) {
+    return assert_get_mat_len(bits, max_len);
+}
+
+void Test_AOCL_ZSTD_storeSequences(void* seqStore, const BYTE* ip, const BYTE* anchor,
+    const BYTE* const iend, U32 offBase, size_t mLength) {
+    AOCL_ZSTD_storeSequences(seqStore, ip, anchor, iend, offBase, mLength);
+}
+
+int Test_AOCL_is_FdsSupported(int hasExtDict, ZSTD_CCtx* zc) {
+    return AOCL_is_FdsSupported(hasExtDict, zc);
+}
+
+int Test_AOCL_ZSTD_window_needsExtDict(const ZSTD_window_t* window, void const* src,
+    size_t srcSize, int forceNonContiguous) {
+    return AOCL_ZSTD_window_needsExtDict(window, src, srcSize, forceNonContiguous);
+}
+
+U32 Test_ZSTD_window_update(ZSTD_window_t* window, void const* src,
+    size_t srcSize, int forceNonContiguous) {
+    return ZSTD_window_update(window, src, srcSize, forceNonContiguous);
+}
+
+size_t Test_AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity) {
+    return AOCL_ZSTD_writeFdsFrame(dst, dstCapacity);
+}
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
+
 #ifdef AOCL_ENABLE_THREADS
 int Test_ZSTD_getWindowFactor(size_t srcSize) {
     return ZSTD_GET_WINDOW_FACTOR(srcSize);
