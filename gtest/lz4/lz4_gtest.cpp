@@ -2696,19 +2696,16 @@ TEST(LZ4_AOCL_LZ4_hash5, AOCL_Compression_lz4_AOCL_LZ4_hash5_pass_common_4)
 
 #ifdef AOCL_TEST_FUZZER
 
-void LZ4_compress_default_fuzz(vector<char> dest,
-                    vector<char> source)
+void LZ4_compress_default_fuzz(vector<char> dest, vector<char> source)
 {
   int destLen = dest.size();
   int srcLen = source.size();
 
   LZ4_compress_default((const char *)source.data(), dest.data(), srcLen, destLen);
 }
-
 FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_default_fuzz);
 
-void LZ4_decompress_safe_fuzz(vector<char> dest,
-                    vector<char> source)
+void LZ4_decompress_safe_fuzz(vector<char> dest, vector<char> source)
 {
   int destLen = dest.size();
   int srcLen = source.size();
@@ -2717,4 +2714,101 @@ void LZ4_decompress_safe_fuzz(vector<char> dest,
 }
 FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_fuzz);
 
+void LZ4_compress_fast_fuzz(int dest_len, vector<char> source, int acceleration)
+{
+    vector<char> dest(dest_len);
+    LZ4_compress_fast((const char *)source.data(), dest.data(), source.size(), dest_len, acceleration);
+}
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_fast_fuzz)
+.WithDomains(fuzztest::InRange<int>(1,10000),
+             fuzztest::Arbitrary<std::vector<char>>(),
+             fuzztest::InRange<int>(0, 65538));
+
+void LZ4_compress_destSize_fuzz(int dest_len, vector<char> source)
+{
+    int srcLen = source.size();
+    vector<char> dest(dest_len);
+    LZ4_compress_destSize(source.data(), dest.data(), &srcLen, dest_len);
+}
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_destSize_fuzz)
+    .WithDomains(fuzztest::InRange<int>(1,10000),
+                fuzztest::Arbitrary<std::vector<char>>()
+                );
+
+void LZ4_compress_fast_continue_fuzz(vector<char> dict, vector<char> source, int dest_len, int acceleration)
+{
+    vector<char> dest(dest_len);
+    LZ4_stream_t *stream = LZ4_createStream();
+    LZ4_loadDict(stream, dict.data(), dict.size());
+    LZ4_compress_fast_continue(stream, source.data(), dest.data(), source.size(), dest.capacity(), acceleration);
+    free(stream);
+}
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_fast_continue_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::InRange<int>(1,10000),
+                fuzztest::InRange<int>(0, 65538)
+                );
+
+void LZ4_decompress_safe_continue_fuzz(vector<char> dict, int orig_len, vector<char> source)
+{
+    LZ4_streamDecode_t *decode = LZ4_createStreamDecode();
+    vector<char> original(orig_len);
+    LZ4_setStreamDecode(decode, dict.data(), dict.size());    
+    LZ4_decompress_safe_continue(decode, source.data(), original.data(), source.size(), orig_len);
+    LZ4_freeStreamDecode(decode);
+}
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_continue_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::InRange<int>(1,10000),
+                fuzztest::Arbitrary<std::vector<char>>()
+                );
+
+void LZ4_decompress_safe_usingDict_fuzz(vector<char> dict, vector<char> source, int dest_len)
+{
+    vector<char> dest(dest_len);
+    LZ4_decompress_safe_usingDict(source.data(), dest.data() , source.size(), dest_len, dict.data(), dict.size());
+}
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_usingDict_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::InRange<int>(1,10000)
+                );
+
+void LZ4_decompress_safe_usingDict_prefixmode_fuzz(vector<char> dict, vector<char> source, int dest_len)
+{
+    vector<char> dest(dest_len);
+    vector<char> dict_source = dict;    
+    dict_source.insert(dict_source.end(), source.begin(), source.end());
+    LZ4_decompress_safe_usingDict(dict_source.data() + dict.size(), dest.data() , source.size(), dest_len, dict_source.data(), dict.size());
+}
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_usingDict_prefixmode_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::InRange<int>(1,10000)
+                );
+
+void LZ4_decompress_safe_partial_usingDict_fuzz(vector<char> dict, vector<char> source, int dest_len)
+{
+    vector<char> dest(dest_len);
+    LZ4_decompress_safe_partial_usingDict(source.data(), dest.data() , source.size(), dest_len, dest_len, dict.data(), dict.size());
+}
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_partial_usingDict_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::InRange<int>(1,10000)
+                );
+
+void LZ4_decompress_safe_partial_usingDict_prefixmode_fuzz(vector<char> dict, vector<char> source, int dest_len)
+{
+    vector<char> dest(dest_len);
+    vector<char> dict_source = dict;
+    dict_source.insert(dict_source.end(), source.begin(), source.end());
+    LZ4_decompress_safe_partial_usingDict(dict_source.data()+dict.size(), dest.data() , source.size(), dest_len, dest_len, dict_source.data(), dict.size());
+}
+FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_partial_usingDict_prefixmode_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::InRange<int>(1,10000)
+                );
 #endif /* AOCL_TEST_FUZZER */

@@ -3239,11 +3239,139 @@ void BuffToBuffDecompress_fuzz(std::vector<char> dest, std::vector<char> source,
     // Verbosity is set to 0 to avoid extensive logs
     BZIP2_API::BuffToBuffDecompress(dest.data(), &destSize, source.data(), source.size(), small, 0);
 }
+
 FUZZ_TEST(AOCL_Compression_bzip2, BuffToBuffDecompress_fuzz)
     .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
                 fuzztest::Arbitrary<std::vector<char>>(),
                 fuzztest::InRange<int>(0, 1));
 
+void BZ2_bzCompress_fuzz(std::vector<char> input, int out_len, int action, int block_size, int verbosity, int work_factor)
+{
+    EStateClass *strm = new EStateClass();
+    std::vector<char> output(out_len);
+    BZIP2_API::CompressInit(strm->getStrm(), block_size, verbosity, work_factor);
+    strm->setEState(strm->getStatePtr());        
+    strm->setNextIn(input.data());
+    strm->setNextOut(output.data());
+    strm->setAvailIn(input.size());
+    strm->setAvailOut(out_len);
+    if(action==0)
+        strm->setMode(BZ_RUN);
+    if(action==1)
+        strm->setMode(BZ_FLUSH);
+    if(action==2)
+        strm->setMode(BZ_FINISH); 
+     
+    BZIP2_API::Compress(strm->getStrm(), action);
+    BZIP2_API::CompressEnd(strm->getStrm());
+    delete strm;
+}
+ 
+FUZZ_TEST(AOCL_Compression_bzip2, BZ2_bzCompress_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::InRange<int>(1, 10000),
+                fuzztest::InRange<int>(0, 2),
+                fuzztest::InRange<int>(1, 9),
+                fuzztest::InRange<int>(0, 4),
+                fuzztest::InRange<int>(0, 250)
+                );
+
+void BZ2_bzDecompress_fuzz(std::vector<char> input, int out_len, int verbosity, int small)
+{
+    DStateClass *strm = new DStateClass();
+    std::vector<char> output(out_len);
+    strm->setNextIn(input.data());
+    strm->setNextOut(output.data());
+    strm->setAvailIn(input.size());
+    strm->setAvailOut(out_len);
+
+    BZIP2_API::DecompressInit(strm->getStrm(), verbosity, small);
+    BZIP2_API::Decompress(strm->getStrm());
+    BZIP2_API::DecompressEnd(strm->getStrm());
+    delete strm;
+}
+
+FUZZ_TEST(AOCL_Compression_bzip2, BZ2_bzDecompress_fuzz)
+.WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::InRange<int>(1, 10000),
+                fuzztest::InRange<int>(0, 4),
+                fuzztest::InRange<int>(0, 1)
+                );
+
+void BZ2_bzWrite_fuzz(std::vector<char> inputbuffer, int block_size, int verbosity, int work_factor, int abandon,int writetype)
+{
+    int bzerror = 0;
+    unsigned int in_low = 0, in_high = 0, out_low = 0, out_high = 0, in = 0, out = 0;
+    string file_name = get_file_name();
+       
+    FILE *pFile = fopen(file_name.c_str(), "wb");
+    EXPECT_NE(pFile, nullptr);
+
+    BZFILE * bzf = BZIP2_API::WriteOpen(&bzerror, pFile, block_size, verbosity, work_factor);
+    EXPECT_EQ(bzerror, BZ_OK);
+
+    BZIP2_API::Write(&bzerror, bzf, inputbuffer.data(), inputbuffer.size());
+   
+    if(writetype == 0)
+        BZIP2_API::WriteClose(&bzerror, bzf, abandon, &in, &out);
+
+    if(writetype == 1)
+        BZIP2_API::WriteClose64(&bzerror, bzf, abandon, &in_low, &in_high, &out_low, &out_high);
+    EXPECT_EQ(bzerror, BZ_OK);
+
+    fclose(pFile);
+    EXPECT_EQ(remove(file_name.c_str()), 0);
+}
+
+FUZZ_TEST(AOCL_Compression_bzip2, BZ2_bzWrite_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::InRange<int>(1, 9),
+                 fuzztest::InRange<int>(0, 4),
+                 fuzztest::InRange<int>(0, 250),
+                 fuzztest::InRange<int>(0, 1),
+                 fuzztest::InRange<int>(0, 1));
+
+void BZ2_bzRead_fuzz(std::vector<char> inputbuffer,int block_size, int verbosity, int work_factor, int small,
+                          int nUnused, int out_len)
+{
+    int bzerror = 0;
+    string file_name = get_file_name();
+    
+    FILE *pFile = fopen(file_name.c_str(), "wb");
+    EXPECT_NE(pFile, nullptr);
+
+    int n = fwrite(inputbuffer.data(),1, inputbuffer.size(), pFile);
+    EXPECT_EQ(n, inputbuffer.size());
+  
+    fclose(pFile);
+
+    pFile = fopen(file_name.c_str(), "rb");
+    EXPECT_NE(pFile, nullptr);
+
+    std:vector<char> unusedbuffer(nUnused);
+    BZFILE *bzf = BZIP2_API::ReadOpen(&bzerror, pFile, verbosity, 1, unusedbuffer.data(), nUnused);
+    EXPECT_EQ(bzerror, BZ_OK);
+    ASSERT_NE(bzf, nullptr);
+
+    vector<char> outputbuffer(out_len);        
+    BZIP2_API::Read(&bzerror, bzf, outputbuffer.data(), out_len);
+
+    BZIP2_API::ReadClose(&bzerror, bzf);
+    EXPECT_EQ(bzerror, BZ_OK);
+
+    fclose(pFile);
+    EXPECT_EQ(remove(file_name.c_str()), 0);        
+}
+
+FUZZ_TEST(AOCL_Compression_bzip2, BZ2_bzRead_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::InRange<int>(1, 9),
+                 fuzztest::InRange<int>(0, 4),
+                 fuzztest::InRange<int>(0, 250),
+                 fuzztest::InRange<int>(0, 1),
+                 fuzztest::InRange<int>(0, BZ_MAX_UNUSED),
+                 fuzztest::InRange<int>(1, 10000)
+                 );
 #endif /* AOCL_TEST_FUZZER */
 /*********************************************
  * End fuzz tests for bzip2
