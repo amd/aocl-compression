@@ -157,6 +157,7 @@ endif()
 #CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=OFF, TEST_COVERAGE_THIRD_PARTY=OFF : run coverage for aocl + third_party ctests
 #CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=OFF, TEST_COVERAGE_THIRD_PARTY=ON  : run coverage for third_party ctests only
 if(CODE_COVERAGE)
+    set(AOCL_EXCLUDE_DEPRECATED_APIS ON) # exclude deprecated APIs while getting code coverage statistics
     if(NOT (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY))
         set(AOCL_TEST_COVERAGE ON) # enable maximum coverage
     endif()
@@ -480,7 +481,10 @@ endif()
 if (TEST_COVERAGE_THIRD_PARTY OR NATIVE_ENABLE_THREADS)
     set_property(SOURCE ${ZSTD_SRC_FILES}  APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_MULTITHREAD")
 endif()
-
+if(AOCL_EXCLUDE_DEPRECATED_APIS)
+    set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_DEPRECATED_APIS")
+    set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_DEPRECATED_APIS")
+endif()
 include(CheckCSourceCompiles)
 #
 # Check if we can hide zlib internal symbols that are linked between separate source files using hidden

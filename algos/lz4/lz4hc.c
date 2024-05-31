@@ -2489,7 +2489,7 @@ int LZ4_saveDictHC (LZ4_streamHC_t* LZ4_streamHCPtr, char* safeBuffer, int dictS
     return dictSize;
 }
 
-
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 /***************************************************
 *  Deprecated Functions
 ***************************************************/
@@ -2559,7 +2559,7 @@ char* LZ4_slideInputBufferHC(void* LZ4HC_Data)
     /* avoid const char * -> char * conversion warning :( */
     return (char *)(uptrval)bufferStart;
 }
-
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 
 /* ================================================
  *  LZ4 Optimal parser (levels [LZ4HC_CLEVEL_OPT_MIN - LZ4HC_CLEVEL_MAX])

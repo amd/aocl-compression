@@ -713,6 +713,7 @@ LZ4LIB_API int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
  * @}
 */
 
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 /*-************************************
 *  Deprecated Functions
 **************************************/
@@ -795,6 +796,7 @@ LZ4_DEPRECATED("use LZ4_createStreamHC() instead") LZ4LIB_API int   LZ4_sizeofSt
 /*! @brief Use LZ4_initStreamHC() instead. */
 LZ4_DEPRECATED("use LZ4_initStreamHC() instead") LZ4LIB_API  int   LZ4_resetStreamStateHC(void* state, char* inputBuffer);
 
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 
 /*! 
  * @brief It is now replaced by LZ4_initStreamHC().

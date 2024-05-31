@@ -3559,6 +3559,10 @@ int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
 int LZ4_compress_forceExtDict (LZ4_stream_t* LZ4_dict, const char* source, char* dest, int srcSize)
 {
     AOCL_SETUP_NATIVE();
+    if(LZ4_dict == NULL || (source==NULL && srcSize!=0) || dest==NULL)
+    {
+        return 0;
+    }
     LZ4_stream_t_internal* streamPtr = &LZ4_dict->internal_donotuse;
     int result;
 
@@ -3576,6 +3580,16 @@ int LZ4_compress_forceExtDict (LZ4_stream_t* LZ4_dict, const char* source, char*
     return result;
 }
 
+#ifdef AOCL_UNIT_TEST
+int Test_LZ4_compress_forceExtDict(LZ4_stream_t* LZ4_dict, const char* source, char* dest, int srcSize)
+{
+    return LZ4_compress_forceExtDict(LZ4_dict, source, dest, srcSize);
+}
+void Test_LZ4_renormDictT(LZ4_stream_t_internal* LZ4_dict, int nextSize)
+{
+    LZ4_renormDictT(LZ4_dict, nextSize);
+}
+#endif /* AOCL_UNIT_TEST */
 
 /*! LZ4_saveDict() :
  *  If previously compressed data block is not guaranteed to remain available at its memory location,
@@ -3620,7 +3634,7 @@ typedef enum { decode_full_block = 0, partial_decode = 1 } earlyEnd_directive;
 #undef MIN
 #define MIN(a,b)    ( (a) < (b) ? (a) : (b) )
 
-
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 /* variant for decompress_unsafe()
  * does not know end of input
  * presumes input is well formed
@@ -3741,6 +3755,7 @@ LZ4_decompress_unsafe_generic(
     return (int)(ip - istart);
 }
 
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 
 /* Read the variable-length literal or match length.
  *
@@ -5347,6 +5362,7 @@ int LZ4_decompress_safe_partial_internal(const char* src, char* dst, int compres
                                   noDict, (BYTE*)dst, NULL, 0);
 }
 
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 LZ4_FORCE_O2
 int LZ4_decompress_fast(const char* source, char* dest, int originalSize)
 {
@@ -5356,6 +5372,7 @@ int LZ4_decompress_fast(const char* source, char* dest, int originalSize)
                 (const BYTE*)source, (BYTE*)dest, originalSize,
                 0, NULL, 0);
 }
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 
 /*===== Instantiate a few more decoding cases, used more than once. =====*/
 
@@ -5376,6 +5393,7 @@ static int LZ4_decompress_safe_partial_withPrefix64k_internal(const char* source
                                   (BYTE*)dest - 64 KB, NULL, 0);
 }
 
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 /* Another obsolete API function, paired with the previous one. */
 int LZ4_decompress_fast_withPrefix64k(const char* source, char* dest, int originalSize)
 {
@@ -5384,6 +5402,7 @@ int LZ4_decompress_fast_withPrefix64k(const char* source, char* dest, int origin
                 (const BYTE*)source, (BYTE*)dest, originalSize,
                 64 KB, NULL, 0);
 }
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 
 LZ4_FORCE_O2
 static int LZ4_decompress_safe_withSmallPrefix_internal(const char* source, char* dest, int compressedSize, int maxOutputSize,
@@ -5425,6 +5444,7 @@ int LZ4_decompress_safe_partial_forceExtDict_internal(const char* source, char* 
                                   (BYTE*)dest, (const BYTE*)dictStart, dictSize);
 }
 
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 LZ4_FORCE_O2
 static int LZ4_decompress_fast_extDict(const char* source, char* dest, int originalSize,
                                        const void* dictStart, size_t dictSize)
@@ -5434,6 +5454,7 @@ static int LZ4_decompress_fast_extDict(const char* source, char* dest, int origi
                 (const BYTE*)source, (BYTE*)dest, originalSize,
                 0, (const BYTE*)dictStart, dictSize);
 }
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 
 /* The "double dictionary" mode, for use with e.g. ring buffers: the first part
  * of the dictionary is passed as prefix, and the second via dictStart + dictSize.
@@ -5772,6 +5793,7 @@ int LZ4_decompress_safe_continue (LZ4_streamDecode_t* LZ4_streamDecode, const ch
     return result;
 }
 
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 LZ4_FORCE_O2 int
 LZ4_decompress_fast_continue (LZ4_streamDecode_t* LZ4_streamDecode, 
                         const char* source, char* dest, int originalSize)
@@ -5812,6 +5834,7 @@ LZ4_decompress_fast_continue (LZ4_streamDecode_t* LZ4_streamDecode,
 
     return result;
 }
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 
 
 /*
@@ -5863,6 +5886,7 @@ int LZ4_decompress_safe_partial_usingDict(const char* source, char* dest, int co
     return LZ4_decompress_safe_partial_forceExtDict(source, dest, compressedSize, targetOutputSize, dstCapacity, dictStart, (size_t)dictSize);
 }
 
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 int LZ4_decompress_fast_usingDict(const char* source, char* dest, int originalSize, const char* dictStart, int dictSize)
 {
     AOCL_SETUP_NATIVE();
@@ -5873,6 +5897,7 @@ int LZ4_decompress_fast_usingDict(const char* source, char* dest, int originalSi
     assert(dictSize >= 0);
     return LZ4_decompress_fast_extDict(source, dest, originalSize, dictStart, (size_t)dictSize);
 }
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 
 static void aocl_register_lz4_fmv(int optOff, int optLevel)
 {
@@ -5949,6 +5974,7 @@ static void aocl_setup_native(void) {
 #endif /* AOCL_LZ4_OPT */
 
 
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 /*=*************************************************
 *  Obsolete Functions
 ***************************************************/
@@ -6017,5 +6043,6 @@ char* LZ4_slideInputBuffer (void* state)
     /* avoid const char * -> char * conversion warning */
     return (char *)(uptrval)((LZ4_stream_t*)state)->internal_donotuse.dictionary;
 }
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 
 #endif   /* LZ4_COMMONDEFS_ONLY */

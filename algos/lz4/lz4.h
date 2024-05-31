@@ -927,6 +927,8 @@ LZ4_decompress_safe_partial_usingDict(const char* src, char* dst,
  *  From a high level, the difference is that
  *  this function initializes the provided state with a call to something like LZ4_resetStream_fast()
  *  while LZ4_compress_fast_extState() starts with a call to LZ4_resetStream().
+ * 
+ * @note NULL state buffer, NULL dst buffer or NULL src buffer with non-zero srcSize are invalid inputs.
  */
 LZ4LIB_STATIC_API int LZ4_compress_fast_extState_fastReset (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int acceleration);
 
@@ -1079,6 +1081,11 @@ struct LZ4_stream_t_internal {
     /* Implicit padding to ensure structure is aligned */
 };
 
+#ifdef AOCL_UNIT_TEST
+LZ4LIB_API int Test_LZ4_compress_forceExtDict(LZ4_stream_t* LZ4_dict, const char* source, char* dest, int srcSize);
+LZ4LIB_API void Test_LZ4_renormDictT(LZ4_stream_t_internal* LZ4_dict, int nextSize);
+#endif /* AOCL_UNIT_TEST */
+
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*  __LZ4_stream_t__ :
@@ -1207,6 +1214,7 @@ union LZ4_streamDecode_u {
 #  endif
 #endif /* LZ4_DISABLE_DEPRECATE_WARNINGS */
 
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 /*! 
 @name Obsolete compression functions (since v1.7.3) 
 @{
@@ -1258,7 +1266,9 @@ LZ4_DEPRECATED("Use LZ4_saveDict() instead")     LZ4LIB_API char* LZ4_slideInput
 /*! @name Obsolete streaming decoding functions (since v1.7.0) 
 @{
 */
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 LZ4_DEPRECATED("use LZ4_decompress_safe_usingDict() instead") LZ4LIB_API int LZ4_decompress_safe_withPrefix64k (const char* src, char* dst, int compressedSize, int maxDstSize); ///< LZ4_decompress_safe_withPrefix64k is deprecated use LZ4_decompress_safe_usingDict() instead
+#ifndef AOCL_EXCLUDE_DEPRECATED_APIS
 LZ4_DEPRECATED("use LZ4_decompress_fast_usingDict() instead") LZ4LIB_API int LZ4_decompress_fast_withPrefix64k (const char* src, char* dst, int originalSize); ///< LZ4_decompress_fast_withPrefix64k is deprecated use LZ4_decompress_fast_usingDict() instead
 /**
  * @}
@@ -1313,6 +1323,7 @@ LZ4LIB_API int LZ4_decompress_fast_usingDict (const char* src, char* dst, int or
  * @} 
  */
 
+#endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 /*! @brief LZ4_stream_t structure must be initialized at least once.
  *  This is done with LZ4_initStream(), or LZ4_resetStream().
  *  
