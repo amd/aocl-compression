@@ -2521,7 +2521,7 @@ void RawCompress(const char* input,
                  char* compressed,
                  size_t* compressed_length) {
   LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-  if (input == NULL || compressed == NULL || compressed_length == NULL)
+  if ((input_length!=0 && input == NULL) || compressed == NULL || compressed_length == NULL)
   {
     LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");

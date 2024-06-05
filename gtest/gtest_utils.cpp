@@ -38,13 +38,24 @@
 /*
     This function returns parameters for parameterised test in the form of {optimization on/off, optimization level}.
 */
-vector<DynamicDispatch> get_dynamic_dispatcher_flags()
+vector<DynamicDispatch> get_dynamic_dispatcher_flags(aocl_compression_type method)
 {
     vector<DynamicDispatch> params;
+    // For methods other than SNAPPY, if optimization is off there is only one code path that dynamic dispatcher selects
+    // but for SNAPPY, even if optimization is off, there are different intrinsic code paths to choose from depending on
+    // machine support.
+    if(method == SNAPPY)
+    {
+        for(int i = get_cpu_opt_flags(0); i > 0; i--)
+        {
+            params.push_back({1, i});   // With Intrinsics & optimization is off, only for snappy
+        }
+    }
     params.push_back({1, 0});   // No optimization
+
     for(int i = get_cpu_opt_flags(0); i >= 0; i--)
     {
-        params.push_back({0, i});   // With optimization
+        params.push_back({0, i});   // With Intrinsics & AOCL path
     }
     return params;
 }

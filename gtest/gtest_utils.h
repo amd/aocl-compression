@@ -38,6 +38,7 @@
 
 #include <random>
 #include <vector>
+#include "aocl_compression.h"
 
 using namespace std;
 
@@ -48,13 +49,14 @@ typedef struct
     int optLevel;
 } DynamicDispatch;
 
+
 // Parent class for parametrized (optimization level) tests.
 #define OPT_LEVEL_TESTS ::testing::TestWithParam<DynamicDispatch>
 
 /*
     This function returns parameters for parameterised test in the form of {optimization on/off, optimization level}.
 */
-vector<DynamicDispatch> get_dynamic_dispatcher_flags();
+vector<DynamicDispatch> get_dynamic_dispatcher_flags(aocl_compression_type method = AOCL_COMPRESSOR_ALGOS_NUM);
 
 
 /* Data generator class to provide different types of random input streams
