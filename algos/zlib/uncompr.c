@@ -244,16 +244,33 @@ int ZEXPORT uncompress2(Bytef *dest, uLongf *destLen, const Bytef *source,
 #ifdef AOCL_THREADS_LOG
         printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
 #endif
-        //For all the threads: Write to a single output buffer in a single-threaded mode
-
-        for(AOCL_UINT32 thread_id=0; thread_id<thread_group_handle.num_threads; thread_id++)
-            total_uncompressed_len += thread_group_handle.threads_info_list[thread_id].dst_trap_size;
-
-        if(total_uncompressed_len > dstCapacity)
-            RETURN_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, Z_BUF_ERROR);
 
         AOCL_UINT32 adler = 1;
-        for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+        /* compute cumulative dst_trap_size and save in unsued member partition_src_size
+        * This is used as offset to indicate starting points of decompressed data blocks in dst */
+        AOCL_UINT32 dst_offset = 0;
+        
+        // For the first thread:
+        cur_thread_info = thread_group_handle.threads_info_list[0];
+        //In case of any thread partitioning or alloc errors, exit the compression process with error
+        if (cur_thread_info.is_error && cur_thread_info.is_error != Z_BUF_ERROR)
+        {
+            result = cur_thread_info.is_error;
+            aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+#ifdef AOCL_THREADS_LOG
+            printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+            return result;
+        }
+        result = cur_thread_info.is_error;
+        total_uncompressed_len += thread_group_handle.threads_info_list[0].dst_trap_size;
+        
+        /* compute cumulative dst_trap_size and save in unsued member partition_src_size */
+        thread_group_handle.threads_info_list[0].partition_src_size = 0;
+        
+        adler = adler32_combine(adler, cur_thread_info.last_bytes_len, cur_thread_info.dst_trap_size);
+ 
+        for (thread_cnt = 1; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
         {
             cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
             //In case of any thread partitioning or alloc errors, exit the compression process with error
@@ -267,11 +284,27 @@ int ZEXPORT uncompress2(Bytef *dest, uLongf *destLen, const Bytef *source,
                 return result;
             }
             result = cur_thread_info.is_error;
-            //Copy this thread's chunk to the output final buffer
-            memcpy(thread_group_handle.dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
-            thread_group_handle.dst += cur_thread_info.dst_trap_size;
+
+            total_uncompressed_len += thread_group_handle.threads_info_list[thread_cnt].dst_trap_size;
+
+            dst_offset = thread_group_handle.threads_info_list[thread_cnt - 1].partition_src_size +
+                         thread_group_handle.threads_info_list[thread_cnt - 1].dst_trap_size; // cumulative dst_trap_size
+            thread_group_handle.threads_info_list[thread_cnt].partition_src_size = dst_offset;
+            
             adler = adler32_combine(adler, cur_thread_info.last_bytes_len, cur_thread_info.dst_trap_size);
         }
+
+        if(total_uncompressed_len > dstCapacity)
+            RETURN_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, Z_BUF_ERROR);
+        
+        /* copy decompressed data from threads to dst multi-threaded */
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+    {
+        AOCL_UINT32 thread_cnt = omp_get_thread_num();
+        cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+        memcpy(thread_group_handle.dst + cur_thread_info.partition_src_size, // dst_offset = cur_thread_info.partition_src_size
+                cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+    }
         // verify uncompressed data integrity
         AOCL_UINT32 stream_adler = *(AOCL_UINT32*)(thread_group_handle.threads_info_list[thread_group_handle.num_threads - 1].additional_state_info);
         adler = ((((adler) >> 24) & 0xff) + (((adler) >> 8) & 0xff00) + (((adler) & 0xff00) << 8) + (((adler) & 0xff) << 24));

@@ -2370,13 +2370,25 @@ bool RawUncompress(const char* compressed, size_t compressed_length, char* uncom
 #ifdef AOCL_THREADS_LOG
     printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
 #endif
-
+  
+    /* compute cumulative dst_trap_size and save in unsued member partition_src_size
+     * This is used as offset to indicate starting points of decompressed data blocks in dst */
+    AOCL_UINT32 dst_offset = 0;
     AOCL_UINT32 thread_cnt = 0;
-    // For all the threads: Write to a single output buffer in single threaded mode
-    for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+    // For the first thread:
+    if (thread_group_handle.threads_info_list[0].is_error)
+    {
+      aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+#ifdef AOCL_THREADS_LOG
+      printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+      return false;
+    }
+    thread_group_handle.threads_info_list[0].partition_src_size = dst_offset;
+    for (thread_cnt = 1; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
     {
       cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
-      // In case of any thread partitioning or alloc errors, exit the compression process with error
+      // In case of any thread partitioning or alloc errors, exit the decompression process with error
       if (cur_thread_info.is_error)
       {
         aocl_destroy_parallel_decompress_mt(&thread_group_handle);
@@ -2385,10 +2397,19 @@ bool RawUncompress(const char* compressed, size_t compressed_length, char* uncom
 #endif
         return false;
       }
-      // Copy this thread's chunk to the output final buffer
-      memcpy(thread_group_handle.dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
-      thread_group_handle.dst += cur_thread_info.dst_trap_size;
+        
+      dst_offset = thread_group_handle.threads_info_list[thread_cnt - 1].partition_src_size +
+          thread_group_handle.threads_info_list[thread_cnt - 1].dst_trap_size; // cumulative dst_trap_size
+      thread_group_handle.threads_info_list[thread_cnt].partition_src_size = dst_offset;
     }
+/* copy decompressed data from threads to dst multi-threaded */
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+  {
+    AOCL_UINT32 thread_cnt = omp_get_thread_num();
+    cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+    memcpy(thread_group_handle.dst + cur_thread_info.partition_src_size, // dst_offset = cur_thread_info.partition_src_size
+        cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+  }
     // free the memory allocated for the the thread_info_list and/or for each thread's dst_trap
     aocl_destroy_parallel_decompress_mt(&thread_group_handle);
     return true;
@@ -2655,17 +2676,26 @@ void RawCompress(const char* input,
     // encoded varint, it also stores the offset for the starting location of
     // the data of the first compressed buffer
     AOCL_UINT32 thread_dst_offset = (AOCL_UINT32)(*compressed_length);
-    for (; thread_cnt < thread_group_handle.num_threads; ++thread_cnt) {
+
+    // For the first thread:
+    // generate RAP data and write to corresponding location in destination buffer
+    *(AOCL_UINT32*)dst_ptr = thread_dst_offset;
+    dst_ptr += RAP_OFFSET_BYTES;
+    thread_dst_offset += thread_group_handle.threads_info_list[0].dst_trap_size;
+    *(AOCL_INT32*)dst_ptr = thread_group_handle.threads_info_list[0].dst_trap_size;
+    dst_ptr += RAP_LEN_BYTES;
+    *(AOCL_INT32*)dst_ptr = thread_group_handle.threads_info_list[0].partition_src_size;
+    dst_ptr += DECOMP_LEN_BYTES;
+
+    // compute cumulative dst_trap_size and save in unsued member partition_src_size
+    thread_group_handle.threads_info_list[0].partition_src_size = 0;
+
+    // update the compressed_length to include the current thread's compressed length
+    *compressed_length += thread_group_handle.threads_info_list[0].dst_trap_size;
+
+    for (thread_cnt = 1; thread_cnt < thread_group_handle.num_threads; ++thread_cnt) {
       thread_info_iter = &thread_group_handle.threads_info_list[thread_cnt];
 
-      // copy compressed data of the current thread to the destination buffer.
-      // (the dst_trap_size for each thread has already been modified to take
-      // into account the varint at beginning and additional_state_info has the
-      // location in the dst_trap buffer that is just past the varint's bytes)
-      memcpy(thread_group_handle.dst, (AOCL_CHAR*)thread_info_iter->additional_state_info, thread_info_iter->dst_trap_size);
-
-      // push the dst buffer pointer ahead by the number of bytes copied
-      thread_group_handle.dst += thread_info_iter->dst_trap_size;
 
       // generate RAP data and write to corresponding location in destination buffer
       *(AOCL_UINT32*)dst_ptr = thread_dst_offset;
@@ -2676,10 +2706,24 @@ void RawCompress(const char* input,
       *(AOCL_INT32*)dst_ptr = thread_info_iter->partition_src_size;
       dst_ptr += DECOMP_LEN_BYTES;
 
+      /* compute cumulative dst_trap_size and save in unsued member partition_src_size
+      * This is used as offset to indicate starting points of compressed data blocks in dst */
+      thread_group_handle.threads_info_list[thread_cnt].partition_src_size =
+              thread_group_handle.threads_info_list[thread_cnt - 1].partition_src_size +
+              thread_group_handle.threads_info_list[thread_cnt - 1].dst_trap_size; //cur_offset i.e. cumulative dst_trap_size
+
       // update the compressed_length to include the current thread's compressed length
       *compressed_length += thread_info_iter->dst_trap_size;
     }
 
+    /* copy compressed data from threads to dst multi-threaded */
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+    {
+      AOCL_UINT32 thread_cnt = omp_get_thread_num();
+      cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+      memcpy(thread_group_handle.dst + cur_thread_info.partition_src_size, //cur_thread_info.partition_src_size contains cur_offset
+          (AOCL_CHAR*)cur_thread_info.additional_state_info, cur_thread_info.dst_trap_size);
+    }
     // free the memory allocated for the the thread_info_list and/or for each thread's dst_trap
     aocl_destroy_parallel_compress_mt(&thread_group_handle);
   }

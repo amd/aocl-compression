@@ -292,7 +292,38 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
 
         // <-- RAP Metadata payload -->
         AOCL_UINT32 offset = 0, adler = 1;
-        for (; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+        
+        // For the first thread:
+        cur_thread_info = thread_group_handle.threads_info_list[0];
+        // In case of any thread partitioning or alloc errors, exit the compression process with error
+        if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
+        {
+            result = cur_thread_info.is_error;
+            aocl_destroy_parallel_compress_mt(&thread_group_handle);
+    #ifdef AOCL_THREADS_LOG
+            printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+    #endif
+            return result;
+        }
+
+        *(AOCL_UINT32*)dst_ptr = *destLen;
+        dst_ptr += RAP_OFFSET_BYTES;
+        *(AOCL_INT32*)dst_ptr = cur_thread_info.dst_trap_size - offset;
+        dst_ptr += RAP_LEN_BYTES;
+        *(AOCL_INT32*)dst_ptr = cur_thread_info.partition_src_size;
+        dst_ptr += DECOMP_LEN_BYTES;
+
+        *destLen += (cur_thread_info.dst_trap_size - offset);
+        // combining partition checksum value stored in last_bytes_len of thread info
+        adler = adler32_combine(adler, cur_thread_info.last_bytes_len, cur_thread_info.partition_src_size);
+        /* save the offset (zlib header bytes) in last_bytes_len */
+        thread_group_handle.threads_info_list[0].last_bytes_len = offset;
+
+        /* compute cumulative dst_trap_size and save in unsued member partition_src_size */
+        thread_group_handle.threads_info_list[0].partition_src_size = 0;
+        offset = 2; // skip 2 bytes zlib header
+
+        for (thread_cnt = 1 ; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
         {
             cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
             //In case of any thread partitioning or alloc errors, exit the compression process with error
@@ -306,9 +337,6 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
                 return result;
             }
 
-            //Copy this thread's chunk to the output final buffer
-            memcpy(thread_group_handle.dst, cur_thread_info.dst_trap + offset, cur_thread_info.dst_trap_size - offset);
-
             *(AOCL_UINT32*)dst_ptr = *destLen; //For storing this thread's RAP offset
             dst_ptr += RAP_OFFSET_BYTES;
             *(AOCL_INT32*)dst_ptr = cur_thread_info.dst_trap_size - offset; //For storing this thread's RAP length
@@ -318,12 +346,30 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
 
             *(AOCL_INT32*)dst_ptr = decomp_len;
             dst_ptr += DECOMP_LEN_BYTES;
-            thread_group_handle.dst += (cur_thread_info.dst_trap_size - offset);
             *destLen += (cur_thread_info.dst_trap_size - offset);
-            offset = 2; // skip 2 bytes zlib header
             // combining partition checksum value stored in last_bytes_len of thread info
             adler = adler32_combine(adler, cur_thread_info.last_bytes_len, cur_thread_info.partition_src_size);
+            thread_group_handle.threads_info_list[thread_cnt].last_bytes_len = offset; /* save the offset (zlib header bytes) in last_bytes_len */
+
+            /* compute cumulative dst_trap_size and save in unsued member partition_src_size
+            * This is used as offset to indicate starting points of compressed data blocks in dst */
+            thread_group_handle.threads_info_list[thread_cnt].partition_src_size =
+                    thread_group_handle.threads_info_list[thread_cnt - 1].partition_src_size +
+                    thread_group_handle.threads_info_list[thread_cnt - 1].dst_trap_size - 
+                    thread_group_handle.threads_info_list[thread_cnt - 1].last_bytes_len; //cur_offset i.e. cumulative dst_trap_size
+
+            offset = 2; // skip 2 bytes zlib header
         }
+
+        /* copy compressed data from threads to dst multi-threaded */
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+        {
+            AOCL_UINT32 thread_cnt = omp_get_thread_num();
+            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+            memcpy(thread_group_handle.dst + cur_thread_info.partition_src_size, //cur_thread_info.partition_src_size contains cur_offset
+                cur_thread_info.dst_trap + cur_thread_info.last_bytes_len, cur_thread_info.dst_trap_size - cur_thread_info.last_bytes_len);
+        }
+        thread_group_handle.dst += *destLen - rap_metadata_len;
         //Update checksum
         adler = ((((adler) >> 24) & 0xff) + (((adler) >> 8) & 0xff00) + (((adler) & 0xff00) << 8) + (((adler) & 0xff) << 24));
         memcpy((thread_group_handle.dst - 4), &adler, 4);
