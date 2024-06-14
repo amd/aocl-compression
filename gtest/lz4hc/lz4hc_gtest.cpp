@@ -54,6 +54,10 @@
 #include "fuzztest/fuzztest.h"
 #endif
 
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif /* AOCL_ENABLE_THREADS */
+
 using namespace std;
 
 /* read function to be called for Hash */
@@ -98,6 +102,21 @@ public:
         /* Provides the maximum size that LZ4/LZ4HC compression may output in a "worst case". */
         compressed_sz = LZ4_compressBound(sz);
         compressed_data = (char *)malloc(compressed_sz);
+    }
+
+    Test_Buffer(int inp_sz, int out_sz)
+    {
+        this->orig_sz = inp_sz;
+        orig_data = (char*)malloc(inp_sz);
+
+        // generating random data inside `orig_data` buffer.
+        for (int i = 0; i < inp_sz; i++)
+        {
+            orig_data[i] = rand() % 255;
+        }
+
+        compressed_sz = out_sz; // custom out_sz
+        compressed_data = (char*)malloc(compressed_sz);
     }
 
     /* Returns pointer to source buffer. */
@@ -418,6 +437,48 @@ TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common
         EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
     }
 }
+
+#ifdef AOCL_ENABLE_THREADS
+
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_11) // pass_case_mt
+{
+    for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
+    {
+        Test_Buffer test_buf(8*64*1024);
+        int compressedSize = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), level /* level */);
+        EXPECT_NE(compressedSize, 0);
+
+        EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
+    }
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common_12) // dstCapacity_inadequate_mt
+{
+    for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
+    {
+        int srcLen = 16*64*1024;
+        Test_Buffer test_buf(srcLen, srcLen/2 /* dst_size */);
+
+        int compressedSize = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), level /* level */);
+        EXPECT_EQ(compressedSize, 0);
+    }
+}
+
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_13) // mt_compression_st_decompression
+{
+    for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
+    {
+        Test_Buffer test_buf(8*64*1024);
+        int compressedSize = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), level /* level */);
+        EXPECT_NE(compressedSize, 0);
+
+        int rap_metadata_len = aocl_skip_rap_frame_mt(test_buf.getCompressedBuff(), compressedSize);
+
+        EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff() + rap_metadata_len, compressedSize - rap_metadata_len));
+    }
+}
+
+#endif
 
 INSTANTIATE_TEST_SUITE_P(
     LZ4HC_TEST,

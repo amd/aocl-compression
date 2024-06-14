@@ -732,6 +732,199 @@ unsigned LZ4_count(const BYTE* pIn, const BYTE* pMatch, const BYTE* pInLimit)
     return (unsigned)(pIn - pStart);
 }
  
+#ifdef AOCL_LZ4_OPT
+#ifdef AOCL_ENABLE_THREADS
+
+/**
+ * AOCL_LZ4_postProcessing_mt(): Post processing in single-threaded mode.
+ * Prepares RAP frame and joins the last sequences of the neighboring threads.
+*/
+static inline
+int AOCL_LZ4_postProcessing_mt(aocl_thread_group_t *thread_group_handle, int rap_metadata_len, char* dest)
+{
+    int result;
+    aocl_thread_info_t cur_thread_info;
+    aocl_thread_info_t prev_thread_info;
+    AOCL_UINT32 thread_cnt = 0;
+    AOCL_UINT32 dst_offset = 0;
+
+    // <-- RAP Header -->
+    //Add at the start of the stream : Although it can be at the end or at any other point in the stream, but it is more easier for parsing at the start
+    AOCL_CHAR* dst_org = thread_group_handle->dst;
+    AOCL_CHAR* dst_ptr = dst_org;
+    AOCL_UINT32 prev_offset, prev_len;
+    AOCL_UINT32 decomp_len;
+    thread_group_handle->dst += rap_metadata_len;
+    dst_ptr += RAP_START_OF_PARTITIONS;
+    // <-- RAP Header -->
+
+    // <-- RAP Metadata payload -->
+    //For the first thread:
+    prev_thread_info = thread_group_handle->threads_info_list[thread_cnt++];
+    //In case of any thread partitioning or alloc errors, exit the compression process with error
+    if (prev_thread_info.is_error || prev_thread_info.dst_trap_size < 0)
+    {
+        result = 0;
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt-1);
+#endif
+        LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt-1);
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return result;
+    }
+    //Copy first chunk as it is to the output final buffer
+    memcpy((thread_group_handle->dst + dst_offset), prev_thread_info.dst_trap, prev_thread_info.dst_trap_size);
+    *(AOCL_UINT32*)dst_ptr = rap_metadata_len; //For storing this thread's RAP offset
+    dst_ptr += RAP_OFFSET_BYTES;
+    *(AOCL_INT32*)dst_ptr = prev_thread_info.dst_trap_size; //For storing this thread's RAP length
+    dst_ptr += RAP_LEN_BYTES;
+    //For storing this thread's decompressed (src) length
+    decomp_len = prev_thread_info.partition_src_size - prev_thread_info.last_bytes_len;
+    if (((AOCL_UCHAR *)prev_thread_info.additional_state_info - (AOCL_UCHAR*)prev_thread_info.partition_src) !=
+        decomp_len)
+    {
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : Error in last bytes position\n", thread_cnt);
+#endif
+        result = 0;
+        LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Error in last bytes position", thread_cnt);
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return result;
+    }
+    *(AOCL_INT32*)dst_ptr = decomp_len;
+    dst_ptr += DECOMP_LEN_BYTES;
+    thread_group_handle->dst += prev_thread_info.dst_trap_size;
+
+    prev_offset = rap_metadata_len;
+    prev_len = prev_thread_info.dst_trap_size;
+
+    //For next threads:
+    for (; thread_cnt < thread_group_handle->num_threads; thread_cnt++)
+    {
+        size_t cur_token, new_token, cur_lit;
+        cur_thread_info = thread_group_handle->threads_info_list[thread_cnt];
+        //In case of any thread partitioning or alloc errors, exit the compression process with error
+        if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
+        {
+            result = 0;
+#ifdef AOCL_THREADS_LOG
+            printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+#endif
+            LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt);
+            LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+            return result;
+        }
+        dst_offset = 0;
+        //thread_group_handle->dst += dst_offset;
+
+        //post processing to join parallely decodable chunks into a contiguous stream to allow
+        //standard decoder to process it in ST mode as well
+        //If cur thread's dst_trap_size = 0 (all literals), then write it to output final buffer
+        //along with the previous chunk's left over bytes (literals)
+        if (cur_thread_info.dst_trap_size == 0 && cur_thread_info.last_bytes_len)
+        {
+            cur_thread_info.last_bytes_len = cur_thread_info.last_bytes_len + prev_thread_info.last_bytes_len;
+            cur_thread_info.additional_state_info = prev_thread_info.additional_state_info;
+            *(AOCL_UINT32*)dst_ptr = (prev_offset + prev_len); //For storing this thread's RAP offset
+            *(AOCL_INT32*)(dst_ptr + RAP_OFFSET_BYTES) = dst_offset; //For storing this thread's RAP length
+            dst_ptr += RAP_DATA_BYTES;
+            //For storing this thread's decompressed (src) length
+            decomp_len = 0;
+            *(AOCL_INT32*)dst_ptr = decomp_len;
+            dst_ptr += DECOMP_LEN_BYTES;
+            prev_thread_info = cur_thread_info;
+            prev_offset = (prev_offset + prev_len);
+            prev_len = dst_offset;
+        }
+        else //Normal situation when cur thread's dst_trap_size > 0
+        {
+            cur_token = *(AOCL_UCHAR*)cur_thread_info.dst_trap;
+            cur_thread_info.dst_trap++;
+            cur_thread_info.dst_trap_size--;
+            cur_lit = (cur_token >> 4);
+            new_token = cur_lit + prev_thread_info.last_bytes_len;
+            if (new_token >= RUN_MASK)
+            {
+                size_t accumulator = new_token - RUN_MASK;
+                *thread_group_handle->dst++ = (BYTE)((RUN_MASK << ML_BITS) | (cur_token & 0xF));
+                dst_offset++;
+                for (; accumulator >= 255; accumulator -= 255)
+                {
+                    *thread_group_handle->dst++ = (BYTE)255;
+                    dst_offset++;
+                }
+                if (cur_lit >= RUN_MASK)
+                {
+                    while (*(AOCL_UCHAR*)cur_thread_info.dst_trap == 255)
+                    {
+                        *thread_group_handle->dst++ = (BYTE)255;
+                        dst_offset++;
+                        cur_thread_info.dst_trap++;
+                        cur_thread_info.dst_trap_size--;
+                    }
+                    new_token = *(AOCL_UCHAR*)cur_thread_info.dst_trap;
+                    cur_thread_info.dst_trap++;
+                    cur_thread_info.dst_trap_size--;
+                    accumulator += new_token;
+                    if (accumulator >= 255)
+                    {
+                        *thread_group_handle->dst++ = (BYTE)255;
+                        dst_offset++;
+                        accumulator -= 255;
+                    }
+                }
+                *thread_group_handle->dst++ = (BYTE)accumulator;
+                dst_offset++;
+            }
+            else
+            {
+                *thread_group_handle->dst++ = (BYTE)((new_token << ML_BITS) | (cur_token & 0xF));
+                dst_offset++;
+            }
+
+            //Copy prev thread's last literal bytes to the output final buffer
+            memcpy(thread_group_handle->dst, prev_thread_info.additional_state_info, prev_thread_info.last_bytes_len);
+            dst_offset += prev_thread_info.last_bytes_len;
+            thread_group_handle->dst += prev_thread_info.last_bytes_len;
+
+            //Copy this thread's chunk to the output final buffer
+            memcpy(thread_group_handle->dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+            dst_offset += cur_thread_info.dst_trap_size;
+            thread_group_handle->dst += cur_thread_info.dst_trap_size;
+
+            *(AOCL_UINT32*)dst_ptr = (prev_offset + prev_len); //For storing this thread's RAP offset
+            *(AOCL_INT32*)(dst_ptr + RAP_OFFSET_BYTES) = dst_offset; //For storing this thread's RAP length
+            dst_ptr += RAP_DATA_BYTES;
+            //For storing this thread's decompressed (src) length
+            decomp_len = cur_thread_info.partition_src_size - cur_thread_info.last_bytes_len;
+            if ((thread_cnt != (thread_group_handle->num_threads - 1)) &&
+                ((AOCL_UCHAR*)cur_thread_info.additional_state_info - (AOCL_UCHAR*)cur_thread_info.partition_src) !=
+                decomp_len)
+            {
+#ifdef AOCL_THREADS_LOG
+                printf("Compress Thread [id: %d] : Error in last bytes position\n", thread_cnt);
+#endif
+                result = 0;
+                LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Error in last bytes position", thread_cnt);
+                LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                return result;
+            }
+            *(AOCL_INT32*)dst_ptr = decomp_len + prev_thread_info.last_bytes_len;
+            dst_ptr += DECOMP_LEN_BYTES;
+
+            prev_thread_info = cur_thread_info;
+            prev_offset = (prev_offset + prev_len);
+            prev_len = dst_offset;
+        }
+    }
+    // <-- RAP Metadata payload -->
+    
+    result = thread_group_handle->dst - dest;
+    return result;
+}
+
+#endif /* AOCL_ENABLE_THRAEDS */
+#endif /* AOCL_LZ4_OPT */
 
 #ifndef LZ4_COMMONDEFS_ONLY
 
@@ -1949,11 +2142,6 @@ _last_literals:
 }
 
 #ifdef AOCL_ENABLE_THREADS
-#ifdef AOCL_LZ4_AVX_OPT
-/* Even though this function does not use AVX instructions, output format it generates (with RAP frame) is
- * not directly compatible with single threaded decompressor. Hence to pair it with 
- * AOCL_LZ4_decompress_safe_mt it is enabled only for AOCL_LZ4_AVX_OPT case.
-*/
 //Same as AOCL_LZ4_compress_generic_validated, but with state information for Multi-threaded support
 LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated_mt(
     LZ4_stream_t_internal* const cctx,
@@ -2459,7 +2647,6 @@ _last_literals:
     DEBUGLOG(5, "LZ4_compress_generic: compressed %i bytes into %i bytes", inputSize, result);
     return result;
 }
-#endif /* AOCL_LZ4_AVX_OPT */
 #endif /* AOCL_ENABLE_THREADS */
 #endif /* AOCL_LZ4_OPT */
 
@@ -2549,10 +2736,8 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic(
         dstCapacity, outputDirective,
         tableType, dictDirective, dictIssue, acceleration);
 }
-#endif /* AOCL_LZ4_OPT */
 
 #ifdef AOCL_ENABLE_THREADS
-#ifdef AOCL_LZ4_AVX_OPT
 //For multi-threaded compression
 LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_mt(
     LZ4_stream_t_internal* const cctx,
@@ -2598,8 +2783,8 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_mt(
         dstCapacity, outputDirective,
         tableType, dictDirective, dictIssue, acceleration);
 }
-#endif /* AOCL_LZ4_AVX_OPT */
 #endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4_OPT */
 
 int LZ4_compress_fast_extState_internal(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
@@ -2675,8 +2860,8 @@ int LZ4_compress_fast_extState(void* state, const char* source, char* dest, int 
     return LZ4_compress_fast_extState_fp(state, source, dest, inputSize, maxOutputSize, acceleration);
 }
 
+#ifdef AOCL_LZ4_OPT
 #ifdef AOCL_ENABLE_THREADS
-#ifdef AOCL_LZ4_AVX_OPT
 //For mutli-threaded compression
 int AOCL_LZ4_compress_fast_extState_mt(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration, unsigned char** last_anchor_ptr, unsigned int* last_bytes_len)
 {
@@ -2709,8 +2894,8 @@ int AOCL_LZ4_compress_fast_extState_mt(void* state, const char* source, char* de
         }
     }
 }
-#endif /* AOCL_LZ4_AVX_OPT */
 #endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4_OPT */
 
 /**
  * LZ4_compress_fast_extState_fastReset() :
@@ -2759,6 +2944,7 @@ int LZ4_compress_fast_extState_fastReset(void* state, const char* src, char* dst
     }
 }
 
+#ifdef AOCL_LZ4_OPT
 #ifdef AOCL_ENABLE_THREADS
 int LZ4_compress_fast_ST(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
@@ -2780,11 +2966,6 @@ int LZ4_compress_fast_ST(const char* source, char* dest, int inputSize, int maxO
     return result;
 }
 
-#ifdef AOCL_LZ4_AVX_OPT
-/* This function does not use any AVX code, but it produces output with RAP frame added.
-* This data is not compatible with the single threaded decompress APIs. Hence, it is placed under
-* AOCL_LZ4_AVX_OPT and made to pair with AOCL_LZ4_decompress_safe_mt().
-*/
 int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration){
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if ((source == NULL && inputSize != 0) || dest == NULL) {
@@ -2804,10 +2985,7 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
     int result;
     aocl_thread_group_t thread_group_handle;
     aocl_thread_info_t cur_thread_info;
-    aocl_thread_info_t prev_thread_info;
     AOCL_INT32 rap_metadata_len = -1;
-    AOCL_UINT32 thread_cnt = 0;
-    AOCL_UINT32 dst_offset = 0;
     
     rap_metadata_len = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)source,
                                                  dest, inputSize, maxOutputSize,
@@ -2849,20 +3027,23 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
 
 #if (LZ4_HEAPMODE)
                 LZ4_stream_t* ctxPtr = (LZ4_stream_t*)ALLOC(sizeof(LZ4_stream_t));   /* malloc-calloc always properly aligned */
-                if (ctxPtr == NULL) return 0;
+                if (ctxPtr == NULL) is_error = 1;
+                else
 #else
                 LZ4_stream_t ctx;
                 LZ4_stream_t* const ctxPtr = &ctx;
 #endif
-                local_result = AOCL_LZ4_compress_fast_extState_mt(ctxPtr,
-                    cur_thread_info.partition_src, cur_thread_info.dst_trap,
-                    cur_thread_info.partition_src_size, 
-                    cur_thread_info.dst_trap_size, acceleration, 
-                    &last_anchor_ptr, (thread_id != (thread_group_handle.num_threads - 1)) ? &last_bytes_len : NULL);
+                {
+                    local_result = AOCL_LZ4_compress_fast_extState_mt(ctxPtr,
+                        cur_thread_info.partition_src, cur_thread_info.dst_trap,
+                        cur_thread_info.partition_src_size, 
+                        cur_thread_info.dst_trap_size, acceleration, 
+                        &last_anchor_ptr, (thread_id != (thread_group_handle.num_threads - 1)) ? &last_bytes_len : NULL);
 #if (LZ4_HEAPMODE)
-                FREEMEM(ctxPtr);
+                    FREEMEM(ctxPtr);
 #endif
-                is_error = 0;
+                    is_error = 0;
+                }
             }//aocl_do_partition_compress_mt
             
             thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
@@ -2882,190 +3063,12 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
         printf("Compress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
 #endif
 
-        //Post processing in single-threaded mode: Prepares RAP frame and joins the last sequences of the neighboring threads
-
-        // <-- RAP Header -->
-        //Add at the start of the stream : Although it can be at the end or at any other point in the stream, but it is more easier for parsing at the start
-        AOCL_CHAR* dst_org = thread_group_handle.dst;
-        AOCL_CHAR* dst_ptr = dst_org;
-        AOCL_UINT32 prev_offset, prev_len;
-        AOCL_UINT32 decomp_len;
-        thread_group_handle.dst += rap_metadata_len;
-        dst_ptr += RAP_START_OF_PARTITIONS;
-        // <-- RAP Header -->
-
-        // <-- RAP Metadata payload -->
-        //For the first thread:
-        prev_thread_info = thread_group_handle.threads_info_list[thread_cnt++];
-        //In case of any thread partitioning or alloc errors, exit the compression process with error
-        if (prev_thread_info.is_error || prev_thread_info.dst_trap_size < 0)
-        {
-            result = 0;
-            aocl_destroy_parallel_compress_mt(&thread_group_handle);
-#ifdef AOCL_THREADS_LOG
-            printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt-1);
-#endif
-            LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt-1);
-            LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-            return result;
-        }
-        //Copy first chunk as it is to the output final buffer
-        memcpy((thread_group_handle.dst + dst_offset), prev_thread_info.dst_trap, prev_thread_info.dst_trap_size);
-        *(AOCL_UINT32*)dst_ptr = rap_metadata_len; //For storing this thread's RAP offset
-        dst_ptr += RAP_OFFSET_BYTES;
-        *(AOCL_INT32*)dst_ptr = prev_thread_info.dst_trap_size; //For storing this thread's RAP length
-        dst_ptr += RAP_LEN_BYTES;
-        //For storing this thread's decompressed (src) length
-        decomp_len = prev_thread_info.partition_src_size - prev_thread_info.last_bytes_len;
-        if (((AOCL_UCHAR *)prev_thread_info.additional_state_info - (AOCL_UCHAR*)prev_thread_info.partition_src) !=
-            decomp_len)
-        {
-#ifdef AOCL_THREADS_LOG
-            printf("Compress Thread [id: %d] : Error in last bytes position\n", thread_cnt);
-#endif
-            result = 0;
-            aocl_destroy_parallel_compress_mt(&thread_group_handle);
-            LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Error in last bytes position", thread_cnt);
-            LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-            return result;
-        }
-        *(AOCL_INT32*)dst_ptr = decomp_len;
-        dst_ptr += DECOMP_LEN_BYTES;
-        thread_group_handle.dst += prev_thread_info.dst_trap_size;
-
-        prev_offset = rap_metadata_len;
-        prev_len = prev_thread_info.dst_trap_size;
-
-        //For next threads:
-        for (; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
-        {
-            size_t cur_token, new_token, cur_lit;
-            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
-            //In case of any thread partitioning or alloc errors, exit the compression process with error
-            if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
-            {
-                result = 0;
-                aocl_destroy_parallel_compress_mt(&thread_group_handle);
-#ifdef AOCL_THREADS_LOG
-                printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
-#endif
-            LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt);
-            LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-                return result;
-            }
-            dst_offset = 0;
-            //thread_group_handle.dst += dst_offset;
-
-            //post processing to join parallely decodable chunks into a contiguous stream to allow
-            //standard decoder to process it in ST mode as well
-            //If cur thread's dst_trap_size = 0 (all literals), then write it to output final buffer
-            //along with the previous chunk's left over bytes (literals)
-            if (cur_thread_info.dst_trap_size == 0 && cur_thread_info.last_bytes_len)
-            {
-                cur_thread_info.last_bytes_len = cur_thread_info.last_bytes_len + prev_thread_info.last_bytes_len;
-                cur_thread_info.additional_state_info = prev_thread_info.additional_state_info;
-                *(AOCL_UINT32*)dst_ptr = (prev_offset + prev_len); //For storing this thread's RAP offset
-                *(AOCL_INT32*)(dst_ptr + RAP_OFFSET_BYTES) = dst_offset; //For storing this thread's RAP length
-                dst_ptr += RAP_DATA_BYTES;
-                //For storing this thread's decompressed (src) length
-                decomp_len = 0;
-                *(AOCL_INT32*)dst_ptr = decomp_len;
-                dst_ptr += DECOMP_LEN_BYTES;
-                prev_thread_info = cur_thread_info;
-                prev_offset = (prev_offset + prev_len);
-                prev_len = dst_offset;
-            }
-            else //Normal situation when cur thread's dst_trap_size > 0
-            {
-                cur_token = *(AOCL_UCHAR*)cur_thread_info.dst_trap;
-                cur_thread_info.dst_trap++;
-                cur_thread_info.dst_trap_size--;
-                cur_lit = (cur_token >> 4);
-                new_token = cur_lit + prev_thread_info.last_bytes_len;
-                if (new_token >= RUN_MASK)
-                {
-                    size_t accumulator = new_token - RUN_MASK;
-                    *thread_group_handle.dst++ = (BYTE)((RUN_MASK << ML_BITS) | (cur_token & 0xF));
-                    dst_offset++;
-                    for (; accumulator >= 255; accumulator -= 255)
-                    {
-                        *thread_group_handle.dst++ = (BYTE)255;
-                        dst_offset++;
-                    }
-                    if (cur_lit >= RUN_MASK)
-                    {
-                        while (*(AOCL_UCHAR*)cur_thread_info.dst_trap == 255)
-                        {
-                            *thread_group_handle.dst++ = (BYTE)255;
-                            dst_offset++;
-                            cur_thread_info.dst_trap++;
-                            cur_thread_info.dst_trap_size--;
-                        }
-                        new_token = *(AOCL_UCHAR*)cur_thread_info.dst_trap;
-                        cur_thread_info.dst_trap++;
-                        cur_thread_info.dst_trap_size--;
-                        accumulator += new_token;
-                        if (accumulator >= 255)
-                        {
-                            *thread_group_handle.dst++ = (BYTE)255;
-                            dst_offset++;
-                            accumulator -= 255;
-                        }
-                    }
-                    *thread_group_handle.dst++ = (BYTE)accumulator;
-                    dst_offset++;
-                }
-                else
-                {
-                    *thread_group_handle.dst++ = (BYTE)((new_token << ML_BITS) | (cur_token & 0xF));
-                    dst_offset++;
-                }
-
-                //Copy prev thread's last literal bytes to the output final buffer
-                memcpy(thread_group_handle.dst, prev_thread_info.additional_state_info, prev_thread_info.last_bytes_len);
-                dst_offset += prev_thread_info.last_bytes_len;
-                thread_group_handle.dst += prev_thread_info.last_bytes_len;
-
-                //Copy this thread's chunk to the output final buffer
-                memcpy(thread_group_handle.dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
-                dst_offset += cur_thread_info.dst_trap_size;
-                thread_group_handle.dst += cur_thread_info.dst_trap_size;
-
-                *(AOCL_UINT32*)dst_ptr = (prev_offset + prev_len); //For storing this thread's RAP offset
-                *(AOCL_INT32*)(dst_ptr + RAP_OFFSET_BYTES) = dst_offset; //For storing this thread's RAP length
-                dst_ptr += RAP_DATA_BYTES;
-                //For storing this thread's decompressed (src) length
-                decomp_len = cur_thread_info.partition_src_size - cur_thread_info.last_bytes_len;
-                if ((thread_cnt != (thread_group_handle.num_threads - 1)) &&
-                    ((AOCL_UCHAR*)cur_thread_info.additional_state_info - (AOCL_UCHAR*)cur_thread_info.partition_src) !=
-                    decomp_len)
-                {
-#ifdef AOCL_THREADS_LOG
-                    printf("Compress Thread [id: %d] : Error in last bytes position\n", thread_cnt);
-#endif
-                    result = 0;
-                    aocl_destroy_parallel_compress_mt(&thread_group_handle);
-                    LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Error in last bytes position", thread_cnt);
-                    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-                    return result;
-                }
-                *(AOCL_INT32*)dst_ptr = decomp_len + prev_thread_info.last_bytes_len;
-                dst_ptr += DECOMP_LEN_BYTES;
-
-                prev_thread_info = cur_thread_info;
-                prev_offset = (prev_offset + prev_len);
-                prev_len = dst_offset;
-            }
-        }
-        // <-- RAP Metadata payload -->
-
-        result = thread_group_handle.dst - dest;
+        result = AOCL_LZ4_postProcessing_mt(&thread_group_handle, rap_metadata_len, dest);
         aocl_destroy_parallel_compress_mt(&thread_group_handle);
     }//thread_group_handle.num_threads > 1
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return result;
 }
-#endif /* AOCL_LZ4_AVX_OPT */
 
 int AOCL_LZ4_compress_fast_st(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration){
     int result = 0;
@@ -3087,13 +3090,14 @@ int AOCL_LZ4_compress_fast_st(const char* source, char* dest, int inputSize, int
 static int (*LZ4_compress_fast_mt_fp)(const char* source, char* dest, int inputSize, 
     int maxOutputSize, int acceleration) = AOCL_LZ4_compress_fast_st;
 #endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4_OPT */
 
 int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
     AOCL_SETUP_NATIVE();
     int result;
 
-#ifdef AOCL_ENABLE_THREADS
+#if defined(AOCL_LZ4_OPT) && defined(AOCL_ENABLE_THREADS)
     result = LZ4_compress_fast_mt_fp(source, dest, inputSize, maxOutputSize, acceleration);
     return result;
 #else
@@ -3111,7 +3115,7 @@ int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutp
 #endif
     return result;
     
-#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4_OPT && AOCL_ENABLE_THREADS */
 }
 
 int LZ4_compress_default(const char* src, char* dst, int srcSize, int maxOutputSize)
@@ -4243,7 +4247,9 @@ AOCL_LZ4_decompress_generic(
         return (int) (-(((const char*)ip)-src))-1;
     }
 }
+#endif /* AOCL_LZ4_AVX_OPT */
 
+#ifdef AOCL_LZ4_OPT
 #ifdef AOCL_ENABLE_THREADS
 //Same as AOCL_LZ4_decompress_generic, but with multi-threaded support
 LZ4_FORCE_INLINE int
@@ -4335,8 +4341,8 @@ AOCL_LZ4_decompress_generic_mt(
             /* copy literals */
             cpy = op + length;
             LZ4_STATIC_ASSERT(MFLIMIT >= WILDCOPYLENGTH);
-            if ((cpy > oend - 64) || (ip + length > iend - 64)) { goto safe_literal_copy; }
-            AOCL_LZ4_wildCopy64_AVX(op, ip, cpy);
+            if ((cpy > oend - 32) || (ip + length > iend - 32)) { goto safe_literal_copy; }
+            LZ4_wildCopy32(op, ip, cpy);
             ip += length; op = cpy;
         }
         else {
@@ -4447,12 +4453,6 @@ AOCL_LZ4_decompress_generic_mt(
         cpy = op + length;
 
         assert((op <= oend) && (oend - op >= 32));
-
-        if (offset >= 32) {
-            AOCL_LZ4_wildCopy64_AVX(op, match, cpy);
-            op = cpy;
-            continue;
-        }
 
         if (unlikely(offset < 16)) {
             LZ4_memcpy_using_offset(op, match, cpy, offset);
@@ -5170,6 +5170,7 @@ static int AOCL_LZ4_decompress_wrapper(const char* source, char* dest, int compr
 
 static int (*LZ4_decompress_wrapper_fp) (const char* source, char* dest, int compressedSize, int maxDecompressedSize) = LZ4_decompress_wrapper;
 
+#ifdef AOCL_LZ4_OPT
 #ifdef AOCL_ENABLE_THREADS
 LZ4_FORCE_O2
 int LZ4_decompress_safe_ST(const char* source, char* dest, int compressedSize, int maxDecompressedSize)
@@ -5184,7 +5185,6 @@ int LZ4_decompress_safe_ST(const char* source, char* dest, int compressedSize, i
 
 }
 
-#ifdef AOCL_LZ4_AVX_OPT
 int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSize, int maxDecompressedSize){
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if (source == NULL || dest == NULL)
@@ -5303,10 +5303,10 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
     }//thread_group_handle.num_threads > 1
 }
 
-#endif /* AOCL_LZ4_AVX_OPT */
 static int (*LZ4_decompress_wrapper_mt_fp) (const char* source, char* dest, 
             int compressedSize, int maxDecompressedSize) = LZ4_decompress_wrapper;
 #endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4_OPT */
 
 LZ4_FORCE_O2
 int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int maxDecompressedSize)
@@ -5322,17 +5322,17 @@ int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int 
     int result = 0;
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
+#ifdef AOCL_LZ4_OPT
 #ifdef AOCL_ENABLE_THREADS
     result = LZ4_decompress_wrapper_mt_fp(source, dest, compressedSize, maxDecompressedSize);
 #else /* !AOCL_ENABLE_THREADS */
-#ifdef AOCL_LZ4_OPT
     result = LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
+#endif /* AOCL_ENABLE_THREADS */
 #else
     result = LZ4_decompress_generic(source, dest, compressedSize, maxDecompressedSize,
                                     decode_full_block, noDict,
                                     (BYTE*)dest, NULL, 0);
 #endif /* AOCL_LZ4_OPT */
-#endif /* AOCL_ENABLE_THREADS */
 
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return result;
@@ -5598,21 +5598,15 @@ LZ4_decompress_safe_doubleDict_fp              = AOCL_LZ4_decompress_safe_double
 LZ4_compress_fast_extState_fp      = AOCL_LZ4_compress_fast_extState_internal;\
 LZ4_compress_fast_continue_fp      = AOCL_LZ4_compress_fast_continue_internal;\
 LZ4_compress_destSize_extState_fp  = AOCL_LZ4_compress_destSize_extState_internal;
-#endif /* AOCL_LZ4_OPT */
 
 #ifdef AOCL_ENABLE_THREADS
-    #ifdef AOCL_LZ4_AVX_OPT
         #define SET_LZ4_MT_FUNCTIONS \
             LZ4_decompress_wrapper_mt_fp = AOCL_LZ4_decompress_safe_mt;\
             LZ4_compress_fast_mt_fp      = AOCL_LZ4_compress_fast_mt;
-    #endif /* AOCL_LZ4_AVX_OPT */
-        #define SET_LZ4_ST_FUNCTIONS \
-            LZ4_decompress_wrapper_mt_fp = LZ4_decompress_wrapper;\
-            LZ4_compress_fast_mt_fp      = AOCL_LZ4_compress_fast_st;
 #else
     #define SET_LZ4_MT_FUNCTIONS
-    #define SET_LZ4_ST_FUNCTIONS
 #endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4_OPT */
 
 LZ4_FORCE_O2
 int LZ4_decompress_safe_partial(const char* src, char* dst, int compressedSize, int targetOutputSize, int dstCapacity)
@@ -5916,19 +5910,18 @@ static void aocl_register_lz4_fmv(int optOff, int optLevel)
         case 1://SSE version
             SET_LZ4_COMPRESS_OPT_FUNCTIONS
             SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
-            SET_LZ4_ST_FUNCTIONS
+            SET_LZ4_MT_FUNCTIONS
             break;
         case 2://AVX version
         case 3://AVX2 version
         default://AVX512 and other versions
-#ifdef AOCL_LZ4_AVX_OPT
             SET_LZ4_COMPRESS_OPT_FUNCTIONS
-            SET_LZ4_DECOMPRESS_AVX_OPT_FUNCTIONS
             SET_LZ4_MT_FUNCTIONS
-#else
-            SET_LZ4_COMPRESS_OPT_FUNCTIONS
+
+#ifdef AOCL_LZ4_AVX_OPT            
+            SET_LZ4_DECOMPRESS_AVX_OPT_FUNCTIONS
+#else       
             SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
-            SET_LZ4_ST_FUNCTIONS
 #endif
             break;
 #else /* !AOCL_LZ4_OPT */

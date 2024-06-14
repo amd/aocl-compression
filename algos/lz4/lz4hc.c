@@ -90,6 +90,7 @@ static const int AOCL_hashchain_slot[LZ4HC_CLEVEL_MAX + 1] = {
            0,     /* 11 */
            0,     /* 12==LZ4HC_CLEVEL_MAX */
 };
+#define LZ4HC_USE_CEHC(compressionLevel) (compressionLevel >= 6 && compressionLevel <=9)
 #endif
 
 /*===   Enums   ===*/
@@ -1388,6 +1389,276 @@ _dest_overflow:
     return 0;
 }
 
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_ENABLE_THREADS
+/*
+ * LZ4HC_compress_hashChain_mt(): Same as LZ4HC_compress_hashChain, but accepts
+ * two additional parameters named 'last_anchor_ptr' and 'last_bytes_len'
+ * to support ST decompression on parallel compressed stream. */
+LZ4_FORCE_INLINE int LZ4HC_compress_hashChain_mt(
+    LZ4HC_CCtx_internal* const ctx,
+    const char* const source,
+    char* const dest,
+    int* srcSizePtr,
+    int const maxOutputSize,
+    unsigned char** last_anchor_ptr,
+    unsigned int* last_bytes_len,
+    int maxNbAttempts,
+    const limitedOutput_directive limit,
+    const dictCtx_directive dict
+    )
+{
+    const int inputSize = *srcSizePtr;
+    const int patternAnalysis = (maxNbAttempts > 128);   /* levels 9+ */
+
+    const BYTE* ip = (const BYTE*) source;
+    const BYTE* anchor = ip;
+    const BYTE* const iend = ip + inputSize;
+    const BYTE* const mflimit = iend - MFLIMIT;
+    const BYTE* const matchlimit = (iend - LASTLITERALS);
+
+    BYTE* optr = (BYTE*) dest;
+    BYTE* op = (BYTE*) dest;
+    BYTE* oend = op + maxOutputSize;
+
+    int   ml0, ml, ml2, ml3;
+    const BYTE* start0;
+    const BYTE* ref0;
+    const BYTE* ref = NULL;
+    const BYTE* start2 = NULL;
+    const BYTE* ref2 = NULL;
+    const BYTE* start3 = NULL;
+    const BYTE* ref3 = NULL;
+
+    int result;
+    BYTE* dst_without_lastLiterals;
+
+    /* init */
+    *srcSizePtr = 0;
+    if (limit == fillOutput) oend -= LASTLITERALS;                  /* Hack for support LZ4 format restriction */
+    if (inputSize < LZ4_minLength) goto _last_literals;             /* Input too small, no compression (all literals) */
+
+    /* Main Loop */
+    while (ip <= mflimit) {
+        ml = LZ4HC_InsertAndFindBestMatch(ctx, ip, matchlimit, &ref, maxNbAttempts, patternAnalysis, dict);
+        if (ml<MINMATCH) { ip++; continue; }
+
+        /* saved, in case we would skip too much */
+        start0 = ip; ref0 = ref; ml0 = ml;
+
+_Search2:
+        if (ip+ml <= mflimit) {
+            ml2 = LZ4HC_InsertAndGetWiderMatch(ctx,
+                            ip + ml - 2, ip + 0, matchlimit, ml, &ref2, &start2,
+                            maxNbAttempts, patternAnalysis, 0, dict, favorCompressionRatio);
+        } else {
+            ml2 = ml;
+        }
+
+        if (ml2 == ml) { /* No better match => encode ML1 */
+            optr = op;
+            if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ref, limit, oend)) goto _dest_overflow;
+            continue;
+        }
+
+        if (start0 < ip) {   /* first match was skipped at least once */
+            if (start2 < ip + ml0) {  /* squeezing ML1 between ML0(original ML1) and ML2 */
+                ip = start0; ref = ref0; ml = ml0;  /* restore initial ML1 */
+        }   }
+
+        /* Here, start0==ip */
+        if ((start2 - ip) < 3) {  /* First Match too small : removed */
+            ml = ml2;
+            ip = start2;
+            ref =ref2;
+            goto _Search2;
+        }
+
+_Search3:
+        /* At this stage, we have :
+        *  ml2 > ml1, and
+        *  ip1+3 <= ip2 (usually < ip1+ml1) */
+        if ((start2 - ip) < OPTIMAL_ML) {
+            int correction;
+            int new_ml = ml;
+            if (new_ml > OPTIMAL_ML) new_ml = OPTIMAL_ML;
+            if (ip+new_ml > start2 + ml2 - MINMATCH) new_ml = (int)(start2 - ip) + ml2 - MINMATCH;
+            correction = new_ml - (int)(start2 - ip);
+            if (correction > 0) {
+                start2 += correction;
+                ref2 += correction;
+                ml2 -= correction;
+            }
+        }
+        /* Now, we have start2 = ip+new_ml, with new_ml = min(ml, OPTIMAL_ML=18) */
+
+        if (start2 + ml2 <= mflimit) {
+            ml3 = LZ4HC_InsertAndGetWiderMatch(ctx,
+                            start2 + ml2 - 3, start2, matchlimit, ml2, &ref3, &start3,
+                            maxNbAttempts, patternAnalysis, 0, dict, favorCompressionRatio);
+        } else {
+            ml3 = ml2;
+        }
+
+        if (ml3 == ml2) {  /* No better match => encode ML1 and ML2 */
+            /* ip & ref are known; Now for ml */
+            if (start2 < ip+ml)  ml = (int)(start2 - ip);
+            /* Now, encode 2 sequences */
+            optr = op;
+            if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ref, limit, oend)) goto _dest_overflow;
+            ip = start2;
+            optr = op;
+            if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml2, ref2, limit, oend)) {
+                ml  = ml2;
+                ref = ref2;
+                goto _dest_overflow;
+            }
+            continue;
+        }
+
+        if (start3 < ip+ml+3) {  /* Not enough space for match 2 : remove it */
+            if (start3 >= (ip+ml)) {  /* can write Seq1 immediately ==> Seq2 is removed, so Seq3 becomes Seq1 */
+                if (start2 < ip+ml) {
+                    int correction = (int)(ip+ml - start2);
+                    start2 += correction;
+                    ref2 += correction;
+                    ml2 -= correction;
+                    if (ml2 < MINMATCH) {
+                        start2 = start3;
+                        ref2 = ref3;
+                        ml2 = ml3;
+                    }
+                }
+
+                optr = op;
+                if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ref, limit, oend)) goto _dest_overflow;
+                ip  = start3;
+                ref = ref3;
+                ml  = ml3;
+
+                start0 = start2;
+                ref0 = ref2;
+                ml0 = ml2;
+                goto _Search2;
+            }
+
+            start2 = start3;
+            ref2 = ref3;
+            ml2 = ml3;
+            goto _Search3;
+        }
+
+        /*
+        * OK, now we have 3 ascending matches;
+        * let's write the first one ML1.
+        * ip & ref are known; Now decide ml.
+        */
+        if (start2 < ip+ml) {
+            if ((start2 - ip) < OPTIMAL_ML) {
+                int correction;
+                if (ml > OPTIMAL_ML) ml = OPTIMAL_ML;
+                if (ip + ml > start2 + ml2 - MINMATCH) ml = (int)(start2 - ip) + ml2 - MINMATCH;
+                correction = ml - (int)(start2 - ip);
+                if (correction > 0) {
+                    start2 += correction;
+                    ref2 += correction;
+                    ml2 -= correction;
+                }
+            } else {
+                ml = (int)(start2 - ip);
+            }
+        }
+        optr = op;
+        if (LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ref, limit, oend)) goto _dest_overflow;
+
+        /* ML2 becomes ML1 */
+        ip = start2; ref = ref2; ml = ml2;
+
+        /* ML3 becomes ML2 */
+        start2 = start3; ref2 = ref3; ml2 = ml3;
+
+        /* let's find a new ML3 */
+        goto _Search3;
+    }
+
+_last_literals:
+    dst_without_lastLiterals = op;
+    /* Encode Last Literals */
+    {   size_t lastRunSize = (size_t)(iend - anchor);  /* literals */
+        size_t llAdd = (lastRunSize + 255 - RUN_MASK) / 255;
+        size_t const totalSize = 1 + llAdd + lastRunSize;
+        if (limit == fillOutput) oend += LASTLITERALS;  /* restore correct value */
+        if (limit && (op + totalSize > oend)) {
+            if (limit == limitedOutput) return 0;
+            /* adapt lastRunSize to fill 'dest' */
+            lastRunSize  = (size_t)(oend - op) - 1 /*token*/;
+            llAdd = (lastRunSize + 256 - RUN_MASK) / 256;
+            lastRunSize -= llAdd;
+        }
+        DEBUGLOG(6, "Final literal run : %i literals", (int)lastRunSize);
+        LOG_FORMATTED(DEBUG, logCtx, "Final literal run : %i literals", (int)lastRunSize);
+        ip = anchor + lastRunSize;  /* can be != iend if limit==fillOutput */
+
+        if (lastRunSize >= RUN_MASK) {
+            size_t accumulator = lastRunSize - RUN_MASK;
+            *op++ = (RUN_MASK << ML_BITS);
+            for(; accumulator >= 255 ; accumulator -= 255) *op++ = 255;
+            *op++ = (BYTE) accumulator;
+        } else {
+            *op++ = (BYTE)(lastRunSize << ML_BITS);
+        }
+        LZ4_memcpy(op, anchor, lastRunSize);
+        op += lastRunSize;
+    }
+
+    /* End */
+    if (last_bytes_len != NULL)
+    {
+        result = (int)(((char*)dst_without_lastLiterals) - dest);
+        *last_anchor_ptr = (BYTE*)anchor; //src pointer until which compressed output is written : To support ST decompression on parallel compressed stream
+        *last_bytes_len = (size_t)(iend - anchor); //length of src bytes pending for compression : To support ST decompression on parallel compressed stream
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : result=%i, last_bytes_len=%i", omp_get_thread_num(), result, (int)(*last_bytes_len));
+    }
+    else
+    {
+        result = (int)(((char*)op) - dest);
+        *last_anchor_ptr = (BYTE*)op; //Write the complete compressed chunk
+        // *last_bytes_len = 0;       //Last thread needs no joining with the next chunk
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : result=%i", omp_get_thread_num(), result);
+    }
+
+    // result=0 when no match found, (all literals).
+    assert(result >= 0);
+    *srcSizePtr = (int) (((const char*)ip) - source);
+    return result;
+
+_dest_overflow:
+    if (limit == fillOutput) {
+        /* Assumption : ip, anchor, ml and ref must be set correctly */
+        size_t const ll = (size_t)(ip - anchor);
+        size_t const ll_addbytes = (ll + 240) / 255;
+        size_t const ll_totalCost = 1 + ll_addbytes + ll;
+        BYTE* const maxLitPos = oend - 3; /* 2 for offset, 1 for token */
+        DEBUGLOG(6, "Last sequence overflowing");
+        LOG_UNFORMATTED(DEBUG, logCtx, "Last sequence overflowing");
+        op = optr;  /* restore correct out pointer */
+        if (op + ll_totalCost <= maxLitPos) {
+            /* ll validated; now adjust match length */
+            size_t const bytesLeftForMl = (size_t)(maxLitPos - (op+ll_totalCost));
+            size_t const maxMlSize = MINMATCH + (ML_MASK-1) + (bytesLeftForMl * 255);
+            assert(maxMlSize < INT_MAX); assert(ml >= 0);
+            if ((size_t)ml > maxMlSize) ml = (int)maxMlSize;
+            if ((oend + LASTLITERALS) - (op + ll_totalCost + 2) - 1 + ml >= MFLIMIT) {
+                LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ref, notLimited, oend);
+        }   }
+        goto _last_literals;
+    }
+    /* compression failed */
+    LOG_UNFORMATTED(ERR, logCtx, "Compression failed");
+    return 0;
+}
+#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4HC_OPT */
 
 #ifdef AOCL_LZ4HC_OPT
 /* AOCL variant of LZ4HC_compress_hashchain() which disables the Pattern Analysis for level 9
@@ -1655,6 +1926,18 @@ static int LZ4HC_compress_optimal( LZ4HC_CCtx_internal* ctx,
     const dictCtx_directive dict,
     const HCfavor_e favorDecSpeed);
 
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_ENABLE_THREADS
+static int LZ4HC_compress_optimal_mt( LZ4HC_CCtx_internal* ctx,
+    const char* const source, char* dst,
+    int* srcSizePtr, int dstCapacity, unsigned char** last_anchor_ptr,
+    unsigned int* last_bytes_len,
+    int const nbSearches, size_t sufficient_len,
+    const limitedOutput_directive limit, int const fullUpdate,
+    const dictCtx_directive dict,
+    const HCfavor_e favorDecSpeed);
+#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4HC_OPT */
 
 LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal (
     LZ4HC_CCtx_internal* const ctx,
@@ -1720,6 +2003,82 @@ LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal (
         return result;
     }
 }
+
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_ENABLE_THREADS
+/**
+ * LZ4HC_compress_generic_internal_mt(): This function is AOCL MT variant of LZ4HC_compress_generic_internal()
+ * that runs compression on multiple threads and additionally accepts two parameters 'last_anchor_ptr' and
+ * 'last_bytes_len' to support ST decompression on parallel compressed stream.
+*/
+LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal_mt (
+    LZ4HC_CCtx_internal* const ctx,
+    const char* const src,
+    char* const dst,
+    int* const srcSizePtr,
+    int const dstCapacity,
+    int cLevel,
+    unsigned char** last_anchor_ptr,
+    unsigned int* last_bytes_len,
+    const limitedOutput_directive limit,
+    const dictCtx_directive dict
+    )
+{
+    typedef enum { lz4hc, lz4opt } lz4hc_strat_e;
+    typedef struct {
+        lz4hc_strat_e strat;
+        int nbSearches;
+        U32 targetLength;
+    } cParams_t;
+    static const cParams_t clTable[LZ4HC_CLEVEL_MAX+1] = {
+        { lz4hc,     2, 16 },  /* 0, unused */
+        { lz4hc,     2, 16 },  /* 1, unused */
+        { lz4hc,     2, 16 },  /* 2, unused */
+        { lz4hc,     4, 16 },  /* 3 */
+        { lz4hc,     8, 16 },  /* 4 */
+        { lz4hc,    16, 16 },  /* 5 */
+        { lz4hc,    32, 16 },  /* 6 */
+        { lz4hc,    64, 16 },  /* 7 */
+        { lz4hc,   128, 16 },  /* 8 */
+        { lz4hc,   256, 16 },  /* 9 */
+        { lz4opt,   96, 64 },  /*10==LZ4HC_CLEVEL_OPT_MIN*/
+        { lz4opt,  512,128 },  /*11 */
+        { lz4opt,16384,LZ4_OPT_NUM },  /* 12==LZ4HC_CLEVEL_MAX */
+    };
+
+    DEBUGLOG(4, "LZ4HC_compress_generic_internal_mt(ctx=%p, src=%p, srcSize=%d, limit=%d)",
+                ctx, src, *srcSizePtr, limit);
+    LOG_FORMATTED(INFO, logCtx, "LZ4HC_compress_generic_internal_mt(ctx=%p, src=%p, srcSize=%i, limit=%i)",
+                 (void *)ctx, (void *)src, *srcSizePtr, limit);
+
+    if (limit == fillOutput && dstCapacity < 1) return 0;   /* Impossible to store anything */
+    if ((U32)*srcSizePtr > (U32)LZ4_MAX_INPUT_SIZE) return 0;    /* Unsupported input size (too large or negative) */
+
+    ctx->end += *srcSizePtr;
+    if (cLevel < 1) cLevel = LZ4HC_CLEVEL_DEFAULT;   /* note : convention is different from lz4frame, maybe something to review */
+    cLevel = MIN(LZ4HC_CLEVEL_MAX, cLevel);
+    {   cParams_t const cParam = clTable[cLevel];
+        HCfavor_e const favor = ctx->favorDecSpeed ? favorDecompressionSpeed : favorCompressionRatio;
+        int result;
+
+        if (cParam.strat == lz4hc) {
+            result = LZ4HC_compress_hashChain_mt(ctx,
+                                src, dst, srcSizePtr, dstCapacity, last_anchor_ptr, last_bytes_len,
+                                cParam.nbSearches, limit, dict);
+        } else {
+            assert(cParam.strat == lz4opt);
+            result = LZ4HC_compress_optimal_mt(ctx,
+                                src, dst, srcSizePtr, dstCapacity, last_anchor_ptr, last_bytes_len,
+                                cParam.nbSearches, cParam.targetLength, limit,
+                                cLevel == LZ4HC_CLEVEL_MAX,   /* ultra mode */
+                                dict, favor);
+        }
+        if (result <= 0) ctx->dirty = 1;
+        return result;
+    }
+}
+#endif /*AOCL_ENABLE_THREADS*/
+#endif /* AOCL_LZ4HC_OPT */
 
 /* This function is AOCL variant of LZ4HC_compress_generic_internal() 
  * which uses Cache Efficient Hash Chain for performance improvement. 
@@ -1802,6 +2161,27 @@ LZ4HC_compress_generic_noDictCtx (
     assert(ctx->dictCtx == NULL);
     return LZ4HC_compress_generic_internal(ctx, src, dst, srcSizePtr, dstCapacity, cLevel, limit, noDictCtx);
 }
+
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_ENABLE_THREADS
+static int
+LZ4HC_compress_generic_noDictCtx_mt(
+        LZ4HC_CCtx_internal* const ctx,
+        const char* const src,
+        char* const dst,
+        int* const srcSizePtr,
+        int const dstCapacity,
+        int cLevel,
+        limitedOutput_directive limit,
+        unsigned char** last_anchor_ptr,
+        unsigned int* last_bytes_len
+        )
+{
+    assert(ctx->dictCtx == NULL);
+    return LZ4HC_compress_generic_internal_mt(ctx, src, dst, srcSizePtr, dstCapacity, cLevel, last_anchor_ptr, last_bytes_len, limit, noDictCtx);
+}
+#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4HC_OPT */
 
 #ifdef AOCL_LZ4HC_OPT
 /* AOCL variant of LZ4HC_compress_generic_noDictCtx() which is used
@@ -1902,6 +2282,28 @@ LZ4HC_compress_generic (
 }
 
 #ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_ENABLE_THREADS
+static int
+LZ4HC_compress_generic_mt(
+    LZ4HC_CCtx_internal* const ctx,
+    const char* const src,
+    char* const dst,
+    int* const srcSizePtr,
+    int const dstCapacity,
+    int cLevel,
+    limitedOutput_directive limit,
+    unsigned char** last_anchor_ptr,
+    unsigned int* last_bytes_len
+)
+{
+    assert(ctx->dictCtx == NULL);
+    return LZ4HC_compress_generic_noDictCtx_mt(ctx, src, dst, srcSizePtr, dstCapacity, cLevel, limit, last_anchor_ptr, last_bytes_len);
+    
+}
+#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4HC_OPT */
+
+#ifdef AOCL_LZ4HC_OPT
 /* AOCL variant of LZ4HC_compress_generic() which is used
  * in Cache efficient hash chain strategy similar to
  * LZ4HC_compress_generic, only difference is the type of ctx. */
@@ -1977,6 +2379,32 @@ int LZ4_compress_HC_extStateHC_fastReset_internal (void* state, const char* src,
 }
 
 #ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_ENABLE_THREADS
+/**
+ * LZ4_compress_HC_extStateHC_fastReset_internal_mt(): This function is AOCL MT variant of LZ4_compress_HC_extStateHC_fastReset_internal()
+ * that runs compression on multiple threads and additionally accepts two parameters 'last_anchor_ptr' and 'last_bytes_len' to support
+ * ST decompression on parallel compressed stream.
+*/
+int LZ4_compress_HC_extStateHC_fastReset_internal_mt(void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel, unsigned char** last_anchor_ptr, unsigned int* last_bytes_len)
+{
+    if (state == NULL || (src == NULL && srcSize != 0) || dst == NULL)
+    { 
+        LOG_FORMATTED(ERR, logCtx, "Invalid arguments passed. state=%p, src=%p, dst=%p, srcSize=%i", (void *)state, (void *)src, (void *)dst, srcSize); 
+        return 0; 
+    }
+    LZ4HC_CCtx_internal* const ctx = &((LZ4_streamHC_t*)state)->internal_donotuse;
+    if (!LZ4_isAligned(state, LZ4_streamHC_t_alignment())) return 0;
+    LZ4_resetStreamHC_fast((LZ4_streamHC_t*)state, compressionLevel);
+    LZ4HC_init_internal(ctx, (const BYTE*)src);
+    if (dstCapacity < LZ4_compressBound(srcSize))
+        return LZ4HC_compress_generic_mt(ctx, src, dst, &srcSize, dstCapacity, compressionLevel, limitedOutput, last_anchor_ptr, last_bytes_len);
+    else
+        return LZ4HC_compress_generic_mt(ctx, src, dst, &srcSize, dstCapacity, compressionLevel, notLimited, last_anchor_ptr, last_bytes_len);
+}
+#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4HC_OPT */
+
+#ifdef AOCL_LZ4HC_OPT
 /* AOCL variant of LZ4_compress_HC_extStateHC_fastReset() which is used
  * in Cache efficient hash chain strategy similar to
  * LZ4_compress_HC_extStateHC_fastReset, only difference is the type of state.
@@ -2021,6 +2449,18 @@ int LZ4_compress_HC_extStateHC_internal (void* state, const char* src, char* dst
     if (ctx==NULL) { LOG_UNFORMATTED(ERR, logCtx, "init failure, ctx is NULL"); return 0; }   /* init failure */
     return LZ4_compress_HC_extStateHC_fastReset_internal(state, src, dst, srcSize, dstCapacity, compressionLevel);
 }
+
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_ENABLE_THREADS
+int LZ4_compress_HC_extStateHC_internal_mt (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel,
+                            unsigned char** last_anchor_ptr, unsigned int* last_bytes_len)
+{
+    LZ4_streamHC_t* const ctx = LZ4_initStreamHC(state, sizeof(*ctx));
+    if (ctx==NULL) { LOG_UNFORMATTED(ERR, logCtx, "init failure, ctx is NULL"); return 0; }   /* init failure */
+    return LZ4_compress_HC_extStateHC_fastReset_internal_mt(state, src, dst, srcSize, dstCapacity, compressionLevel, last_anchor_ptr, last_bytes_len);
+}
+#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4HC_OPT */
 
 #ifdef AOCL_LZ4HC_OPT
 /* AOCL variant of LZ4_compress_HC_extStateHC() which is used
@@ -2094,17 +2534,159 @@ int AOCL_LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int d
 
 // function pointer to variants of LZ4_compress_HC() function, used for integration with the dynamic dispatcher.
 static int (*LZ4_compress_HC_fp)(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel) = LZ4_compress_HC_internal;
+
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_ENABLE_THREADS
+/**
+ * LZ4_compress_HC_internal_mt(): This function is AOCL MT variant of LZ4_compress_HC_internal()
+ * that runs compression on multiple threads.
+*/
+int LZ4_compress_HC_internal_mt(const char* source, char* dst, int inputSize, int dstCapacity, int compressionLevel)
+{
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    if ((source == NULL && inputSize != 0) || dst == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return 0;
+    }
+    int cprBound = LZ4_compressBound(inputSize);
+    if (cprBound == 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "LZ4_compressBound_mt failed");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return 0;
+    }
+    if(dstCapacity < cprBound)
+        RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(0)
+    
+    int result;
+    aocl_thread_group_t thread_group_handle;
+    aocl_thread_info_t cur_thread_info;
+    aocl_thread_info_t prev_thread_info;
+    AOCL_INT32 rap_metadata_len = -1;
+    AOCL_UINT32 thread_cnt = 0;
+    AOCL_UINT32 dst_offset = 0;
+    
+    rap_metadata_len = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)source,
+                                                 dst, inputSize, dstCapacity,
+                                                 LZ4_COMPRESS_INPLACE_MARGIN,
+                                                 WINDOW_FACTOR);
+    if (rap_metadata_len < 0)
+    {
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return 0;
+    }
+ 
+    if (thread_group_handle.num_threads == 1)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Running single threaded compress");
+        if(LZ4HC_USE_CEHC(compressionLevel))
+            result = AOCL_LZ4_compress_HC_internal(source, dst, inputSize, dstCapacity, compressionLevel);
+        else
+            result = LZ4_compress_HC_internal(source, dst, inputSize, dstCapacity, compressionLevel);
+    }
+    else
+    {
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
+#endif
+        LOG_FORMATTED(INFO, logCtx, "Running multi threaded compress on %u threads", thread_group_handle.num_threads);
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+        {
+#ifdef AOCL_THREADS_LOG
+            printf("Compress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
+#endif
+            AOCL_UCHAR *last_anchor_ptr = NULL;
+            AOCL_UINT32 cmpr_bound_pad = ((thread_group_handle.common_part_src_size + 
+                                        thread_group_handle.leftover_part_src_bytes) / 255) + 
+                                        16 + rap_metadata_len;
+            AOCL_UINT32 is_error = 1;
+            AOCL_UINT32 thread_id = omp_get_thread_num();
+            AOCL_INT32 local_result = -1;
+            AOCL_UINT32 last_bytes_len = 0;
+
+            if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
+            {
+#if defined(LZ4HC_HEAPMODE) && LZ4HC_HEAPMODE==1
+                LZ4_streamHC_t* const statePtr = (LZ4_streamHC_t*)ALLOC(sizeof(LZ4_streamHC_t));
+                if (statePtr == NULL)  is_error = 1;
+                else
+#else
+                LZ4_streamHC_t state;
+                LZ4_streamHC_t* const statePtr = &state;
+#endif
+                {
+                    local_result = LZ4_compress_HC_extStateHC_internal_mt(statePtr, cur_thread_info.partition_src, 
+                                cur_thread_info.dst_trap, cur_thread_info.partition_src_size, cur_thread_info.dst_trap_size,
+                                compressionLevel, &last_anchor_ptr,
+                                (thread_id != (thread_group_handle.num_threads - 1)) ? &last_bytes_len : NULL);
+#if defined(LZ4HC_HEAPMODE) && LZ4HC_HEAPMODE==1
+                    FREEMEM(statePtr);
+#endif
+                    is_error = 0;
+                }    
+            }//aocl_do_partition_compress_mt
+            
+            thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+            thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+            thread_group_handle.threads_info_list[thread_id].additional_state_info = (AOCL_VOID *)last_anchor_ptr;
+            thread_group_handle.threads_info_list[thread_id].dst_trap_size = local_result;
+            thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+            thread_group_handle.threads_info_list[thread_id].last_bytes_len = last_bytes_len;
+            thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+            thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+#ifdef AOCL_THREADS_LOG
+            //printf("Compress Thread [id: %d] : Compression output length [%d], original source length [%d]\n",
+            //                                                  omp_get_thread_num(), local_result, inputSize);
+#endif
+        }//#pragma omp parallel
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
+#endif
+
+        result = AOCL_LZ4_postProcessing_mt(&thread_group_handle, rap_metadata_len, dst);
+        aocl_destroy_parallel_compress_mt(&thread_group_handle);
+    }//thread_group_handle.num_threads > 1
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    return result;
+
+}
+
+int LZ4_compress_HC_internal_st(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
+{
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    int ret = 0;
+    AOCL_SETUP_NATIVE_HC();
+#ifdef AOCL_LZ4HC_OPT
+if(LZ4HC_USE_CEHC(compressionLevel))
+    return LZ4_compress_HC_fp(src, dst, srcSize, dstCapacity, compressionLevel);
+else
+    ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
+#else /* !AOCL_LZ4HC_OPT */
+    ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
+#endif /* AOCL_LZ4HC_OPT */
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    return ret;
+}
+
+static int (*LZ4_compress_HC_internal_mt_fp)(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel) = LZ4_compress_HC_internal_st;
+
+#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_LZ4HC_OPT */
 int LZ4_compress_HC(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     int ret = 0;
     AOCL_SETUP_NATIVE_HC();
 #ifdef AOCL_LZ4HC_OPT
-if(compressionLevel >= 6 && compressionLevel <=9)
+#ifdef AOCL_ENABLE_THREADS
+    ret = LZ4_compress_HC_internal_mt_fp(src, dst, srcSize, dstCapacity, compressionLevel);
+#else /* !AOCL_ENABLE_THREADS */
+if(LZ4HC_USE_CEHC(compressionLevel))
     return LZ4_compress_HC_fp(src, dst, srcSize, dstCapacity, compressionLevel);
 else
     ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
-#else
+#endif /* AOCL_ENABLE_THREADS */
+#else /* !AOCL_LZ4HC_OPT */
     ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
 #endif /* AOCL_LZ4HC_OPT */
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");
@@ -2625,6 +3207,347 @@ LZ4HC_FindLongerMatch(LZ4HC_CCtx_internal* const ctx,
     return match;
 }
 
+
+#ifdef AOCL_LZ4HC_OPT
+#ifdef AOCL_ENABLE_THREADS
+/**
+ * LZ4HC_compress_optimal_mt(): This function is AOCL MT variant of LZ4HC_compress_optimal() that
+ * runs compression on multiple threads and additionally accepts two parameters 'last_anchor_ptr'
+ * and 'last_bytes_len' to support ST decompression on parallel compressed stream.
+*/
+static int LZ4HC_compress_optimal_mt( LZ4HC_CCtx_internal* ctx,
+                                    const char* const source,
+                                    char* dst,
+                                    int* srcSizePtr,
+                                    int dstCapacity,
+                                    unsigned char** last_anchor_ptr,
+                                    unsigned int* last_bytes_len,
+                                    int const nbSearches,
+                                    size_t sufficient_len,
+                                    const limitedOutput_directive limit,
+                                    int const fullUpdate,
+                                    const dictCtx_directive dict,
+                                    const HCfavor_e favorDecSpeed)
+{
+    int retval = 0;
+#define TRAILING_LITERALS 3
+#if defined(LZ4HC_HEAPMODE) && LZ4HC_HEAPMODE==1
+    LZ4HC_optimal_t* const opt = (LZ4HC_optimal_t*)ALLOC(sizeof(LZ4HC_optimal_t) * (LZ4_OPT_NUM + TRAILING_LITERALS));
+#else
+    LZ4HC_optimal_t opt[LZ4_OPT_NUM + TRAILING_LITERALS];   /* ~64 KB, which is a bit large for stack... */
+#endif
+
+    const BYTE* ip = (const BYTE*) source;
+    const BYTE* anchor = ip;
+    const BYTE* const iend = ip + *srcSizePtr;
+    const BYTE* const mflimit = iend - MFLIMIT;
+    const BYTE* const matchlimit = iend - LASTLITERALS;
+    BYTE* op = (BYTE*) dst;
+    BYTE* opSaved = (BYTE*) dst;
+    BYTE* oend = op + dstCapacity;
+    int ovml = MINMATCH;  /* overflow - last sequence */
+    const BYTE* ovref = NULL;
+
+    BYTE* dst_without_lastLiterals;
+
+    /* init */
+#if defined(LZ4HC_HEAPMODE) && LZ4HC_HEAPMODE==1
+    if (opt == NULL) goto _return_label;
+#endif
+    DEBUGLOG(5, "LZ4HC_compress_optimal(dst=%p, dstCapa=%u)", (void *)dst, (unsigned)dstCapacity);
+    LOG_FORMATTED(INFO, logCtx, "LZ4HC_compress_optimal(dst=%p, dstCapa=%u)", (void *)dst, (unsigned)dstCapacity);
+    *srcSizePtr = 0;
+    if (limit == fillOutput) oend -= LASTLITERALS;   /* Hack for support LZ4 format restriction */
+    if (sufficient_len >= LZ4_OPT_NUM) sufficient_len = LZ4_OPT_NUM-1;
+    
+    if(ip==NULL) goto _last_literals;
+    /* Main Loop */
+    while (ip <= mflimit) {
+         int const llen = (int)(ip - anchor);
+         int best_mlen, best_off;
+         int cur, last_match_pos = 0;
+
+         LZ4HC_match_t const firstMatch = LZ4HC_FindLongerMatch(ctx, ip, matchlimit, MINMATCH-1, nbSearches, dict, favorDecSpeed);
+         if (firstMatch.len==0) { ip++; continue; }
+
+         if ((size_t)firstMatch.len > sufficient_len) {
+             /* good enough solution : immediate encoding */
+             int const firstML = firstMatch.len;
+             const BYTE* const matchPos = ip - firstMatch.off;
+             opSaved = op;
+             if ( LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), firstML, matchPos, limit, oend) ) {  /* updates ip, op and anchor */
+                 ovml = firstML;
+                 ovref = matchPos;
+                 goto _dest_overflow;
+             }
+             continue;
+         }
+
+         /* set prices for first positions (literals) */
+         {   int rPos;
+             for (rPos = 0 ; rPos < MINMATCH ; rPos++) {
+                 int const cost = LZ4HC_literalsPrice(llen + rPos);
+                 opt[rPos].mlen = 1;
+                 opt[rPos].off = 0;
+                 opt[rPos].litlen = llen + rPos;
+                 opt[rPos].price = cost;
+                 DEBUGLOG(7, "rPos:%3i => price:%3i (litlen=%i) -- initial setup",
+                             rPos, cost, opt[rPos].litlen);
+         }   }
+         /* set prices using initial match */
+         {   int mlen = MINMATCH;
+             int const matchML = firstMatch.len;   /* necessarily < sufficient_len < LZ4_OPT_NUM */
+             int const offset = firstMatch.off;
+             assert(matchML < LZ4_OPT_NUM);
+             for ( ; mlen <= matchML ; mlen++) {
+                 int const cost = LZ4HC_sequencePrice(llen, mlen);
+                 opt[mlen].mlen = mlen;
+                 opt[mlen].off = offset;
+                 opt[mlen].litlen = llen;
+                 opt[mlen].price = cost;
+                 DEBUGLOG(7, "rPos:%3i => price:%3i (matchlen=%i) -- initial setup",
+                             mlen, cost, mlen);
+         }   }
+         last_match_pos = firstMatch.len;
+         {   int addLit;
+             for (addLit = 1; addLit <= TRAILING_LITERALS; addLit ++) {
+                 opt[last_match_pos+addLit].mlen = 1; /* literal */
+                 opt[last_match_pos+addLit].off = 0;
+                 opt[last_match_pos+addLit].litlen = addLit;
+                 opt[last_match_pos+addLit].price = opt[last_match_pos].price + LZ4HC_literalsPrice(addLit);
+                 DEBUGLOG(7, "rPos:%3i => price:%3i (litlen=%i) -- initial setup",
+                             last_match_pos+addLit, opt[last_match_pos+addLit].price, addLit);
+         }   }
+
+         /* check further positions */
+         for (cur = 1; cur < last_match_pos; cur++) {
+             const BYTE* const curPtr = ip + cur;
+             LZ4HC_match_t newMatch;
+
+             if (curPtr > mflimit) break;
+             DEBUGLOG(7, "rPos:%u[%u] vs [%u]%u",
+                     cur, opt[cur].price, opt[cur+1].price, cur+1);
+             if (fullUpdate) {
+                 /* not useful to search here if next position has same (or lower) cost */
+                 if ( (opt[cur+1].price <= opt[cur].price)
+                   /* in some cases, next position has same cost, but cost rises sharply after, so a small match would still be beneficial */
+                   && (opt[cur+MINMATCH].price < opt[cur].price + 3/*min seq price*/) )
+                     continue;
+             } else {
+                 /* not useful to search here if next position has same (or lower) cost */
+                 if (opt[cur+1].price <= opt[cur].price) continue;
+             }
+
+             DEBUGLOG(7, "search at rPos:%u", cur);
+             if (fullUpdate)
+                 newMatch = LZ4HC_FindLongerMatch(ctx, curPtr, matchlimit, MINMATCH-1, nbSearches, dict, favorDecSpeed);
+             else
+                 /* only test matches of minimum length; slightly faster, but misses a few bytes */
+                 newMatch = LZ4HC_FindLongerMatch(ctx, curPtr, matchlimit, last_match_pos - cur, nbSearches, dict, favorDecSpeed);
+             if (!newMatch.len) continue;
+
+             if ( ((size_t)newMatch.len > sufficient_len)
+               || (newMatch.len + cur >= LZ4_OPT_NUM) ) {
+                 /* immediate encoding */
+                 best_mlen = newMatch.len;
+                 best_off = newMatch.off;
+                 last_match_pos = cur + 1;
+                 goto encode;
+             }
+
+             /* before match : set price with literals at beginning */
+             {   int const baseLitlen = opt[cur].litlen;
+                 int litlen;
+                 for (litlen = 1; litlen < MINMATCH; litlen++) {
+                     int const price = opt[cur].price - LZ4HC_literalsPrice(baseLitlen) + LZ4HC_literalsPrice(baseLitlen+litlen);
+                     int const pos = cur + litlen;
+                     if (price < opt[pos].price) {
+                         opt[pos].mlen = 1; /* literal */
+                         opt[pos].off = 0;
+                         opt[pos].litlen = baseLitlen+litlen;
+                         opt[pos].price = price;
+                         DEBUGLOG(7, "rPos:%3i => price:%3i (litlen=%i)",
+                                     pos, price, opt[pos].litlen);
+             }   }   }
+
+             /* set prices using match at position = cur */
+             {   int const matchML = newMatch.len;
+                 int ml = MINMATCH;
+
+                 assert(cur + newMatch.len < LZ4_OPT_NUM);
+                 for ( ; ml <= matchML ; ml++) {
+                     int const pos = cur + ml;
+                     int const offset = newMatch.off;
+                     int price;
+                     int ll;
+                     DEBUGLOG(7, "testing price rPos %i (last_match_pos=%i)",
+                                 pos, last_match_pos);
+                     if (opt[cur].mlen == 1) {
+                         ll = opt[cur].litlen;
+                         price = ((cur > ll) ? opt[cur - ll].price : 0)
+                               + LZ4HC_sequencePrice(ll, ml);
+                     } else {
+                         ll = 0;
+                         price = opt[cur].price + LZ4HC_sequencePrice(0, ml);
+                     }
+
+                    assert((U32)favorDecSpeed <= 1);
+                     if (pos > last_match_pos+TRAILING_LITERALS
+                      || price <= opt[pos].price - (int)favorDecSpeed) {
+                         DEBUGLOG(7, "rPos:%3i => price:%3i (matchlen=%i)",
+                                     pos, price, ml);
+                         assert(pos < LZ4_OPT_NUM);
+                         if ( (ml == matchML)  /* last pos of last match */
+                           && (last_match_pos < pos) )
+                             last_match_pos = pos;
+                         opt[pos].mlen = ml;
+                         opt[pos].off = offset;
+                         opt[pos].litlen = ll;
+                         opt[pos].price = price;
+             }   }   }
+             /* complete following positions with literals */
+             {   int addLit;
+                 for (addLit = 1; addLit <= TRAILING_LITERALS; addLit ++) {
+                     opt[last_match_pos+addLit].mlen = 1; /* literal */
+                     opt[last_match_pos+addLit].off = 0;
+                     opt[last_match_pos+addLit].litlen = addLit;
+                     opt[last_match_pos+addLit].price = opt[last_match_pos].price + LZ4HC_literalsPrice(addLit);
+                     DEBUGLOG(7, "rPos:%3i => price:%3i (litlen=%i)", last_match_pos+addLit, opt[last_match_pos+addLit].price, addLit);
+             }   }
+         }  /* for (cur = 1; cur <= last_match_pos; cur++) */
+
+         assert(last_match_pos < LZ4_OPT_NUM + TRAILING_LITERALS);
+         best_mlen = opt[last_match_pos].mlen;
+         best_off = opt[last_match_pos].off;
+         cur = last_match_pos - best_mlen;
+
+encode: /* cur, last_match_pos, best_mlen, best_off must be set */
+         assert(cur < LZ4_OPT_NUM);
+         assert(last_match_pos >= 1);  /* == 1 when only one candidate */
+         DEBUGLOG(6, "reverse traversal, looking for shortest path (last_match_pos=%i)", last_match_pos);
+         {   int candidate_pos = cur;
+             int selected_matchLength = best_mlen;
+             int selected_offset = best_off;
+             while (1) {  /* from end to beginning */
+                 int const next_matchLength = opt[candidate_pos].mlen;  /* can be 1, means literal */
+                 int const next_offset = opt[candidate_pos].off;
+                 DEBUGLOG(7, "pos %i: sequence length %i", candidate_pos, selected_matchLength);
+                 opt[candidate_pos].mlen = selected_matchLength;
+                 opt[candidate_pos].off = selected_offset;
+                 selected_matchLength = next_matchLength;
+                 selected_offset = next_offset;
+                 if (next_matchLength > candidate_pos) break; /* last match elected, first match to encode */
+                 assert(next_matchLength > 0);  /* can be 1, means literal */
+                 candidate_pos -= next_matchLength;
+         }   }
+
+         /* encode all recorded sequences in order */
+         {   int rPos = 0;  /* relative position (to ip) */
+             while (rPos < last_match_pos) {
+                 int const ml = opt[rPos].mlen;
+                 int const offset = opt[rPos].off;
+                 if (ml == 1) { ip++; rPos++; continue; }  /* literal; note: can end up with several literals, in which case, skip them */
+                 rPos += ml;
+                 assert(ml >= MINMATCH);
+                 assert((offset >= 1) && (offset <= LZ4_DISTANCE_MAX));
+                 opSaved = op;
+                 if ( LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ml, ip - offset, limit, oend) ) {  /* updates ip, op and anchor */
+                     ovml = ml;
+                     ovref = ip - offset;
+                     goto _dest_overflow;
+         }   }   }
+     }  /* while (ip <= mflimit) */
+
+_last_literals:
+    dst_without_lastLiterals = op;
+     /* Encode Last Literals */
+     {   size_t lastRunSize = (size_t)(iend - anchor);  /* literals */
+         size_t llAdd = (lastRunSize + 255 - RUN_MASK) / 255;
+         size_t const totalSize = 1 + llAdd + lastRunSize;
+         if (limit == fillOutput) oend += LASTLITERALS;  /* restore correct value */
+         if (limit && (op + totalSize > oend)) {
+             if (limit == limitedOutput) { /* Check output limit */
+                retval = 0;
+                goto _return_label;
+             }
+             /* adapt lastRunSize to fill 'dst' */
+             lastRunSize  = (size_t)(oend - op) - 1 /*token*/;
+             llAdd = (lastRunSize + 256 - RUN_MASK) / 256;
+             lastRunSize -= llAdd;
+         }
+         DEBUGLOG(6, "Final literal run : %i literals", (int)lastRunSize);
+         LOG_FORMATTED(DEBUG, logCtx, "Final literal run : %i literals", (int)lastRunSize);
+         ip = anchor + lastRunSize; /* can be != iend if limit==fillOutput */
+
+         if (lastRunSize >= RUN_MASK) {
+             size_t accumulator = lastRunSize - RUN_MASK;
+             *op++ = (RUN_MASK << ML_BITS);
+             for(; accumulator >= 255 ; accumulator -= 255) *op++ = 255;
+             *op++ = (BYTE) accumulator;
+         } else {
+             *op++ = (BYTE)(lastRunSize << ML_BITS);
+         }
+         LZ4_memcpy(op, anchor, lastRunSize);
+         op += lastRunSize;
+     }
+
+     /* End */
+     if (last_bytes_len != NULL)
+     {
+         retval = (int)(((char*)dst_without_lastLiterals) - dst);
+         *last_anchor_ptr = (BYTE*)anchor; //src pointer until which compressed output is written : To support ST decompression on parallel compressed stream
+         *last_bytes_len = (size_t)(iend - anchor); //length of src bytes pending for compression : To support ST decompression on parallel compressed stream
+         LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : result=%i, last_bytes_len=%i", omp_get_thread_num(), retval, (int)(*last_bytes_len));
+     }
+     else
+     {
+         retval = (int)(((char*)op) - dst);
+         *last_anchor_ptr = (BYTE*)op; //Write the complete commpressed chunk
+         // *last_bytes_len = 0;       //Last thread needs no joining with the next chunk
+         LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : result=%i", omp_get_thread_num(), retval);
+     }
+
+     // result=0 when no match found, (all literals).
+     assert(retval >= 0);
+     *srcSizePtr = (int) (((const char*)ip) - source);
+     goto _return_label;
+
+_dest_overflow:
+if (limit == fillOutput) {
+     /* Assumption : ip, anchor, ovml and ovref must be set correctly */
+     size_t const ll = (size_t)(ip - anchor);
+     size_t const ll_addbytes = (ll + 240) / 255;
+     size_t const ll_totalCost = 1 + ll_addbytes + ll;
+     BYTE* const maxLitPos = oend - 3; /* 2 for offset, 1 for token */
+     DEBUGLOG(6, "Last sequence overflowing (only %i bytes remaining)", (int)(oend-1-opSaved));
+     LOG_FORMATTED(DEBUG, logCtx, "Last sequence overflowing (only %i bytes remaining)", (int)(oend-1-opSaved));
+     op = opSaved;  /* restore correct out pointer */
+     if (op + ll_totalCost <= maxLitPos) {
+         /* ll validated; now adjust match length */
+         size_t const bytesLeftForMl = (size_t)(maxLitPos - (op+ll_totalCost));
+         size_t const maxMlSize = MINMATCH + (ML_MASK-1) + (bytesLeftForMl * 255);
+         assert(maxMlSize < INT_MAX); assert(ovml >= 0);
+         if ((size_t)ovml > maxMlSize) ovml = (int)maxMlSize;
+         if ((oend + LASTLITERALS) - (op + ll_totalCost + 2) - 1 + ovml >= MFLIMIT) {
+             DEBUGLOG(6, "Space to end : %i + ml (%i)", (int)((oend + LASTLITERALS) - (op + ll_totalCost + 2) - 1), ovml);
+             LOG_FORMATTED(DEBUG, logCtx, "Space to end : %i + ml (%i)", (int)((oend + LASTLITERALS) - (op + ll_totalCost + 2) - 1), ovml);
+             DEBUGLOG(6, "Before : ip = %p, anchor = %p", (void *)ip, (void *)anchor);
+             LOG_FORMATTED(DEBUG, logCtx, "Before : ip = %p, anchor = %p", (void *)ip, (void *)anchor);
+             LZ4HC_encodeSequence(UPDATABLE(ip, op, anchor), ovml, ovref, notLimited, oend);
+             DEBUGLOG(6, "After : ip = %p, anchor = %p", (void *)ip, (void *)anchor);
+             LOG_FORMATTED(DEBUG, logCtx, "After : ip = %p, anchor = %p", (void *)ip, (void *)anchor);
+     }   }
+     goto _last_literals;
+}
+_return_label:
+#if defined(LZ4HC_HEAPMODE) && LZ4HC_HEAPMODE==1
+     FREEMEM(opt);
+#endif
+     return retval;
+}
+#endif /* AOCL_ENABLE_THREADS*/
+#endif /* AOCL_LZ4HC_OPT */
+
 static int LZ4HC_compress_optimal ( LZ4HC_CCtx_internal* ctx,
                                     const char* const source,
                                     char* dst,
@@ -2948,21 +3871,6 @@ static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
     {
         switch (optLevel)
         {
-            case -1: // undecided. use defaults based on compiler flags
-#ifdef AOCL_LZ4HC_OPT
-            LZ4HC_countBack_fp = AOCL_LZ4HC_countBack;
-            LZ4_compress_HC_fp = AOCL_LZ4_compress_HC_internal;
-            LZ4_compress_HC_extStateHC_fp = AOCL_LZ4_compress_HC_extStateHC_internal;
-            LZ4_compress_HC_extStateHC_fastReset_fp = AOCL_LZ4_compress_HC_extStateHC_fastReset_internal;
-            LZ4_compress_HC_destSize_fp = AOCL_LZ4_compress_HC_destSize_internal;
-#else
-            LZ4HC_countBack_fp = LZ4HC_countBack;
-            LZ4_compress_HC_fp = LZ4_compress_HC_internal;
-            LZ4_compress_HC_extStateHC_fp = LZ4_compress_HC_extStateHC_internal;
-            LZ4_compress_HC_extStateHC_fastReset_fp = LZ4_compress_HC_extStateHC_fastReset_internal;
-            LZ4_compress_HC_destSize_fp = LZ4_compress_HC_destSize_internal;
-#endif
-            break;
 #ifdef AOCL_LZ4HC_OPT
         case 0://C version
         case 1://SSE version
@@ -2974,8 +3882,11 @@ static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
             LZ4_compress_HC_extStateHC_fp = AOCL_LZ4_compress_HC_extStateHC_internal;
             LZ4_compress_HC_extStateHC_fastReset_fp = AOCL_LZ4_compress_HC_extStateHC_fastReset_internal;
             LZ4_compress_HC_destSize_fp = AOCL_LZ4_compress_HC_destSize_internal;
+#ifdef AOCL_ENABLE_THREADS
+        LZ4_compress_HC_internal_mt_fp = LZ4_compress_HC_internal_mt;
+#endif /* AOCL_ENABLE_THREADS */
             break;
-#else
+#else /* !AOCL_LZ4HC_OPT */
         default:
             LZ4HC_countBack_fp = LZ4HC_countBack;
             LZ4_compress_HC_fp = LZ4_compress_HC_internal;

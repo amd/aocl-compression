@@ -45,10 +45,9 @@
 #define AOCL_LZ4_OPT
 #ifdef AOCL_LZ4_OPT
     #define AOCL_LZ4_AVX_OPT
+    /* LZ4HC */
+    #define AOCL_LZ4HC_OPT
 #endif /* AOCL_LZ4_OPT */
-
-/* LZ4HC */
-#define AOCL_LZ4HC_OPT
 
 /* LZMA */
 #define AOCL_LZMA_OPT

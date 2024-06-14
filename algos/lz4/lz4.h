@@ -522,9 +522,12 @@ LZ4LIB_API unsigned int Test_AOCL_LZ4_hash5(uint64_t sequence, int tableType);
 #else
 LZ4LIB_API unsigned int Test_AOCL_LZ4_hash5(unsigned long long sequence, int tableType);
 #endif /* defined(__cplusplus) || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)) */
-LZ4LIB_API void LZ4_writeLE16_wrapper(void* memPtr , unsigned short value);
 #endif /* AOCL_UNIT_TEST */
 #endif /* AOCL_LZ4_OPT */
+
+#ifdef AOCL_UNIT_TEST
+LZ4LIB_API void LZ4_writeLE16_wrapper(void* memPtr , unsigned short value);
+#endif /* AOCL_UNIT_TEST */
 
 
 /*-*********************************************
