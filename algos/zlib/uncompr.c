@@ -1,6 +1,6 @@
 /* uncompr.c -- decompress a memory buffer
  * Copyright (C) 1995-2003, 2010, 2014, 2016 Jean-loup Gailly, Mark Adler
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -34,12 +34,12 @@
 */
 #ifdef AOCL_ENABLE_THREADS
 #ifdef AOCL_ZLIB_OPT
-extern uint32_t adler32_x86_internal(uint32_t adler, const Bytef *buf, z_size_t len);
+extern uint32_t adler32_x86_internal_with_copy(uint32_t adler, Bytef *des, const Bytef *buf, z_size_t len, const short copy);
 #endif /* AOCL_ZLIB_OPT */
 static inline AOCL_UINT32 partition_checksum(Bytef *source, AOCL_INTP length)
 {
 #ifdef AOCL_ZLIB_OPT
-    return adler32_x86_internal(1, source, length);
+    return adler32_x86_internal_with_copy(1, Z_NULL, source, length, 0);
 #else
     return adler32(1, source, length);
 #endif /* AOCL_ZLIB_OPT */

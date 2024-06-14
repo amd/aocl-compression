@@ -7,7 +7,7 @@
  */
 
 /**
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -268,6 +268,7 @@ break_matching: /* sorry for goto's, but such code is smaller and easier to view
 /* Function pointer holding the optimized variant as per the detected CPU 
  * features */
 static uInt (*longest_match_fp)(deflate_state* s, IPos cur_match) = longest_match_c_opt;
+static uInt (*longest_match_lazy_fp)(deflate_state* s, IPos cur_match) = longest_match_c_opt;
 
 #if defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
 __attribute__((__target__("avx2")))
@@ -298,13 +299,13 @@ static inline uint32_t compare256_avx2(const Bytef *src1, const Bytef *src2)
     }
     return 256;
 }
+#define TARGET_ISA_ATTRIBUTE __attribute__((__target__("avx2")))
 #define COMPARE256 compare256_avx2
 #define LONGEST_MATCH_AVX_FAMILY longest_match_avx2_opt
+#define LONGEST_MATCH_LAZY_AVX_FAMILY longest_match_avx2_opt_lazy
 /* This header file is a template to generate multiversion functions 
  * based on above defined maccros */
 #include "longest_match_x86.h"
-#undef COMPARE256
-#undef LONGEST_MATCH_AVX_FAMILY
 #endif /* AOCL_ZLIB_AVX2_OPT && HAVE_BUILTIN_CTZ */
 
 #ifdef AOCL_ZLIB_AVX_OPT
@@ -334,13 +335,13 @@ static inline uint32_t compare256_avx(const Bytef *src1, const Bytef *src2)
 
     return 256;
 }
+#define TARGET_ISA_ATTRIBUTE __attribute__((__target__("avx")))
 #define COMPARE256 compare256_avx
 #define LONGEST_MATCH_AVX_FAMILY longest_match_avx_opt
+#define LONGEST_MATCH_LAZY_AVX_FAMILY longest_match_avx_opt_lazy
 /* This header file is a template to generate multiversion functions 
  * based on above defined maccros */
 #include "longest_match_x86.h"
-#undef COMPARE256
-#undef LONGEST_MATCH_AVX_FAMILY
 #endif /* AOCL_ZLIB_AVX_OPT */
 
 /* This function intercepts non optimized code path and orchestrate 
@@ -350,11 +351,17 @@ uInt ZLIB_INTERNAL longest_match_x86(deflate_state *s, IPos cur_match)
     return longest_match_fp(s, cur_match);
 }
 
+uInt ZLIB_INTERNAL longest_match_lazy_x86(deflate_state *s, IPos cur_match)
+{
+    return longest_match_lazy_fp(s, cur_match);
+}
+
 static inline void aocl_register_longest_match_fmv(int optOff, int optLevel)
 {
     if (UNLIKELY(optOff == 1))
     {
         longest_match_fp = longest_match_c_opt;
+        longest_match_lazy_fp = longest_match_c_opt;
     }
     else
     {
@@ -363,12 +370,15 @@ static inline void aocl_register_longest_match_fmv(int optOff, int optLevel)
         case 0://C version
         case 1://SSE version
             longest_match_fp = longest_match_c_opt;
+            longest_match_lazy_fp = longest_match_c_opt;
             break;
         case 2://AVX version
 #ifdef AOCL_ZLIB_AVX_OPT
             longest_match_fp = longest_match_avx_opt;
+            longest_match_lazy_fp = longest_match_avx_opt_lazy;
 #else
             longest_match_fp = longest_match_c_opt;
+            longest_match_lazy_fp = longest_match_c_opt;
 #endif
             break;
         case -1: // undecided. use defaults based on compiler flags
@@ -376,10 +386,13 @@ static inline void aocl_register_longest_match_fmv(int optOff, int optLevel)
         default://AVX512 and other versions
 #if defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
             longest_match_fp = longest_match_avx2_opt;
+            longest_match_lazy_fp = longest_match_avx2_opt_lazy;
 #elif defined(AOCL_ZLIB_AVX_OPT)
             longest_match_fp = longest_match_avx_opt;
+            longest_match_lazy_fp = longest_match_avx_opt_lazy;
 #else
             longest_match_fp = longest_match_c_opt;
+            longest_match_lazy_fp = longest_match_c_opt;
 #endif
             break;
         }

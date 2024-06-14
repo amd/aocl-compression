@@ -111,7 +111,7 @@ block_state ZLIB_INTERNAL deflate_quick(deflate_state *s, int flush)
 
     do {
         if (s->lookahead < MIN_LOOKAHEAD) {
-            fill_window_fp(s);
+            aocl_fill_window_fp(s);
             if (s->lookahead < MIN_LOOKAHEAD && flush == Z_NO_FLUSH) {
                 static_emit_end_block(s, 0);
                 return need_more;
@@ -120,8 +120,8 @@ block_state ZLIB_INTERNAL deflate_quick(deflate_state *s, int flush)
                 break;
         }
 
-        if (s->lookahead >= MIN_MATCH) {
-            INSERT_STRING_CRC(s, s->strstart, hash_head);
+        if (s->lookahead >= AOCL_MIN_MATCH) {
+            INSERT_STRING_MUL(s, s->strstart, hash_head);
             dist = s->strstart - hash_head;
 
             if ((dist-1) < (s->w_size - 1)) {
@@ -134,11 +134,11 @@ block_state ZLIB_INTERNAL deflate_quick(deflate_state *s, int flush)
                     static_emit_ptr(s, match_len - MIN_MATCH, s->strstart - s->match_start);
                     s->lookahead -= match_len;
                     if (match_len <= s->max_insert_length &&
-                        s->lookahead >= MIN_MATCH) {
+                        s->lookahead >= AOCL_MIN_MATCH) {
                         match_len--; /* string at strstart already in table */
                         do {
                             s->strstart++;
-                            INSERT_STRING_CRC2(s, s->strstart);
+                            INSERT_STRING_MUL(s, s->strstart, hash_head);
                             /* strstart never exceeds WSIZE-MAX_MATCH, so there are
                             * always MIN_MATCH bytes ahead.
                             */

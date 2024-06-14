@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -35,8 +35,6 @@ extern void aocl_destroy_slide_hash(void);
 
 extern void aocl_register_longest_match(int optOff, int optLevel);
 extern void aocl_destroy_longest_match(void);
-
-extern void aocl_register_deflate_medium(int optOff, int optLevel);
 
 extern void aocl_setup_adler32(int optOff, int optLevel);
 extern void aocl_destroy_adler32(void);

@@ -1,6 +1,6 @@
 /* deflate.h -- internal compression state
  * Copyright (C) 1995-2018 Jean-loup Gailly
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -390,7 +390,7 @@ typedef enum {
 } block_state;
 
 
-extern void (*fill_window_fp) (deflate_state *s);
+extern void (*aocl_fill_window_fp) (deflate_state *s);
 extern void (*flush_pending_fp) (z_streamp strm);
 #ifdef ZLIB_DEBUG
 extern void (*check_match_fp) (deflate_state *s, IPos start, IPos match,
@@ -406,27 +406,13 @@ extern void (*check_match_fp) (deflate_state *s, IPos start, IPos match,
     match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
     s->head[s->ins_h] = (Pos)(str))
 
-#define INSERT_STRING2(s, str) \
-   (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
-    s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
-    s->head[s->ins_h] = (Pos)(str))
+// knuth multiplicative hash
+#define UPDATE_HASH_MUL(s,h,c) ((h = ( (*((uint32_t*)(&c)) * 2654435761U) >> (32 - s->hash_bits) ) & s->hash_mask))
 
-
-#ifdef AOCL_ZLIB_AVX_OPT
-extern uint32_t mask;
-#include<nmmintrin.h>
-#define UPDATE_HASH_CRC(s,h,c) (h = _mm_crc32_u32(0, (*(unsigned *)((uintptr_t)(&c) - (MIN_MATCH-1))) & mask) & s->hash_mask)
-
-#define INSERT_STRING_CRC(s, str, match_head) \
-   (UPDATE_HASH_CRC(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
+#define INSERT_STRING_MUL(s, str, match_head) \
+   (UPDATE_HASH_MUL(s, s->ins_h, s->window[str]), \
     match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
     s->head[s->ins_h] = (Pos)(str))
-
-#define INSERT_STRING_CRC2(s, str) \
-   (UPDATE_HASH_CRC(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
-    s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
-    s->head[s->ins_h] = (Pos)(str))
-#endif /* AOCL_ZLIB_AVX_OPT */
 
 /* ===========================================================================
  * Flush the current block, with given end-of-file flag.

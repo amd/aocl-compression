@@ -1,6 +1,6 @@
 /* zutil.h -- internal interface and configuration of the compression library
  * Copyright (C) 1995-2022 Jean-loup Gailly, Mark Adler
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -85,6 +85,11 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #define MIN_MATCH  3
 #define MAX_MATCH  258
 /* The minimum and maximum match lengths */
+
+#ifdef AOCL_ZLIB_OPT
+#define AOCL_MIN_MATCH (MIN_MATCH + 1)
+/* Minimum 4 bytes match allowed in optimized path */
+#endif
 
 #define PRESET_DICT 0x20 /* preset dictionary flag in zlib header */
 
@@ -278,5 +283,33 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* Reverse the bytes in a 32-bit value */
 #define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + \
                     (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
+
+#ifdef AOCL_ZLIB_OPT
+/* AOCL ZLIB utility functions for fast buffer comparisions */
+static inline uint32_t aocl_compare_2b(const void *a, const void *b) 
+{
+   uint16_t a_val, b_val;
+   memcpy(&a_val, a, sizeof(uint16_t));
+   memcpy(&b_val, b, sizeof(uint16_t));
+
+   return a_val != b_val;
+}
+static inline uint32_t aocl_compare_4b(const void *a, const void *b) 
+{
+   uint32_t a_val, b_val;
+   memcpy(&a_val, a, sizeof(uint32_t));
+   memcpy(&b_val, b, sizeof(uint32_t));
+
+   return a_val != b_val;
+}
+static inline uint32_t aocl_compare_8b(const void *a, const void *b) 
+{
+   uint64_t a_val, b_val;
+   memcpy(&a_val, a, sizeof(uint64_t));
+   memcpy(&b_val, b, sizeof(uint64_t));
+
+   return a_val != b_val;
+}
+#endif /* AOCL_ZLIB_OPT */
 
 #endif /* ZUTIL_H */

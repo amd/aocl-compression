@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -55,23 +55,23 @@ static int setup_ok_zlib_adler = 0; // flag to indicate status of dynamic dispat
 #define DO4(buf,i)  DO2(buf,i); DO2(buf,i+2);
 #define DO8(buf)  DO4(buf,0); DO4(buf,4);
 
-#define DO4_C(buf,i)  DO2(buf,i); DO2(buf,i+2);
-#define DO8_C(buf,i)  DO4_C(buf,i); DO4_C(buf,i+4);
-#define DO16(buf)   DO8_C(buf,0); DO8_C(buf,8);
-
-#define MOD(a) a %= BASE
-#define MOD28(a) a %= BASE
-#define MOD63(a) a %= BASE
+static inline uint32_t adler32_with_copy(uint32_t adler, Bytef *dst, const Bytef *buf, z_size_t len, const short copy)
+{
+    if(copy)
+    {
+        zmemcpy(dst, buf, len);
+    }
+    return adler32(adler, buf, len);
+}
 
 /* Function pointer holding the optimized variant as per the detected CPU
  * features */
-static uint32_t (*adler32_x86_fp)(uint32_t adler, const Bytef* buf, z_size_t len) =
-(uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
+static uint32_t (*adler32_x86_with_copy_fp)(uint32_t adler, Bytef* dst, const Bytef* buf, z_size_t len, const short copy) =
+adler32_with_copy;
 
-#ifdef AOCL_ZLIB_AVX_OPT
 // This function separation prevents compiler from generating VZEROUPPER instruction
 // because of transition from VEX to Non-VEX code resulting in performance drop
-static inline uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_t len)
+static inline uint32_t adler32_rem_len_with_copy(uint32_t adler, Bytef *dst, const Bytef *buf, z_size_t len, const short copy)
 {
     uint32_t sum_A = adler & 0xffff;
     uint32_t sum_B = adler >> 16;
@@ -80,11 +80,20 @@ static inline uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_
         {
             len -= 8;
             DO8(buf);
+            if(copy)
+            {
+                zmemcpy(dst, buf, 8);
+                dst += 8;
+            }
             buf += 8;
         }
 
         while (len--)
         {
+            if(copy)
+            {
+                *dst++ = *buf;
+            }
             sum_B += (sum_A += *buf++);
         }
 
@@ -96,8 +105,9 @@ static inline uint32_t adler32_rem_len(uint32_t adler, const Bytef *buf, z_size_
     return sum_A | (sum_B << 16);
 }
 
+#ifdef AOCL_ZLIB_AVX_OPT
 __attribute__((__target__("avx"))) // uses SSSE3 intrinsics
-static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_t len)
+static inline uint32_t adler32_x86_avx_with_copy(uint32_t adler, Bytef *dst, const Bytef *buf, z_size_t len, const short copy)
 {
     AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     uint32_t sum_A = adler & 0xffff;
@@ -106,6 +116,18 @@ static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_
     z_size_t  itr_cnt = len / ITER_SZ;
     len -= itr_cnt * ITER_SZ;
 
+    // coeff1[16]: {64, 63, 62, ..., 49}
+    const __m128i coeff1 = _mm_setr_epi8(64,63,62,61,60,59,58,57,56,55,54,53,52,51,50,49);
+    // coeff2[16]: {48, 47, 46, ..., 33}
+    const __m128i coeff2 = _mm_setr_epi8(48,47,46,45,44,43,42,41,40,39,38,37,36,35,34,33);
+    // coeff3[16]: {32, 31, 30, ..., 17}
+    const __m128i coeff3 = _mm_setr_epi8(32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17);
+    // coeff4[16]: {16, 15, 14, ..., 1}
+    const __m128i coeff4 = _mm_setr_epi8(16,15,14,13,12,11,10, 9, 8, 7, 6, 5, 4, 3, 2, 1);
+    const __m128i zero = _mm_setzero_si128();
+    // octa_ones[8]: {1, 1, ..., 1}
+    const __m128i octa_ones = _mm_set1_epi16(1);
+    
     while (itr_cnt)
     {
         __m128i vos, vcs, vbs, batch1, batch2, mad0, mad1;
@@ -114,14 +136,9 @@ static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_
             n = itr_cnt;
         itr_cnt -= n;
 
-        const __m128i coeff1 = _mm_setr_epi8(64,63,62,61,60,59,58,57,56,55,54,53,52,51,50,49);
-        const __m128i coeff2 = _mm_setr_epi8(48,47,46,45,44,43,42,41,40,39,38,37,36,35,34,33);
-        const __m128i coeff3 = _mm_setr_epi8(32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17);
-        const __m128i coeff4 = _mm_setr_epi8(16,15,14,13,12,11,10, 9, 8, 7, 6, 5, 4, 3, 2, 1);
-        const __m128i zero = _mm_setzero_si128();
-        const __m128i octa_ones = _mm_set1_epi16(1);
-
+        // vos[4]: {sum_A * n, 0, 0, 0}
         vos = _mm_set_epi32(0, 0, 0, sum_A * n);
+        // vcs[4]: {sum_B, 0, 0, 0}
         vcs = _mm_set_epi32(0, 0, 0, sum_B);
         vbs = zero;
 
@@ -138,42 +155,70 @@ static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_
             vcs : stores sum_B's partial computation of consecutive bytes in adjacent four 32-bit numbers
             vos : accumulating vbs results per iteration for future calculation of sum_B
         */
-            batch1 = _mm_lddqu_si128((__m128i*)(buf)); // batch1: B1 | B2 | ... B16
-            batch2 = _mm_lddqu_si128((__m128i*)(buf + 16)); // batch1: B17 | B18 | ... B32
+            // batch1[16]: {B1, B2, ..., B16}
+            batch1 = _mm_lddqu_si128((__m128i*)(buf));
+            // batch2[16]: {B17, B18, ..., B32}
+            batch2 = _mm_lddqu_si128((__m128i*)(buf + 16));
 
-            // vos: old_vos + vbs
+            if(copy)
+            {
+                _mm_storeu_si128((__m128i*)dst, batch1);
+                _mm_storeu_si128((__m128i*)(dst + 16), batch2);
+                dst += 32;
+            }
+
+            // vos[4]: {vos[0] + vbs[0], ..., vos[3]}
             vos = _mm_add_epi32(vos, vbs);
-            // vbs: old_vbs + ( 0x00000000| 0x0000<B1+B2+B3+B4+B5+B6+B7+B8>| 0x00000000| 0x0000<B9+B10+B11+B12+B13+B14+B15+B16>)
+            // vbs[4]: {vbs[0] + S[B1, ..., B8], 0, vbs[2] + S[B9, ..., B16], 0}
             vbs = _mm_add_epi32(vbs, _mm_sad_epu8(batch1, zero));
-            // mad0: 1*B16 + 2*B15| ...| ...| ...| ...| ...| ...| 15*B2 + 16*B1
+            // mad0[8]: {64*B1 + 63*B2, ..., 50*B15 + 49*B16}
             mad0 = _mm_maddubs_epi16(batch1, coeff1);
-            // vcs: old_vsc + ( 1*B16 + 2*B15 + 3*B14 + 4*B13| ...| ...| 13*B4 + 14*B3 + 15*B2 + 16*B1 )
+            // vcs[4]: {vcs[0] + (64*B1 + 63*B2) + (62*B3 + 61*B4), ..., vcs[3] + (52*B13 + 51*B14) + (50*B15 + 49*B16)}
             vcs = _mm_add_epi32(vcs, _mm_madd_epi16(mad0, octa_ones));
 
+            // vbs[4]: {vbs[0] + S[B17, ..., B24], 0, vbs[2] + S[B25, ..., B32], 0}
             vbs = _mm_add_epi32(vbs, _mm_sad_epu8(batch2, zero));
+            // mad1[8]: {48*B17 + 47*B18, ..., 34*B31 + 33*B32}
             mad1 = _mm_maddubs_epi16(batch2, coeff2);
+            // vcs[4]: {vcs[0] + (48*B17 + 47*B18) + (46*B19 + 45*B20), ..., vcs[3] + (36*B29 + 35*B30) + (34*B31 + 33*B32)}
             vcs = _mm_add_epi32(vcs, _mm_madd_epi16(mad1, octa_ones));
 
+            // batch1: {B33, B34, ..., B48}
             batch1 = _mm_lddqu_si128((__m128i*)(buf + 32));
+            // batch2: {B49, B50, ..., B64}
             batch2 = _mm_lddqu_si128((__m128i*)(buf + 48));
 
+            if(copy)
+            {
+                _mm_storeu_si128((__m128i*)dst, batch1);
+                _mm_storeu_si128((__m128i*)(dst + 16), batch2);
+                dst += 32;
+            }
+
+            // vbs[4]: {vbs[0] + S[B33, ..., B40], 0, vbs[2] + S[B41, ..., B48], 0}
             vbs = _mm_add_epi32(vbs, _mm_sad_epu8(batch1, zero));
+            // mad0[8]: {32*B33 + 31*B34, ..., 18*B47 + 17*B48}
             mad0 = _mm_maddubs_epi16(batch1, coeff3);
+            // vcs[4]: {vcs[0] + (32*B33 + 31*B34) + (30*B35 + 29*B36), ..., vcs[3] + (18*B45 + 17*B46) + (16*B47 + 15*B48)}
             vcs = _mm_add_epi32(vcs, _mm_madd_epi16(mad0, octa_ones));
 
+            // vbs[4]: {vbs[0] + S[B49, ..., B56], 0, vbs[2] + S[B57, ..., B64], 0}
             vbs = _mm_add_epi32(vbs, _mm_sad_epu8(batch2, zero));
+            // mad1[8]: {16*B49 + 15*B50, ..., 2*B63 + 1*B64}
             mad1 = _mm_maddubs_epi16(batch2, coeff4);
+            // vcs[4]: {vcs[0] + (16*B49 + 15*B50) + (14*B51 + 13*B52), ..., vcs[3] + (4*B61 + 3*B62) + (2*B63 + 1*B64)}
             vcs = _mm_add_epi32(vcs, _mm_madd_epi16(mad1, octa_ones));
 
             buf += ITER_SZ;
         }
 
-        vcs = _mm_add_epi32(vcs, _mm_slli_epi32(vos, 6));
         // Shuffling and adding vbs data to compute 64*n byte sum in lower 32-bit number
         vbs = _mm_add_epi32(vbs, _mm_shuffle_epi32(vbs, _MM_SHUFFLE(2,3,0,1)));
         vbs = _mm_add_epi32(vbs, _mm_shuffle_epi32(vbs, _MM_SHUFFLE(1,0,3,2)));
 
         sum_A += _mm_cvtsi128_si32(vbs);
+
+        vcs = _mm_add_epi32(vcs, _mm_slli_epi32(vos, 6));
         // Shuffling and adding vcs data to accumulate sum_B in lower 32-bit number
         vcs = _mm_add_epi32(vcs, _mm_shuffle_epi32(vcs, _MM_SHUFFLE(2,3,0,1)));
         vcs = _mm_add_epi32(vcs, _mm_shuffle_epi32(vcs, _MM_SHUFFLE(1,0,3,2)));
@@ -184,14 +229,13 @@ static inline uint32_t adler32_x86_avx(uint32_t adler, const Bytef *buf, z_size_
         sum_B %= BASE;
     }
 
-
-    return adler32_rem_len(sum_A | (sum_B << 16), buf, len);
+    return adler32_rem_len_with_copy(sum_A | (sum_B << 16), dst, buf, len, copy);
 }
 #endif /* AOCL_ZLIB_AVX_OPT */
 
-#if defined(AOCL_ZLIB_AVX2_OPT) && defined(USE_AOCL_ADLER32_AVX2)
+#ifdef AOCL_ZLIB_AVX2_OPT
 __attribute__((__target__("avx2")))
-static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size_t len)
+static inline uint32_t adler32_x86_avx2_with_copy(uint32_t adler, Bytef *dst, const Bytef *buf, z_size_t len, const short copy)
 {
     AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     uint32_t sum_A = adler & 0xffff;
@@ -199,157 +243,98 @@ static inline uint32_t adler32_x86_avx2(uint32_t adler, const Bytef *buf, z_size
 
     z_size_t  itr_cnt = len / ITER_SZ;
     len -= itr_cnt * ITER_SZ;
+    
+    // coeff1[32]: {64, 63, 62, ..., 33}
+    const __m256i coeff1 = _mm256_setr_epi8(64,63,62,61,60,59,58,57,56,55,54,53,52,51,50,49,48,47,46,45,44,43,42,41,40,39,38,37,36,35,34,33);
+    // coeff1[32]: {32, 31, 30, ..., 1}
+    const __m256i coeff2 = _mm256_setr_epi8(32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10, 9, 8, 7, 6, 5, 4, 3, 2, 1);
+    const __m256i zero = _mm256_setzero_si256();
+    // sixteen_ones[16]: {1, 1, ..., 1, 1}
+    const __m256i sixteen_ones = _mm256_set1_epi16(1);
 
     while (itr_cnt)
     {
-        __m256i vos, vcs, vbs, batch1, mad0;
+        __m256i vos, vcs, vbs, batch1, batch2, mad0, mad1, vbs_i;
         z_size_t n = NMAX / ITER_SZ; 
         if (n > itr_cnt)
             n = itr_cnt;
         itr_cnt -= n;
 
-        const __m256i coeff1 = _mm256_setr_epi8(64,63,62,61,60,59,58,57,56,55,54,53,52,51,50,49,48,47,46,45,44,43,42,41,40,39,38,37,36,35,34,33);
-        const __m256i coeff2 = _mm256_setr_epi8(32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10, 9, 8, 7, 6, 5, 4, 3, 2, 1);
-        const __m256i zero = _mm256_setzero_si256();
-        const __m256i octa_ones = _mm256_set1_epi16(1);
-
-        vos = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0,sum_A * n);
+        // vos[8]: {sum_A * n, 0, 0, ..., 0}
+        vos = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, sum_A * n);
+        // vcs[8]: {sum_B, 0, 0, ..., 0}
         vcs = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, sum_B);
         vbs = zero;
 
         while(n--)
         {
-            batch1 = _mm256_lddqu_si256((__m256i*)(buf)); // batch1: B1 | B2 | ... B32
+            // batch1[32]: {B1, B2, ..., B32}
+            batch1 = _mm256_lddqu_si256((__m256i*)(buf));
+            // batch1[32]: {B33, B34, ..., B64}
+            batch2 = _mm256_lddqu_si256((__m256i*)(buf + 32));
+            if(copy)
+            {
+                _mm256_storeu_si256((__m256i*)dst, batch1);
+                _mm256_storeu_si256((__m256i*)(dst + 32), batch2);
+                dst += ITER_SZ;
+            }
+            // mad0[8]: {(64*B1 + 63*B2) + (62*B3 + 61*B4), ..., (36*B29 + 35*B30) + (34*B31 + 33*B32)}
+            mad0 = _mm256_madd_epi16(_mm256_maddubs_epi16(batch1, coeff1), sixteen_ones);
+            // mad1[8]: {(32*B33 + 31*B34) + (30*B35 + 29*B36), ..., (4*B61 + 3*B62) + (2*B63 + 1*B64)}
+            mad1 = _mm256_madd_epi16(_mm256_maddubs_epi16(batch2, coeff2), sixteen_ones);
 
-            // vos: old_vos + vbs
+            // vcs[8]: {vcs[0] + mad0[0], ..., vcs[7] + mad0[7]}
+            vcs = _mm256_add_epi32(vcs, mad0);
+            // vcs[8]: {vcs[0] + mad1[0], ..., vcs[7] + mad1[7]}
+            vcs = _mm256_add_epi32(vcs, mad1);
+
+            // vos[8]: {vos[0] + vbs[0], ..., vos[7] + vbs[7]}
             vos = _mm256_add_epi32(vos, vbs);
-            // vbs: old_vbs + ( 0x00000000| 0x0000<B1+B2+B3+B4+B5+B6+B7+B8>| ... 0x00000000| 0x0000<B25+B26+B27+B28+B29+B30+B31+B32>)
-            vbs = _mm256_add_epi32(vbs, _mm256_sad_epu8(batch1, zero));
-            // mad0: 1*B32 + 2*B31| ...| ...| ...| ...| ... 31*B2 + 32*B1
-            mad0 = _mm256_maddubs_epi16(batch1, coeff1);
-            // vcs: old_vsc + ( 1*B32 + 2*B31 + 3*B30 + 4*B29| ...| ... 29*B4 + 30*B3 + 31*B2 + 32*B1 )
-            vcs = _mm256_add_epi32(vcs, _mm256_madd_epi16(mad0, octa_ones));
 
-            batch1 = _mm256_lddqu_si256((__m256i*)(buf + 32));
-
-            vbs = _mm256_add_epi32(vbs, _mm256_sad_epu8(batch1, zero));
-            mad0 = _mm256_maddubs_epi16(batch1, coeff2);
-            vcs = _mm256_add_epi32(vcs, _mm256_madd_epi16(mad0, octa_ones));
+            // vbs_i[8]: {S[B1, ...,B8] + S[B33, ...,B40], 0, ..., S[B25, ...,B32] + S[B57, ...,B64], 0}
+            vbs_i = _mm256_add_epi32(_mm256_sad_epu8(batch1, zero),  _mm256_sad_epu8(batch2, zero));
+            // vbs[8]: {vbs[0] + vbs_i[0], 0, ..., vbs[6] + vbs_i[6], 0}
+            vbs = _mm256_add_epi32(vbs, vbs_i);
 
             buf += ITER_SZ;
         }
+        // vbs[8]: A | 0 | B | 0 | C | 0 | D | 0 => A+B | 0+0 | B+A | 0+0 | C+D | 0+0 | D+C | 0+0
+        vbs = _mm256_add_epi32(vbs, _mm256_shuffle_epi32(vbs, 206));
+        // sum_A = A+B+C+D
+        sum_A += _mm256_cvtsi256_si32(vbs) + _mm_cvtsi128_si32(_mm256_extracti128_si256(vbs, 1));
 
         vcs = _mm256_add_epi32(vcs, _mm256_slli_epi32(vos, 6));
-
-        vbs = _mm256_add_epi32(vbs, _mm256_shuffle_epi32(vbs, _MM_SHUFFLE(2,3,0,1)));
-
-        vbs = _mm256_add_epi32(vbs, _mm256_shuffle_epi32(vbs, _MM_SHUFFLE(1,0,3,2)));
-
-        //sum_A += _mm256_cvtsi256_si32(vbs);
-        sum_A += _mm256_extract_epi32(vbs, 0);
-
-        vcs = _mm256_add_epi32(vcs, _mm256_shuffle_epi32(vcs, _MM_SHUFFLE(2,3,0,1)));
-        vcs = _mm256_add_epi32(vcs, _mm256_shuffle_epi32(vcs, _MM_SHUFFLE(1,0,3,2)));
-
-        //sum_B = _mm256_cvtsi256_si32(vcs);
-        sum_B = _mm256_extract_epi32(vcs, 0);
+        // vcs[8]: A | B | C | D | E | F | G | H => A+C | B+D | C+A | D+B | E+G | F+H | G+E | H+F
+        vcs = _mm256_add_epi32(vcs, _mm256_shuffle_epi32(vcs, 78));
+        // vcs[8]: A+C | B+D | C+A | D+B | E+G | F+H | G+E | H+F => A+C+B+D | B+D+A+C | C+A+D+B | D+B+C+A | E+G+F+H | F+H+E+G | G+E+H+F | H+F+G+E
+        vcs = _mm256_add_epi32(vcs, _mm256_shuffle_epi32(vcs, 177));
+        // sum_B = A+C+B+D+E+G+F+H
+        sum_B = _mm256_cvtsi256_si32(vcs) + _mm_cvtsi128_si32(_mm256_extracti128_si256(vcs, 1));
 
         sum_A %= BASE;
         sum_B %= BASE;
     }
-    return adler32_rem_len(sum_A | (sum_B << 16), buf, len);
+    return adler32_rem_len_with_copy(sum_A | (sum_B << 16), dst, buf, len, copy);
 }
-#endif /* AOCL_ZLIB_AVX2_OPT && USE_AOCL_ADLER32_AVX2 */
+#endif /* AOCL_ZLIB_AVX2_OPT */
 
-uint32_t ZLIB_INTERNAL adler32_x86_internal(uint32_t sum_A, const Bytef* buf, z_size_t len)
+uint32_t ZLIB_INTERNAL adler32_x86_internal_with_copy(uint32_t sum_A, Bytef *dst, const Bytef* buf, z_size_t len, const short copy)
 {
-    unsigned long sum_B;
-#if !defined(AOCL_ZLIB_AVX_OPT)
-    unsigned n;
-#endif
+    if(buf == NULL)
+        return 1;
 
-    if (buf && len >= 32)
+    if (LIKELY(buf && len >= 32))
     {
-        return adler32_x86_fp(sum_A, buf, len);
+        return adler32_x86_with_copy_fp(sum_A, dst, buf, len, copy);
     }
-
-    /* split Adler-32 into component sums */
-    sum_B = (sum_A >> 16) & 0xffff;
-    sum_A &= 0xffff;
-
-    /* in case user likes doing a byte at a time, keep it fast */
-    if (len == 1)
-    {
-        sum_A += buf[0];
-        if (sum_A >= BASE)
-            sum_A -= BASE;
-        sum_B += sum_A;
-        if (sum_B >= BASE)
-            sum_B -= BASE;
-        return sum_A | (sum_B << 16);
-    }
-
-    /* initial sum_A-32 value (deferred check for len == 1 speed) */
-    if (buf == Z_NULL)
-        return 1L;
-
-    /* in case short lengths are provided, keep it somewhat fast */
-    if (len < 16)
-    {
-        while (len--)
-        {
-            sum_A += *buf++;
-            sum_B += sum_A;
-        }
-        if (sum_A >= BASE)
-            sum_A -= BASE;
-        MOD28(sum_B);            /* only added so many BASE's */
-        return sum_A | (sum_B << 16);
-    }
-
-#if !defined(AOCL_ZLIB_AVX_OPT)
-    /* do length NMAX blocks -- requires just one modulo operation */
-    while (len >= NMAX)
-    {
-        len -= NMAX;
-        n = NMAX / 16;          /* NMAX is divisible by 16 */
-        do
-        {
-            DO16(buf);          /* 16 sums unrolled */
-            buf += 16;
-        } while (--n);
-        MOD(sum_A);
-        MOD(sum_B);
-    }
-#endif
-
-    /* do remaining bytes (less than NMAX, still just one modulo) */
-    if (len)                   /* avoid modulos if none remaining */
-    {
-        while (len >= 16)
-        {
-            len -= 16;
-            DO16(buf);
-            buf += 16;
-        }
-        while (len--)
-        {
-            sum_A += *buf++;
-            sum_B += sum_A;
-        }
-        MOD(sum_A);
-        MOD(sum_B);
-    }
-
-    /* return recombined sums */
-    return sum_A | (sum_B << 16);
+    return adler32_with_copy(sum_A, dst, buf, len, copy);
 }
 
 static inline void aocl_setup_adler32_fmv(int optOff, int optLevel)
 {
     if (UNLIKELY(optOff == 1))
     {
-        adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
+        adler32_x86_with_copy_fp = adler32_with_copy;
     }
     else
     {
@@ -357,24 +342,24 @@ static inline void aocl_setup_adler32_fmv(int optOff, int optLevel)
         {
         case 0://C version
         case 1://SSE version
-            adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
+            adler32_x86_with_copy_fp = adler32_with_copy;
             break;
         case 2://AVX version
 #ifdef AOCL_ZLIB_AVX_OPT
-            adler32_x86_fp = adler32_x86_avx;
+            adler32_x86_with_copy_fp = adler32_x86_avx_with_copy;
 #else
-            adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
+            adler32_x86_with_copy_fp = adler32_with_copy;
 #endif
             break;
         case -1: // undecided. use defaults based on compiler flags
         case 3://AVX2 version
         default://AVX512 and other versions
-#if defined(AOCL_ZLIB_AVX2_OPT) && defined(USE_AOCL_ADLER32_AVX2)
-            adler32_x86_fp = adler32_x86_avx2;
+#ifdef AOCL_ZLIB_AVX2_OPT
+            adler32_x86_with_copy_fp = adler32_x86_avx2_with_copy;
 #elif defined(AOCL_ZLIB_AVX_OPT)
-            adler32_x86_fp = adler32_x86_avx;
+            adler32_x86_with_copy_fp = adler32_x86_avx_with_copy;
 #else
-            adler32_x86_fp = (uint32_t(*)(uint32_t, const Bytef*, z_size_t))adler32;
+            adler32_x86_with_copy_fp = adler32_with_copy;
 #endif
             break;
         }
@@ -416,7 +401,7 @@ uint32_t ZEXPORT adler32_x86(uint32_t sum_A, const Bytef* buf, z_size_t len)
 {
 #ifdef AOCL_ZLIB_OPT
     AOCL_SETUP_NATIVE();
-    return adler32_x86_internal(sum_A, buf, len);
+    return adler32_x86_internal_with_copy(sum_A, Z_NULL, buf, len, 0);
 #else
     return adler32(sum_A, buf, len);
 #endif /* AOCL_ZLIB_OPT */
