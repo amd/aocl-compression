@@ -58,6 +58,7 @@
 #undef FASTEST // not supported with AOCL zlib optimizations
 static int setup_ok_zlib_deflate = 0; // flag to indicate status of dynamic dispatcher setup
 static int optLevel = 0, optOff = 1; // optimization configurations
+static int enable_dquick = 0; // flag to enable/disable deflate quick compression
 
 // This increases the hash table size (default to 128K) and reduces the number of collisions.
 #define AOCL_ADDITIONAL_HASH_BITS 2
@@ -119,9 +120,7 @@ local int aocl_deflateInit2__opt(z_streamp strm, int level, int method,
                           int windowBits, int memLevel, int strategy,
                           const char *version, int stream_size);
 extern block_state deflate_medium(deflate_state *s, int flush);
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
 extern block_state deflate_quick(deflate_state *s, int flush);
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 #endif /* AOCL_ZLIB_OPT */
 
 /* ===========================================================================
@@ -2006,10 +2005,8 @@ local block_state aocl_deflate_fast_opt(deflate_state *s, int flush)
     IPos hash_head;       /* head of the hash chain */
     int bflush;           /* set if current block must be flushed */
 
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
-    if(s->level == 1)
+    if(enable_dquick && s->level == 1)
         return deflate_quick(s, flush);
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 
     for (;;) {
         /* Make sure that we always have enough lookahead, except
@@ -2369,6 +2366,13 @@ static void aocl_setup_deflate_fmv(int optOff, int optLevel)
 {
     aocl_register_slide_hash(optOff, optLevel);
     aocl_register_longest_match(optOff, optLevel);
+    
+    if (!setup_ok_zlib_deflate) {
+        if(getenv("AOCL_ZLIB_QUICK_MODE") != NULL)
+            enable_dquick = 1;
+        else
+            enable_dquick = 0;
+    }
 
     if (UNLIKELY(optOff == 1)) {
         config_table = configuration_table;
@@ -2418,6 +2422,7 @@ void ZLIB_INTERNAL aocl_destroy_deflate(void) {
     setup_ok_zlib_deflate = 0;
     optLevel = 0;
     optOff = 1;
+    enable_dquick = 0;
     AOCL_EXIT_CRITICAL(setup_zlib_deflate)
     aocl_destroy_tree();
     aocl_destroy_longest_match();

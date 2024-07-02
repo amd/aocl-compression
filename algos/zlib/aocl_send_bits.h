@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -38,7 +38,6 @@
 #define OPT_send_bits(s, c, v) send_bits((s), (c), (v))
 #endif /* AOCL_ZLIB_OPT */
 
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
 #ifndef ZLIB_DEBUG
 #  define send_code(s, c, tree) OPT_send_bits(s, tree[c].Code, tree[c].Len);
  /* Send a code of the given tree. c and tree must not have side effects */
@@ -48,7 +47,6 @@
      { if (z_verbose>2) fprintf(stderr,"\ncd %3d ",(c)); \
        OPT_send_bits(s, tree[c].Code, tree[c].Len); }
 #endif
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 
 
 /* ===========================================================================

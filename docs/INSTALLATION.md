@@ -108,7 +108,6 @@ CODE_COVERAGE                       |  Enable source code coverage. Only support
 ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
 VALGRIND                            |  Enable Valgrind checks. Only supported on Linux/Debug and incompatible with ASAN=ON (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Disabled by default)
-ZLIB_DEFLATE_FAST_MODE              |  Enable ZLIB deflate quick strategy (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1  |  Enable LZ4 match skipping optimization strategy-1 based on a larger base step size applied for long distance search (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2  |  Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1. Preferred to be used with Silesia corpus (Disabled by default)
 AOCL_LZ4_NEW_PRIME_NUMBER           |  Enable the usage of a new prime number for LZ4 hashing function. Preferred to be used with Silesia corpus (Disabled by default)
@@ -127,6 +126,9 @@ TEST_COVERAGE_THIRD_PARTY           |  Enable third party test bench based CTest
 NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression for supported methods (Disabled by default)
 AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
 AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
+
+* NOTE: <br>
+   1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by <br> setting environment variable AOCL_ZLIB_QUICK_MODE  <br>
 
 Running tests with CTest
 ------------------------

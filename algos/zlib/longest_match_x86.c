@@ -48,6 +48,17 @@ static int setup_ok_zlib_longest = 0; // flag to indicate status of dynamic disp
 /* Please retain this line */
 const char fast_lm_copyright[] = " Fast match finder for zlib, https://github.com/gildor2/fast_zlib ";
 
+static inline uint32_t compare256_c(const Bytef *src1, const Bytef *src2) {
+    uint32_t match_len = 0;
+    while (match_len < 256) {
+        if (*src1 != *src2) {
+            return match_len;
+        }
+        src1++, src2++, match_len++;
+    }
+    return 256;
+}
+
 static inline uInt longest_match_c_opt(deflate_state* s, IPos cur_match)
 {
     unsigned chain_length = s->max_chain_length;/* max hash chain length */
@@ -343,6 +354,8 @@ static inline uint32_t compare256_avx(const Bytef *src1, const Bytef *src2)
  * based on above defined maccros */
 #include "longest_match_x86.h"
 #endif /* AOCL_ZLIB_AVX_OPT */
+// Function pointer holding the optimized variant of compare256 as per the detected CPU
+uint32_t (*aocl_compare256_fp) (const Bytef *src1, const Bytef *src2) = compare256_c;
 
 /* This function intercepts non optimized code path and orchestrate 
  * optimized code flow path */
@@ -362,6 +375,7 @@ static inline void aocl_register_longest_match_fmv(int optOff, int optLevel)
     {
         longest_match_fp = longest_match_c_opt;
         longest_match_lazy_fp = longest_match_c_opt;
+        aocl_compare256_fp = compare256_c;
     }
     else
     {
@@ -371,14 +385,17 @@ static inline void aocl_register_longest_match_fmv(int optOff, int optLevel)
         case 1://SSE version
             longest_match_fp = longest_match_c_opt;
             longest_match_lazy_fp = longest_match_c_opt;
+            aocl_compare256_fp = compare256_c;
             break;
         case 2://AVX version
 #ifdef AOCL_ZLIB_AVX_OPT
             longest_match_fp = longest_match_avx_opt;
             longest_match_lazy_fp = longest_match_avx_opt_lazy;
+            aocl_compare256_fp = compare256_avx;
 #else
             longest_match_fp = longest_match_c_opt;
             longest_match_lazy_fp = longest_match_c_opt;
+            aocl_compare256_fp = compare256_c;
 #endif
             break;
         case -1: // undecided. use defaults based on compiler flags
@@ -387,12 +404,15 @@ static inline void aocl_register_longest_match_fmv(int optOff, int optLevel)
 #if defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
             longest_match_fp = longest_match_avx2_opt;
             longest_match_lazy_fp = longest_match_avx2_opt_lazy;
+            aocl_compare256_fp = compare256_avx2;
 #elif defined(AOCL_ZLIB_AVX_OPT)
             longest_match_fp = longest_match_avx_opt;
             longest_match_lazy_fp = longest_match_avx_opt_lazy;
+            aocl_compare256_fp = compare256_avx;
 #else
             longest_match_fp = longest_match_c_opt;
             longest_match_lazy_fp = longest_match_c_opt;
+            aocl_compare256_fp = compare256_c;
 #endif
             break;
         }

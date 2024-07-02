@@ -754,7 +754,7 @@ TEST_P(AOCL_Compression_zlib, deflate_large_buffers)
     deflate_large_buffers_(9); // validate level 9
 }
 
-#if defined(AOCL_ZLIB_DEFLATE_FAST_MODE) && defined(AOCL_INTERNAL_TEST)
+#if defined(AOCL_INTERNAL_TEST)
 #define MAX_SEARCH_DIST 32768 // refer deflate_quick.c
 
 #ifdef __cplusplus
@@ -778,4 +778,4 @@ TEST(AOCL_Compression_zlib, deflate_quick_dist_code_verify)
     EXPECT_EQ(quick_dist_codes[i], value);
   }
 }
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE && AOCL_INTERNAL_TEST */
+#endif /* AOCL_INTERNAL_TEST */
