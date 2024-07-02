@@ -89,8 +89,8 @@ if(ENABLE_STRICT_WARNINGS)
 endif()
 
 
-set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
+#set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+#set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
 
 set(INTERNAL_INC_FILES  ${INC_FILES}
                         api/types.h
@@ -128,8 +128,8 @@ endif()
 target_link_libraries(${exe_name} ${lib_name})
 target_link_libraries(${exe_name} ${CMAKE_DL_LIBS})
 
-message(STATUS "Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")
-install(TARGETS ${exe_name} DESTINATION ${DEST_BIN_PATH})
+#message(STATUS "Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")
+#install(TARGETS ${exe_name} DESTINATION ${DEST_BIN_PATH})
 
 #download datasets
 if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)

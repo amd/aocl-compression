@@ -318,7 +318,7 @@ endif ()
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(DEST_LIB_PATH lib)
 set(DEST_INC_PATH include)
-set(DEST_BIN_PATH bin)
+#set(DEST_BIN_PATH bin)
 
 set(INC_FILES api/aocl_compression.h
               ${ALGOS_PATH}/common/aoclAlgoOpt.h

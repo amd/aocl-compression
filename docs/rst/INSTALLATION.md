@@ -30,7 +30,7 @@ library and testsuite binary as explained below for Linux® and Windows® platfo
    ```
    The library is generated in "lib" directory. <br>
    The test bench executable is generated in "build". <br>
-   The additional option `--target install` will install the library, binary, and <br>
+   The additional option `--target install` will install the library, and <br>
    interface header files in the installation path as specified with <br>
    `-DCMAKE_INSTALL_PREFIX` option or in the local system path. <br>
    The option `-j` will run the compilation process using multiple cores.
@@ -78,7 +78,7 @@ __Desktop development with C++__ toolset that includes the Clang compiler.
 
 1. Go to AOCL-Compression source package and create a folder named build.
 2. Go to the build folder.
-3. Use the following command to configure and build the library to test bench executable.
+3. Use the following command to configure and build the library and test bench executable.
 ```
 cmake .. -T ClangCl -G <installed Visual Studio version> && cmake --build . --config Release --target INSTALL
 ```
@@ -119,105 +119,6 @@ AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL |  Build with xz utils lzma APIs. Experiment
 AOCL_ENABLE_THREADS                 |  Enable multi-threaded compression and decompression using SMP based openMP threads (Disabled by default)
 AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
 AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
-
-#### Running AOCL-Compression Test Bench On Linux
-
-Test bench supports several options to validate, benchmark or debug the supported
-compression methods.
-It uses the unified API set to invoke the compression methods supported by AOCL-Compression.
-Test bench can invoke and benchmark some of the IPP's compression methods as well.
-
-* To check various options supported by the test bench, use one of the following commands:<br>
-  `aocl_compression_bench -h`  
-  `aocl_compression_bench --help`
-
-* To check all the supported compression methods, use the command:<br>
-  `aocl_compression_bench -l`
-
-* To run the test bench with requested number of iterations, use the command:<br>
-  `aocl_compression_bench -i`
-
-* To run the test bench to check the performance of all the supported compression <br>
-   and decompression methods for a given input file, use the command:<br>
-   `aocl_compression_bench -a -p <input filename>`
-
-* To run the test bench to validate the outputs from all the supported compression <br>
-   and decompression methods for a given input file, use the command:<br>
-   `aocl_compression_bench -a -t <input filename>`
-
-* To run the test bench to check the performance of a compression and decompression <br>
-   method for a given input file, use the command:<br>
-   `aocl_compression_bench -ezstd:5:0 -p <input filename>`<br>
-Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
-
-
-* To run the test bench to validate the output of a compression and decompression <br>
-   method for a given input file, use the command:<br>
-   `aocl_compression_bench -ezstd:5:0 -t <input filename>`<br>
-   Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
-  
-
-* To run the test bench with error/debug/trace/info logs, build the library by using `-DAOCL_ENABLE_LOG_FEATURE=ON` & set the environment variable `AOCL_ENABLE_LOG` to any of the following:<br>
-   * `AOCL_ENABLE_LOG=ERR`   for Error logs.
-   * `AOCL_ENABLE_LOG=INFO`  for Error, Info logs.
-   * `AOCL_ENABLE_LOG=DEBUG` for Error, Info, Debug logs.
-   * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.
-
-
-* To run the test bench but only compression or decompression <br>
-   for a given input file, use the command:<br>
-   `aocl_compression_bench -rcompress <input filename>` or <br>
-   `aocl_compression_bench -rdecompress -ezstd <compressed input filename>` or <br>
-   `aocl_compression_bench -rdecompress -ezstd -t -f<uncompressed file for validation> <compressed input filename>` <br>
-   Note: In -rdecompress mode, compression method must be specified using -e option. <br>
-   If validation of decompressed data is needed, specify -t and -f options additionally.
-
-* To run the test bench and dump output data generated <br>
-   for a given input file, use the command:<br>
-   `aocl_compression_bench -d<dump filename> -ezstd:1 <input filename>` or <br>
-   `aocl_compression_bench -d<dump filename> -rcompress -ezstd:1 <input filename>` or <br>
-   `aocl_compression_bench -d<dump filename> -rdecompress -ezstd <compressed input filename>` <br>
-   Here, when -rcompress operation is selected, compressed file gets dumped <br>
-   and when -rdecompress operation is selected, decompressed file gets dumped. <br>
-   Method name and level must be specified using -e for default and -rcompress modes. <br>
-   Method name must be specified using -e for -rdecompress mode.
-
----
-  
-To test and benchmark the performance of IPP's compression methods, use the
-test bench option `-c<path to IPP library method>` along with other relevant options (as explained above).
-IPP's lz4, lz4hc, zlib and bzip2 methods are supported by the test bench.
-Check the following details for the exact steps:
-1. Set the library path environment variable (export LD_LIBRARY_PATH on <br>
-   Linux) to point to the installed IPP library path. <br>
-   Alternatively, you can also run vars.sh that comes along with the <br>
-   IPP installation to setup the environment variable.
-2. Download lz4-1.9.3, zlib-1.2.11 and bzip2-1.0.8 source packages.
-3. Apply IPP patch files using the command:<br>
-   `patch -p1 < path to corresponding patch file>`
-
-4. Build the patched IPP lz4, zlib and bzip2 libraries per the steps <br>
-   in the IPP readme files in the corresponding patch file <br>
-   locations for these compression methods.
-5. Append the library path to `-c` option and pass it to executable as command line argument <br>
-   (Linux is only supported) for running patched IPP lz4, zlib and bzip2 libraries.
-6. Run the test bench to benchmark the IPP library methods as follows:
-```
-    aocl_compression_bench -a -p -c/path/to/ipp_patch <input filename>
-    aocl_compression_bench -elz4 -p -c/path/to/ipp_patch <input filename>
-    aocl_compression_bench -elz4hc -p -c/path/to/ipp_patch <input filename>
-    aocl_compression_bench -ezlib -p -c/path/to/ipp_patch <input filename>
-    aocl_compression_bench -ebzip2 -p -c/path/to/ipp_patch <input filename>
-```
-
-#### Running AOCL-Compression Test Bench On Windows
-
-Test bench on Windows supports all the user options as Linux,
-except for the `-c` option to link and test IPP compression methods.
-For more information on various user options, refer to the previous section on Linux.
-To set and launch the test bench with a specific user option,
-go to project aocl_compression_bench -> Properties -> Debugging;
-specify the user options and the input test file.
 
 #### Running tests with CTest
 

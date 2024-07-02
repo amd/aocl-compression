@@ -560,7 +560,7 @@ if __name__ == '__main__':
             DEFAULT_BUILD, 'Release/aocl_compression_bench')
     else:
         bench_cmd = os.path.join(
-            installation_path, 'bin/aocl_compression_bench')
+            DEFAULT_BUILD, 'aocl_compression_bench')
         
     # Linux specific library configuration and installation commands with default flags
     compression_cmds = {

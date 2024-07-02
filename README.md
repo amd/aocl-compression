@@ -54,7 +54,7 @@ Building on Linux
    ```
    The library is generated in "lib" directory. <br>
    The test bench executable is generated in "build". <br>
-   The additional option `--target install` will install the library, binary, and <br>
+   The additional option `--target install` will install the library, and <br>
    interface header files in the installation path as specified with <br>
    `-DCMAKE_INSTALL_PREFIX` option or in the local system path. <br>
    The option `-j` will run the compilation process using multiple cores.
@@ -102,7 +102,7 @@ Building with Visual Studio IDE (command line)
 ----------------------------------------------
 1. Go to AOCL-Compression source package and create a folder named build.
 2. Go to the build folder.
-3. Use the following command to configure and build the library to test bench executable.
+3. Use the following command to configure and build the library and test bench executable.
 ```
 cmake .. -T ClangCl -G <installed Visual Studio version> && cmake --build . --config Release --target INSTALL
 ```
@@ -148,6 +148,9 @@ AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supporte
 
 Running AOCL-Compression Test Bench On Linux
 --------------------------------------------
+
+* CAUTION: <br>
+   Before running the test bench, check whether it points to the right library dependency. <br>
 
 Test bench supports several options to validate, benchmark or debug the supported
 compression methods.
@@ -245,6 +248,9 @@ Check the following details for the exact steps:
 
 Running AOCL-Compression Test Bench On Windows
 ----------------------------------------------
+
+* CAUTION: <br>
+   Before running the test bench, check whether it points to the right library dependency. <br>
 
 Test bench on Windows supports all the user options as Linux,
 except for the `-c` option to link and test IPP compression methods.
