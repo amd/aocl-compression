@@ -138,17 +138,6 @@ class ZLIB_inflate_stream : public ZLIB_stream {
     }
 };
 
-// returns list of supported optimization levels
-static vector<int> get_supported_optlevels(void) {
-    vector<int> optlevels;
-    int highest_supported_level = get_cpu_opt_flags(0);
-    while(highest_supported_level >= 0) {
-        optlevels.push_back(highest_supported_level);
-        highest_supported_level--;
-    }
-    return optlevels;
-}
-
 // comparision of two different data types
 static bool cmpr(const char *c1, char *c2, int j)
 {

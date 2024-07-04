@@ -2029,7 +2029,7 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
 #ifdef AOCL_ENABLE_THREADS
 TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_pass_common_12) // compress multithreaded. decompress reference. format compliance test.
 {
-    TestLoad_2 d(1024 * 1024 * 32); //use larger input so that compression gets triggered on multiple threads
+    TestLoad_2 d((1024 * 1024 * 32) + 5); //use larger input so that compression gets triggered on multiple threads
     int level = 3;
     ZSTD_parameters param;
     param = Test_ZSTD_getParams(level, d.getOrigSize(), 0);
@@ -2041,6 +2041,42 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
     //As ZSTD writes RAP frame inside skippable frame, compressed output must be format compliant
     EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen,
         Test_ZSTD_decompressDCtxRef));
+}
+
+TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_pass_common_13) //compress MT threads < decompress MT threads
+{
+    ASSERT_NE(test_omp_max_threads_set(5), 0); // system must have atleast 5 threads
+    TestLoad_2 d((1024 * 1024 * 32) + 5); //use larger input so that compression gets triggered on multiple threads
+    int level = 3;
+    ZSTD_parameters param;
+    param = Test_ZSTD_getParams(level, d.getOrigSize(), 0);
+    Test_ZSTD_CCtx_setParameter(getCtx(), ZSTD_c_compressionLevel, level);
+
+    //Compress using multithreaded compressor
+    size_t outLen = Test_ZSTD_compress_advanced(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), NULL, 0, param);
+    
+    //Decompress using multithreaded decompressor
+    test_omp_max_threads_reset();
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen,
+        Test_ZSTD_decompressDCtx));
+}
+
+TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_pass_common_14) //compress MT threads > decompress MT threads
+{
+    test_omp_max_threads_reset();
+    TestLoad_2 d((1024 * 1024 * 32) + 5); //use larger input so that compression gets triggered on multiple threads
+    int level = 3;
+    ZSTD_parameters param;
+    param = Test_ZSTD_getParams(level, d.getOrigSize(), 0);
+    Test_ZSTD_CCtx_setParameter(getCtx(), ZSTD_c_compressionLevel, level);
+
+    //Compress using multithreaded compressor
+    size_t outLen = Test_ZSTD_compress_advanced(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), NULL, 0, param);
+
+    //Decompress using multithreaded decompressor
+    ASSERT_NE(test_omp_max_threads_set(5), 0); // system must have atleast 5 threads
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen,
+        Test_ZSTD_decompressDCtx));
 }
 #endif
 /*********************************************

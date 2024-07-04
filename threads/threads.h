@@ -417,6 +417,12 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_skip_rap_frame_mt(AOCL_CHAR* src, AOCL_UINTP 
  */
 EXPORT_SYM_THREADS AOCL_INT32 aocl_set_partition_stats_mt(aocl_thread_group_t *thread_grp,
                                 AOCL_UINTP in_size, AOCL_INT32 window_len, AOCL_INT32 window_factor);
+
+#ifdef AOCL_UNIT_TEST
+EXPORT_SYM_THREADS int test_omp_max_threads_get(void);
+EXPORT_SYM_THREADS int test_omp_max_threads_set(int max_threads);
+EXPORT_SYM_THREADS void test_omp_max_threads_reset(void);
+#endif
 #ifdef __cplusplus
 }
 #endif

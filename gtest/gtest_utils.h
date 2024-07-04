@@ -57,15 +57,15 @@ typedef struct
 // Parent class for parametrized (optimization level) tests.
 #define OPT_LEVEL_TESTS ::testing::TestWithParam<DynamicDispatch>
 
-/*
-    This function returns parameters for parameterised test in the form of {optimization on/off, optimization level}.
-*/
+// Get parameters for parameterised test in the form of {optimization on/off, optimization level}.
 vector<DynamicDispatch> get_dynamic_dispatcher_flags(aocl_compression_type method = AOCL_COMPRESSOR_ALGOS_NUM);
 
+// Get list of supported optimization levels
+vector<int> get_supported_optlevels(void);
 
 /* Data generator class to provide different types of random input streams
 *  Manages buffers for generated original data and compressed data */
-typedef size_t(*gtest_compress_bound_t) (size_t);
+using gtest_compress_bound_t = std::function<size_t(size_t)>;
 enum class gtest_data_gen_type { random, repeated };
 
 class gtest_data_gen_t {
@@ -302,5 +302,4 @@ fuzz_dpr_seed_t<T> get_fuzz_dpr_seeds(vector<tuple<string>>& seed_files) {
     }
     return seeds;
 }
-
 #endif /* _GTEST_UTILS_H_ */

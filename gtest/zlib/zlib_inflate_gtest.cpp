@@ -37,6 +37,7 @@
  */
 
 #include "zlib_gtest.h"
+#include "gtest_utils.h"
 
 TEST(AOCL_Compression_zlib, inflateInit_common)
 {

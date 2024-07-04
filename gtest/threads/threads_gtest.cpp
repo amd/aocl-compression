@@ -44,6 +44,7 @@
 #include "threads/threads.h"
 #include "api/aocl_compression.h"
 #include "api/types.h"
+#include "algos/common/aoclThreadUtils.h"
 
 using namespace std;
 
@@ -873,9 +874,9 @@ AOCL_INT32 add_RAP_frame_header(AOCL_CHAR* buf, AOCL_INT32 num_threads) {
 /*********************************************
 * Begin multi-threaded decompress setup Tests
 *********************************************/
-class API_setup_parallel_decompress_MT : public ::testing::Test {
+class API_setup_parallel_decompress_MT_base {
 public:
-    void SetUp() override {
+    void setup_base() {
         init_thread_group(&thread_grp);
         in_size = 0;
         src = NULL;
@@ -883,7 +884,7 @@ public:
         dst = (AOCL_CHAR*)calloc(out_size, sizeof(AOCL_CHAR));
     }
 
-    void TearDown() override {
+    void teardown_base() {
         Test_aocl_destroy_parallel_decompress_mt(&thread_grp);
         if (src) free(src);
         if (dst) free(dst);
@@ -902,13 +903,22 @@ public:
         EXPECT_EQ(thread_grp.src_size, in_size);
         EXPECT_EQ(thread_grp.dst_size, out_size);
 
-        if (rap_metadata_len > 0 && thread_grp.num_threads > 1) { // RAP frame is added. Validate it.
-            // validate threads_info_list is set
-            EXPECT_NE(thread_grp.threads_info_list, nullptr);
+        if (thread_grp.threads_info_list != NULL) { // threads_info_list is set
+            EXPECT_GT(rap_metadata_len, 0); // RAP frame is added
             if (thread_grp.num_threads > 1) {
                 // access items in threads_info_list. If allocated properly, this should not produce any out of bound access in memory leak checks.
                 for (int i = 0; i < thread_grp.num_threads; ++i) {
                     thread_grp.threads_info_list[i].dst_trap = NULL;
+                }
+            }
+
+            // if next nodes are present, validate their memory locations are allocated sequentially and do not overlap
+            aocl_thread_info_t* next_ptr = thread_grp.threads_info_list + thread_grp.num_threads; // starts after num_threads items
+            for (int i = 0; i < thread_grp.num_threads; ++i) {
+                aocl_thread_info_t* cur_ptr = thread_grp.threads_info_list[i].next;
+                while (cur_ptr) {
+                    EXPECT_EQ(cur_ptr, next_ptr++); //next nodes expected to be allocated in contiguous memory
+                    cur_ptr = cur_ptr->next;
                 }
             }
         }
@@ -921,6 +931,16 @@ public:
     AOCL_CHAR* src, * dst;
     AOCL_INT32 in_size, out_size;
     const AOCL_INT32 buff_size = 1024 * 16;
+};
+
+class API_setup_parallel_decompress_MT : public API_setup_parallel_decompress_MT_base, public ::testing::Test {
+    void SetUp() override {
+        setup_base();
+    }
+
+    void TearDown() override {
+        teardown_base();
+    }
 };
 
 TEST_F(API_setup_parallel_decompress_MT, AOCL_Compression_api_aocl_setup_parallel_decompress_mt_common_1) { // RAP frame present
@@ -1010,6 +1030,36 @@ TEST_F(API_setup_parallel_decompress_MT, AOCL_Compression_api_aocl_setup_paralle
         out_size, 0);
     validate(rap_metadata_len);
 }
+
+class API_setup_parallel_decompress_unequal_MT : public API_setup_parallel_decompress_MT_base,
+    public ::testing::TestWithParam<tuple<int, int>> {
+    void SetUp() override {
+        setup_base();
+    }
+
+    void TearDown() override {
+        teardown_base();
+    }
+};
+
+// Combinations of compress MT thread count and decompress MT thread counts
+TEST_P(API_setup_parallel_decompress_unequal_MT, AOCL_Compression_api_aocl_setup_parallel_decompress_mt_common_1) {
+    auto cpr_dpr_threads_pair = GetParam();
+    create_src_with_RAP_frame_header(get<0>(cpr_dpr_threads_pair));
+
+    test_omp_max_threads_set(get<1>(cpr_dpr_threads_pair));
+    AOCL_INT32 rap_metadata_len = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, in_size,
+        out_size, 0);
+    validate(rap_metadata_len);
+
+    test_omp_max_threads_reset();
+}
+INSTANTIATE_TEST_SUITE_P(
+    API,
+    API_setup_parallel_decompress_unequal_MT,
+    ::testing::Combine(::testing::ValuesIn({ 1, 2, 3, 4, 8, 16 } /* cpr thread count */),
+                       ::testing::ValuesIn({ 1, 2, 3, 4, 8, 16 } /* dpr thread count */)));
+
 /*********************************************
 * End multi-threaded decompress setup Tests
 *********************************************/
@@ -1098,22 +1148,24 @@ public:
 TEST_F(API_do_partition_decompress_MT, AOCL_Compression_api_aocl_do_partition_decompress_mt_common_1) { // partition the problem
     aocl_thread_info_t cur_thread_info;
     const AOCL_UINT32 cmpr_bound_pad = 16;
-    //for(int thread_id =0; thread_id< num_threads;++thread_id)
 #pragma omp parallel private(cur_thread_info) shared(thread_grp, cmpr_bound_pad) num_threads(thread_grp.num_threads)
     {
         AOCL_UINT32 thread_id = omp_get_thread_num();
-        EXPECT_EQ(Test_aocl_do_partition_decompress_mt(&thread_grp, &cur_thread_info, cmpr_bound_pad, thread_id), 0);
+        AOCL_MT_PROCESS_PARTITION_START(thread_grp, ti_cur, thread_id)
+        EXPECT_EQ(Test_aocl_do_partition_decompress_mt(&thread_grp,
+            &cur_thread_info, cmpr_bound_pad, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur)), 0);
 
-        thread_grp.threads_info_list[thread_id].partition_src         = cur_thread_info.partition_src;
-        thread_grp.threads_info_list[thread_id].dst_trap              = cur_thread_info.dst_trap;
-        thread_grp.threads_info_list[thread_id].additional_state_info = cur_thread_info.additional_state_info;
-        thread_grp.threads_info_list[thread_id].partition_src_size    = cur_thread_info.partition_src_size;
-        thread_grp.threads_info_list[thread_id].dst_trap_size         = cur_thread_info.dst_trap_size;
-        thread_grp.threads_info_list[thread_id].last_bytes_len        = cur_thread_info.last_bytes_len;
-        thread_grp.threads_info_list[thread_id].num_child_threads     = 0; // not used as of now
-        thread_grp.threads_info_list[thread_id].is_error              = cur_thread_info.is_error;
-        thread_grp.threads_info_list[thread_id].thread_id             = cur_thread_info.thread_id;
-        thread_grp.threads_info_list[thread_id].next                  = cur_thread_info.next;
+        ti_cur->partition_src         = cur_thread_info.partition_src;
+        ti_cur->dst_trap              = cur_thread_info.dst_trap;
+        ti_cur->additional_state_info = cur_thread_info.additional_state_info;
+        ti_cur->partition_src_size    = cur_thread_info.partition_src_size;
+        ti_cur->dst_trap_size         = cur_thread_info.dst_trap_size;
+        ti_cur->last_bytes_len        = cur_thread_info.last_bytes_len;
+        ti_cur->num_child_threads     = 0; // not used as of now
+        ti_cur->is_error              = cur_thread_info.is_error;
+        ti_cur->thread_id             = cur_thread_info.thread_id;
+        ti_cur->next                  = cur_thread_info.next;
+        AOCL_MT_PROCESS_PARTITION_END(ti_cur)
     } // #pragma omp parallel
     validate(cmpr_bound_pad);
 }

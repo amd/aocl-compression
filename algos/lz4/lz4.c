@@ -345,6 +345,7 @@ typedef enum {
 
 #ifdef AOCL_ENABLE_THREADS
 #include "threads/threads.h"
+#include "algos/common/aoclThreadUtils.h"
 #endif
 
 /*-************************************
@@ -5325,7 +5326,6 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
     aocl_thread_group_t thread_group_handle;
     aocl_thread_info_t cur_thread_info;
     AOCL_INT32 ret_status = -1;
-    AOCL_UINT32 thread_cnt = 0;
     AOCL_INT32 use_ST_decompressor = 0;
 
     ret_status = aocl_setup_parallel_decompress_mt(&thread_group_handle, (char *)source, dest,
@@ -5337,7 +5337,7 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
     }
     
 
-    if (thread_group_handle.num_threads == 1 || use_ST_decompressor == 1)
+    if (AOCL_MT_NO_PARTITIONS(thread_group_handle))
     {
         LOG_UNFORMATTED(INFO, logCtx, "Running single threaded decompress");
         result = LZ4_decompress_safe_ST(source + ret_status, dest, compressedSize - ret_status, maxDecompressedSize);
@@ -5361,14 +5361,16 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
             AOCL_INT32 local_result = -1;
             AOCL_INT32 thread_parallel_res = 0;
 
-            thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id);
+            AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
+            thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, 
+                &cur_thread_info, cmpr_bound_pad, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur));
             if (thread_parallel_res == 0)
             {
                 local_result = AOCL_LZ4_decompress_generic_mt(cur_thread_info.partition_src, cur_thread_info.dst_trap, 
                     cur_thread_info.partition_src_size, cur_thread_info.dst_trap_size,
                     decode_full_block, noDict,
                     (BYTE*)cur_thread_info.dst_trap, NULL, 0,
-                    (thread_id == (thread_group_handle.num_threads - 1)) ? 1 : 0);
+                    AOCL_MT_IS_LAST_PARTITION(thread_group_handle, ti_cur, thread_id) ? 1 : 0);
 
                 if (local_result < 0)
                     is_error = 1;
@@ -5381,50 +5383,66 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
                 is_error = 0;
             }
 
-            thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
-            thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
-            thread_group_handle.threads_info_list[thread_id].additional_state_info = NULL;
-            thread_group_handle.threads_info_list[thread_id].dst_trap_size = local_result;
-            thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
-            thread_group_handle.threads_info_list[thread_id].last_bytes_len = 0;
-            thread_group_handle.threads_info_list[thread_id].is_error = is_error;
-            thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+            ti_cur->partition_src = cur_thread_info.partition_src;
+            ti_cur->dst_trap = cur_thread_info.dst_trap;
+            ti_cur->additional_state_info = NULL;
+            ti_cur->dst_trap_size = local_result;
+            ti_cur->partition_src_size = cur_thread_info.partition_src_size;
+            ti_cur->last_bytes_len = 0;
+            ti_cur->is_error = is_error;
+            ti_cur->num_child_threads = 0;
+            AOCL_MT_PROCESS_PARTITION_END(ti_cur)
 
         }//#pragma omp parallel
 #ifdef AOCL_THREADS_LOG
         printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
 #endif
 
-        int total_decompressed_sz = 0;
-        for(AOCL_UINT32 thread_id=0; thread_id<thread_group_handle.num_threads; thread_id++)
-            total_decompressed_sz += thread_group_handle.threads_info_list[thread_id].dst_trap_size;
-        
-        if(total_decompressed_sz > maxDecompressedSize)
-            RETURN_DPR_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, -1);
+        /* Post processing: 
+            * For all the threads, write to a single output buffer */
 
-        //For all the threads: Write to a single output buffer in a single-threaded mode
-        for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+        /* compute cumulative dst_trap_size and save in unsued member partition_src_size
+         * This is used as offset to indicate starting points of decompressed data blocks in dst */
+        AOCL_UINTP total_decompressed_sz = 0;
+        AOCL_UINT32 dst_offset = 0;
+        aocl_thread_info_t* ti_prev = NULL;
+        for (AOCL_UINT32 thread_id = 0; thread_id < thread_group_handle.num_threads; thread_id++)
         {
-            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+            AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
             //In case of any thread partitioning or alloc errors, exit the decompression process with error
-            if (cur_thread_info.is_error)
+            if (ti_cur->is_error)
             {
-                result = -1;
                 aocl_destroy_parallel_decompress_mt(&thread_group_handle);
 #ifdef AOCL_THREADS_LOG
-                printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+                printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_id);
 #endif
-                LOG_FORMATTED(ERR, logCtx, "Decompress Thread [id: %d] : Encountered ERROR", thread_cnt);
+                LOG_FORMATTED(ERR, logCtx, "Decompress Thread [id: %d] : Encountered ERROR", thread_id);
                 LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-                return result;
+                return -1;
             }
+            total_decompressed_sz += ti_cur->dst_trap_size;
 
-            //Copy this thread's chunk to the output final buffer
-            memcpy(thread_group_handle.dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
-            thread_group_handle.dst += cur_thread_info.dst_trap_size;
+            if (ti_prev != NULL) {
+                dst_offset = ti_prev->partition_src_size + ti_prev->dst_trap_size; // cumulative dst_trap_size
+            }
+            ti_cur->partition_src_size = dst_offset;
+            ti_prev = ti_cur;
+            AOCL_MT_PROCESS_PARTITION_END(ti_cur)
         }
 
-        result = thread_group_handle.dst - dest;
+        if (total_decompressed_sz > maxDecompressedSize)
+            RETURN_DPR_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, -1);
+
+        /* copy decompressed data from threads to dst multi-threaded */
+#pragma omp parallel shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+        {
+            AOCL_UINT32 thread_id = omp_get_thread_num();
+            AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
+            memcpy(thread_group_handle.dst + ti_cur->partition_src_size, // dst_offset = ti_cur->partition_src_size
+                    ti_cur->dst_trap, ti_cur->dst_trap_size);
+            AOCL_MT_PROCESS_PARTITION_END(ti_cur)
+        }
+        result = ti_prev->partition_src_size + ti_prev->dst_trap_size;
 
         aocl_destroy_parallel_decompress_mt(&thread_group_handle);
 

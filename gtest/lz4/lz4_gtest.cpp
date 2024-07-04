@@ -76,71 +76,42 @@ using namespace std;
 */
 class TestLoad
 {
-    //source buffer (original data which we intend to compress).
-    char *orig_data;
-    size_t orig_sz = 0;
-    //destination buffer (kdata obtained after compression).
-    char *compressed_data;
-    size_t compressed_sz=0;
+private:
+    gtest_data_gen_t* data_gen = NULL;
 
 public:
-    // Constructor functions, creates `sz` size of source data.
-    TestLoad(int sz)
+    TestLoad(size_t sz, gtest_data_gen_type type = gtest_data_gen_type::random)
     {
-        this->orig_sz = sz;
-        orig_data = (char *)malloc(sz);
-
-        // generating random data inside `orig_data` buffer.
-        for (int i = 0; i < sz; i++)
-        {
-            orig_data[i] = rand() % 255;
-        }
-
-        // Provides the maximum size that LZ4 compression may output in a "worst case".
-        compressed_sz = LZ4_compressBound(sz);
-        compressed_data = (char *)malloc(compressed_sz);
+        data_gen = new gtest_data_gen_t(LZ4_compressBound, sz, type);
     }
 
-    TestLoad(int inp_sz, int out_sz)
+    TestLoad(size_t inp_sz, size_t out_sz, gtest_data_gen_type type = gtest_data_gen_type::random)
     {
-        this->orig_sz = inp_sz;
-        orig_data = (char*)malloc(inp_sz);
-
-        // generating random data inside `orig_data` buffer.
-        for (int i = 0; i < inp_sz; i++)
-        {
-            orig_data[i] = rand() % 255;
-        }
-
-        compressed_sz = out_sz; // custom out_sz
-        compressed_data = (char*)malloc(compressed_sz);
+        data_gen = new gtest_data_gen_t(LZ4_compressBound, inp_sz, out_sz, type);
     }
 
-    // Returns pointer to source buffer.
-    char *getOrigData()
-    {
-        return orig_data;
+    ~TestLoad() {
+        delete data_gen;
     }
-    // Returns size of source buffer.
+
+    char* getOrigData()
+    {
+        return data_gen->getOrigBuff();
+    }
+
     size_t getOrigSize()
     {
-        return orig_sz;
+        return data_gen->getOrigSize();
     }
-    // Returns pointer to destination buffer (data obtained after compression).
-    char *getCompressedBuff()
+
+    char* getCompressedBuff()
     {
-        return compressed_data;
+        return data_gen->getCompressedBuff();
     }
-    // Returns size of destination data.
+
     size_t getCompressedSize()
     {
-        return compressed_sz;
-    }
-    // Destructor function.
-    ~TestLoad()
-    {
-        free(orig_data);
-        free(compressed_data);
+        return data_gen->getCompressedSize();
     }
 };
 

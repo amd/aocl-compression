@@ -1,6 +1,6 @@
 /**
  * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
@@ -25,50 +25,38 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
- 
- /** @file gtest_utils.cpp
- *  
- *  @brief Provides utility functions for individual gtest algos.
+
+ /** @file aoclThreadUtils.h
  *
- *  @author J Niranjan Reddy
+ *  @brief Common routines used in multithreaded implementations.
+ *
+ *  This file contains common routines and definitions used in multithreaded 
+ *  implementations across methods.
+ *
+ *  @author Ashish Sriram
  */
 
-#include "utils/utils.h"
-#include "gtest_utils.h"
-/*
-    This function returns parameters for parameterised test in the form of {optimization on/off, optimization level}.
-*/
-vector<DynamicDispatch> get_dynamic_dispatcher_flags(aocl_compression_type method)
-{
-    vector<DynamicDispatch> params;
-    // For methods other than SNAPPY, if optimization is off there is only one code path that dynamic dispatcher selects
-    // but for SNAPPY, even if optimization is off, there are different intrinsic code paths to choose from depending on
-    // machine support.
-    if(method == SNAPPY)
-    {
-        for(int i = get_cpu_opt_flags(0); i > 0; i--)
-        {
-            params.push_back({1, i});   // With Intrinsics & optimization is off, only for snappy
+#ifndef __COMMON_THREAD_UTILS_H
+#define __COMMON_THREAD_UTILS_H
+
+#define AOCL_MT_NO_PARTITIONS(thread_group_handle) (thread_group_handle.threads_info_list == NULL) /* no partitions found after setup */
+
+#define AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur) ti_cur->thread_id /* serialized id of partition associated with a thread */
+
+#define AOCL_MT_IS_FIRST_PARTITION(ti_cur) \
+        (AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur) == 0) /* is first partition of first thread? */
+
+#define AOCL_MT_IS_LAST_PARTITION(thread_group_handle, ti_cur, thread_id) ( /* is last partition of last thread? */ \
+        (thread_id == (thread_group_handle.num_threads - 1) /* last thread */) \
+        && ti_cur->next == NULL /* last partition for this thread */)
+
+#define AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id) /* processing partitions serially. loop start */ \
+        aocl_thread_info_t* ti_cur = &thread_group_handle.threads_info_list[thread_id]; \
+        while (ti_cur) {
+
+
+#define AOCL_MT_PROCESS_PARTITION_END(ti_cur) /* processing partitions serially. loop end */ \
+        ti_cur = ti_cur->next; /* next linked partition */ \
         }
-    }
-    params.push_back({1, 0});   // No optimization
 
-    for(int i = get_cpu_opt_flags(0); i >= 0; i--)
-    {
-        params.push_back({0, i});   // With Intrinsics & AOCL path
-    }
-    return params;
-}
-
-vector<int> get_supported_optlevels(void) {
-    vector<int> optlevels;
-    int highest_supported_level = get_cpu_opt_flags(0);
-    while (highest_supported_level >= 0) {
-        optlevels.push_back(highest_supported_level);
-        highest_supported_level--;
-    }
-    return optlevels;
-}
-
-const std::vector<std::string> gtest_data_gen_t::randomStrs({ "qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890",
-"QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM", "!@#$%^&*()" });
+#endif /* __COMMON_THREAD_UTILS_H */

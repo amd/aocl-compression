@@ -43,18 +43,27 @@
 #include "threads.h"
 #include "utils/utils.h"
 
+#ifdef AOCL_UNIT_TEST
+int(*test_omp_get_max_threads_fp)(void) = omp_get_max_threads;
+#endif
+
 AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp, 
                                       AOCL_CHAR *src, AOCL_CHAR *dst, AOCL_UINTP in_size,
                                       AOCL_UINTP out_size, AOCL_INT32 window_len,
                                       AOCL_INT32 window_factor)
 {
     assert(thread_grp != NULL);
-    if (window_len <= 0 || window_factor <= 0) {
+    if (window_len <= 0 || window_factor <= 0) 
+    {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return ERR_INVALID_INPUT;
     }
 
+#ifndef AOCL_UNIT_TEST
     AOCL_UINT32 max_threads = omp_get_max_threads();
+#else
+    AOCL_UINT32 max_threads = test_omp_max_threads_get();
+#endif
     AOCL_UINTP chunk_size =  (AOCL_UINTP)window_len * window_factor;
 
     thread_grp->src = src;
@@ -112,7 +121,8 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
                                       AOCL_UINTP out_size, AOCL_INT32 window_len,
                                       AOCL_INT32 window_factor)
 {
-    if (dst == NULL) {
+    if (dst == NULL) 
+    {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return ERR_INVALID_INPUT;
     }
@@ -130,10 +140,11 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
                     sizeof(aocl_thread_info_t) * thread_grp->num_threads);
     memset(thread_grp->threads_info_list, 0, 
                     sizeof(aocl_thread_info_t) * thread_grp->num_threads);
-    for (AOCL_UINT32 i = 0; i < thread_grp->num_threads; ++i) {
+    for (AOCL_UINT32 thread_id = 0; thread_id < thread_grp->num_threads; ++thread_id)
+    {
         /* Set to 1 by default.
          * Reset to 0 when thread gets spawned and completes its task successfully.*/
-        thread_grp->threads_info_list[i].is_error = 1;
+        thread_grp->threads_info_list[thread_id].is_error = 1;
     }
     if (thread_grp->threads_info_list == NULL) {
         LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
@@ -176,7 +187,8 @@ AOCL_INT32 aocl_do_partition_compress_mt(aocl_thread_group_t *thread_grp,
         cur_thread_info->thread_id, cur_thread_info->dst_trap_size);
 #endif
 
-    if (cur_thread_info->dst_trap == NULL) {
+    if (cur_thread_info->dst_trap == NULL) 
+    {
         LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
         return ERR_MEMORY_ALLOC;
     }
@@ -205,19 +217,24 @@ void aocl_destroy_parallel_compress_mt(aocl_thread_group_t *thread_grp)
     }
 }
 
-AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
+AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
                                         AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_UINTP in_size,
                                         AOCL_UINTP out_size, AOCL_INT32 use_ST_decompressor)
 {
     assert(thread_grp != NULL);
-    if (src == NULL) {
+    if (src == NULL) 
+    {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return ERR_INVALID_INPUT;
     }
 
-    AOCL_CHAR *src_base;
+    AOCL_CHAR* src_base;
     AOCL_UINT32 rap_metadata_len;
+#ifndef AOCL_UNIT_TEST
     AOCL_UINT32 max_threads = omp_get_max_threads();
+#else
+    AOCL_UINT32 max_threads = test_omp_max_threads_get();
+#endif
 
     thread_grp->src = src;
     thread_grp->dst = dst;
@@ -237,14 +254,15 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
     }
     else
     {
-        AOCL_CHAR *src_ptr;
+        AOCL_CHAR* src_ptr;
         AOCL_UINT32 num_main_threads;
         src_ptr = src_base + RAP_MAGIC_WORD_BYTES;
-        rap_metadata_len = *(AOCL_UINT32 *)(src_ptr);
+        rap_metadata_len = *(AOCL_UINT32*)(src_ptr);
         src_ptr += RAP_METADATA_LEN_BYTES;
         num_main_threads = *(AOCL_UINT32*)(src_ptr);
 
-        if (num_main_threads == 0) {
+        if (num_main_threads == 0) 
+        {
             LOG_UNFORMATTED(ERR, logCtx, "Invalid main thread count value in RAP frame");
             return -1; // invalid main thread count in stream. Must be >= 1.
         }
@@ -253,42 +271,112 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
             return rap_metadata_len;
         
         //Find number of threads to process the number of parallel partitions
+        AOCL_UINT32 part_per_thread = 1;
+        AOCL_UINT32 part_per_thread_rem = 0;
         if (max_threads >= num_main_threads)
             //Use exactly num_main_threads threads
             thread_grp->num_threads = num_main_threads;
         else
-            //When max_threads is lesser than num_main_threads, we can handle
-            //in two ways:
-            //1) Multi partitions are assigned to each thread as a linked list
-            //using next pointer - This is the efficient and smart approach.
-            //2) Decompress using single-threaded decompressor - This is the
-            //simplest (less complex) and less efficient approach.
-            //Currently, approach 2) is implemented.
-            //thread_grp->num_threads = max_threads;
-            thread_grp->num_threads = 1;
+        {
+            //When max_threads is lesser than num_main_threads, multi partitions are 
+            //assigned to each thread as a linked list using next pointer
+            thread_grp->num_threads = max_threads;
+            part_per_thread = num_main_threads / max_threads;
+            part_per_thread_rem = num_main_threads % max_threads;
+        }
+            
         LOG_FORMATTED(INFO, logCtx, "Number of threads set to %u", thread_grp->num_threads);
 
-        if (thread_grp->num_threads == 1)
+        if (thread_grp->num_threads == 1) //process in a single thread
             return rap_metadata_len;
 
         //Tentative partitioning. Actual partitioning is done at thread level
+        assert(part_per_thread >= 1);
         thread_grp->common_part_src_size = thread_grp->dst_size /
-                                            thread_grp->num_threads;
+            num_main_threads;
         thread_grp->leftover_part_src_bytes = thread_grp->dst_size %
-                                            thread_grp->num_threads;
+            num_main_threads;
 
         //Allocate threads list to hold references to threads_info
         thread_grp->threads_info_list = (aocl_thread_info_t*)malloc(
-                        sizeof(aocl_thread_info_t) * thread_grp->num_threads);
-        memset(thread_grp->threads_info_list, 0,
-                        sizeof(aocl_thread_info_t) * thread_grp->num_threads);
-        for (AOCL_UINT32 i = 0; i < thread_grp->num_threads; ++i) {
-            /* Set to 1 by default.
-             * Reset to 0 when thread gets spawned and completes its task successfully.*/
-            thread_grp->threads_info_list[i].is_error = 1;
+            sizeof(aocl_thread_info_t) * num_main_threads);
+        memset(thread_grp->threads_info_list, 0, //needed to ensure pointer related checks behave as expected
+            sizeof(aocl_thread_info_t) * num_main_threads);
+
+        if (part_per_thread == 1 && part_per_thread_rem == 0) 
+        { //max_threads >= num_main_threads
+            for (AOCL_UINT32 thread_id = 0; thread_id < thread_grp->num_threads; ++thread_id) 
+            {
+                thread_grp->threads_info_list[thread_id].thread_id = thread_id;
+                /* Set to 1 by default.
+                * Reset to 0 when thread gets spawned and completes its task successfully.*/
+                thread_grp->threads_info_list[thread_id].is_error = 1;
+            }
+        }
+        else
+        { //max_threads < num_main_threads 
+            /*  
+             * num_main_threads     : Threads used during compression
+             * max_threads          : Threads available now for decompression
+             * part_per_thread      : These many partitions must be evenly distributed among threads
+             * part_per_thread_rem  : Assign 1 each to first 'part_per_thread_rem' threads
+             * 
+             * Example with num_main_threads = 6, max_threads (thread_grp->num_threads) = 2:
+             * cpr partitions : P0, P01, P02, P1, P11, P12
+             * dpr threads    : T0, T1
+             * T0 needs to process : P0, P01, P02
+             * T1 needs to process : P1, P11, P12
+             * 
+             * Data for each partition is stored in thread_grp->threads_info_list in this order:
+             * | P0 | P1 | P01 | P02 | P11 | P12 | 
+             * 
+             * Assignment of partitions to threads (serial_thread_id):
+             * dpr threads          : |  T0 |  T1 |  T0 |  T0 |  T1 |  T1 |
+             * threads_info_list    : |  P0 |  P1 | P01 | P02 | P11 | P12 |
+             * pointer to next node : | P01 | P11 | P02 |   - | P12 |   - |
+             * serial_thread_id     : |   0 |   3 |   1 |   2 |   4 |   5 |
+             * 
+             * As partitions are assigned based on serial_thread_id in aocl_do_partition_decompress_mt(),
+             * dpr threads will process consecutive partitions:
+             * T0 : 0, 1, 2
+             * T1 : 3, 4, 5
+            */
+
+            //First thread_grp->num_threads slots hold data for first set of partitions to be processed by each thread 
+            aocl_thread_info_t* ti_ptr = thread_grp->threads_info_list + thread_grp->num_threads;
+            //Subsequent slots are linked to members of thread_grp->threads_info_list
+            AOCL_UINT32 part_rem = part_per_thread_rem;
+            AOCL_UINT32 serial_thread_id = 0;
+            for (AOCL_UINT32 thread_id = 0; thread_id < thread_grp->num_threads; ++thread_id) 
+            {
+                AOCL_UINT32 part_cur = part_per_thread - 1; //1 partition for head node, assign rest to linked list
+                aocl_thread_info_t* ti_cur = &thread_grp->threads_info_list[thread_id];
+                ti_cur->thread_id = serial_thread_id++;
+                ti_cur->is_error = 1;
+                while (part_cur--) 
+                { //link consecutive partitions to linked list 
+                    ti_cur->next = ti_ptr;
+                    ti_cur = ti_cur->next;
+                    ti_cur->thread_id = serial_thread_id++;
+                    ti_cur->is_error = 1;
+                    ti_ptr++;
+                }
+                if (part_rem) 
+                { //link 1 additional partition
+                    ti_cur->next = ti_ptr;
+                    ti_cur = ti_cur->next;
+                    ti_cur->thread_id = serial_thread_id++;
+                    ti_cur->is_error = 1;
+                    ti_ptr++;
+                    part_rem--;
+                }
+                ti_cur->next = NULL;
+            }
+            assert(ti_ptr == (thread_grp->threads_info_list + num_main_threads));
         }
 
-        if (thread_grp->threads_info_list == NULL) {
+        if (thread_grp->threads_info_list == NULL) 
+        {
             LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
             return ERR_MEMORY_ALLOC;
         }
@@ -302,7 +390,8 @@ AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
 {
     assert(thread_grp != NULL);
     assert(cur_thread_info != NULL);
-
+    memset(cur_thread_info, 0, sizeof(aocl_thread_info_t)); //needed to ensure pointer related checks behave as expected
+        
     AOCL_UINT32 cur_rap_pos = RAP_START_OF_PARTITIONS + 
                             (thread_id * (RAP_DATA_BYTES_WITH_DECOMP_LEN));
     cur_thread_info->partition_src = thread_grp->src +
@@ -335,7 +424,8 @@ AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
         cur_thread_info->thread_id);
 #endif
 
-    if (cur_thread_info->dst_trap == NULL) {
+    if (cur_thread_info->dst_trap == NULL) 
+    {
         LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
         return ERR_MEMORY_ALLOC;
     }
@@ -352,10 +442,15 @@ void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp)
         AOCL_UINT32 thread_cnt;
         for (thread_cnt = 0; thread_cnt < thread_grp->num_threads; thread_cnt++)
         {
-            if (thread_grp->threads_info_list[thread_cnt].dst_trap)
+            aocl_thread_info_t* ti_cur = &thread_grp->threads_info_list[thread_cnt];
+            while (ti_cur) 
             {
-                free(thread_grp->threads_info_list[thread_cnt].dst_trap);
-                thread_grp->threads_info_list[thread_cnt].dst_trap = NULL;
+                if (ti_cur->dst_trap)
+                {
+                    free(ti_cur->dst_trap);
+                    ti_cur->dst_trap = NULL;
+                }
+                ti_cur = ti_cur->next;
             }
         }
         free(thread_grp->threads_info_list);
@@ -387,7 +482,50 @@ AOCL_INT32 aocl_skip_rap_frame_mt(AOCL_CHAR* src, AOCL_UINTP src_size)
 }
 
 AOCL_INT32 aocl_set_partition_stats_mt(aocl_thread_group_t *thread_grp,
-                                    AOCL_UINTP in_size, AOCL_INT32 window_len, AOCL_INT32 window_factor){
-        
+                                    AOCL_UINTP in_size, AOCL_INT32 window_len, AOCL_INT32 window_factor)
+{
     return aocl_setup_partition_internal(thread_grp, NULL /* src */, NULL /* dst */, in_size, 0 /* out_size */, window_len, window_factor);
 }
+
+#ifdef AOCL_UNIT_TEST
+/* Functions to override omp_get_max_threads() for unit testing */
+static int test_omp_max_threads = 1;
+int omp_get_max_threads_manual(void) 
+{
+    return test_omp_max_threads;
+}
+
+int test_omp_max_threads_set(int max_threads) 
+{
+    int max_limit = omp_get_max_threads();
+    if (max_threads > max_limit) 
+    {
+        return 0;
+    }
+    else 
+    {
+        AOCL_ENTER_CRITICAL(setup_test_omp_max_threads)
+        test_omp_max_threads = max_threads;
+        test_omp_get_max_threads_fp = omp_get_max_threads_manual;
+        AOCL_EXIT_CRITICAL(setup_test_omp_max_threads)
+        return 1;
+    }
+}
+
+int test_omp_max_threads_get(void)
+{
+    int max_threads = 0;
+    AOCL_ENTER_CRITICAL(setup_test_omp_max_threads)
+    max_threads = test_omp_get_max_threads_fp();
+    AOCL_EXIT_CRITICAL(setup_test_omp_max_threads)
+    return max_threads;
+}
+
+void test_omp_max_threads_reset(void) 
+{
+    AOCL_ENTER_CRITICAL(setup_test_omp_max_threads)
+    test_omp_max_threads = 1;
+    test_omp_get_max_threads_fp = omp_get_max_threads;
+    AOCL_EXIT_CRITICAL(setup_test_omp_max_threads)
+}
+#endif
