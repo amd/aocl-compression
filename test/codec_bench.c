@@ -521,9 +521,14 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
     return ret;
 }
 
+/*In MT mode on machines with high thread count, this compress bound 
+* might be insufficient. Increasing the bound size as a temporary fix.
+* Proper fix is to call aocl_llc_compressBound() for respective
+* methods. */
+#define TEMP_PAD_FACTOR 5 //default 6 for snappy, 255 for LZ4
 AOCL_UINTP compression_bound(AOCL_UINTP inSize)
 {
-    AOCL_UINTP outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
+    AOCL_UINTP outSize = (inSize + (inSize / TEMP_PAD_FACTOR) + MIN_PAD_SIZE);
     return outSize;
 }
 

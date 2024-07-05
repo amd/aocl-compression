@@ -299,6 +299,8 @@ AOCL_INT64 aocl_snappy_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
 {
     AOCL_UINTP max_compressed_length = snappy::MaxCompressedLength(insize);
     if (outsize < max_compressed_length) {
+        LOG_FORMATTED(ERR, logCtx, "Insufficient outsize: %zu < MaxCompressedLength: %zu",
+            outsize, max_compressed_length);
         return CODEC_ERROR;
     }
     // RawCompress modifies the value of the 4th parameter after successful
@@ -319,16 +321,20 @@ AOCL_INT64 aocl_snappy_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
     return CODEC_ERROR;
 }
 
-AOCL_INT64 aocl_snappy_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, 
-							 AOCL_UINTP outsize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR *)
+AOCL_INT64 aocl_snappy_decompress(AOCL_CHAR* inbuf, AOCL_UINTP insize, AOCL_CHAR* outbuf,
+    AOCL_UINTP outsize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR*)
 {
     AOCL_UINTP uncompressed_len;
 #ifdef AOCL_ENABLE_THREADS
-    if (!snappy::GetUncompressedLengthFromMTCompressedBuffer(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len)
+    if (!snappy::GetUncompressedLengthFromMTCompressedBuffer(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid uncompressed_len");
         return CODEC_ERROR;
+    }
 #else
-    if (!snappy::GetUncompressedLength(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len)
+    if (!snappy::GetUncompressedLength(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid uncompressed_len");
         return CODEC_ERROR;
+    }
 #endif
     bool res = snappy::RawUncompress(inbuf, insize, outbuf);
     if (res)
@@ -405,8 +411,10 @@ AOCL_CHAR *aocl_zstd_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
     aocl_setup_zstd_encode(optOff, optLevel, insize, level, windowLog);
     aocl_setup_zstd_decode(optOff, optLevel, insize, level, windowLog);
     
-    if (!zstd_params)
-		return NULL;
+    if (!zstd_params) {
+        LOG_UNFORMATTED(ERR, logCtx, "zstd_params_t allocation failed");
+        return NULL;
+    }
     zstd_params->cctx = ZSTD_createCCtx();
     zstd_params->dctx = ZSTD_createDCtx();
     zstd_params->cdict = NULL;
@@ -420,8 +428,10 @@ AOCL_VOID aocl_zstd_destroy(AOCL_CHAR *workmem)
     aocl_destroy_zstd_decode();
 
     zstd_params_t *zstd_params = (zstd_params_t *) workmem;
-    if (!zstd_params)
-		return;
+    if (!zstd_params) {
+        LOG_UNFORMATTED(ERR, logCtx, "zstd_params_t deallocation failed");
+        return;
+    }
     if (zstd_params->cctx)
 		ZSTD_freeCCtx(zstd_params->cctx);
     if (zstd_params->dctx)
@@ -447,8 +457,10 @@ AOCL_INT64 aocl_zstd_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *ou
     AOCL_UINTP res;
     zstd_params_t *zstd_params = (zstd_params_t *) workmem;
     
-    if (!zstd_params || !zstd_params->cctx)
+    if (!zstd_params || !zstd_params->cctx) {
+        LOG_UNFORMATTED(ERR, logCtx, "zstd_params_t or context invalid");
         return 0;
+    }
 
     zstd_params->zparams = ZSTD_getParams(level, insize, 0);
     ZSTD_CCtx_setParameter(zstd_params->cctx, ZSTD_c_compressionLevel, level);
@@ -479,8 +491,10 @@ AOCL_INT64 aocl_zstd_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
 {
     AOCL_UINTP res;
     zstd_params_t *zstd_params = (zstd_params_t *) workmem;
-    if (!zstd_params || !zstd_params->dctx)
+    if (!zstd_params || !zstd_params->dctx) {
+        LOG_UNFORMATTED(ERR, logCtx, "zstd_params_t or context invalid");
         return CODEC_ERROR;
+    }
 
     res = ZSTD_decompressDCtx(zstd_params->dctx, outbuf, outsize, 
                               inbuf, insize);

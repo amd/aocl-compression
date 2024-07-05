@@ -69,6 +69,8 @@ AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp,
         LOG_UNFORMATTED(DEBUG, logCtx, "Src size is small. Running on single thread.");
         //Single threaded execution for very small stream (< window_len * window_factor)
         thread_grp->num_threads = 1;
+        thread_grp->common_part_src_size = thread_grp->src_size;
+        thread_grp->leftover_part_src_bytes = 0;
     }
     else
     {
