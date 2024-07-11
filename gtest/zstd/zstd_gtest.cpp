@@ -2459,6 +2459,132 @@ FUZZ_TEST(AOCL_Compression_zstd, ZSTD_decompressDCtx_fuzz)
 })
 #endif
 ;
+
+void ZSTD_compress2_fuzz(int dest_len, std::vector<char> source, std::vector<char> dict, 
+                            int compressionLevel, int contentSizeFlag,int checksumFlag, int noDictIDFlag )
+{
+    ZSTD_CCtx* cctx = ZSTD_createCCtx();
+    EXPECT_NE(cctx, nullptr);
+
+    ZSTD_parameters zparams = ZSTD_getParams(compressionLevel, source.size(), dict.size());
+    zparams.fParams.contentSizeFlag = contentSizeFlag; 
+    zparams.fParams.checksumFlag = checksumFlag; 
+    zparams.fParams.noDictIDFlag = noDictIDFlag; 
+    ZSTD_CCtx_setParams(cctx, zparams);
+    ZSTD_CCtx_loadDictionary(cctx, dict.data(), dict.size());
+
+    std::vector<char> dest(dest_len);
+    ZSTD_compress2(cctx, dest.data(),dest_len, source.data(), source.size());
+    
+    if (cctx) ZSTD_freeCCtx(cctx);
+}
+FUZZ_TEST(AOCL_Compression_zstd, ZSTD_compress2_fuzz)
+    .WithDomains(fuzztest::InRange<int>(1, 10000),
+                 fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::InRange<int>(1, 22),
+                 fuzztest::InRange<int>(0, 1),
+                 fuzztest::InRange<int>(0, 1),
+                 fuzztest::InRange<int>(0, 1));
+
+
+void ZSTD_compressStream2_fuzz(std::vector<char> source, unsigned int endop, std::vector<char> dict, 
+                            int compressionLevel, int contentSizeFlag, int checksumFlag, 
+                            int noDictIDFlag)
+{
+    ZSTD_outBuffer buffOut;
+    ZSTD_inBuffer buffIn;
+    size_t ret = 0;
+    ZSTD_EndDirective directive = ZSTD_e_continue;
+
+    if(endop == 1)
+        directive = ZSTD_e_flush;
+
+    if(endop == 2)
+        directive = ZSTD_e_end;
+    
+    ZSTD_CCtx* cctx = ZSTD_createCCtx();
+    EXPECT_NE(cctx, nullptr);
+
+    ZSTD_parameters zparams = ZSTD_getParams(compressionLevel, source.size(), dict.size());
+    zparams.fParams.contentSizeFlag = contentSizeFlag; 
+    zparams.fParams.checksumFlag = checksumFlag; 
+    zparams.fParams.noDictIDFlag = noDictIDFlag; 
+    ZSTD_CCtx_setParams(cctx, zparams);
+    ZSTD_CCtx_loadDictionary(cctx, dict.data(), dict.size());
+    
+    int dest_len = ZSTD_compressBound(source.size());
+    std::vector<char> output(dest_len);
+    buffIn.size  = source.size();
+    buffOut.size = dest_len;    
+    buffOut.dst = output.data();
+    buffIn.src = source.data();
+    ZSTD_compressStream2(cctx, &buffOut, &buffIn, directive);
+    if (cctx) ZSTD_freeCCtx(cctx);
+}
+
+FUZZ_TEST(AOCL_Compression_zstd, ZSTD_compressStream2_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),                 
+                 fuzztest::InRange<int>(0, 2),
+                 fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::InRange<int>(1, 22),
+                 fuzztest::InRange<int>(0, 1),
+                 fuzztest::InRange<int>(0, 1),
+                 fuzztest::InRange<int>(0, 1)
+                    );
+
+
+void ZSTD_decompressStream_fuzz(std::vector<char> source, int dest_len)
+{    
+    ZSTD_outBuffer buffOut;
+    ZSTD_inBuffer buffIn;
+    size_t ret = 0;
+
+    ZSTD_DStream* zds = ZSTD_createDStream();
+    EXPECT_NE(zds, nullptr);
+
+    std::vector<char> output(dest_len);
+    buffOut.dst = output.data();
+    buffIn.src = source.data();
+    buffOut.size = 0;
+    buffIn.size = 0;
+    ZSTD_decompressStream(zds, &buffOut, &buffIn);
+    if(zds) ZSTD_freeDStream(zds);
+}
+FUZZ_TEST(AOCL_Compression_zstd, ZSTD_decompressStream_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::InRange<int>(1, 10000)
+                );
+
+void ZSTD_compress_usingDict_fuzz(std::vector<char> input, int out_len, std::vector<char> dict, int compressionLevel)
+{
+    ZSTD_CCtx* cctx = ZSTD_createCCtx();
+    std::vector<char> output(out_len);
+    ZSTD_compress_usingDict(cctx,output.data(), out_len,
+                           input.data(), input.size(),
+                           dict.data(), dict.size(), compressionLevel);
+    if (cctx) ZSTD_freeCCtx(cctx);
+}
+FUZZ_TEST(AOCL_Compression_zstd, ZSTD_compress_usingDict_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::InRange<int>(1, 10000),
+                 fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::InRange<int>(1, 22));
+
+void ZSTD_decompress_usingDict_fuzz(std::vector<char> input, int out_len, std::vector<char> dict)
+{
+    ZSTD_DCtx* dctx =  ZSTD_createDCtx();
+    std::vector<char> output(out_len);
+    ZSTD_decompress_usingDict(dctx, output.data(), out_len,
+                           input.data(), input.size(),
+                           dict.data(), dict.size());
+    if (dctx) ZSTD_freeDCtx(dctx);
+}
+FUZZ_TEST(AOCL_Compression_zstd, ZSTD_decompress_usingDict_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                 fuzztest::InRange<int>(1, 10000),
+                 fuzztest::Arbitrary<std::vector<char>>());
+
 #endif /* AOCL_TEST_FUZZER */
 /*********************************************
  * End fuzz tests for zstd
