@@ -2974,19 +2974,19 @@ int zstd_paramgrill_main(int argc, char** argv)
         if(separateFiles) {
             for(i = 0; i < argc - filenamesStart; i++) {
                 if (g_optimizer) {
-                    result = optimizeForSize(argv+filenamesStart + i, 1, dictFileName, target, paramTarget, cLevelOpt, cLevelRun, memoTableLog);
+                    result = optimizeForSize((const char**)(argv+filenamesStart + i), 1, dictFileName, target, paramTarget, cLevelOpt, cLevelRun, memoTableLog);
                     if(result) { DISPLAY("Error on File %d", i); return result; }
                 } else {
-                    result = benchFiles(argv+filenamesStart + i, 1, dictFileName, cLevelRun);
+                    result = benchFiles((const char**)(argv+filenamesStart + i), 1, dictFileName, cLevelRun);
                     if(result) { DISPLAY("Error on File %d", i); return result; }
                 }
             }
         } else {
             if (g_optimizer) {
                 assert(filenamesStart < argc);
-                result = optimizeForSize(argv+filenamesStart, (size_t)(argc-filenamesStart), dictFileName, target, paramTarget, cLevelOpt, cLevelRun, memoTableLog);
+                result = optimizeForSize((const char**)(argv+filenamesStart), (size_t)(argc-filenamesStart), dictFileName, target, paramTarget, cLevelOpt, cLevelRun, memoTableLog);
             } else {
-                result = benchFiles(argv+filenamesStart, argc-filenamesStart, dictFileName, cLevelRun);
+                result = benchFiles((const char**)(argv+filenamesStart), argc-filenamesStart, dictFileName, cLevelRun);
             }
         }
     }
