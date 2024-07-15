@@ -2724,6 +2724,104 @@ FUZZ_TEST(AOCL_Compression_snappy, RawUncompress_fuzz)
 #endif
 ;
 
+void Compress_fuzz(vector<char> input)
+{
+    std::string compressed = "";
+    Compress(input.data(), input.size(), &compressed);
+}
+FUZZ_TEST(AOCL_Compression_snappy, Compress_fuzz);
+
+void Uncompress_fuzz(vector<char> input)
+{
+    std::string compressed = "";
+    Uncompress(input.data(), input.size(), &compressed);
+}
+FUZZ_TEST(AOCL_Compression_snappy, Uncompress_fuzz);
+
+void Uncompress_source_sink_fuzz(vector<char> compressed)
+{
+    string result;
+    result.resize(compressed.size()*10);
+
+    Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
+    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
+
+    Uncompress(source, sink);
+    delete source;
+    delete sink;
+}
+FUZZ_TEST(AOCL_Compression_snappy, Uncompress_source_sink_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>()
+                );
+
+void Compress_source_sink_fuzz(vector<char> input)
+{
+    string result;
+    result.resize(MaxCompressedLength(input.size()));
+
+    Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(input.data(), input.size());
+    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
+
+    Compress(source, sink);
+    delete source;
+    delete sink;
+}
+FUZZ_TEST(AOCL_Compression_snappy, Compress_source_sink_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>()
+                );
+
+void UncompressAsMuchAsPossible_fuzz(vector<char> src)
+{
+    string result;
+    result.resize(src.size()*10);
+
+    Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(src.data(), src.size());
+    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
+    UncompressAsMuchAsPossible(source,sink);
+    delete source;
+    delete sink;
+}
+FUZZ_TEST(AOCL_Compression_snappy, UncompressAsMuchAsPossible_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>()                      
+                );
+
+void RawUncompress_source_fuzz(vector<char> src)
+{
+    string result;
+    result.resize(src.size()*10);
+
+    Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(src.data(), src.size());
+    RawUncompress(source, string_as_array(&result));
+    delete source;
+}
+FUZZ_TEST(AOCL_Compression_snappy, RawUncompress_source_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>()                             
+                );
+
+void IsValidCompressedBuffer_fuzz(vector<char> src)
+{
+    IsValidCompressedBuffer(src.data(), src.size());
+}
+FUZZ_TEST(AOCL_Compression_snappy, IsValidCompressedBuffer_fuzz);
+
+void RawUncompressToIOVec_fuzz(vector<char> src, vector<int> input)
+{
+    //int *kLengths = &input[0];
+    vector<iovec> iov = vector<iovec>(input.size());
+ 
+    iov_init(iov.data(), input.data(), input.size());
+    RawUncompressToIOVec(src.data(), src.size(), iov.data(), iov.size());
+
+    for (int i = 0; i < iov.size(); ++i)
+    {
+        delete[] reinterpret_cast<char *>(iov[i].iov_base);
+    }
+}
+FUZZ_TEST(AOCL_Compression_snappy, RawUncompressToIOVec_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::VectorOf(fuzztest::InRange(1,10000)).WithMinSize(1).WithMaxSize(10)
+                );
+
 #endif /* AOCL_TEST_FUZZER */
 /*********************************************
  * End fuzz tests for snappy
