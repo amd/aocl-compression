@@ -532,11 +532,68 @@ AOCL_UINTP compression_bound(AOCL_UINTP inSize)
     return outSize;
 }
 
+/* Return 1 if inSize is too large.
+*  Return 0 and set outSize to compress_bound otherwise. */
+int compression_bound_with_overflow(AOCL_UINTP inSize, AOCL_UINTP* outSize, AOCL_INTP codec_method)
+{
+    /* TODO: Modify to call aocl_llc_compressBound once calling API
+    * code flow is fixed */
+    AOCL_UINTP oSize = compression_bound(inSize);
+    if (oSize < inSize) { //overflow
+        return 1;
+    }
+    *outSize = oSize;
+    return 0;
+}
+
+/* 
+* mem_limit is used to split the input file into chunks of mem_limit size 
+* before processing chunkwise. 
+* Input of size mem_limit needs output buffer of size compression_bound(mem_limit).
+* If compression_bound(mem_limit) is > max size supported by the codec_method,
+* successful compression is not possible.
+* 
+* This function returns the largest input size that can be fed for the given 
+* codec_method for successful compression to be possible if mem_limit exceeds it.
+*/
+AOCL_UINTP mem_limit_bound(AOCL_UINTP mem_limit, AOCL_INTP codec_method) {
+    AOCL_UINTP dst_limit = 0;
+    int overflow = compression_bound_with_overflow(mem_limit, &dst_limit, codec_method);
+    if (overflow || dst_limit > codec_list[codec_method].max_dst_size) {
+        /* determine largest input [0, max_dst_size], whose compress bound fits.
+        * compression_bound needs to be derived at runtime as it can vary based
+        * on number of threads used. */
+        AOCL_UINTP min_dst_size = 0, max_dst_size = codec_list[codec_method].max_dst_size;
+        while (min_dst_size <= max_dst_size) { // binary search
+            AOCL_UINTP limit = min_dst_size + ((max_dst_size - min_dst_size) / 2);
+            int overflow = compression_bound_with_overflow(limit, &dst_limit, codec_method);
+            if (!overflow && dst_limit == codec_list[codec_method].max_dst_size) {
+                return limit; // largest input whose compress bound fits
+            }
+            if (overflow || dst_limit > codec_list[codec_method].max_dst_size) {
+                max_dst_size = limit - 1;
+            }
+            else {
+                min_dst_size = limit + 1;
+            }
+        }
+        return max_dst_size;
+    }
+    else {
+        return mem_limit;
+    }
+}
+
 AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
           aocl_compression_desc *aocl_codec_handle)
 {
     LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
+    AOCL_UINTP mem_limit = mem_limit_bound(codec_bench_handle->mem_limit, 0);
+    if (mem_limit < codec_bench_handle->mem_limit) {
+        LOG_BENCH(ERR, "Maximum size set to %zu to avoid overflow\n", mem_limit);
+        codec_bench_handle->mem_limit = mem_limit;
+    }
 
     if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
         codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS) 

@@ -44,6 +44,7 @@
 #define strtok_r strtok_s
 #define strcasecmp _stricmp
 #endif
+#include <limits.h>
 
 #include "utils.h"
 
@@ -55,7 +56,7 @@
 //Size of input data to be processed in memory at a time
 //Few compression methods are limited by datatype upper bound (2^31 -1)
 //Output buffer needs extra space to accomodate the additional header bytes
-#define MAX_MEM_SIZE_FOR_FILE_READ 1073741824 //(1024 MBs)
+#define MAX_MEM_SIZE_FOR_FILE_READ 2147483647 //(2 GBs)
 
 //Uninitialized level value
 #define UNINIT_LEVEL 999
@@ -87,6 +88,7 @@ typedef struct
     AOCL_INTP native_st_support; // single-threaded native APIs supported
     AOCL_INTP native_mt_support; // multi-threaded native APIs supported
     AOCL_INTP dict_support; // native APIs with external dictionary supported
+    AOCL_UINTP max_dst_size;
     const AOCL_CHAR* extension;
 } codec_list_t;
 
@@ -94,13 +96,13 @@ typedef struct
 //The list is ordered as per the enum aocl_compression_type
 static const codec_list_t codec_list[AOCL_COMPRESSOR_ALGOS_NUM] =
 {
-    {"LZ4",    0, 0,  0, 0, 1, 0, 0, ".lz4"},
-    {"LZ4HC",  1, 12, 0, 0, 1, 0, 0, ".lz4"},
-    {"LZMA",   0, 9,  0, 0, 1, 0, 0, ".lzma"},
-    {"BZIP2",  1, 9,  0, 0, 1, 0, 0, ".bz2"},
-    {"SNAPPY", 0, 0,  0, 0, 1, 0, 0, ".snappy"},
-    {"ZLIB",   1, 9,  0, 0, 1, 0, 0, ".zlib"},
-    {"ZSTD",   1, 22, 0, 0, 1, 1, 1, ".zst"}
+    {"LZ4",    0, 0,  0, 0, 1, 0, 0, INT_MAX  , ".lz4"},
+    {"LZ4HC",  1, 12, 0, 0, 1, 0, 0, INT_MAX  , ".lz4"},
+    {"LZMA",   0, 9,  0, 0, 1, 0, 0, SIZE_MAX , ".lzma"},
+    {"BZIP2",  1, 9,  0, 0, 1, 0, 0, SIZE_MAX , ".bz2"},
+    {"SNAPPY", 0, 0,  0, 0, 1, 0, 0, SIZE_MAX , ".snappy"},
+    {"ZLIB",   1, 9,  0, 0, 1, 0, 0, ULONG_MAX, ".zlib"},
+    {"ZSTD",   1, 22, 0, 0, 1, 1, 1, SIZE_MAX , ".zst"}
 };
 
 //Main data structure for Test bench functionality
