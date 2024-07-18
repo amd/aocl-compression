@@ -655,6 +655,215 @@ void mem_free(void * opaque, void * addr)
 }
 
 /*********************************************
+ * "Begin" of libsais Tests
+ ********************************************/
+
+class BZIP2_LIBSAIS : public ::testing::Test
+{
+public:
+    string unBWT(vector<int> &dest, string s, int pointer)
+    {
+        // Here BWT string is constructed from sorted indexes.
+        int n = s.size();
+        string bwt = "";
+        for(int i=0;i<n;i++)
+        {
+            bwt += s[(dest[i]-1+n)%n];
+        }
+
+        // Buckets of each character are initialized,
+        // where each bucket contains number of occurances of a char in BWT str.
+        int arr[256] = {0};
+        for(int i=0;i<n;i++)
+        {
+            int j = (unsigned char)bwt[i];
+            arr[j]++;
+        }
+        map<int,int> mp;
+        vector<int> v(n);
+        int j= n-1;
+
+        // Sorting of `bwt` str, and storing rank a character is done.
+        // Here rank of a character is not overall rank but local rank within a bucket.
+        for(int i=255;i>=0;i--)
+        {
+            while(arr[i])
+            {
+                v[j] = arr[i]<<8 | i;
+                arr[i]--;
+                j--;
+            }
+        }
+        j = 0;
+
+        // Here for each "index:value" pair where:
+        // v[index]=value;
+        // `mp` stores the pair for reverse matching i.e,
+        // mp[value]=index;
+        for(auto c: bwt)
+        {
+            int l = (unsigned char)c;
+            arr[l]++;
+            int k = arr[l] << 8 | l;
+            mp[k] = j++;
+        }
+        string ans = "";
+        j=0;
+        int k=pointer;
+
+        // Inverse bijective transform of BWT.
+        while(j<n)
+        {
+            int temp = v[k];
+            ans += (unsigned char)(temp & 255);
+            k = mp[temp];
+            j++;
+        }
+        return ans;
+    }
+};
+
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_1)
+{
+    /*
+        Here n is length of string & m is length of LMS indexes.
+        For current case n = 10, m = n/2
+        this input checks the below condition in  function `libsais_gather_lms_suffixes_8u`
+        "if(m <= (omp_block_size-1)/2) return;"
+        And also last character is LMS character.
+    */
+    string s = "idzdzargib";
+    int n = s.size();
+    vector<int> dest = vector<int>(n);
+
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+
+    string unbwt = unBWT(dest, s, origIndex);
+    EXPECT_EQ(unbwt, s);
+}
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_2)
+{
+    /*
+        First level n = 24, m = 10, second level n = 10, m = n/2
+        in second level last index is LMS character and number of LMS indexes are half that of input length
+        This input checks overlapping condition of LMS generated in `libsais_reconstruct_compacted_lms_suffixes_32s_2k_omp`
+        If m = n/2, then there occurs overlap of one element between distinct and non-distinct element,
+        we avoid this by storing the to be overlapped distinct element in a `temp` variable,
+        by this input we check that condition.
+        Also first character being LMS character is covered.
+    */
+    string s = "or/bookmarks/bookmarksOv";
+    int n = s.size();
+    vector<int> dest = vector<int>(n);
+
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+
+    string unbwt = unBWT(dest, s, origIndex);
+    EXPECT_EQ(unbwt, s);
+}
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_3)
+{
+    // In second level LMS indexes generated is only 1
+    string s = "duprwuvuvn";
+    int n = s.size();
+    vector<int> dest = vector<int>(n);
+
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+
+    string unbwt = unBWT(dest, s, origIndex);
+    EXPECT_EQ(unbwt, s);
+}
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_4)
+{
+    /*
+        For the below input, 8 LMS indexes are generated all renamed with same name in 1st level,
+        so in the 2nd level 8 repeated characters are given as input array,
+        so in the second level of function call zero LMS indexes are generated,
+        this is a special case, to deal with such case without applying any LMS sorting we can directly initiate it to any order.
+    */
+    string s = " 0  0  0  0  0  0  0  0 ";
+
+    int n = s.size();
+    vector<int> dest = vector<int>(n);
+
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+
+    string unbwt = unBWT(dest, s, origIndex);
+    EXPECT_EQ(unbwt, s);
+}
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_5)
+{
+    /*
+        Similar to previous test, except repeated characters are to be dealt in first level itself.
+    */
+    string s = "1111111111111111111111";
+
+    int n = s.size();
+    vector<int> dest = vector<int>(n);
+
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+
+    string unbwt = unBWT(dest, s, origIndex);
+    EXPECT_EQ(unbwt, s);
+}
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_6)
+{
+    /*
+        In second level, no uniques are present i.e, `f=0` but m = n/2
+    */
+    string s = "mkkldmkkld";
+
+    int n = s.size();
+    vector<int> dest = vector<int>(n);
+
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+
+    string unbwt = unBWT(dest, s, origIndex);
+    EXPECT_EQ(unbwt, s);
+}
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_7)
+{
+    /*
+        Inputs that caused failures while modifying libsais to BWT compatible code.
+    */
+    vector<string> test_input_strings = {
+        "mmiissiissiippii",
+        "nwlrbbmqbhcdarzowkkyhiddqscdxrjmowfrxsjybldbefsarcbynecdyggxxpklorellnmpapqfwkhopkmcoqhnwnkuewhsqmgb",
+        "zvfrkmlnozjkpqpxrjxkitzyxacbhhkicqc",
+        "wnpkwjkpbummzdzhayflrugawcbabrayhrk",
+        "><int val='1'/><int val='~2'/><int val='1'/><eqCheck/><geqtimesgeeq><int val='1'/",
+        "r id='25'/><int val='1'/><int val='~String:r id='25'/><int val='1'/><int val='~",
+        "><andi><ander><anderString:><andi><ander><ander",
+        "<andi><btr><ander><ander><ander><andel><",
+        "ny></andi></andi></andi></lm></impi></an",
+        "sel><sel><String:sel><sel><",
+        "plateString:plate"
+    };
+
+    for(string s: test_input_strings){
+
+        int n = s.size();
+        vector<int> dest = vector<int>(n);
+
+        int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+
+        string unbwt = unBWT(dest, s, origIndex);
+        EXPECT_EQ(unbwt, s);
+    }
+}
+
+/*********************************************
+ * "End" of libsais Tests
+ ********************************************/
+
+/*********************************************
  * "Begin" of BZIP2_bzCompressInit Tests
  ********************************************/
 class BZIP2_BZ2_bzCompressInit : public ::testing::Test

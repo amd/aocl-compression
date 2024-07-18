@@ -31,6 +31,7 @@
 
 #include "utils/utils.h"
 #include "bzlib_private.h"
+#include "libsais.h"
 
 #ifdef AOCL_BZIP2_OPT
 /* Dynamic dispatcher setup function for native APIs.
@@ -44,6 +45,7 @@ static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE()
 #endif
 
+int AOCL_use_libsais = 0;
 static int setup_ok_bzip2 = 0; // flag to indicate status of dynamic dispatcher setup
 
 /*---------------------------------------------------*/
@@ -210,6 +212,11 @@ void aocl_register_copy_fmv(int optOff, int optLevel)
    }
 }
 
+void aocl_register_bwt(int optOff)
+{
+   AOCL_use_libsais = !optOff;
+}
+
 BZ_EXTERN char * BZ_API(aocl_setup_bzip2) 
                      ( int optOff,
                        int optLevel,
@@ -220,6 +227,7 @@ BZ_EXTERN char * BZ_API(aocl_setup_bzip2)
     AOCL_ENTER_CRITICAL(setup_bzip2)
     if (!setup_ok_bzip2) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_bwt(optOff);
         aocl_register_decompress_fmv(optOff, optLevel);
         aocl_register_copy_fmv(optOff, optLevel);
         aocl_register_mainSimpleSort_fmv(optOff, optLevel);
@@ -235,6 +243,7 @@ static void aocl_setup_native(void) {
     if (!setup_ok_bzip2) {
         int optLevel = get_cpu_opt_flags(0);
         int optOff = get_disable_opt_flags(0);
+        aocl_register_bwt(optOff);
         aocl_register_decompress_fmv(optOff, optLevel);
         aocl_register_copy_fmv(optOff, optLevel);
         aocl_register_mainSimpleSort_fmv(optOff, optLevel);
@@ -1554,6 +1563,11 @@ void BZ_API(BZ2_bzReadGetUnused)
 }
 #endif
 
+
+int Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq)
+{
+   return libsais(T, SA, n, fs, freq);
+}
 
 /*---------------------------------------------------*/
 /*--- Misc convenience stuff                      ---*/

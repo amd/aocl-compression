@@ -859,6 +859,11 @@ BZ_EXTERN void BZ_API(aocl_destroy_bzip2) (void);
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
+#ifdef AOCL_UNIT_TEST
+/* Wrapper function for libsais function for unit testing. */
+BZ_EXTERN int BZ_API(Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq));
+#endif /* AOCL_UNIT_TEST */
+
 #ifdef __cplusplus
 }
 #endif

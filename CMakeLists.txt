@@ -188,7 +188,9 @@ set (BZIP2_SRC_FILES    ${ALGOS_PATH}/bzip2/code_alignment.c
                         ${ALGOS_PATH}/bzip2/compress.c
                         ${ALGOS_PATH}/bzip2/decompress.c
                         ${ALGOS_PATH}/bzip2/bzlib.c
-                        ${ALGOS_PATH}/bzip2/bzlib.h)
+                        ${ALGOS_PATH}/bzip2/bzlib.h
+                        ${ALGOS_PATH}/bzip2/libsais.c
+                        ${ALGOS_PATH}/bzip2/libsais.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
 endif ()
