@@ -119,9 +119,9 @@ AOCL_INT64 native_lz4hc_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR 
     //Perform the compression
     #if !defined(AOCL_EXCLUDE_LZ4HC) && !defined(AOCL_EXCLUDE_LZ4)
     AOCL_INT64 resultComp = LZ4_compress_HC(inbuf, outbuf, insize, outsize, level);
-    if (resultComp < 0)
+    if (resultComp <= 0)
     {
-        LOG_BENCH(ERR, "LZ4 compression failed. \n");
+        LOG_BENCH(ERR, "LZ4HC compression failed. \n");
         return -1;
     }
     return resultComp;
@@ -137,7 +137,7 @@ AOCL_INT64 native_lz4hc_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHA
     AOCL_INT64 resultDecomp = LZ4_decompress_safe(inbuf, outbuf, insize, outsize);
     if (resultDecomp < 0)
     {
-        LOG_BENCH(ERR, "LZ4 decompression failed. \n");
+        LOG_BENCH(ERR, "LZ4HC decompression failed. \n");
         return -1;
     }
     return resultDecomp;

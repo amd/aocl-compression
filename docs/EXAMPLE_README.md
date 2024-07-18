@@ -20,12 +20,13 @@ The following test program shows the sample usage and calling sequence of aocl -
 int main (int argc, char **argv)
 {
     aocl_compression_desc aocl_compression_ds;
-    aocl_compression_desc *aocl_compression_handle = &aocl_compression_ds;
-    FILE *inFp = NULL;
+    aocl_compression_desc* aocl_compression_handle = &aocl_compression_ds;
+    FILE* inFp = NULL;
     int file_size = 0;
-    char *inPtr = NULL, *compPtr = NULL, *decompPtr = NULL;
+    char* inPtr = NULL, * compPtr = NULL, * decompPtr = NULL;
     int64_t resultCompBound = 0, resultComp = 0, resultDecomp = 0;
 
+    printf("Running example_unified_api\n");
     if (argc < 2)
     {
         printf("Provide input test file path\n");
@@ -59,16 +60,16 @@ int main (int argc, char **argv)
         goto error_exit;
     }
     aocl_compression_handle->outSize = resultCompBound;
-    inPtr = (char *)calloc(1, aocl_compression_handle->inSize);
-    compPtr = (char *)calloc(1, aocl_compression_handle->outSize);
-    decompPtr = (char *)calloc(1, aocl_compression_handle->inSize);
+    inPtr = (char*)calloc(1, aocl_compression_handle->inSize);
+    compPtr = (char*)calloc(1, aocl_compression_handle->outSize);
+    decompPtr = (char*)calloc(1, aocl_compression_handle->inSize);
     aocl_compression_handle->inBuf = inPtr;
     aocl_compression_handle->outBuf = compPtr;
     file_size = fread(inPtr, 1, file_size, inFp);
 
     // 3. compress
     resultComp = aocl_llc_compress(aocl_compression_handle, method);
-    
+
     if (resultComp <= 0)
     {
         printf("Compression: failed\n");
@@ -93,7 +94,8 @@ int main (int argc, char **argv)
 
     // 5. destroy handle
     aocl_llc_destroy(aocl_compression_handle, method);
-    error_exit:
+
+error_exit:
     if (inPtr)
         free(inPtr);
     if (compPtr)
@@ -124,12 +126,13 @@ Build AOCL-Compression library with `AOCL_ENABLE_THREADS`.
 int main (int argc, char **argv)
 {
     aocl_compression_desc aocl_compression_ds;
-    aocl_compression_desc *aocl_compression_handle = &aocl_compression_ds;
-    FILE *inFp = NULL;
+    aocl_compression_desc* aocl_compression_handle = &aocl_compression_ds;
+    FILE* inFp = NULL;
     int file_size = 0;
-    char *inPtr = NULL, *compPtr = NULL, *decompPtr = NULL;
+    char* inPtr = NULL, * compPtr = NULL, * decompPtr = NULL;
     int64_t resultCompBound = 0, resultComp = 0, resultDecomp = 0;
 
+    printf("Running example_aocl_llc_skip_rap_frame\n");
     if (argc < 2)
     {
         printf("Provide input test file path\n");
@@ -162,9 +165,9 @@ int main (int argc, char **argv)
         goto error_exit;
     }
     aocl_compression_handle->outSize = resultCompBound;
-    inPtr = (char *)calloc(1, aocl_compression_handle->inSize);
-    compPtr = (char *)calloc(1, aocl_compression_handle->outSize);
-    decompPtr = (char *)calloc(1, aocl_compression_handle->inSize);
+    inPtr = (char*)calloc(1, aocl_compression_handle->inSize);
+    compPtr = (char*)calloc(1, aocl_compression_handle->outSize);
+    decompPtr = (char*)calloc(1, aocl_compression_handle->inSize);
     aocl_compression_handle->inBuf = inPtr;
     aocl_compression_handle->outBuf = compPtr;
     file_size = fread(inPtr, 1, file_size, inFp);
@@ -172,7 +175,7 @@ int main (int argc, char **argv)
 
     // 3. MT compress
     resultComp = aocl_llc_compress(aocl_compression_handle, method);
-    
+
     if (resultComp <= 0)
     {
         printf("Compression: failed\n");
@@ -182,7 +185,7 @@ int main (int argc, char **argv)
 
     //4. ST decompress
     // Get number of bytes for the RAP frame
-    int rap_frame_len = aocl_llc_skip_rap_frame((char *)compPtr, resultComp);
+    int rap_frame_len = aocl_llc_skip_rap_frame((char*)compPtr, resultComp);
 
     // Skip RAP frame in input stream and pass this to ST decompressor
     aocl_compression_handle->inSize = resultComp - rap_frame_len;
@@ -202,7 +205,7 @@ int main (int argc, char **argv)
 
     // 5. destroy handle
     aocl_llc_destroy(aocl_compression_handle, method);
-    error_exit:
+error_exit:
     if (inPtr)
         free(inPtr);
     if (compPtr)

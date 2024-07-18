@@ -126,6 +126,7 @@ CODE_COVERAGE                       |  Enable source code coverage. Only support
 ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
 VALGRIND                            |  Enable Valgrind checks. Only supported on Linux/Debug and incompatible with ASAN=ON (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Disabled by default)
+BUILD_EXAMPLE                       |  Build examples for aocl-compression (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1  |  Enable LZ4 match skipping optimization strategy-1 based on a larger base step size applied for long distance search (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2  |  Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1. Preferred to be used with Silesia corpus (Disabled by default)
 AOCL_LZ4_NEW_PRIME_NUMBER           |  Enable the usage of a new prime number for LZ4 hashing function. Preferred to be used with Silesia corpus (Disabled by default)
@@ -275,6 +276,25 @@ To set and launch the test bench with a specific user option,
 go to project aocl_compression_bench -> Properties -> Debugging;
 specify the user options and the input test file.
 
+Running AOCL-Compression Examples
+---------------------------------
+
+* CAUTION: <br>
+   Before running the example programs, check whether it points to the right library dependency. <br>
+
+Example programs are provided for both unified API and native APIs of each compression method.
+The library should be built with -DBUILD_EXAMPLE=ON. Other cmake options including 
+-DAOCL_ENABLE_THREADS=ON can be enabled as desired.
+
+* To run example program for unified API, use the command:<br>
+  `example_unified_api <input filename>`
+
+* To run example program for LZ4 native API, use the command:<br>
+  `example_LZ4_compress_default <input filename>`
+
+* To run example program that demonstrates obtaining format compliant compressed stream from multithreaded unified API,
+  build the library by using -DAOCL_ENABLE_THREADS=ON and run the command:<br>
+  `example_aocl_llc_skip_rap_frame <input filename>`
 
 Running tests with CTest
 ------------------------
