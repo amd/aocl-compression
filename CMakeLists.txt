@@ -110,6 +110,8 @@ if(NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF")
     # ZSTD
     set(AOCL_ZSTD_WILDCOPY_LONG "ON") # >= 1 
     # AOCL_DECOMPRESS_FAST = 2 is supported when compression is performed using ZSTD_compress, ZSTD_compressCCtx, ZSTD_compress_advanced or aocl_llc_compress APIs.
+    # LZ4
+    set(AOCL_LZ4_DECOMPRESS_FAST "ON")
 endif()
 
 # setup to get source code coverage(GCOV)
@@ -465,6 +467,9 @@ if (AOCL_LZ4_HASH_BITS_USED)
     elseif(NOT AOCL_LZ4_HASH_BITS_USED  STREQUAL "OFF")
         message(FATAL_ERROR "AOCL_LZ4_HASH_BITS_USED can only be LOW or HIGH, the provided value is:${AOCL_LZ4_HASH_BITS_USED}")
     endif()
+endif()
+if (AOCL_LZ4_DECOMPRESS_FAST)
+    set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_DECOMPRESS_FAST")
 endif()
 if (SNAPPY_MATCH_SKIP_OPT)
     set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_MATCH_SKIP_OPT")

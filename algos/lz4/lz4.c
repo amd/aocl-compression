@@ -1100,6 +1100,34 @@ LZ4_FORCE_INLINE void LZ4_clearHash(U32 h, void* tableBase, tableType_t const ta
     }
 }
 
+#ifdef AOCL_LZ4_OPT
+LZ4_FORCE_INLINE void AOCL_LZ4_clearHash(U32 h, void* tableBase, tableType_t const tableType)
+{
+    switch (tableType)
+    {
+    default: /* fallthrough */
+    case clearedTable: { /* illegal! */ assert(0); return; }
+    case byPtr: { const BYTE** hashTable = (const BYTE**)tableBase; hashTable[h] = NULL; return; }
+    case byU32: {   U32* hashTable = (U32*) tableBase;
+#ifdef AOCL_LZ4_DECOMPRESS_FAST
+                    hashTable[h] = 2;
+#else
+                    hashTable[h] = 0;
+#endif /* AOCL_LZ4_DECOMPRESS_FAST */
+                    return;
+                }
+    case byU16: {   U16* hashTable = (U16*) tableBase;
+#ifdef AOCL_LZ4_DECOMPRESS_FAST
+                    hashTable[h] = 2;
+#else
+                    hashTable[h] = 0;
+#endif /* AOCL_LZ4_DECOMPRESS_FAST */
+                    return; 
+                }
+    }
+}
+#endif
+
 LZ4_FORCE_INLINE void LZ4_putIndexOnHash(U32 idx, U32 h, void* tableBase, tableType_t const tableType)
 {
     switch (tableType)
@@ -1630,6 +1658,48 @@ _last_literals:
 }
 
 #ifdef AOCL_LZ4_OPT
+
+#ifdef AOCL_LZ4_DECOMPRESS_FAST
+/**
+ * ptrBack holds 6 bytes starting at (ptr-2).
+ * ptrFwd holds 6 bytes starting at ip.
+ */
+#define AOCL_READ_FWD_AND_BACK_BYTES(ptr, ptrFwd, ptrBack) \
+            ptrBack = *(U64*)(ptr - 2);\
+            ptrFwd = ptrBack >> 16;\
+            ptrBack &= 0x0000FFFFFFFFFFFF;
+
+/**
+ * For cases when dict_directive == noDict, to avoid out-of-bound memory access
+ * on reading 2 bytes in backward direction (when `match` pointer points to start
+ * of the source buffer), initialize hashTable entries with 2. This ensures that
+ * `match` pointer never points to 0th index of the source buffer.
+*/
+#define AOCL_INITIALIZE_HASHTABLE_FOR_NODICT(cctx, type, no_of_entries) \
+        {\
+            type* hashTable = (type*)cctx->hashTable;\
+            for(int i=0; i < no_of_entries; i++) {\
+                hashTable[i] = 2;\
+            }\
+        }
+
+/**
+ * For cases when dict_directive != noDict, to avoid out-of-bound memory access
+ * on reading 2 bytes in backward direction,
+ * a. Initialize only those hashTable entries with 2, which are 0. This avoids
+ *    overwriting the entries when hashTable is not reset.
+ * b. Increment the hashTable entry by 2, if the entry points to either 1st or
+ *    2nd byte of dictionary.
+*/
+#define AOCL_INITIALIZE_HASHTABLE_FOR_DICT(cctx, type, no_of_entries, dictBase, dictionary) \
+        {\
+            type* hashTable = (type*)cctx->hashTable;\
+            for(int i=0; i < no_of_entries; i++) {\
+                if(likely(hashTable[i] == 0)) hashTable[i] = 2;\
+                if(unlikely((dictBase + hashTable[i]) < dictionary+2 )) hashTable[i] += 2;\
+            }\
+        }
+#endif
 /** AOCL_LZ4_compress_generic_validated() :
  *  inlined, to ensure branches are decided at compilation time.
  *  Presumed already validated at this stage:
@@ -1720,6 +1790,20 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
 
     if (inputSize<LZ4_minLength) goto _last_literals;        /* Input too small, no compression (all literals) */
 
+#ifdef AOCL_LZ4_DECOMPRESS_FAST
+
+    if(dictDirective == noDict) {
+        if(tableType == byU32) AOCL_INITIALIZE_HASHTABLE_FOR_NODICT(cctx, U32, (1U << (LZ4_MEMORY_USAGE-2)))
+        if(tableType == byU16) AOCL_INITIALIZE_HASHTABLE_FOR_NODICT(cctx, U16, (1U << (LZ4_MEMORY_USAGE-1)))
+    } else {
+        if(tableType == byU32) AOCL_INITIALIZE_HASHTABLE_FOR_DICT(cctx, U32, (1U << (LZ4_MEMORY_USAGE-2)), dictBase, dictionary)
+        if(tableType == byU16) AOCL_INITIALIZE_HASHTABLE_FOR_DICT(cctx, U16, (1U << (LZ4_MEMORY_USAGE-1)), dictBase, dictionary)
+    }
+
+    /* Skip first two bytes */
+    ip += 2;
+
+#endif
     /* First Byte */
     AOCL_LZ4_putPosition(ip, cctx->hashTable, tableType, base);
     ip++; forwardH = AOCL_LZ4_hashPosition(ip, tableType);
@@ -1769,16 +1853,25 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
 #else
             int searchMatchNb = acceleration << LZ4_skipTrigger;
 #endif
-#ifdef AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
+#ifdef AOCL_LZ4_DECOMPRESS_FAST
+            U64 ipDataFwd, ipDataBck;
+#else
+    #if defined(AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY)
             U32 ipData;
+    #endif            
 #endif
             do {
                 U32 const h = forwardH;
                 U32 const current = (U32)(forwardIp - base);
                 U32 matchIndex = LZ4_getIndexOnHash(h, cctx->hashTable, tableType);
-#ifdef AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
+#ifdef AOCL_LZ4_DECOMPRESS_FAST
+                auto U64 matchDataFwd, matchDataBck;
+#else
+    #if defined(AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY)
                 auto U32 matchData;
+    #endif            
 #endif
+
                 assert(matchIndex <= current);
                 assert(forwardIp - base < (ptrdiff_t)(2 GB - 1));
                 ip = forwardIp;
@@ -1819,8 +1912,13 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                 } else {   /* single continuous memory segment */
                     match = base + matchIndex;
                 }
-#ifdef AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
+
+#ifdef AOCL_LZ4_DECOMPRESS_FAST
+                AOCL_READ_FWD_AND_BACK_BYTES(ip, ipDataFwd, ipDataBck)
+#else
+    #if defined(AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY)
                 ipData=*(U32*)ip;
+    #endif
 #endif
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
                 prevOffset = ((ip - anchor) > 8) ? 8 : (ip - anchor);
@@ -1838,7 +1936,11 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
                     continue;
                 } /* too far */
 
-#ifdef AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
+#ifdef AOCL_LZ4_DECOMPRESS_FAST
+                AOCL_READ_FWD_AND_BACK_BYTES(match, matchDataFwd, matchDataBck)
+
+                if (matchDataFwd == ipDataFwd || matchDataBck == ipDataBck) {
+#elif defined(AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY)
                 matchData=*(U32*)match;
 
                 if (matchData == ipData) {
@@ -2009,7 +2111,7 @@ _next_match:
                         DEBUGLOG(5, "Clearing %u positions", (U32)(filledIp - ip));
                         for (ptr = ip; ptr <= filledIp; ++ptr) {
                             U32 const h = AOCL_LZ4_hashPosition(ptr, tableType);
-                            LZ4_clearHash(h, cctx->hashTable, tableType);
+                            AOCL_LZ4_clearHash(h, cctx->hashTable, tableType);
                         }
                     }
                 } else {
@@ -2082,6 +2184,27 @@ _next_match:
             }
             LZ4_putIndexOnHash(current, h, cctx->hashTable, tableType);
             assert(matchIndex < current);
+            
+               
+#ifdef AOCL_LZ4_DECOMPRESS_FAST
+            if ( ((dictIssue==dictSmall) ? (matchIndex >= prefixIdxLimit) : 1)
+              && (((tableType==byU16) && (LZ4_DISTANCE_MAX == LZ4_DISTANCE_ABSOLUTE_MAX)) ? 1 : (matchIndex+LZ4_DISTANCE_MAX >= current)) ) {
+                U64 ipDataFwd, ipDataBck;
+                auto U64 matchDataFwd, matchDataBck;
+                AOCL_READ_FWD_AND_BACK_BYTES(ip, ipDataFwd, ipDataBck)
+                AOCL_READ_FWD_AND_BACK_BYTES(match, matchDataFwd, matchDataBck)
+                if (matchDataFwd == ipDataFwd || matchDataBck == ipDataBck) {
+                    token=op++;
+                    *token=0;
+                    if (maybe_extMem) offset = current - matchIndex;
+                    LOG_FORMATTED(DEBUG, logCtx, "seq.start:%i, literals=%u, match.start:%i",
+                            (int)(anchor-(const BYTE*)source), 0, (int)(ip-(const BYTE*)source));
+                    DEBUGLOG(6, "seq.start:%i, literals=%u, match.start:%i",
+                            (int)(anchor-(const BYTE*)source), 0, (int)(ip-(const BYTE*)source));
+                    goto _next_match;
+                }
+            }
+#else
             if ( ((dictIssue==dictSmall) ? (matchIndex >= prefixIdxLimit) : 1)
               && (((tableType==byU16) && (LZ4_DISTANCE_MAX == LZ4_DISTANCE_ABSOLUTE_MAX)) ? 1 : (matchIndex+LZ4_DISTANCE_MAX >= current))
               && (LZ4_read32(match) == LZ4_read32(ip)) ) {
@@ -2094,6 +2217,7 @@ _next_match:
                             (int)(anchor-(const BYTE*)source), 0, (int)(ip-(const BYTE*)source));
                 goto _next_match;
             }
+#endif
         }
 
         /* Prepare next loop */
