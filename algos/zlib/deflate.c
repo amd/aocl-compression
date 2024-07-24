@@ -187,6 +187,23 @@ local const config configuration_table_opt[10] = {
 /* 7 */ {8,   16, 256, 144, deflate_slow},
 /* 8 */ {32, 128, 258, 192, deflate_slow},
 /* 9 */ {32, 258, 258, 256, deflate_slow}}; /* max compression */
+
+local const config configuration_table_quick[10] = {
+/*      good lazy nice chain */
+/* 0 */ {0,    0,  0,    0, deflate_stored},  /* store only */
+
+/* 1 */ {0,    0,  0,    0, deflate_quick}, /* max speed, no lazy matches */
+
+/* 2 */ {16,    4,    32,   3, deflate_fast},
+/* 3 */ {16,    4,   128,   3, deflate_fast},
+/* 4 */ {32,    16,   32,   48, deflate_fast},
+
+/* 5 */ {8,    16,   32,  28, deflate_medium},
+/* 6 */ {8,    16,  256, 128, deflate_medium},
+
+/* 7 */ {8,    16,  256, 144, deflate_slow},
+/* 8 */ {32,  128,  258, 192, deflate_slow},
+/* 9 */ {32,  258,  258, 256, deflate_slow}}; /* max compression */
 #endif /* AOCL_ZLIB_OPT */
 
 /* Note: the deflate() code requires max_lazy >= MIN_MATCH and max_chain >= 4
@@ -2005,9 +2022,6 @@ local block_state aocl_deflate_fast_opt(deflate_state *s, int flush)
     IPos hash_head;       /* head of the hash chain */
     int bflush;           /* set if current block must be flushed */
 
-    if(enable_dquick && s->level == 1)
-        return deflate_quick(s, flush);
-
     for (;;) {
         /* Make sure that we always have enough lookahead, except
          * at the end of the input file. We need MAX_MATCH bytes
@@ -2393,7 +2407,10 @@ static void aocl_setup_deflate_fmv(int optOff, int optLevel)
             case 2://AVX version
             case 3://AVX2 version
             default://AVX512 and other versions
-                config_table = configuration_table_opt;
+                if(enable_dquick)
+                    config_table = configuration_table_quick;
+                else
+                    config_table = configuration_table_opt;
                 deflate_slide_hash_fp = slide_hash_x86;
                 aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_opt;
                 aocl_fill_window_fp = aocl_fill_window_opt;
