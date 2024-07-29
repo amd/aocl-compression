@@ -98,6 +98,12 @@ AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp,
         thread_grp->leftover_part_src_bytes = thread_grp->src_size %
                                                 thread_grp->num_threads;
     }
+#ifdef AOCL_THREADS_LOG
+    printf("Input stream size: [%td], Minimum per thread chunk size: [%d]\n",
+        thread_grp->src_size, chunk_size);
+    printf("Number of max threads: [%d], Number of threads set for execution: [%d]\n",
+        max_threads, thread_grp->num_threads);
+#endif
     return 0;
 }
 
@@ -122,6 +128,13 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
     //Allocate threads list to hold references to threads_info
     thread_grp->threads_info_list = (aocl_thread_info_t*)malloc(
                     sizeof(aocl_thread_info_t) * thread_grp->num_threads);
+    memset(thread_grp->threads_info_list, 0, 
+                    sizeof(aocl_thread_info_t) * thread_grp->num_threads);
+    for (AOCL_UINT32 i = 0; i < thread_grp->num_threads; ++i) {
+        /* Set to 1 by default.
+         * Reset to 0 when thread gets spawned and completes its task successfully.*/
+        thread_grp->threads_info_list[i].is_error = 1;
+    }
     if (thread_grp->threads_info_list == NULL) {
         LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
         return ERR_MEMORY_ALLOC;
@@ -134,12 +147,6 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
     dst += RAP_METADATA_LEN_BYTES;
     *(AOCL_UINT32*)dst = thread_grp->num_threads; //For storing the no. of threads
 
-#ifdef AOCL_THREADS_LOG
-    printf("Input stream size: [%td], Minimum per thread chunk size: [%d]\n",
-        thread_grp->src_size, chunk_size);
-    printf("Number of max threads: [%d], Number of threads set for execution: [%d]\n",
-        max_threads, thread_grp->num_threads);
-#endif
     return rap_frame_len;
 }
 
@@ -273,6 +280,13 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t *thread_grp,
         //Allocate threads list to hold references to threads_info
         thread_grp->threads_info_list = (aocl_thread_info_t*)malloc(
                         sizeof(aocl_thread_info_t) * thread_grp->num_threads);
+        memset(thread_grp->threads_info_list, 0,
+                        sizeof(aocl_thread_info_t) * thread_grp->num_threads);
+        for (AOCL_UINT32 i = 0; i < thread_grp->num_threads; ++i) {
+            /* Set to 1 by default.
+             * Reset to 0 when thread gets spawned and completes its task successfully.*/
+            thread_grp->threads_info_list[i].is_error = 1;
+        }
 
         if (thread_grp->threads_info_list == NULL) {
             LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");

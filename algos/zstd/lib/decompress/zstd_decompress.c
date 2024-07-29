@@ -1459,7 +1459,7 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
         }
 
         if (total_decompressed_sz > dstCapacity) 
-            RETURN_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, ERROR(dstSize_tooSmall));
+            RETURN_DPR_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, ERROR(dstSize_tooSmall));
 
         /* copy decompressed data from threads to dst multi-threaded */
 #pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)

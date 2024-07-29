@@ -2622,7 +2622,10 @@ int LZ4_compress_HC_internal_mt(const char* source, char* dst, int inputSize, in
 #if defined(LZ4HC_HEAPMODE) && LZ4HC_HEAPMODE==1
                     FREEMEM(statePtr);
 #endif
-                    is_error = 0;
+                    if (local_result == 0)
+                        is_error = (last_anchor_ptr == NULL);
+                    else
+                        is_error = 0;
                 }    
             }//aocl_do_partition_compress_mt
             

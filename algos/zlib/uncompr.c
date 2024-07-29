@@ -295,7 +295,7 @@ int ZEXPORT uncompress2(Bytef *dest, uLongf *destLen, const Bytef *source,
         }
 
         if(total_uncompressed_len > dstCapacity)
-            RETURN_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, Z_BUF_ERROR);
+            RETURN_DPR_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, Z_BUF_ERROR);
         
         /* copy decompressed data from threads to dst multi-threaded */
 #pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)

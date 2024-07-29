@@ -109,8 +109,8 @@ extern "C"
                         return error; \
                     }
 
-#define RETURN_DST_BUFF_INSUFFICIENT_ERROR_MT(handle, error) { \
-                        aocl_destroy_parallel_compress_mt(&handle); \
+#define RETURN_DPR_DST_BUFF_INSUFFICIENT_ERROR_MT(handle, error) { \
+                        aocl_destroy_parallel_decompress_mt(&handle); \
                         LOG_UNFORMATTED(ERR, logCtx, "Destination buffer is too small/ insufficient."); \
                         LOG_UNFORMATTED(TRACE, logCtx, "Exit"); \
                         return error; \

@@ -2266,7 +2266,7 @@ _last_literals:
 }
 
 #ifdef AOCL_ENABLE_THREADS
-//Same as AOCL_LZ4_compress_generic_validated, but with state information for Multi-threaded support
+//Same as AOCL_LZ4_compress_generic_validated, but with state information for Multi - threaded support
 LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated_mt(
     LZ4_stream_t_internal* const cctx,
     const char* const source,
@@ -3166,7 +3166,10 @@ int AOCL_LZ4_compress_fast_mt(const char* source, char* dest, int inputSize, int
 #if (LZ4_HEAPMODE)
                     FREEMEM(ctxPtr);
 #endif
-                    is_error = 0;
+                    if (local_result == 0)
+                        is_error = (last_anchor_ptr == NULL);
+                    else
+                        is_error = 0;
                 }
             }//aocl_do_partition_compress_mt
             
@@ -5367,7 +5370,10 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
                     (BYTE*)cur_thread_info.dst_trap, NULL, 0,
                     (thread_id == (thread_group_handle.num_threads - 1)) ? 1 : 0);
 
-                is_error = 0;
+                if (local_result < 0)
+                    is_error = 1;
+                else
+                    is_error = 0;
             }//aocl_do_partition_decompress_mt
             else if (thread_parallel_res == 1)
             {
@@ -5394,7 +5400,7 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
             total_decompressed_sz += thread_group_handle.threads_info_list[thread_id].dst_trap_size;
         
         if(total_decompressed_sz > maxDecompressedSize)
-            RETURN_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, -1);
+            RETURN_DPR_DST_BUFF_INSUFFICIENT_ERROR_MT(thread_group_handle, -1);
 
         //For all the threads: Write to a single output buffer in a single-threaded mode
         for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
