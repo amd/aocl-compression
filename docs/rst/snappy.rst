@@ -31,3 +31,9 @@ SNAPPY
 
 .. doxygengroup:: SNAPPY_API
    :members:
+
+SNAPPY C APIs
+=============
+
+.. doxygengroup:: SNAPPY_C_API
+   :members:

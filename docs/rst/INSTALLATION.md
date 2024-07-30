@@ -2,7 +2,7 @@ Installation
 ------------
 
 1. Download the latest stable release from the Github repository:<br>
-[https://github.amd.com/AOCL/aocl-compression](https://github.amd.com/AOCL/aocl-compression)
+[https://github.com/amd/aocl-compression](https://github.com/amd/aocl-compression)
 2. Install CMake on the machine where the sources are to be compiled.
 3. Make any one of the compilers GCC or Clang available on the machine.
 4. Then, use the cmake based build system to compile and generate AOCL-Compression <br>
@@ -68,11 +68,7 @@ __Desktop development with C++__ toolset that includes the Clang compiler.
    Microsoft Visual Studio project is generated.
 6. Click __Open Project__.
    Microsoft Visual Studio project for the source package __is launched__.
-7. For building multi-threaded library based on AOCL_ENABLE_THREADS, set the 
-   LLVM openMP library path in the Linker->General option and openMP library name
-   in the Linker->Input under the project properties. Set /openmp as the additional
-   compilation option.
-8. Build the entire solution or the required projects.
+7. Build the entire solution or the required projects.
 
 #### Building with Visual Studio IDE (command line)
 

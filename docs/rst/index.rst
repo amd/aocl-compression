@@ -70,7 +70,6 @@ the library offers openMP based multi-threaded compression for a few methods.
    unified_api
    INTRODUCTION
    algos
-   multi-thread
    EXAMPLE_README
 
 Contacts

@@ -1909,11 +1909,18 @@ ZEXTERN z_size_t ZEXPORT gzfread(voidp buf, z_size_t size, z_size_t nitems,
 ZEXTERN int ZEXPORT gzwrite(gzFile file, voidpc buf, unsigned len);
 
 /**
-  @brief It writes nitems items of size size from buf to file, duplicating
+  @brief It writes `nitems` items of size `size` from `buf` to `file`, duplicating
   the interface of stdio's fwrite(), with size_t request and return types.
 
   If the library defines size_t, then z_size_t is identical to size_t.  If not,
   then z_size_t is an unsigned integer type that can contain a pointer.
+
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b buf    | in      | This is a buffer into which the data read is written to. |
+  | \b size   | in      | Size of each element in number of bytes that needs to be copied into buf. |
+  | \b nitems | in      | Number of elements that needs to be copied. |
+  | \b file   | in,out  | Semi-opaque gzip file descriptor. |
 
   @return
   |Result   | Description |
@@ -1927,6 +1934,11 @@ ZEXTERN z_size_t ZEXPORT gzfwrite(voidpc buf, z_size_t size,
 /**
   @brief It converts, formats, and writes the arguments to the compressed file under
   control of the format string, as in fprintf.
+
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b file   | in,out  | Semi-opaque gzip file descriptor. |
+  | \b format |   in    | A format string that specifies how subsequent arguments are converted for output. |
 
   @return
   |Result          | Description  |
@@ -2090,7 +2102,7 @@ ZEXTERN z_off_t ZEXPORT gzseek(gzFile file,
 
   |Parameters|Direction|Description|
   |:---------|:-------:|:----------|
-  | \b file | in,out |semi-opaque gzip file descriptor.|
+  | \b file  | in,out  |semi-opaque gzip file descriptor.|
 
   @return
   |Result | Description |
@@ -2131,7 +2143,7 @@ ZEXTERN z_off_t ZEXPORT gzoffset(gzFile file);
 
   |Parameters|Direction|Description|
   |:---------|:-------:|:----------|
-  | \b file | in,out |semi-opaque gzip file descriptor.|
+  | \b file  | in,out  |semi-opaque gzip file descriptor.|
 
 
   @note The end-of-file indicator is set only if the read tried to go past the end of the input, but came up short.  
@@ -2164,6 +2176,10 @@ ZEXTERN int ZEXPORT gzeof(gzFile file);
   explicitly requested, so the application already knows the answer.  When
   linking statically, using gzdirect() will include all of the zlib code for
   gzip file reading and decompression, which may not be desired.
+
+  |Parameters|Direction|Description|
+  |:---------|:-------:|:----------|
+  | \b file  | in,out  |semi-opaque gzip file descriptor.|
 
   @return
   When reading
@@ -2998,7 +3014,7 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
   |\b NULL  | If the file could not be opened, if there was insufficient memory to allocate the gzFile state, or if an invalid mode was specified (an 'r', 'w', or 'a' was not provided, or '+' was provided). |
   |\b errno | It can be checked to determine if the reason gzopen failed was that the file could not be opened. |
 */
-   ZEXTERN gzFile ZEXPORT gzopen(const char *, const char *);
+   ZEXTERN gzFile ZEXPORT gzopen(const char * path, const char * mode);
 
 /**
   @brief Sets the starting position for the next gzread or gzwrite on the given
@@ -3006,8 +3022,9 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
 
   |Parameters |Direction|Description|
   |:----------|:-------:|:----------|
-  | \b offset | out |The offset represents a number of bytes in the uncompressed data stream.|
-  | \b whence | in |The whence parameter is defined as in lseek(2); the value SEEK_END is not supported. |
+  | \b file   |  in,out | semi-opaque gzip file descriptor. |
+  | \b offset |   out   | The offset represents a number of bytes in the uncompressed data stream.|
+  | \b whence |   in    | The whence parameter is defined as in lseek(2); the value SEEK_END is not supported. |
 
   If the file is opened for reading, this function is emulated but can be
   extremely slow.  If the file is opened for writing, only forward seeks are
@@ -3020,10 +3037,8 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
   |Success | Returns the resulting offset location as measured in bytes from the beginning of the uncompressed stream |
   |-1      | in case of error, in particular if the file is opened for writing and the new starting position would be before the current position. |
 
-
-  
 */
-   ZEXTERN z_off_t ZEXPORT gzseek(gzFile, z_off_t, int);
+   ZEXTERN z_off_t ZEXPORT gzseek(gzFile file, z_off_t offset, int whence);
 
 /**
   @brief It returns the starting position for the next gzread or gzwrite on the given
@@ -3035,8 +3050,9 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
 
   gztell(file) is equivalent to gzseek(file, 0L, SEEK_CUR)
 
-  @return Returns the starting position for the next gzread or gzwrite on the given
-  compressed file.
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b file   |  in,out | semi-opaque gzip file descriptor. |
 
   @return
   |Result  | Description |
@@ -3044,7 +3060,7 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
   |Success | Returns the starting position for the next gzread or gzwrite on the given compressed file. |
   
 */
-   ZEXTERN z_off_t ZEXPORT gztell(gzFile);
+   ZEXTERN z_off_t ZEXPORT gztell(gzFile file);
 
 /**
   @brief It returns the current offset in the file being read or written.  This offset
@@ -3053,13 +3069,17 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
   does not include as yet unused buffered input.  This information can be used
   for a progress indicator.
 
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b file   |  in,out | semi-opaque gzip file descriptor. |
+
   @return
   |Result  | Description |
   |:-------|:------------|
   |Success | Returs the current offset in the file being read or written. |
   | -1     | On error, gzoffset() returns -1. |
 */
-   ZEXTERN z_off_t ZEXPORT gzoffset(gzFile);
+   ZEXTERN z_off_t ZEXPORT gzoffset(gzFile file);
 
 /**
  * @}
@@ -3076,6 +3096,12 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
   For two sequences of bytes, seq1 and seq2 with lengths len1 and len2, Adler-32 checksums were calculated for
   each, adler1 and adler2.
 
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b adler1 |   in    | Adler-32 calculated for seq1 of length len1. |
+  | \b adler2 |   in    | Adler-32 calculated for seq2 of length len2. |
+  | \b len2   |   in    | Length of seq2. |
+
   @note The z_off_t type (like off_t) is a signed integer.  If len2 is negative, the result has no meaning or utility.
 
   @return
@@ -3083,13 +3109,19 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
   |:-------|:-------------|
   |Success | The Adler-32 checksum of seq1 and seq2 concatenated, requiring only adler1, adler2, and len2. |
 */
-   ZEXTERN uLong ZEXPORT adler32_combine(uLong, uLong, z_off_t);
+   ZEXTERN uLong ZEXPORT adler32_combine(uLong adler1, uLong adler2, z_off_t len2);
 
 /**
   @brief This function combines two CRC-32 check values into one.
   
   For two sequences of bytes, seq1 and seq2 with lengths len1 and len2, CRC-32 check values were
   calculated for each, crc1 and crc2.
+  
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b crc1   |   in    | CRC-32 calculated for seq1 of length len1. |
+  | \b crc2   |   in    | CRC-32 calculated for seq2 of length len2. |
+  | \b len2   |   in    | Length of seq2. |
 
   @return
   |Result | Description |
@@ -3102,12 +3134,16 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
 /**
   @brief Return the operator corresponding to length len2, to be used with crc32_combine_op().
 
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b len2   |   in    | Length to which corresponding operator needs to be returned. |
+
   @return
   |Result | Description |
   |:------| :-----------|
   |Success| The operator corresponding to length len2, to be used with crc32_combine_op(). |
 */
-   ZEXTERN uLong ZEXPORT crc32_combine_gen(z_off_t);
+   ZEXTERN uLong ZEXPORT crc32_combine_gen(z_off_t len2);
 
 /**
  * @}
@@ -3133,8 +3169,17 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
 /**
   @brief exported to allow conversion of error code to string for compress() and
   uncompress()
+
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b err    |   in    | Error code. |
+
+  @return
+  |Result | Description |
+  |:------|:-----------|
+  |Success| Error string is returned. |
 */
-ZEXTERN const char   * ZEXPORT zError(int);
+ZEXTERN const char   * ZEXPORT zError(int err);
 
 /**
   @brief This function is used by one PPP
@@ -3144,9 +3189,20 @@ ZEXTERN const char   * ZEXPORT zError(int);
    Z_SYNC_FLUSH or Z_FULL_FLUSH. PPP uses Z_SYNC_FLUSH but removes the length
    bytes of the resulting empty stored block. When decompressing, PPP checks 
    that at the end of input packet, inflate is waiting for these length bytes.
+
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b str    |   in    | The internal stream state for decompression/compression. |
+
+  @return
+  |Result | Description |
+  |:------| :-----------|
+  |Success| Returns true if inflate is currently at the end of a block generated by Z_SYNC_FLUSH or Z_FULL_FLUSH. |
+  |Failure| Returns Z_STREAM_ERROR if str == NULL, or some other internal data structure errors. |
+  | ^     | Returns false if current str mode is not `STORED` or bits is not 0. |
   
 */
-ZEXTERN int            ZEXPORT inflateSyncPoint(z_streamp);
+ZEXTERN int            ZEXPORT inflateSyncPoint(z_streamp str);
 
 /**
  * @}
@@ -3158,6 +3214,11 @@ ZEXTERN int            ZEXPORT inflateSyncPoint(z_streamp);
 */
 /**
   @brief This function can be used by asm versions of crc32().
+
+  @return
+  |Result | Description |
+  |:------| :-----------|
+  |Success| Returns crc table. |
 */
 ZEXTERN const z_crc_t FAR * ZEXPORT get_crc_table(void);
 /**
@@ -3186,14 +3247,34 @@ ZEXTERN unsigned long  ZEXPORT inflateCodesUsed(z_streamp);
 
 /**
   @brief This function is used to reset the stream state to maintain inflate() calls.
+
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b str    |   in    | The internal stream state for decompression/compression. |
+
+  @return
+  | Result  | Description |
+  |:--------|:------------|
+  | Success | Returns Z_OK |
+  | Failure | Returns Z_STREAM_ERROR if found an error. |
 */
-ZEXTERN int            ZEXPORT inflateResetKeep(z_streamp);
+ZEXTERN int            ZEXPORT inflateResetKeep(z_streamp str);
 
 /**
   @brief This function is used to reset the stream state and return Z_Ok.
+
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b str    |   in    | The internal stream state for decompression/compression. |
+
+  @return
+  | Result  | Description |
+  |:--------|:------------|
+  | Success | Returns Z_OK |
+  | Failure | Returns Z_STREAM_ERROR if found an error. |
 */
 
-ZEXTERN int            ZEXPORT deflateResetKeep(z_streamp);
+ZEXTERN int            ZEXPORT deflateResetKeep(z_streamp str);
 
 /**
  * @}
@@ -3213,6 +3294,13 @@ ZEXTERN gzFile         ZEXPORT gzopen_w(const wchar_t *path,
 /**
   @brief It converts, formats, and writes the arguments to the compressed file under
   control of the format string, as in fprintf.
+
+  |Parameters |Direction|Description|
+  |:----------|:-------:|:----------|
+  | \b file   | in,out  | Semi-opaque gzip file descriptor. |
+  | \b format |   in    | A format string that specifies how subsequent arguments are converted for output. |
+  | \b va     |   in    | A variable argument list that contains the values to be formatted according to the format string. |
+
 
   @return
   |Result   | Description  |
@@ -3253,11 +3341,13 @@ ZEXTERN int            ZEXPORTVA gzvprintf(gzFile file,
  * in zlib following the code path of set at first setup call or  the most recent setup call that was
  * preceded by the destroy function.
  * 
- * @param optOff Turn on/off all AOCL-Compression optimizations.
- * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
- * @param insize Input data length.
- * @param level Requested compression level.
- * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * |Parameters    |Direction|Description|
+ * |:-------------|:-------:|:----------|
+ * | \b optOff    |  in     |   Turn on/off all AOCL-Compression optimizations. |
+ * | \b optLevel  |  in     |   Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 . |
+ * | \b insize    |  in     |   Input data length.  |
+ * | \b level     |  in     |   Requested compression level.  |
+ * | \b windowLog |  in     |   Largest match distance : larger == more compression, more memory needed during decompression. |
  * 
  * @return \b NULL .
  */

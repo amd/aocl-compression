@@ -92,11 +92,7 @@ Building with Visual Studio IDE (GUI)
    Microsoft Visual Studio project is generated.
 6. Click __Open Project__.
    Microsoft Visual Studio project for the source package __is launched__.
-7. For building multi-threaded library based on AOCL_ENABLE_THREADS, set the 
-   LLVM openMP library path in the Linker->General option and openMP library name
-   in the Linker->Input under the project properties. Set /openmp as the additional
-   compilation option.
-8. Build the entire solution or the required projects.
+7. Build the entire solution or the required projects.
 
 Building with Visual Studio IDE (command line)
 ----------------------------------------------

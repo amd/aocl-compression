@@ -276,7 +276,7 @@ namespace snappy {
    * least "MaxCompressedLength(input_length)" bytes in length.
    * 
    * @note - Example:\n\n
-   *  \code{.c}
+   *  \code{.cpp}
    *            char  output = new char[snappy::MaxCompressedLength(input_length)];\n
    *            size_t output_length;\n
    *            RawCompress(input, input_length, output, &output_length);\n
