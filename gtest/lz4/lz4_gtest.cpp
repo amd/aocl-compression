@@ -48,6 +48,11 @@
 #ifdef AOCL_TEST_FUZZER
 #include "fuzztest/fuzztest.h"
 #endif
+
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif /* AOCL_ENABLE_THREADS */
+
 #include "gtest_utils.h"
 
 using namespace std;
@@ -271,6 +276,18 @@ TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail
 
     int outLen = LZ4_compress_default(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize());
     EXPECT_EQ(outLen, 0);
+}
+
+TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_pass_common_11) // mt_compression_st_decompression
+{
+    TestLoad d(8*64 KB);
+
+    int outLen = LZ4_compress_default(d.getOrigData(), d.getCompressedBuff(), d.getOrigSize(), d.getCompressedSize());
+    EXPECT_NE(outLen, 0);
+
+    int rap_metadata_len = aocl_skip_rap_frame_mt(d.getCompressedBuff(), outLen);
+
+    EXPECT_TRUE(check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff() + rap_metadata_len, outLen - rap_metadata_len));
 }
 
 #endif

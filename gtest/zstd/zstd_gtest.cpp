@@ -102,6 +102,11 @@ size_t Test_ZSTD_compressBound(size_t srcSize) {
     return ZSTD_compressBound(srcSize);
 }
 
+size_t Test_AOCL_ZSTD_compressBound(size_t srcSize, ZSTD_parameters params) {
+    return AOCL_ZSTD_compressBound(srcSize, params);
+}
+
+
 size_t Test_ZSTD_writeSkippableFrame(void* dst, size_t dstCapacity,
     const void* src, size_t srcSize, unsigned magicVariant) {
     return ZSTD_writeSkippableFrame(dst, dstCapacity, src, srcSize, magicVariant);
@@ -2207,6 +2212,8 @@ TEST(ZSTD_ZSTD_compressBound, AOCL_Compression_zstd_ZSTD_compressBound_pass_comm
 
     // max supported value
 #if AOCL_DECOMPRESS_FAST > 1
+    // max supported value when AOCL_DECOMPRESS_FAST > 1 is `ZSTD_MAX_INPUT_SIZE - 23`
+    // to account for FDS skippable frame.
     ret = Test_ZSTD_compressBound(ZSTD_MAX_INPUT_SIZE - 23);
     EXPECT_GT(ret, ZSTD_MAX_INPUT_SIZE - 23);
 #else
@@ -2226,6 +2233,67 @@ TEST(ZSTD_ZSTD_compressBound, AOCL_Compression_zstd_ZSTD_compressBound_fail_comm
 }
 /*********************************************
  * End of ZSTD_ZSTD_compressBound
+ *********************************************/
+
+/*********************************************
+* Begin of ZSTD_AOCL_ZSTD_compressBound
+*********************************************/
+class ZSTD_AOCL_ZSTD_compressBound : public AOCL_setup_zstd
+{
+    public:
+        ZSTD_parameters params;
+
+        void Test_AOCL_ZSTD_compressBound_for_windowLog_range(size_t srcSize) {
+            size_t upperBound = Test_ZSTD_compressBound(srcSize);
+            for (int i = ZSTD_WINDOWLOG_MIN; i < ZSTD_WINDOWLOG_MAX; i++) {
+                params.cParams.windowLog = i;
+                size_t ret = Test_AOCL_ZSTD_compressBound(srcSize, params);
+                EXPECT_GT(ret, srcSize);
+                EXPECT_LE(ret, upperBound);
+            }
+        }
+};
+TEST_F(ZSTD_AOCL_ZSTD_compressBound, AOCL_Compression_zstd_AOCL_ZSTD_compressBound_pass_common_1) { // valid
+    
+    Test_AOCL_ZSTD_compressBound_for_windowLog_range(0);
+    Test_AOCL_ZSTD_compressBound_for_windowLog_range(1024);
+
+    // max supported value
+#if AOCL_DECOMPRESS_FAST > 1
+    // max supported value when AOCL_DECOMPRESS_FAST > 1 is `ZSTD_MAX_INPUT_SIZE - 23`
+    // to account for FDS skippable frame.
+    Test_AOCL_ZSTD_compressBound_for_windowLog_range(ZSTD_MAX_INPUT_SIZE - 23);
+#else
+    Test_AOCL_ZSTD_compressBound_for_windowLog_range(ZSTD_MAX_INPUT_SIZE - 1);
+#endif
+}
+
+TEST_F(ZSTD_AOCL_ZSTD_compressBound, AOCL_Compression_zstd_AOCL_ZSTD_compressBound_fail_common_2) { // src size out of bounds
+
+    // If srcSize is out of bound, irrespective of windowLog, AOCL_ZSTD_compressBound() returns ERROR(srcSize_wrong).
+    params.cParams.windowLog = ZSTD_WINDOWLOG_MIN;
+
+#if AOCL_DECOMPRESS_FAST > 1
+    size_t ret = Test_AOCL_ZSTD_compressBound(ZSTD_MAX_INPUT_SIZE - 22, params);
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
+#else
+    size_t ret = Test_AOCL_ZSTD_compressBound(ZSTD_MAX_INPUT_SIZE, params);
+    EXPECT_EQ(ret, ERROR(srcSize_wrong));
+#endif   
+}
+
+#ifdef AOCL_ENABLE_THREADS
+TEST_F(ZSTD_AOCL_ZSTD_compressBound, AOCL_Compression_zstd_AOCL_ZSTD_compressBound_fail_common_3) { // invalid windowLog
+
+    // valid windowLog range [ZSTD_WINDOWLOG_MIN, ZSTD_WINDOWLOG_MAX)
+    params.cParams.windowLog = ZSTD_WINDOWLOG_MAX;
+    EXPECT_EQ(Test_AOCL_ZSTD_compressBound(1024, params), ERROR(srcSize_wrong)); 
+}
+#endif
+
+
+/*********************************************
+ * End of ZSTD_AOCL_ZSTD_compressBound
  *********************************************/
 
 /*********************************************

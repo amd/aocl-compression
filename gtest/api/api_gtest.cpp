@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -1089,10 +1089,6 @@ AOCL_INT32 Test_aocl_get_rap_frame_bound_mt() {
     return aocl_get_rap_frame_bound_mt();
 }
 
-AOCL_INT32 Test_aocl_skip_rap_frame_mt(char* src, int32_t src_size) {
-    return aocl_skip_rap_frame_mt(src, src_size);
-}
-
 /*********************************************
 * Begin rap frame bound Tests
 *********************************************/
@@ -1107,7 +1103,7 @@ TEST(API_get_rap_frame_bound_MT, AOCL_Compression_api_aocl_get_rap_frame_bound_m
 /*********************************************
 * Begin skip rap frame Tests
 *********************************************/
-class API_skip_rap_frame_MT : public ::testing::Test {
+class API_skip_rap_frame : public ::testing::Test {
 public:
     void SetUp() override {
         src = NULL;
@@ -1134,44 +1130,62 @@ public:
     size_t src_size;
 };
 
-TEST_F(API_skip_rap_frame_MT, AOCL_Compression_api_aocl_skip_rap_frame_mt_common_1) { //RAP frame only
+TEST_F(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_1) { //RAP frame only
     //Create RAP frame
     int mainThreads = 2;
     src_size = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0);
     AOCL_INT32 val_size = add_rap_frame(mainThreads);
 
-    EXPECT_EQ(Test_aocl_skip_rap_frame_mt(src, src_size), val_size);
+    EXPECT_EQ(aocl_llc_skip_rap_frame(src, src_size), val_size);
 }
 
-TEST_F(API_skip_rap_frame_MT, AOCL_Compression_api_aocl_skip_rap_frame_mt_common_2) { //RAP frame + stream
+TEST_F(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_2) { //RAP frame + stream
     //Create RAP frame
     int mainThreads = 2;
     src_size = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0) + 1024; //1024 for stream
     AOCL_INT32 val_size = add_rap_frame(mainThreads);
 
-    EXPECT_EQ(Test_aocl_skip_rap_frame_mt(src, src_size), val_size);
+    EXPECT_EQ(aocl_llc_skip_rap_frame(src, src_size), val_size);
 }
 
-TEST_F(API_skip_rap_frame_MT, AOCL_Compression_api_aocl_skip_rap_frame_mt_common_3) { //No RAP frame
+TEST_F(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_3) { //No RAP frame
     //No RAP frame
     src_size = 1024; //1024 for stream
     src = (AOCL_CHAR*)malloc(src_size * sizeof(AOCL_CHAR));
     memset(src, 0, src_size);
 
-    EXPECT_EQ(Test_aocl_skip_rap_frame_mt(src, src_size), 0);
+    EXPECT_EQ(aocl_llc_skip_rap_frame(src, src_size), 0);
 }
 
-TEST_F(API_skip_rap_frame_MT, AOCL_Compression_api_aocl_skip_rap_frame_mt_common_4) { //src size too small
+TEST_F(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_4) { //src size too small
     //Src smaller than magic word
     src_size = RAP_MAGIC_WORD_BYTES - 1;
     src = (AOCL_CHAR*)malloc(src_size * sizeof(AOCL_CHAR));
     memset(src, 0, src_size);
 
-    EXPECT_EQ(Test_aocl_skip_rap_frame_mt(src, src_size), 0);
+    EXPECT_EQ(aocl_llc_skip_rap_frame(src, src_size), 0);
 }
 
-TEST_F(API_skip_rap_frame_MT, AOCL_Compression_api_aocl_skip_rap_frame_mt_common_5) { //src null
-    EXPECT_EQ(Test_aocl_skip_rap_frame_mt(src, src_size), ERR_INVALID_INPUT);
+TEST_F(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_5) { //src null
+    EXPECT_EQ(aocl_llc_skip_rap_frame(src, src_size), ERR_INVALID_INPUT);
+}
+/*********************************************
+* End skip rap frame Tests
+*********************************************/
+
+#else /* !AOCL_ENABLE_THREADS */
+
+/*********************************************
+* Begin skip rap frame Tests
+*********************************************/
+TEST(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_1) {
+    size_t src_size = 1024;
+    AOCL_CHAR* src = (AOCL_CHAR*)malloc(src_size * sizeof(AOCL_CHAR));
+    memset(src, 0, src_size);
+
+    EXPECT_EQ(aocl_llc_skip_rap_frame(src, src_size), 0);
+
+    free(src);
 }
 /*********************************************
 * End skip rap frame Tests
