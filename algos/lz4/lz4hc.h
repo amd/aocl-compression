@@ -674,16 +674,6 @@ LZ4LIB_API LZ4_streamHC_t* LZ4_initStreamHC(void* buffer, size_t size);
 LZ4LIB_API AOCL_LZ4_streamHC_t* AOCL_LZ4_initStreamHC(void* buffer, size_t size);
 #endif /* AOCL_LZ4HC_OPT */
 
-#ifdef AOCL_UNIT_TEST
-#ifdef AOCL_LZ4HC_OPT
-/* Test wrapper function AOCL_LZ4HC_init_internal for unit testing */
-LZ4LIB_API void Test_AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, const LZ4_byte* start);
-
-/* Test wrapper function of AOCL_LZ4HC_Insert for unit testing */
-LZ4LIB_API void Test_AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const LZ4_byte* ip, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz);
-#endif
-#endif
-
 /*===   Enums   ===*/
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
 typedef enum { noDictCtx, usingDictCtxHc } dictCtx_directive;
@@ -692,6 +682,12 @@ typedef enum { favorCompressionRatio = 0, favorDecompressionSpeed } HCfavor_e;
 
 #ifdef AOCL_UNIT_TEST
 #ifdef AOCL_LZ4HC_OPT
+/* Test wrapper function AOCL_LZ4HC_init_internal for unit testing */
+LZ4LIB_API void Test_AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, const LZ4_byte* start);
+
+/* Test wrapper function of AOCL_LZ4HC_Insert for unit testing */
+LZ4LIB_API void Test_AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const LZ4_byte* ip, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz);
+
 /* Test wrapper function of AOCL_LZ4HC_InsertAndGetWiderMatch for unit testing */
 LZ4LIB_API int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
     AOCL_LZ4HC_CCtx_internal* const hc4,
@@ -707,6 +703,13 @@ LZ4LIB_API int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
     int Hash_Chain_Max,
     int Hash_Chain_Slot_Sz);
 #endif
+
+/* Test wrapper function of LZ4_compress_HC_extStateHC_fastReset for unit testing */
+LZ4LIB_API int Test_LZ4_compress_HC_extStateHC_fastReset(
+    void* state,
+    const char* src, char* dst,
+    int srcSize, int dstCapacity,
+    int compressionLevel);
 #endif /* AOCL_UNIT_TEST */
 
 /**

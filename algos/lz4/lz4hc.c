@@ -1016,6 +1016,15 @@ int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
         patternAnalysis, chainSwap, dict, favorDecSpeed, Hash_Chain_Max, Hash_Chain_Slot_Sz);
 }
 #endif
+
+int Test_LZ4_compress_HC_extStateHC_fastReset(
+    void* state,
+    const char* src, char* dst,
+    int srcSize, int dstCapacity,
+    int compressionLevel) 
+{
+    return LZ4_compress_HC_extStateHC_fastReset(state, src, dst, srcSize, dstCapacity, compressionLevel);
+}
 #endif /* AOCL_UNIT_TEST */
 
 LZ4_FORCE_INLINE int 

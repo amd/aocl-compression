@@ -5,7 +5,7 @@ This directory contains sample source files showing
 usage of AOCL-Compression library functions.
 Use the provided cmake script file "CMakeLists.txt" 
 to compile and run the programs. Same cmake script may
-be used for both Linux and Windows platforms..
+be used for both Linux and Windows platforms.
 
 Building on Linux
 -----------------
@@ -48,7 +48,7 @@ Building with Visual Studio IDE (GUI)
 
 Building with Visual Studio IDE (command line)
 ----------------------------------------------
-1. Go to examples/ folder in AOCL-Compression package and create a folder named build.
+1. Go to examples/ folder in AOCL-Compression install package and create a folder named build.
 2. Go to the build folder.
 3. Use the following command to configure and build example executables.
 ```
