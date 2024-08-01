@@ -78,6 +78,85 @@ AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
             aocl_compression_desc *aocl_codec_handle, AOCL_VOID *hDL,
             AOCL_INTP *verifyRes);
 
+AOCL_VOID *ipp_allocMem(AOCL_UINTP size, AOCL_INTP zeroInit)
+{
+    AOCL_VOID *bufPtr = (zeroInit == 0) ? calloc(1, size) : malloc(size);
+    return bufPtr;
+}
+
+#define TEMP_PAD_FACTOR 5 //default 6 for snappy, 255 for LZ4
+AOCL_UINTP ipp_compression_bound(AOCL_UINTP inSize)
+{
+    AOCL_UINTP outSize = (inSize + (inSize / TEMP_PAD_FACTOR) + MIN_PAD_SIZE);
+    return outSize;
+}
+
+AOCL_INTP ipp_init_alloc(aocl_codec_bench_info *codec_bench_handle,
+          aocl_compression_desc *aocl_codec_handle)
+{
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
+
+
+    if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
+        codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS) 
+    {
+        codec_bench_handle->inSize = 
+            (codec_bench_handle->file_size > codec_bench_handle->mem_limit) ?
+            codec_bench_handle->mem_limit : codec_bench_handle->file_size;
+        codec_bench_handle->inPtr =
+            (AOCL_CHAR*)ipp_allocMem(codec_bench_handle->inSize, 0);
+        codec_bench_handle->outSize = ipp_compression_bound(codec_bench_handle->inSize);
+        codec_bench_handle->outPtr =
+            (AOCL_CHAR*)ipp_allocMem(codec_bench_handle->outSize, 0); // ptr to hold compressed data
+        codec_bench_handle->decompPtr =
+            (AOCL_CHAR*)ipp_allocMem(codec_bench_handle->inSize, 0); // get size of decompressed data from input
+    }
+    else 
+    { // codec_bench_handle->runOperation == RUN_OPERATION_DECOMPRESS
+
+        if (codec_bench_handle->file_size > ipp_compression_bound(codec_bench_handle->mem_limit))
+        {
+            LOG_BENCH(ERR, "Cannot decompress this large file.\n");
+            return ERR_CODEC_BENCH_MEM;
+
+        }
+        codec_bench_handle->inSize = codec_bench_handle->file_size;
+        codec_bench_handle->inPtr =
+            (AOCL_CHAR*)ipp_allocMem(codec_bench_handle->inSize, 0);
+        codec_bench_handle->outSize = codec_bench_handle->mem_limit;
+        codec_bench_handle->outPtr =
+            (AOCL_CHAR*)ipp_allocMem(codec_bench_handle->outSize, 0); // ptr to hold decompressed data
+        codec_bench_handle->decompPtr =
+            (AOCL_CHAR*)ipp_allocMem(codec_bench_handle->outSize, 0); // get size of decompressed data from output
+    }
+
+    if (!codec_bench_handle->inPtr || !codec_bench_handle->outPtr ||
+        !codec_bench_handle->decompPtr)
+    {
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        return -1;
+    }
+    else
+    {
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        return 0;
+    }
+}
+
+AOCL_VOID ipp_destroy_buffer(aocl_codec_bench_info *codec_bench_handle)
+{
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
+
+    if (codec_bench_handle->inPtr)
+        free(codec_bench_handle->inPtr);
+    if (codec_bench_handle->outPtr)
+        free(codec_bench_handle->outPtr);
+    if (codec_bench_handle->decompPtr)
+        free(codec_bench_handle->decompPtr);
+
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+}
+
 AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
               aocl_compression_desc *aocl_codec_handle)
 { 
@@ -1018,6 +1097,14 @@ AOCL_INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
     AOCL_INT64 ret = 0;
     
     ret = ipp_setup(codec_bench_handle, aocl_codec_handle);
+
+    if(ipp_init_alloc(codec_bench_handle, aocl_codec_handle) < 0)
+    {
+        LOG_UNFORMATTED(ERR, log_ctx, "Error in allocating memory.\n");
+        ipp_destroy_buffer(codec_bench_handle);
+        return ERR_CODEC_BENCH_MEM;
+    }
+
     if (ret != 0)
         goto error_exit;
     
@@ -1028,11 +1115,12 @@ AOCL_INTP ipp_bench_run(aocl_compression_desc *aocl_codec_handle,
     ipp_destroy(aocl_codec_handle);
 
     LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
-
+    ipp_destroy_buffer(codec_bench_handle);
     return 0;
 
 error_exit:
     LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+    ipp_destroy_buffer(codec_bench_handle);
     return ret;
 }
 

@@ -482,6 +482,92 @@ AOCL_INT64 native_zstd_dict_decompress(AOCL_CHAR* inbuf, AOCL_UINTP insize, AOCL
 #endif
 }
 
+AOCL_VOID *native_allocMem(AOCL_UINTP size, AOCL_INTP zeroInit)
+{
+    AOCL_VOID *bufPtr = (zeroInit == 0) ? calloc(1, size) : malloc(size);
+    return bufPtr;
+}
+
+#define TEMP_PAD_FACTOR 5 //default 6 for snappy, 255 for LZ4
+AOCL_UINTP native_compression_bound(AOCL_UINTP inSize)
+{
+    AOCL_UINTP outSize = (inSize + (inSize / TEMP_PAD_FACTOR) + MIN_PAD_SIZE);
+    return outSize;
+}
+
+AOCL_INTP native_init_alloc(aocl_codec_bench_info *codec_bench_handle,
+          aocl_compression_desc *aocl_codec_handle)
+{
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
+
+
+    if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT ||
+        codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS) 
+    {
+        codec_bench_handle->inSize = 
+            (codec_bench_handle->file_size > codec_bench_handle->mem_limit) ?
+            codec_bench_handle->mem_limit : codec_bench_handle->file_size;
+        codec_bench_handle->inPtr =
+            (AOCL_CHAR*)native_allocMem(codec_bench_handle->inSize, 0);
+        codec_bench_handle->outSize = native_compression_bound(codec_bench_handle->inSize);
+        codec_bench_handle->outPtr =
+            (AOCL_CHAR*)native_allocMem(codec_bench_handle->outSize, 0); // ptr to hold compressed data
+        codec_bench_handle->decompPtr =
+            (AOCL_CHAR*)native_allocMem(codec_bench_handle->inSize, 0); // get size of decompressed data from input
+    }
+    else 
+    { // codec_bench_handle->runOperation == RUN_OPERATION_DECOMPRESS
+
+        if (codec_bench_handle->file_size > native_compression_bound(codec_bench_handle->mem_limit))
+        {
+            LOG_BENCH(ERR, "Cannot decompress this large file.\n");
+            return ERR_CODEC_BENCH_MEM;
+
+        }
+        codec_bench_handle->inSize = codec_bench_handle->file_size;
+        codec_bench_handle->inPtr =
+            (AOCL_CHAR*)native_allocMem(codec_bench_handle->inSize, 0);
+        codec_bench_handle->outSize = codec_bench_handle->mem_limit;
+        codec_bench_handle->outPtr =
+            (AOCL_CHAR*)native_allocMem(codec_bench_handle->outSize, 0); // ptr to hold decompressed data
+        codec_bench_handle->decompPtr =
+            (AOCL_CHAR*)native_allocMem(codec_bench_handle->outSize, 0); // get size of decompressed data from output
+    }
+
+    if (codec_bench_handle->dictSize > 0)
+        codec_bench_handle->dictPtr =
+            (AOCL_CHAR*)native_allocMem(codec_bench_handle->dictSize, 0);
+
+
+    if (!codec_bench_handle->inPtr || !codec_bench_handle->outPtr ||
+        !codec_bench_handle->decompPtr)
+    {
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        return -1;
+    }
+    else
+    {
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        return 0;
+    }
+}
+
+AOCL_VOID native_destroy(aocl_codec_bench_info *codec_bench_handle)
+{
+    LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
+
+    if (codec_bench_handle->inPtr)
+        free(codec_bench_handle->inPtr);
+    if (codec_bench_handle->outPtr)
+        free(codec_bench_handle->outPtr);
+    if (codec_bench_handle->decompPtr)
+        free(codec_bench_handle->decompPtr);
+    if (codec_bench_handle->dictPtr)
+        free(codec_bench_handle->dictPtr);
+
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+}
+
 // Function pointer type defination
 typedef AOCL_INT64  (*native_compress)(AOCL_CHAR *,  AOCL_UINTP, AOCL_CHAR *, AOCL_UINTP, AOCL_UINTP); 
 typedef AOCL_INT64  (*native_decompress)(AOCL_CHAR *,  AOCL_UINTP, AOCL_CHAR *, AOCL_UINTP); 
@@ -539,6 +625,14 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     codec_bench_handle->cBestTime = UINT64_MAX;
     codec_bench_handle->dBestTime = UINT64_MAX;
     aocl_codec_handle->level = level;
+
+    // Allocating memory for outBuf
+    if(native_init_alloc(codec_bench_handle, aocl_codec_handle) < 0)
+    {
+        LOG_UNFORMATTED(ERR, log_ctx, "Error in allocating memory.\n");
+        native_destroy(codec_bench_handle);
+        return ERR_CODEC_BENCH_MEM;
+    }
 
     // load dict
     {
@@ -601,6 +695,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                          }
                         break;
                     default:
+                        native_destroy(codec_bench_handle);
                         return -2;
                 }
                 if (resultComp <= 0)
@@ -658,6 +753,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                             }
                             break;
                         default:
+                            native_destroy(codec_bench_handle);
                             return -2;
                     }
                     
@@ -755,6 +851,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     resultDecomp = native_run_decompress(aocl_codec_handle, native_zstd_decompress);
                     break;
                 default:
+                    native_destroy(codec_bench_handle);
                     return -1;
             }
             if (resultDecomp <= 0)
@@ -815,6 +912,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     {
         LOG_BENCH(ERR, "Compression/Decompression/Verification operation failed for codec [%s]\n", 
             codec_list[codec].codec_name);
+        native_destroy(codec_bench_handle);
         return status;
     }
 
@@ -893,6 +991,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     }
 
     LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+    native_destroy(codec_bench_handle);
     return status;
 }
 

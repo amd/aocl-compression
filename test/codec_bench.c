@@ -521,24 +521,11 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
     return ret;
 }
 
-/*In MT mode on machines with high thread count, this compress bound 
-* might be insufficient. Increasing the bound size as a temporary fix.
-* Proper fix is to call aocl_llc_compressBound() for respective
-* methods. */
-#define TEMP_PAD_FACTOR 5 //default 6 for snappy, 255 for LZ4
-AOCL_UINTP compression_bound(AOCL_UINTP inSize)
-{
-    AOCL_UINTP outSize = (inSize + (inSize / TEMP_PAD_FACTOR) + MIN_PAD_SIZE);
-    return outSize;
-}
-
 /* Return 1 if inSize is too large.
 *  Return 0 and set outSize to compress_bound otherwise. */
 int compression_bound_with_overflow(AOCL_UINTP inSize, AOCL_UINTP* outSize, AOCL_INTP codec_method)
 {
-    /* TODO: Modify to call aocl_llc_compressBound once calling API
-    * code flow is fixed */
-    AOCL_UINTP oSize = compression_bound(inSize);
+    AOCL_UINTP oSize = aocl_llc_compressBound(codec_method, inSize);
     if (oSize < inSize) { //overflow
         return 1;
     }
@@ -584,12 +571,12 @@ AOCL_UINTP mem_limit_bound(AOCL_UINTP mem_limit, AOCL_INTP codec_method) {
     }
 }
 
-AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
+AOCL_INTP init_alloc(aocl_codec_bench_info *codec_bench_handle,
           aocl_compression_desc *aocl_codec_handle)
 {
     LOG_UNFORMATTED(TRACE, log_ctx, "Enter");
 
-    AOCL_UINTP mem_limit = mem_limit_bound(codec_bench_handle->mem_limit, 0);
+    AOCL_UINTP mem_limit = mem_limit_bound(codec_bench_handle->mem_limit, codec_bench_handle->codec_method);
     if (mem_limit < codec_bench_handle->mem_limit) {
         LOG_BENCH(ERR, "Maximum size set to %zu to avoid overflow\n", mem_limit);
         codec_bench_handle->mem_limit = mem_limit;
@@ -603,7 +590,7 @@ AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
             codec_bench_handle->mem_limit : codec_bench_handle->file_size;
         codec_bench_handle->inPtr =
             (AOCL_CHAR*)allocMem(codec_bench_handle->inSize, 0);
-        codec_bench_handle->outSize = compression_bound(codec_bench_handle->inSize);
+        codec_bench_handle->outSize = aocl_llc_compressBound(codec_bench_handle->codec_method, codec_bench_handle->inSize);
         codec_bench_handle->outPtr =
             (AOCL_CHAR*)allocMem(codec_bench_handle->outSize, 0); // ptr to hold compressed data
         codec_bench_handle->decompPtr =
@@ -612,7 +599,7 @@ AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
     else 
     { // codec_bench_handle->runOperation == RUN_OPERATION_DECOMPRESS
 
-        if (codec_bench_handle->file_size > compression_bound(codec_bench_handle->mem_limit))
+        if (codec_bench_handle->file_size > aocl_llc_compressBound(codec_bench_handle->codec_method, codec_bench_handle->mem_limit))
         {
             LOG_BENCH(ERR, "Cannot decompress this large file.\n");
             return ERR_CODEC_BENCH_MEM;
@@ -632,6 +619,23 @@ AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
         codec_bench_handle->dictPtr =
             (AOCL_CHAR*)allocMem(codec_bench_handle->dictSize, 0);
 
+
+    if (!codec_bench_handle->inPtr || !codec_bench_handle->outPtr ||
+        !codec_bench_handle->decompPtr)
+    {
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        return -1;
+    }
+    else
+    {
+        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        return 0;
+    }
+}
+
+AOCL_VOID init_initialise(aocl_codec_bench_info *codec_bench_handle,
+          aocl_compression_desc *aocl_codec_handle)
+{
     codec_bench_handle->cTime = 0;
     codec_bench_handle->cSize = 0;
     codec_bench_handle->cSpeed = 0.0;
@@ -646,19 +650,6 @@ AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
     aocl_codec_handle->measureStats = codec_bench_handle->print_stats;
     aocl_codec_handle->workBuf = NULL;
     aocl_codec_handle->optOff = codec_bench_handle->optOff;
-
-
-    if (!codec_bench_handle->inPtr || !codec_bench_handle->outPtr ||
-        !codec_bench_handle->decompPtr)
-    {
-        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
-        return -1;
-    }
-    else
-    {
-        LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
-        return 0;
-    }
 }
 
 typedef enum { CB_FILE_INPUT, CB_FILE_DICT } codec_bench_file_type;
@@ -908,6 +899,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     codec_bench_handle->dSize = 0;
     codec_bench_handle->cBestTime = UINT64_MAX;
     codec_bench_handle->dBestTime = UINT64_MAX;
+    codec_bench_handle->codec_method = codec; 
     aocl_codec_handle->level = level;
 
     //setup the codec method
@@ -917,22 +909,30 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
         return -2;
     }
+
+    if(init_alloc(codec_bench_handle, aocl_codec_handle) < 0)
+    {
+        LOG_BENCH(ERR, "Error in allocating memory for codec [%s]\n", codec_list[codec].codec_name);
+        error = ERR_CODEC_BENCH_MEM;
+        goto exit_with_error;
+    }
+
     if(dumpEnabled) {
         if (codec_bench_handle->runOperation == RUN_OPERATION_DEFAULT /* Compress and decompress */ ||
             codec_bench_handle->runOperation == RUN_OPERATION_COMPRESS /* Compress only */) {
                 if (codec_bench_handle->file_size > codec_bench_handle->inSize){
                     error = create_dump_folder(codec_bench_handle);
-                    if (error != 0) return error;
+                    if (error != 0) goto exit_with_error;
 
                     folder_created = 1;
                 } else {
                     error = create_dump_file(codec_bench_handle, &dumpFp);
-                    if (error != 0) return error;
+                    if (error != 0) goto exit_with_error;
                 }
         } else {
             /* Decompress only */
             error = create_dump_file(codec_bench_handle, &dumpFp);
-            if (error != 0) return error;
+            if (error != 0) goto exit_with_error;
         }
     }
     for (AOCL_INTP k = 0; k < codec_bench_handle->iterations; k++)
@@ -970,7 +970,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 {
                     if(folder_created){
                         error = dump_to_file(codec_bench_handle, codec, level, chunk_cnt, aocl_codec_handle->outBuf, resultComp);
-                        if (error!=0) return error;
+                        if (error!=0) goto exit_with_error;
                     } else {
                         // dump compressed data to file
                         AOCL_UINTP written = fwrite(aocl_codec_handle->outBuf, sizeof(AOCL_CHAR), resultComp,
@@ -1128,7 +1128,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
                 close_file_in_folder(codec_bench_handle); //close prev file if open
                 error = open_file_in_folder(codec_bench_handle, (AOCL_INT32)(codec_bench_handle->cfile_count - file_count + 1));
-                if(error != 0) return error;
+                if(error != 0) goto exit_with_error;
 
                 // codec_bench_handle->fp points to the next file in the folder
                 inSize = fread(codec_bench_handle->inPtr, 1, codec_bench_handle->inSize, codec_bench_handle->fp);
@@ -1140,7 +1140,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                 close_file_in_folder(codec_bench_handle); //close prev file if open
                 // codec_bench_handle->fp is made to point to first file in the folder for next iteration
                 error = open_file_in_folder(codec_bench_handle, 1);
-                if (error != 0) return error;
+                if (error != 0) goto exit_with_error;
             }
             resultDecomp = totalResultDecomp;
             if (codec_bench_handle->print_stats)
@@ -1169,6 +1169,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         LOG_BENCH(ERR, "Compression/Decompression/Verification operation failed for codec [%s]\n",
             codec_list[codec].codec_name);
         LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+        destroy(codec_bench_handle);
         return status;
     }
 
@@ -1246,8 +1247,15 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
         }
     }
 
+    destroy(codec_bench_handle);
     LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return status;
+
+exit_with_error:
+    LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
+    aocl_llc_destroy(aocl_codec_handle, codec);
+    destroy(codec_bench_handle);
+    return error;
 }
 
 AOCL_INTP aocl_bench_run(aocl_compression_desc *aocl_codec_handle,
@@ -1495,12 +1503,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
         }
     }
 
-    if (init(&codec_bench_handle, aocl_codec_handle) < 0)
-    {
-        LOG_BENCH(ERR, "Error in allocating memory.\n");
-        result = ERR_CODEC_BENCH_MEM;
-		goto exit;
-    }
+    init_initialise(&codec_bench_handle, aocl_codec_handle);
 
     if (codec_bench_handle.useIPP) 
     {
@@ -1522,8 +1525,6 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
     {
         LOG_BENCH(ERR, "Error in compression and decompression operations.\n");
     }
-
-    destroy(&codec_bench_handle);
 
 exit:
     close_input_file(&codec_bench_handle);

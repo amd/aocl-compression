@@ -152,9 +152,7 @@ typedef struct
 static aocl_log_ctx log_ctx = {-1};
 #endif /* AOCL_ENABLE_LOG_FEATURE */
 
-//Function declarations
-AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
-          aocl_compression_desc *aocl_codec_handle);
+//Function declarations       
 AOCL_INTP read_user_options (AOCL_INTP argc,
                        AOCL_CHAR **argv,
                        aocl_codec_bench_info *codec_bench_handle);
