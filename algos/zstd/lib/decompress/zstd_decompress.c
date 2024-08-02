@@ -1451,7 +1451,7 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
 #endif
                 LOG_FORMATTED(ERR, logCtx, "Decompress Thread [id: %d] : Encountered ERROR", thread_id);
                 LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-                return ERROR(GENERIC);
+                return ti_cur->dst_trap_size; //dst_trap_size holds error code on failure
             }
             total_decompressed_sz += ti_cur->dst_trap_size;
 

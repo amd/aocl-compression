@@ -5542,10 +5542,10 @@ size_t AOCL_write_skippable_rap_frame(aocl_thread_group_t* thread_group_handle, 
     {
         cur_thread_info = thread_group_handle->threads_info_list[thread_cnt];
         //In case of any thread partitioning or alloc errors, exit the compression process with error
-        if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
+        if (cur_thread_info.is_error)
         {
             LOG_UNFORMATTED(ERR, logCtx, "Setup for one or more of the threads failed");
-            return ERROR(GENERIC);
+            return cur_thread_info.dst_trap_size; //dst_trap_size holds error code on failure
         }
 
         *(AOCL_UINT32*)dst_ptr = dst_offset; //For storing this thread's RAP offset
