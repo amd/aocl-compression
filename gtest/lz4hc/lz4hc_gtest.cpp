@@ -2735,6 +2735,79 @@ FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_fuzz)
 })
 #endif
 ;
+
+static void* setup_LZ4HC_stream(int optOff, int compressionLevel, int optLevel) 
+{ 
+    aocl_setup_lz4hc(optOff, optLevel, 0, 0,0); 
+    void *stream = NULL;    
+    if(optOff || compressionLevel<6 || compressionLevel>9)
+        stream = LZ4_createStreamHC();       
+    else 
+        stream = AOCL_LZ4_createStreamHC();
+    return stream; 
+}
+
+static void destroy_LZ4HC_stream(void* stream, int optOff, int compressionLevel)
+{
+    if(optOff || compressionLevel<6 || compressionLevel>9)
+        LZ4_freeStreamHC((LZ4_streamHC_t*)stream);
+    else 
+        AOCL_LZ4_freeStreamHC((AOCL_LZ4_streamHC_t*)stream);  
+    aocl_destroy_lz4hc();
+}
+
+void LZ4_compress_HC_continue_fuzz(vector<char> src, int out_len)
+{
+    vector<char> dst(out_len);
+    LZ4_streamHC_t* stream = LZ4_createStreamHC();   
+    LZ4_compress_HC_continue (stream, src.data(), dst.data(), src.size(), out_len);
+    LZ4_freeStreamHC(stream);
+}
+FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_continue_fuzz)
+    .WithDomains(fuzztest::Arbitrary<vector<char>>(),
+                 fuzztest::InRange<int>(1, 10000));
+
+void LZ4_compress_HC_continue_destSize_fuzz(vector<char> src, int out_len)
+{
+    int src_size = src.size();     
+    vector<char> dst(out_len);
+    LZ4_streamHC_t* stream = LZ4_createStreamHC();    
+    LZ4_compress_HC_continue_destSize(stream,  src.data(), dst.data(),&src_size, out_len);
+    LZ4_freeStreamHC(stream);
+}
+FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_continue_destSize_fuzz)
+    .WithDomains(fuzztest::Arbitrary<vector<char>>(),
+                 fuzztest::InRange<int>(1, 10000));
+
+void LZ4_compress_HC_extStateHC_fuzz(vector<char> src, int out_len, int compressionLevel, int optOff, int optLevel)
+{
+    vector<char> dst(out_len);
+    void *stream = setup_LZ4HC_stream(optOff, compressionLevel, optLevel);
+    LZ4_compress_HC_extStateHC(stream, src.data(), dst.data(), src.size(), out_len, compressionLevel);
+    destroy_LZ4HC_stream(stream, optOff,compressionLevel);
+}
+FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_extStateHC_fuzz)
+    .WithDomains(fuzztest::Arbitrary<vector<char>>(),
+                fuzztest::InRange<int>(1, 10000),
+                fuzztest::InRange<int>(-1, 13),
+                fuzztest::InRange<int>(0, 1),
+                fuzztest::InRange<int>(0, 4));
+
+void LZ4_compress_HC_destSize_fuzz(vector<char> src, int out_len, int compressionLevel, int optOff, int optLevel)
+{    
+    int srcSize = src.size();
+    vector<char> dst(out_len);
+    void *stream = setup_LZ4HC_stream(optOff, compressionLevel, optLevel);
+    LZ4_compress_HC_destSize(stream, src.data(), dst.data(), &srcSize, out_len, compressionLevel);
+    destroy_LZ4HC_stream(stream, optOff,compressionLevel);
+}
+FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_destSize_fuzz)
+    .WithDomains(fuzztest::Arbitrary<vector<char>>(),
+                fuzztest::InRange<int>(1, 10000),
+                fuzztest::InRange<int>(-1, 13),
+                fuzztest::InRange<int>(0, 1),
+                fuzztest::InRange<int>(0, 4));
+
 #endif /* AOCL_TEST_FUZZER */
 /*********************************************
  * End fuzz tests for lz4hc
