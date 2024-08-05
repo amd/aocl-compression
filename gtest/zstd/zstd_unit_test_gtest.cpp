@@ -948,7 +948,7 @@ TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_
 {
     const int mainThreads = 5;
     size_t dstCapacity = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0) + ZSTD_SKIPPABLEHEADERSIZE;
-    dst = malloc(dstCapacity);
+    dst = calloc(dstCapacity, 1);
     EXPECT_TRUE(write_skippable_RAP_frame((AOCL_CHAR*)dst, dstCapacity, srcSize, mainThreads));
 
     CHECK_PASS_ZSTD(Test_AOCL_ZSTD_readSkippableRAPFrameHeader(dst, dstCapacity));
@@ -957,7 +957,7 @@ TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_
 TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_readSkippableFrameHeader_fail_common_2) // no skippable frame
 {
     size_t dstCapacity = 128;
-    dst = malloc(dstCapacity);
+    dst = calloc(dstCapacity, 1);
 
     size_t ret = Test_AOCL_ZSTD_readSkippableRAPFrameHeader(dst, dstCapacity);
     EXPECT_EQ(ret, ERROR(frameParameter_unsupported));
@@ -967,7 +967,7 @@ TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_
 {
     const int mainThreads = 5;
     size_t dstCapacity = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0) + ZSTD_SKIPPABLEHEADERSIZE;
-    dst = malloc(dstCapacity);
+    dst = calloc(dstCapacity, 1);
     CHECK_PASS_ZSTD(Test_AOCL_ZSTD_writeSkippableFrameHeader(dst, dstCapacity, srcSize, rand() % 15)); // write skippable header
 
     size_t ret = Test_AOCL_ZSTD_readSkippableRAPFrameHeader(dst, dstCapacity);
@@ -978,7 +978,7 @@ TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_
 {
     const int mainThreads = 5;
     size_t dstCapacity = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0) + ZSTD_SKIPPABLEHEADERSIZE;
-    dst = malloc(dstCapacity);
+    dst = calloc(dstCapacity, 1);
     EXPECT_TRUE(write_skippable_RAP_frame((AOCL_CHAR*)dst, dstCapacity, srcSize, mainThreads));
 
     dstCapacity = ZSTD_SKIPPABLEHEADERSIZE + RAP_MAGIC_WORD_BYTES - 1;
@@ -990,7 +990,7 @@ TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_
 {
     const int mainThreads = 5;
     size_t dstCapacity = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0) + ZSTD_SKIPPABLEHEADERSIZE;
-    dst = malloc(dstCapacity);
+    dst = calloc(dstCapacity, 1);
     MEM_writeLE32((char*)dst, (U32)(ZSTD_MAGIC_SKIPPABLE_START + 0)); // write skippable header
     MEM_writeLE32((char*)dst + 4, (U32)(dstCapacity + 1)); // write invalid skip frame size
 
