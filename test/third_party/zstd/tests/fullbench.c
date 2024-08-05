@@ -38,6 +38,9 @@
 
 /* AOCL changes:
  *  + renamed main() to zstd_fullbench_main().
+ *  + AOCL_DFS_CORRECTION sections introduced to adjust test cases to
+ *    account for skip frames being present in the compressed output when library
+ *    is built in FDS mode.
 */
 
 /*_************************************
@@ -126,6 +129,26 @@ static size_t BMK_findMaxMem(U64 requiredMem)
 /*_*******************************************************
 *  Benchmark wrappers
 *********************************************************/
+
+#ifdef AOCL_DFS_CORRECTION
+/* Decompress until all input is consumed. Multiple frames may be present. */
+static size_t Test_decompressStreamMultiple(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input) {
+    size_t ret = 0;
+    while (input->pos < input->size) { // as multiple frames are present, exiting on ret == 0 will return on 1st frame. Instead consume all input.
+        ret = ZSTD_decompressStream(zds, output, input);
+        if (ZSTD_isError(ret)) return ret;
+    }
+    return ret;
+}
+
+static size_t Test_ZSTD_compress2(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int cLevel) {
+    ZSTD_CCtx* cctx_fds = ZSTD_createCCtx();
+    ZSTD_CCtx_setParameter(cctx_fds, ZSTD_c_compressionLevel, cLevel);
+    size_t g_cSize = ZSTD_compress2(cctx_fds, dst, dstCapacity, src, srcSize);
+    ZSTD_freeCCtx(cctx_fds);
+    return g_cSize;
+}
+#endif /* AOCL_DFS_CORRECTION */
 
 static ZSTD_CCtx* g_zcc = NULL;
 
@@ -383,7 +406,11 @@ local_ZSTD_decompressStream(const void* src, size_t srcSize,
     buffIn.src = buff2;
     buffIn.size = g_cSize;
     buffIn.pos = 0;
+#ifdef AOCL_DFS_CORRECTION
+    Test_decompressStreamMultiple(g_dstream, &buffOut, &buffIn);
+#else
     ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
+#endif
     return buffOut.pos;
 }
 
@@ -442,6 +469,21 @@ static size_t local_ZSTD_decompressContinue(const void* src, size_t srcSize,
     size_t remainingCapacity = dstCapacity;
 
     (void)src; (void)srcSize;  /* unused */
+#ifdef AOCL_DFS_CORRECTION
+    while (ip < iend) { /* outer loop added to support multiple frames in src */
+        ZSTD_decompressBegin(g_zdc); /* reset context */
+        while (ip < iend) {
+            size_t const iSize = ZSTD_nextSrcSizeToDecompress(g_zdc);
+            if (iSize == 0)
+                break; /* current frame is fully decoded */
+            size_t const decodedSize = ZSTD_decompressContinue(g_zdc, op, remainingCapacity, ip, iSize);
+            ip += iSize;
+            regeneratedSize += decodedSize;
+            op += decodedSize;
+            remainingCapacity -= decodedSize;
+        }
+    }
+#else
     ZSTD_decompressBegin(g_zdc);
     while (ip < iend) {
         size_t const iSize = ZSTD_nextSrcSizeToDecompress(g_zdc);
@@ -451,7 +493,7 @@ static size_t local_ZSTD_decompressContinue(const void* src, size_t srcSize,
         op += decodedSize;
         remainingCapacity -= decodedSize;
     }
-
+#endif
     return regeneratedSize;
 }
 #endif
@@ -597,7 +639,12 @@ static int benchMem(unsigned benchNb,
         /* fall-through */
     case 31:  /* ZSTD_decodeLiteralsBlock : starts literals block in dstBuff2 */
         {   size_t frameHeaderSize;
+#ifdef AOCL_DFS_CORRECTION
+            /* Call ZSTD_compress2 instead as it does not add skippable frame */
+            g_cSize = Test_ZSTD_compress2(dstBuff, dstBuffSize, src, srcSize, cLevel);
+#else
             g_cSize = ZSTD_compress(dstBuff, dstBuffSize, src, srcSize, cLevel);
+#endif
             frameHeaderSize = ZSTD_frameHeaderSize(dstBuff, ZSTD_FRAMEHEADERSIZE_PREFIX(ZSTD_f_zstd1));
             CONTROL(!ZSTD_isError(frameHeaderSize));
             /* check block is compressible, hence contains a literals section */
@@ -618,7 +665,13 @@ static int benchMem(unsigned benchNb,
         {   blockProperties_t bp;
             const BYTE* ip = dstBuff;
             const BYTE* iend;
-            {   size_t const cSize = ZSTD_compress(dstBuff, dstBuffSize, src, srcSize, cLevel);
+            {   
+#ifdef AOCL_DFS_CORRECTION
+                /* Call ZSTD_compress2 instead as it does not add skippable frame */
+                size_t const cSize = Test_ZSTD_compress2(dstBuff, dstBuffSize, src, srcSize, cLevel);
+#else
+                size_t const cSize = ZSTD_compress(dstBuff, dstBuffSize, src, srcSize, cLevel);
+#endif
                 CONTROL(cSize > ZSTD_FRAMEHEADERSIZE_PREFIX(ZSTD_f_zstd1));
             }
             /* Skip frame Header */
