@@ -46,3 +46,99 @@
    obj:*/libgomp.so.*
    obj:*/libgomp.so.*
 }
+{
+   libomp_6
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   obj:*/libgomp.so.*
+   obj:*/libgomp.so.*
+}
+{
+   libomp_lz4
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:UnknownInlinedFun
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   obj:*/libc.so.*
+   obj:*/libgomp.so.*
+   fun:GOMP_parallel
+   fun:*
+}
+{
+   libomp_7_all_comb
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   obj:*/libgomp.so.*
+   obj:*/libgomp.so.*
+   fun:GOMP_parallel
+   fun:*
+}
+{
+   zlib_reference
+   Memcheck:Cond
+   fun:slide_hash
+   fun:fill_window_ref
+   fun:fill_window
+   fun:deflate_fast_ref
+   fun:deflate_fast
+   fun:deflate
+   fun:compress2_ST
+   fun:compress2._omp_fn.0
+   fun:GOMP_parallel
+   fun:compress2
+   fun:_Z18aocl_zlib_compressPcmS_mmmS_
+   fun:aocl_llc_compress
+}
+{
+   snappy_test_1
+   Memcheck:Value8
+   fun:_itoa_word
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:_ZN7testing12_GLOBAL__N_126PrintByteSegmentInObjectToEPKhmmPSo
+   fun:_ZN7testing12_GLOBAL__N_124PrintBytesInObjectToImplEPKhmPSo
+   fun:_ZN7testing8internal20PrintBytesInObjectToEPKhmPSo
+   fun:_ZN7testing8internal15RawBytesPrinter10PrintValueI11STR_WRAPPERLm32EEEvRKT_PSo
+   fun:_ZN7testing8internal17PrintWithFallbackI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal7PrintToI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal16UniversalPrinterI11STR_WRAPPERE5PrintERKS2_PSo
+   fun:_ZN7testing8internal12PrintTupleToISt5tupleIJ15DynamicDispatch11STR_WRAPPEREELm2EEEvRKT_St17integral_constantImXT0_EEPSo
+}
+{
+   snappy_test_2
+   Memcheck:Cond
+   fun:_itoa_word
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:_ZN7testing12_GLOBAL__N_126PrintByteSegmentInObjectToEPKhmmPSo
+   fun:_ZN7testing12_GLOBAL__N_124PrintBytesInObjectToImplEPKhmPSo
+   fun:_ZN7testing8internal20PrintBytesInObjectToEPKhmPSo
+   fun:_ZN7testing8internal15RawBytesPrinter10PrintValueI11STR_WRAPPERLm32EEEvRKT_PSo
+   fun:_ZN7testing8internal17PrintWithFallbackI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal7PrintToI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal16UniversalPrinterI11STR_WRAPPERE5PrintERKS2_PSo
+   fun:_ZN7testing8internal12PrintTupleToISt5tupleIJ15DynamicDispatch11STR_WRAPPEREELm2EEEvRKT_St17integral_constantImXT0_EEPSo
+   fun:*
+}
+{
+   snappy_test_3
+   Memcheck:Cond
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:_ZN7testing12_GLOBAL__N_126PrintByteSegmentInObjectToEPKhmmPSo
+   fun:_ZN7testing12_GLOBAL__N_124PrintBytesInObjectToImplEPKhmPSo
+   fun:_ZN7testing8internal20PrintBytesInObjectToEPKhmPSo
+   fun:_ZN7testing8internal15RawBytesPrinter10PrintValueI11STR_WRAPPERLm32EEEvRKT_PSo
+   fun:_ZN7testing8internal17PrintWithFallbackI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal7PrintToI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal16UniversalPrinterI11STR_WRAPPERE5PrintERKS2_PSo
+   fun:_ZN7testing8internal12PrintTupleToISt5tupleIJ15DynamicDispatch11STR_WRAPPEREELm2EEEvRKT_St17integral_constantImXT0_EEPSo
+   fun:_ZN7testing8internal7PrintToIJ15DynamicDispatch11STR_WRAPPEREEEvRKSt5tupleIJDpT_EEPSo
+}
