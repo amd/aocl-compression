@@ -48,9 +48,15 @@ TEST(AOCL_Compression_zlib, zlibVersion_common)
 TEST(AOCL_Compression_zlib, compressBound_common)
 {
   EXPECT_EQ(compressBound(0), 13);  // AOCL_compression_zlib_compressBound_common_1
-  EXPECT_EQ(compressBound(1 << 13), 8207);  // AOCL_compression_zlib_compressBound_common_2
-  EXPECT_EQ(compressBound(1 << 15), 32791); // AOCL_compression_zlib_compressBound_common_3
-  EXPECT_EQ(compressBound(1 << 26), 67129359);  // AOCL_compression_zlib_compressBound_common_4
+  if(getenv("AOCL_ZLIB_QUICK_MODE") != NULL) {
+    EXPECT_EQ(compressBound(1 << 13), 9229);
+    EXPECT_EQ(compressBound(1 << 15), 36877);
+    EXPECT_EQ(compressBound(1 << 26), 75497485);
+  } else {
+    EXPECT_EQ(compressBound(1 << 13), 8207);  // AOCL_compression_zlib_compressBound_common_2
+    EXPECT_EQ(compressBound(1 << 15), 32791); // AOCL_compression_zlib_compressBound_common_3
+    EXPECT_EQ(compressBound(1 << 26), 67129359);  // AOCL_compression_zlib_compressBound_common_4
+  }
 }
 #endif
 

@@ -276,7 +276,8 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/trees.c
                     ${ALGOS_PATH}/zlib/uncompr.c
                     ${ALGOS_PATH}/zlib/zutil.c
-                    ${ALGOS_PATH}/zlib/zlib.h)
+                    ${ALGOS_PATH}/zlib/zlib.h
+                    ${ALGOS_PATH}/zlib/aocl_zlib_utils.c)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()

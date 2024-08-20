@@ -411,9 +411,16 @@ TEST(AOCL_Compression_zlib, deflateTune_common)
 TEST(AOCL_Compression_zlib, deflateBound_common)
 {
   ZLIB_deflate_stream deflateObj;
+  int is_quick_mode = 0;
   int sourceLen = 1 << 6;
 
-  EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 82); // AOCL_Compression_zlib_deflateBound_common_1
+  if(getenv("AOCL_ZLIB_QUICK_MODE") != NULL)
+    is_quick_mode = 1;
+  
+  if(is_quick_mode)
+    EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 85);
+  else
+    EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 82); // AOCL_Compression_zlib_deflateBound_common_1
 
   deflateInit(deflateObj.get_stream(), 2);
   deflate_state *state = (deflate_state *)deflateObj.get_stream()->state;
@@ -455,7 +462,10 @@ TEST(AOCL_Compression_zlib, deflateBound_common)
 
   state->w_bits = 14;
 
-  EXPECT_EQ(deflateBound(deflateObj.get_stream(), 0), 44); // AOCL_Compression_zlib_deflateBound_common_7
+  if(is_quick_mode)
+    EXPECT_EQ(deflateBound(deflateObj.get_stream(), 0), 47);
+  else
+    EXPECT_EQ(deflateBound(deflateObj.get_stream(), 0), 44); // AOCL_Compression_zlib_deflateBound_common_7
 
   free(gz);
   gz = nullptr;
