@@ -11,6 +11,7 @@
 #include "utils/utils.h"
 
 #ifdef AOCL_ZLIB_OPT
+#include "aocl_zlib_utils.h"
 #include "aocl_zlib_setup.h"
 
 int zlibOptOff = 0; // default, run reference code
@@ -145,8 +146,16 @@ static inline int compress2_ST(aocl_thread_info_t *cThread, int level, int final
 }
 
 uLong ZEXPORT compressBound_ST(uLong sourceLen) {
-    return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
-           (sourceLen >> 25) + 13;
+    /* Worst case: each byte -> 9 bits (fixed Huffman deflate). 13 bytes for zlib wrapper + safety. */
+    uLong fixed_size = FIXED_HUFFFMAN_COMPRESSED_SIZE(sourceLen) + 13;
+
+    /* stored_size: size with stored deflate (no compression). Adds 5 bytes/block (worst case as per deflate specification).
+       Assumes default memLevel/windowbits. */
+    uLong stored_size = STORED_ZLIB_COMPRESSED_SIZE(sourceLen);
+    if(aocl_zlib_get_enable_dquick()) {
+        return (fixed_size > stored_size) ? fixed_size : stored_size;
+    }
+    return stored_size;
 }
 
 uLong ZEXPORT compressBound_MT(uLong sourceLen) {
@@ -395,8 +404,20 @@ int ZEXPORT compress(Bytef *dest, uLongf *destLen, const Bytef *source,
  */
 
 uLong ZEXPORT compressBound(uLong sourceLen) {
+    AOCL_SETUP_NATIVE();
 #ifdef AOCL_ENABLE_THREADS
     return compressBound_MT(sourceLen);
+#elif defined(AOCL_ZLIB_OPT)
+    /* Worst case: each byte -> 9 bits (fixed Huffman deflate). 13 bytes for zlib wrapper + safety. */
+    uLong fixed_size = FIXED_HUFFFMAN_COMPRESSED_SIZE(sourceLen) + 13;
+    /* stored_size: size with stored deflate (no compression). Adds 5 bytes/block (worst case as per deflate specification).
+       Assumes default memLevel/windowbits. */
+    uLong stored_size = STORED_ZLIB_COMPRESSED_SIZE(sourceLen);
+
+    if(aocl_zlib_get_enable_dquick()) {
+        return (fixed_size > stored_size) ? fixed_size : stored_size;
+    }
+    return stored_size;
 #else
     return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
            (sourceLen >> 25) + 13;

@@ -53,12 +53,12 @@
 #include "deflate.h"
 #include "aocl_zlib_x86.h"
 #include "aocl_zlib_setup.h"
+#include "aocl_zlib_utils.h"
 
 #ifdef AOCL_ZLIB_OPT
 #undef FASTEST // not supported with AOCL zlib optimizations
 static int setup_ok_zlib_deflate = 0; // flag to indicate status of dynamic dispatcher setup
 static int optLevel = 0, optOff = 1; // optimization configurations
-static int enable_dquick = 0; // flag to enable/disable deflate quick compression
 
 // This increases the hash table size (default to 128K) and reduces the number of collisions.
 #define AOCL_ADDITIONAL_HASH_BITS 2
@@ -1019,6 +1019,11 @@ uLong ZEXPORT deflateBound(z_streamp strm, uLong sourceLen) {
     /* upper bound for fixed blocks with 9-bit literals and length 255
        (memLevel == 2, which is the lowest that may not use stored blocks) --
        ~13% overhead plus a small constant */
+#ifdef AOCL_ZLIB_OPT
+    if(aocl_zlib_get_enable_dquick())
+        fixedlen = FIXED_HUFFFMAN_COMPRESSED_SIZE(sourceLen) + 7;
+    else
+#endif /* AOCL_ZLIB_OPT */
     fixedlen = sourceLen + (sourceLen >> 3) + (sourceLen >> 8) +
                (sourceLen >> 9) + 4;
 
@@ -2383,9 +2388,9 @@ static void aocl_setup_deflate_fmv(int optOff, int optLevel)
     
     if (!setup_ok_zlib_deflate) {
         if(getenv("AOCL_ZLIB_QUICK_MODE") != NULL)
-            enable_dquick = 1;
+            aocl_zlib_set_enable_dquick(1);
         else
-            enable_dquick = 0;
+            aocl_zlib_set_enable_dquick(0);
     }
 
     if (UNLIKELY(optOff == 1)) {
@@ -2407,7 +2412,7 @@ static void aocl_setup_deflate_fmv(int optOff, int optLevel)
             case 2://AVX version
             case 3://AVX2 version
             default://AVX512 and other versions
-                if(enable_dquick)
+                if(aocl_zlib_get_enable_dquick())
                     config_table = configuration_table_quick;
                 else
                     config_table = configuration_table_opt;
@@ -2439,7 +2444,7 @@ void ZLIB_INTERNAL aocl_destroy_deflate(void) {
     setup_ok_zlib_deflate = 0;
     optLevel = 0;
     optOff = 1;
-    enable_dquick = 0;
+    aocl_zlib_set_enable_dquick(0);
     AOCL_EXIT_CRITICAL(setup_zlib_deflate)
     aocl_destroy_tree();
     aocl_destroy_longest_match();
