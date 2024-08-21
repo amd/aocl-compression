@@ -1743,6 +1743,10 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
     int prevStep = 0;
     int presetMatchNb = 0;
 #endif
+#if defined(__clang__) && (__clang_major__ > 16) && defined(AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2)
+    /* Alignment for clang version 17 and above when `AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2` is enabled. */
+    __asm__(".p2align 6");
+#endif
     /* Main Loop */
     for ( ; ; ) {
         const BYTE* match;
@@ -1786,6 +1790,10 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_validated(
 #endif
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
             U32 ipData;
+#endif
+#if defined(__clang__) && (__clang_major__ > 16) && defined(AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2)
+            /* Alignment for clang version 17 and above when `AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2` is enabled. */
+            __asm__(".p2align 3");
 #endif
             do {
                 U32 const h = forwardH;
