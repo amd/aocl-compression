@@ -76,7 +76,7 @@ ZEXTERN void ZEXPORT aocl_destroy_zlib (void) {
 }
 
 #ifdef AOCL_ENABLE_THREADS
-#define ZLIB_MT_WINDOW_LEN 32768
+#define ZLIB_MT_WINDOW_LEN (32768 << 1)
 #include <string.h>
 #include "threads/threads.h"
 #endif
