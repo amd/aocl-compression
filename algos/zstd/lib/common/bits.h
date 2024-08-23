@@ -174,7 +174,6 @@ MEM_STATIC unsigned ZSTD_highbit32(U32 val)   /* compress, dictBuilder, decodeCo
 
 /* ZSTD_rotateRight_*():
  * Rotates a bitfield to the right by "count" bits.
- * https://en.wikipedia.org/w/index.php?title=Circular_shift&oldid=991635599#Implementing_circular_shifts
  */
 MEM_STATIC
 U64 ZSTD_rotateRight_U64(U64 const value, U32 count) {
