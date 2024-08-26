@@ -41,6 +41,12 @@
 static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE() aocl_setup_native()
 
+#if defined(__GNUC__) && (__GNUC__ < 11)
+#define MM256_EXTRACT_FIRST_INT32(x) _mm256_extract_epi32(x, 0)
+#else
+#define MM256_EXTRACT_FIRST_INT32(x) _mm256_cvtsi256_si32(x)
+#endif
+
 static int setup_ok_zlib_adler = 0; // flag to indicate status of dynamic dispatcher setup
 
 /* Largest prime smaller than 65536 */
@@ -301,7 +307,7 @@ static inline uint32_t adler32_x86_avx2_with_copy(uint32_t adler, Bytef *dst, co
         // vbs[8]: A | 0 | B | 0 | C | 0 | D | 0 => A+B | 0+0 | B+A | 0+0 | C+D | 0+0 | D+C | 0+0
         vbs = _mm256_add_epi32(vbs, _mm256_shuffle_epi32(vbs, 206));
         // sum_A = A+B+C+D
-        sum_A += _mm256_cvtsi256_si32(vbs) + _mm_cvtsi128_si32(_mm256_extracti128_si256(vbs, 1));
+        sum_A += MM256_EXTRACT_FIRST_INT32(vbs) + _mm_cvtsi128_si32(_mm256_extracti128_si256(vbs, 1));
 
         vcs = _mm256_add_epi32(vcs, _mm256_slli_epi32(vos, 6));
         // vcs[8]: A | B | C | D | E | F | G | H => A+C | B+D | C+A | D+B | E+G | F+H | G+E | H+F
@@ -309,7 +315,7 @@ static inline uint32_t adler32_x86_avx2_with_copy(uint32_t adler, Bytef *dst, co
         // vcs[8]: A+C | B+D | C+A | D+B | E+G | F+H | G+E | H+F => A+C+B+D | B+D+A+C | C+A+D+B | D+B+C+A | E+G+F+H | F+H+E+G | G+E+H+F | H+F+G+E
         vcs = _mm256_add_epi32(vcs, _mm256_shuffle_epi32(vcs, 177));
         // sum_B = A+C+B+D+E+G+F+H
-        sum_B = _mm256_cvtsi256_si32(vcs) + _mm_cvtsi128_si32(_mm256_extracti128_si256(vcs, 1));
+        sum_B = MM256_EXTRACT_FIRST_INT32(vcs) + _mm_cvtsi128_si32(_mm256_extracti128_si256(vcs, 1));
 
         sum_A %= BASE;
         sum_B %= BASE;
