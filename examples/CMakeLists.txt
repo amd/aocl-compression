@@ -33,7 +33,7 @@
 #
 # @author Ashish Sriram
 
-cmake_minimum_required(VERSION 3.18.0)
+cmake_minimum_required(VERSION 3.22.0)
 
 # Use out-of-src-tree build if building directly from AOCL-Compression package
 if(NOT DEFINED ENABLE_EXAMPLE_OUTOFSRCTREE)

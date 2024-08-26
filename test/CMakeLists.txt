@@ -192,7 +192,7 @@ endif ()
 
 # add test cases
 if (AOCL_TEST_COVERAGE)
-    cmake_minimum_required(VERSION 3.18.0)
+    cmake_minimum_required(VERSION 3.22.0)
     enable_testing()
 
     file(GLOB calgary_dataset ${CMAKE_BINARY_DIR}/calgary/*)
