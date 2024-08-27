@@ -1445,13 +1445,14 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
             //In case of any thread partitioning or alloc errors, exit the decompression process with error
             if (ti_cur->is_error)
             {
+                result = ti_cur->dst_trap_size; //dst_trap_size holds error code on failure
                 aocl_destroy_parallel_decompress_mt(&thread_group_handle);
 #ifdef AOCL_THREADS_LOG
                 printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_id);
 #endif
                 LOG_FORMATTED(ERR, logCtx, "Decompress Thread [id: %d] : Encountered ERROR", thread_id);
                 LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-                return ti_cur->dst_trap_size; //dst_trap_size holds error code on failure
+                return result;
             }
             total_decompressed_sz += ti_cur->dst_trap_size;
 
