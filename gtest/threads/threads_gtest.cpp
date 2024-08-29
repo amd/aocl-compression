@@ -795,7 +795,7 @@ public:
 TEST_F(API_do_partition_compress_MT, AOCL_Compression_api_aocl_do_partition_compress_mt_common_1) { // partition the problem
     aocl_thread_info_t cur_thread_info;
     const AOCL_UINT32 cmpr_bound_pad = 16;
-    #pragma omp parallel private(cur_thread_info) shared(thread_grp, cmpr_bound_pad) num_threads(thread_grp.num_threads)
+    #pragma omp parallel private(cur_thread_info) shared(thread_grp) num_threads(thread_grp.num_threads)
     {
         AOCL_UINT32 thread_id = omp_get_thread_num();
         EXPECT_EQ(Test_aocl_do_partition_compress_mt(&thread_grp, &cur_thread_info, cmpr_bound_pad, thread_id), 0);
@@ -1133,7 +1133,7 @@ public:
 TEST_F(API_do_partition_decompress_MT, AOCL_Compression_api_aocl_do_partition_decompress_mt_common_1) { // partition the problem
     aocl_thread_info_t cur_thread_info;
     const AOCL_UINT32 cmpr_bound_pad = 16;
-#pragma omp parallel private(cur_thread_info) shared(thread_grp, cmpr_bound_pad) num_threads(thread_grp.num_threads)
+#pragma omp parallel private(cur_thread_info) shared(thread_grp) num_threads(thread_grp.num_threads)
     {
         AOCL_UINT32 thread_id = omp_get_thread_num();
         AOCL_MT_PROCESS_PARTITION_START(thread_grp, ti_cur, thread_id)
