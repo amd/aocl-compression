@@ -32,12 +32,11 @@
 #ifndef THIRD_PARTY_SNAPPY_OPENSOURCE_SNAPPY_STUBS_INTERNAL_H_
 #define THIRD_PARTY_SNAPPY_OPENSOURCE_SNAPPY_STUBS_INTERNAL_H_
 
-#ifdef HAVE_CONFIG_H
+#if HAVE_CONFIG_H
 #include "config.h"
 #endif
 
 #include <stdint.h>
-#include "aoclAlgoOpt.h" /* AOCL Optimization flags */
 
 #include <cassert>
 #include <cstdlib>
@@ -45,18 +44,17 @@
 #include <limits>
 #include <string>
 
-#ifdef HAVE_SYS_MMAN_H
+#if HAVE_SYS_MMAN_H
 #include <sys/mman.h>
 #endif
 
-#ifdef HAVE_UNISTD_H
+#if HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 
 #if defined(_MSC_VER)
 #include <intrin.h>
 #endif  // defined(_MSC_VER)
-
 
 #ifndef __has_feature
 #define __has_feature(x) 0
@@ -72,10 +70,10 @@
 
 #include "snappy-stubs-public.h"
 
+#include "aoclAlgoOpt.h" /* AOCL Optimization flags */
+
 // Used to enable 64-bit optimized versions of some routines.
-#if defined(__x86_64__) || defined(_M_X64)
-#define ARCH_K8 1
-#elif defined(__PPC64__) || defined(__powerpc64__)
+#if defined(__PPC64__) || defined(__powerpc64__)
 #define ARCH_PPC 1
 #elif defined(__aarch64__) || defined(_M_ARM64)
 #define ARCH_ARM 1
@@ -95,31 +93,38 @@
 #define ARRAYSIZE(a) int{sizeof(a) / sizeof(*(a))}
 
 // Static prediction hints.
-#ifdef HAVE_BUILTIN_EXPECT
+#if HAVE_BUILTIN_EXPECT
 #define SNAPPY_PREDICT_FALSE(x) (__builtin_expect(x, 0))
 #define SNAPPY_PREDICT_TRUE(x) (__builtin_expect(!!(x), 1))
 #else
 #define SNAPPY_PREDICT_FALSE(x) x
 #define SNAPPY_PREDICT_TRUE(x) x
-#endif
+#endif  // HAVE_BUILTIN_EXPECT
 
 // Inlining hints.
-#ifdef HAVE_ATTRIBUTE_ALWAYS_INLINE
+#if HAVE_ATTRIBUTE_ALWAYS_INLINE
 #define SNAPPY_ATTRIBUTE_ALWAYS_INLINE __attribute__((always_inline))
 #else
 #define SNAPPY_ATTRIBUTE_ALWAYS_INLINE
+#endif  // HAVE_ATTRIBUTE_ALWAYS_INLINE
+
+#if HAVE_BUILTIN_PREFETCH
+#define SNAPPY_PREFETCH(ptr) __builtin_prefetch(ptr, 0, 3)
+#else
+#define SNAPPY_PREFETCH(ptr) (void)(ptr)
 #endif
 
-// This is only used for recomputing the tag byte table used during
-// decompression; for simplicity we just remove it from the open-source
-// version (anyone who wants to regenerate it can just do the call
-// themselves within main()).
-#define DEFINE_bool(flag_name, default_value, description) \
-  bool FLAGS_ ## flag_name = default_value
-#define DECLARE_bool(flag_name) \
-  extern bool FLAGS_ ## flag_name
+// Stubbed version of ABSL_FLAG.
+//
+// In the open source version, flags can only be changed at compile time.
+#define SNAPPY_FLAG(flag_type, flag_name, default_value, help) \
+  flag_type FLAGS_ ## flag_name = default_value
 
 namespace snappy {
+
+// Stubbed version of absl::GetFlag().
+template <typename T>
+inline T GetFlag(T flag) { return flag; }
 
 static const uint32_t kuint32max = std::numeric_limits<uint32_t>::max();
 static const int64_t kint64max = std::numeric_limits<int64_t>::max();
@@ -194,28 +199,44 @@ class LittleEndian {
   }
 #endif /* AOCL_SNAPPY_OPT */
 
+  // Functions to do unaligned loads and stores in little-endian order.
   static inline uint16_t Load16(const void *ptr) {
-    const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
-
     // Compiles to a single mov/str on recent clang and gcc.
+#if SNAPPY_IS_BIG_ENDIAN
+    const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
     return (static_cast<uint16_t>(buffer[0])) |
             (static_cast<uint16_t>(buffer[1]) << 8);
+#else
+    // memcpy() turns into a single instruction early in the optimization
+    // pipeline (relatively to a series of byte accesses). So, using memcpy
+    // instead of byte accesses may lead to better decisions in more stages of
+    // the optimization pipeline.
+    uint16_t value;
+    std::memcpy(&value, ptr, 2);
+    return value;
+#endif
   }
 
   static inline uint32_t Load32(const void *ptr) {
-    const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
-
     // Compiles to a single mov/str on recent clang and gcc.
+#if SNAPPY_IS_BIG_ENDIAN
+    const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
     return (static_cast<uint32_t>(buffer[0])) |
             (static_cast<uint32_t>(buffer[1]) << 8) |
             (static_cast<uint32_t>(buffer[2]) << 16) |
             (static_cast<uint32_t>(buffer[3]) << 24);
+#else
+    // See Load16() for the rationale of using memcpy().
+    uint32_t value;
+    std::memcpy(&value, ptr, 4);
+    return value;
+#endif
   }
 
   static inline uint64_t Load64(const void *ptr) {
-    const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
-
     // Compiles to a single mov/str on recent clang and gcc.
+#if SNAPPY_IS_BIG_ENDIAN
+    const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
     return (static_cast<uint64_t>(buffer[0])) |
             (static_cast<uint64_t>(buffer[1]) << 8) |
             (static_cast<uint64_t>(buffer[2]) << 16) |
@@ -224,30 +245,44 @@ class LittleEndian {
             (static_cast<uint64_t>(buffer[5]) << 40) |
             (static_cast<uint64_t>(buffer[6]) << 48) |
             (static_cast<uint64_t>(buffer[7]) << 56);
+#else
+    // See Load16() for the rationale of using memcpy().
+    uint64_t value;
+    std::memcpy(&value, ptr, 8);
+    return value;
+#endif
   }
 
   static inline void Store16(void *dst, uint16_t value) {
-    uint8_t* const buffer = reinterpret_cast<uint8_t*>(dst);
-
     // Compiles to a single mov/str on recent clang and gcc.
+#if SNAPPY_IS_BIG_ENDIAN
+    uint8_t* const buffer = reinterpret_cast<uint8_t*>(dst);
     buffer[0] = static_cast<uint8_t>(value);
     buffer[1] = static_cast<uint8_t>(value >> 8);
+#else
+    // See Load16() for the rationale of using memcpy().
+    std::memcpy(dst, &value, 2);
+#endif
   }
 
   static void Store32(void *dst, uint32_t value) {
-    uint8_t* const buffer = reinterpret_cast<uint8_t*>(dst);
-
     // Compiles to a single mov/str on recent clang and gcc.
+#if SNAPPY_IS_BIG_ENDIAN
+    uint8_t* const buffer = reinterpret_cast<uint8_t*>(dst);
     buffer[0] = static_cast<uint8_t>(value);
     buffer[1] = static_cast<uint8_t>(value >> 8);
     buffer[2] = static_cast<uint8_t>(value >> 16);
     buffer[3] = static_cast<uint8_t>(value >> 24);
+#else
+    // See Load16() for the rationale of using memcpy().
+    std::memcpy(dst, &value, 4);
+#endif
   }
 
   static void Store64(void* dst, uint64_t value) {
-    uint8_t* const buffer = reinterpret_cast<uint8_t*>(dst);
-
     // Compiles to a single mov/str on recent clang and gcc.
+#if SNAPPY_IS_BIG_ENDIAN
+    uint8_t* const buffer = reinterpret_cast<uint8_t*>(dst);
     buffer[0] = static_cast<uint8_t>(value);
     buffer[1] = static_cast<uint8_t>(value >> 8);
     buffer[2] = static_cast<uint8_t>(value >> 16);
@@ -256,14 +291,18 @@ class LittleEndian {
     buffer[5] = static_cast<uint8_t>(value >> 40);
     buffer[6] = static_cast<uint8_t>(value >> 48);
     buffer[7] = static_cast<uint8_t>(value >> 56);
+#else
+    // See Load16() for the rationale of using memcpy().
+    std::memcpy(dst, &value, 8);
+#endif
   }
 
   static inline constexpr bool IsLittleEndian() {
-#if defined(SNAPPY_IS_BIG_ENDIAN)
+#if SNAPPY_IS_BIG_ENDIAN
     return false;
 #else
     return true;
-#endif  // defined(SNAPPY_IS_BIG_ENDIAN)
+#endif  // SNAPPY_IS_BIG_ENDIAN
   }
 };
 
@@ -289,7 +328,7 @@ class Bits {
   void operator=(const Bits&);
 };
 
-#if defined(HAVE_BUILTIN_CTZ)
+#if HAVE_BUILTIN_CTZ
 
 inline int Bits::Log2FloorNonZero(uint32_t n) {
   assert(n != 0);
@@ -378,7 +417,7 @@ inline int Bits::FindLSBSetNonZero(uint32_t n) {
 
 #endif  // End portable versions.
 
-#if defined(HAVE_BUILTIN_CTZ)
+#if HAVE_BUILTIN_CTZ
 
 inline int Bits::FindLSBSetNonZero64(uint64_t n) {
   assert(n != 0);
@@ -412,7 +451,7 @@ inline int Bits::FindLSBSetNonZero64(uint64_t n) {
   }
 }
 
-#endif  // End portable version.
+#endif  // HAVE_BUILTIN_CTZ
 
 // Variable-length integer encoding.
 class Varint {
