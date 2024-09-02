@@ -5,7 +5,7 @@
    fun:malloc
    fun:_Z9ompd_initv
    fun:_ZL26__kmp_do_serial_initializev
-   fun:__kmp_get_global_thread_id_reg
+   fun:*
 }
 {
    libomp_2
@@ -14,7 +14,7 @@
    fun:malloc
    fun:_Z23__kmp_init_nesting_modev
    fun:_ZL26__kmp_do_serial_initializev
-   fun:__kmp_get_global_thread_id_reg
+   fun:*
 }
 {
    libomp_3
@@ -35,7 +35,7 @@
    fun:_ZL21___kmp_allocate_alignmm
    fun:_Z14__kmp_env_dumpv
    fun:_ZL26__kmp_do_serial_initializev
-   fun:__kmp_get_global_thread_id_reg
+   fun:*
 }
 {
    libomp_5
@@ -53,6 +53,29 @@
    fun:realloc
    obj:*/libgomp.so.*
    obj:*/libgomp.so.*
+}
+{
+   libomp_7
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   obj:*/libgomp.so.*
+   obj:*/libgomp.so.*
+   obj:*/libgomp.so.*
+}
+{
+   libomp_8
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   obj:*/libomp.so
+   obj:*/libomp.so
+   obj:*/libomp.so
+   obj:*/libomp.so
+   obj:*/libomp.so
+   obj:*/libomp.so
+   obj:*/libomp.so
+   fun:*
 }
 {
    libomp_lz4
@@ -86,12 +109,6 @@
    fun:deflate_fast_ref
    fun:deflate_fast
    fun:deflate
-   fun:compress2_ST
-   fun:compress2._omp_fn.0
-   fun:GOMP_parallel
-   fun:compress2
-   fun:_Z18aocl_zlib_compressPcmS_mmmS_
-   fun:aocl_llc_compress
 }
 {
    snappy_test_1
@@ -141,4 +158,71 @@
    fun:_ZN7testing8internal16UniversalPrinterI11STR_WRAPPERE5PrintERKS2_PSo
    fun:_ZN7testing8internal12PrintTupleToISt5tupleIJ15DynamicDispatch11STR_WRAPPEREELm2EEEvRKT_St17integral_constantImXT0_EEPSo
    fun:_ZN7testing8internal7PrintToIJ15DynamicDispatch11STR_WRAPPEREEEvRKSt5tupleIJDpT_EEPSo
+}
+{
+   snappy_test_4
+   Memcheck:Value8
+   fun:_itoa_word
+   fun:__printf_buffer
+   fun:__vsnprintf_internal
+   fun:snprintf
+}
+{
+   snappy_test_5
+   Memcheck:Cond
+   fun:_itoa_word
+   fun:__printf_buffer
+   fun:__vsnprintf_internal
+   fun:snprintf
+}
+{
+   snappy_test_6
+   Memcheck:Cond
+   fun:__printf_buffer
+   fun:__vsnprintf_internal
+   fun:snprintf
+}
+{
+   dlopen_memory_leak_1
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:malloc
+   fun:open_path
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+}
+{
+   dlopen_memory_leak_2
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:malloc
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+}
+{
+   dlopen_memory_leak_3
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:calloc
+   fun:_dl_check_map_versions
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+   fun:dl_open_worker
+}
+{
+   dlopen_memory_leak_4
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:calloc
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
 }

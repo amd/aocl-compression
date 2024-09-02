@@ -255,10 +255,10 @@ AOCL_INT64 aocl_lzma_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *ou
 AOCL_INT64 aocl_lzma_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
 						   AOCL_UINTP outsize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR *)
 {
-    AOCL_INTP res;
+    AOCL_INTP res = SZ_OK;
     SizeT outLen = outsize;
     SizeT srcLen = insize - LZMA_PROPS_SIZE;
-    ELzmaStatus status;
+    ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
 	
     res = LzmaDecode((AOCL_UINT8 *)outbuf, &outLen, (AOCL_UINT8 *)inbuf+LZMA_PROPS_SIZE, 
                      &srcLen, (AOCL_UINT8 *)inbuf, LZMA_PROPS_SIZE, LZMA_FINISH_END,
