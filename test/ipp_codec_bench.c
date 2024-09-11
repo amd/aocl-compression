@@ -176,11 +176,11 @@ AOCL_INTP ipp_setup(aocl_codec_bench_info *codec_bench_handle,
 
     memcpy(ippDir, codec_bench_handle->ippDir, ippDirLen);
 
-    if(!(ippDirLen == 0 || (ippDirLen < (MAX_FILENAME_LEN-1) && ippDir[ippDirLen-1] == '/' ))) // add trailing '/' to dir name if missing
+    if(ippDirLen > 0 && ippDirLen < (MAX_FILENAME_LEN-1) && ippDir[ippDirLen-1] != '/') // add trailing '/' to dir name if missing
     {
         ippDir[ippDirLen++] = '/';
+        ippDir[ippDirLen] = '\0';
     }
-    ippDir[ippDirLen] = '\0';
 
     switch (codec_bench_handle->codec_method)
     {
