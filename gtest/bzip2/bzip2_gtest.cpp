@@ -3479,13 +3479,13 @@ void BuffToBuffDecompress_fuzz(vector<char> source, size_t dest_sz,
 
     aocl_destroy_bzip2();
 }
-#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
 FUZZ_TEST(AOCL_Compression_bzip2, BuffToBuffDecompress_fuzz)
 .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
              fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
              fuzztest::InRange<int>(0, 1),
              fuzztest::InRange<int>(0, 4),
              fuzztest::InRange<int>(0, 1))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
 .WithSeeds([]() -> vector<tuple<vector<char>, size_t, int, int, int>> {
     auto seed_files = READ_FUZZ_DPR_SEED();
     vector<tuple<vector<char>, size_t, int, int, int>> seeds;
