@@ -164,7 +164,12 @@
  * - AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2 : Aggressively sets search distance on top of strategy-1.
  * - AOCL_LZ4_NEW_PRIME_NUMBER          : New prime number for hashing.
  * - AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES  : Additional hash table updates to improve ratio.
+ *
+ * Compiler aggressively unrolls "for (; len >= 255; len -= 255) *op++ = 255;" loop 
+ * when O3 optimization level is used. This results in performance degradation. 
+ * Hence, AOCL_LZ4_FORCE_O2 is used to force O2 optimization level. 
  */
+AOCL_LZ4_FORCE_O2
 LZ4_FORCE_INLINE int AOCL_LZ4_COMPRESS_GENERIC_FUNC(
                  LZ4_stream_t_internal* const cctx,
                  const char* const source,
@@ -247,11 +252,13 @@ LZ4_FORCE_INLINE int AOCL_LZ4_COMPRESS_GENERIC_FUNC(
     int prevStep = 0;
     int presetMatchNb = 0;
 #endif
-#if defined(__clang__) && (__clang_major__ > 16) && defined(AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2)
-    /* Alignment for clang version 17 and above when `AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2` is enabled. */
-    __asm__(".p2align 6");
-#endif
     /* Main Loop */
+#if defined(__clang__) && (__clang_major__ > 16)
+    /* Alignment for clang version 17 and above */
+    __asm__(".p2align 6");
+    __asm__("nop");
+    __asm__(".p2align 5");
+#endif
     for ( ; ; ) {
         const BYTE* match;
         BYTE* token;
@@ -301,6 +308,13 @@ LZ4_FORCE_INLINE int AOCL_LZ4_COMPRESS_GENERIC_FUNC(
             do {
                 U32 const h = forwardH;
                 U32 const current = (U32)(forwardIp - base);
+#if defined(__clang__)
+                /* clang re-arranges the order of (matchData == ipData) and
+                 * (matchIndex+LZ4_DISTANCE_MAX < current) checks. This
+                 * results in ~3% performance drop. Making matchIndex volatile
+                 * restricts the compiler from changing the order of the checks. */
+                volatile
+#endif
                 U32 matchIndex = LZ4_getIndexOnHash(h, cctx->hashTable, tableType);
                 AOCL_LZ4_CGV_INIT_MATCHDATA
 
@@ -452,7 +466,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_COMPRESS_GENERIC_FUNC(
             else *token = (BYTE)(litLength<<ML_BITS);
 
             /* Copy Literals */
-            LZ4_wildCopy8(op, anchor, op+litLength);
+            AOCL_LZ4_wildCopy16(op, anchor, op+litLength);
             op+=litLength;
             LOG_FORMATTED(DEBUG, logCtx, "seq.start:%i, literals=%u, match.start:%i",
                         (int)(anchor-(const BYTE*)source), litLength, (int)(ip-(const BYTE*)source));

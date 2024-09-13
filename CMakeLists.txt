@@ -447,6 +447,11 @@ if(NOT BUILD_STATIC_LIBS)
 endif()
 elseif (UNIX)
     set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_FLAGS "-msse4.1")
+if (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
+    # Optimization level controls at per function level are not available in Clang.
+    # Hence setting it at file level here for lz4.
+    set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-O2")
+endif()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
     if(ENABLE_FAST_MATH)

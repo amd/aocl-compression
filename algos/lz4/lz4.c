@@ -206,6 +206,12 @@ static void aocl_setup_native(void);
 
 static int setup_ok_lz4 = 0; // flag to indicate status of dynamic dispatcher setup
 
+#if defined(__GNUC__) && !defined(__clang__)
+#  define AOCL_LZ4_FORCE_O2  __attribute__((optimize("O2")))
+#else
+#  define AOCL_LZ4_FORCE_O2
+#endif
+
 /*-************************************
 *  Memory routines
 **************************************/
@@ -260,9 +266,19 @@ void  LZ4_free(void* p);
 **************************************/
 #define MINMATCH 4
 
+#ifdef AOCL_LZ4_OPT
+#define AOCL_EXTRA_WILDCOPYLENGTH 8
+#define WILDCOPYLENGTH (8 + AOCL_EXTRA_WILDCOPYLENGTH) /* WILDCOPYLENGTH 16 is needed for AOCL_* functions */
+#define LASTLITERALS   5
+#define MFLIMIT        (12 + AOCL_EXTRA_WILDCOPYLENGTH)
+/* Note: When AOCL_LZ4_OPT is enabled, the minimum input size to pass through the compression logic is 
+ * 21 instead of 13 (LZ4_minLength = MFLIMIT+1) */
+#else
 #define WILDCOPYLENGTH 8
 #define LASTLITERALS   5   /* see ../doc/lz4_Block_format.md#parsing-restrictions */
 #define MFLIMIT       12   /* see ../doc/lz4_Block_format.md#parsing-restrictions */
+#endif /*AOCL_LZ4_OPT*/
+
 #define MATCH_SAFEGUARD_DISTANCE  ((2*WILDCOPYLENGTH) - MINMATCH)   /* ensure it's possible to write 2 x wildcopyLength without overflowing output buffer */
 #define FASTLOOP_SAFE_DISTANCE 64
 static const int LZ4_minLength = (MFLIMIT+1);
@@ -473,6 +489,18 @@ void LZ4_wildCopy8(void* dstPtr, const void* srcPtr, void* dstEnd)
 
     do { LZ4_memcpy(d,s,8); d+=8; s+=8; } while (d<e);
 }
+
+#ifdef AOCL_LZ4_OPT
+LZ4_FORCE_INLINE
+void AOCL_LZ4_wildCopy16(void* dstPtr, const void* srcPtr, void* dstEnd)
+{
+    BYTE* d = (BYTE*)dstPtr;
+    const BYTE* s = (const BYTE*)srcPtr;
+    BYTE* const e = (BYTE*)dstEnd;
+
+    do { LZ4_memcpy(d,s,16); d+=16; s+=16; } while (d<e);
+}
+#endif
 
 static const unsigned inc32table[8] = {0, 1, 2,  1,  0,  4, 4, 4};
 static const int      dec64table[8] = {0, 0, 0, -1, -4,  1, 2, 3};
@@ -1330,6 +1358,7 @@ LZ4_FORCE_INLINE int LZ4_compress_generic_validated(
     ip++; forwardH = LZ4_hashPosition(ip, tableType);
 
     /* Main Loop */
+    __asm__(".p2align 6"); // minimizes performance variation due to code-alignment changes
     for (; ; ) {
         const BYTE* match;
         BYTE* token;
@@ -1743,6 +1772,7 @@ LZ4_FORCE_INLINE int LZ4_compress_generic(
  *  inlined, to ensure branches are decided at compilation time;
  *  takes care of src == (NULL, 0)
  *  and forward the rest to AOCL_LZ4_compress_generic_validated */
+AOCL_LZ4_FORCE_O2
 LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic(
     LZ4_stream_t_internal* const cctx,
     const char* const src,
@@ -1906,6 +1936,7 @@ int LZ4_compress_fast_extState_internal(void* state, const char* source, char* d
 }
 
 #ifdef AOCL_LZ4_OPT
+AOCL_LZ4_FORCE_O2
 int AOCL_LZ4_compress_fast_extState_internal(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
     if(state==NULL || (source==NULL && inputSize!=0) || dest==NULL)
@@ -2265,6 +2296,7 @@ static int LZ4_compress_destSize_extState_internal (LZ4_stream_t* state, const c
  * Same as LZ4_compress_destSize_extState_internal(), but calls optimized implementation
  * i.e., AOCL_LZ4_compress_generic() in place of LZ4_compress_generic().
 */ 
+AOCL_LZ4_FORCE_O2
 static int AOCL_LZ4_compress_destSize_extState_internal (LZ4_stream_t* state, const char* src, char* dst, int* srcSizePtr, int targetDstSize)
 {
     if(state==NULL || dst==NULL || srcSizePtr==NULL || (src==NULL && *srcSizePtr!=0))
@@ -2574,6 +2606,7 @@ int LZ4_compress_fast_continue_internal (LZ4_stream_t* LZ4_stream,
  * Same as LZ4_compress_fast_continue_internal(), but calls optimized implementation
  * i.e., AOCL_LZ4_compress_generic() in place of LZ4_compress_generic().
 */
+AOCL_LZ4_FORCE_O2
 int AOCL_LZ4_compress_fast_continue_internal (LZ4_stream_t* LZ4_stream,
                                 const char* source, char* dest,
                                 int inputSize, int maxOutputSize,
@@ -2996,6 +3029,7 @@ LZ4_decompress_generic(
         }
 
         /* Fast loop : decode sequences as long as output < oend-FASTLOOP_SAFE_DISTANCE */
+        __asm__(".p2align 6"); // minimizes performance variation due to code-alignment changes
         while (1) {
             /* Main fastloop assertion: We can always wildcopy FASTLOOP_SAFE_DISTANCE */
             assert(oend - op >= FASTLOOP_SAFE_DISTANCE);
