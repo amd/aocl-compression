@@ -385,6 +385,8 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                 case 'm':
                     codec_bench_handle->mem_limit =
                         (atoi(&argv[cnt][2]))*1024*1024;//MBs to bytes
+                    if(codec_bench_handle->mem_limit == 0)
+                        codec_bench_handle->mem_limit = MAX_MEM_SIZE_FOR_FILE_READ;
                 break;
                 
                 case 'e':
@@ -395,6 +397,8 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                 
                 case 'i':
                     codec_bench_handle->iterations = atoi(&argv[cnt][2]);
+                    if(codec_bench_handle->iterations == 0)
+                        codec_bench_handle->iterations = BENCH_NUM_ITERS;
                 break;
                 
                 case 't':
