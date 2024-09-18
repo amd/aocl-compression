@@ -71,6 +71,12 @@
 #include "lz4.c"   /* LZ4_count, constants, mem */
 #endif
 
+#ifndef AOCL_ENABLE_THREADS_LZ4HC
+#if defined(AOCL_LZ4_AVX_OPT) && defined(AOCL_LZ4HC_OPT) && defined(AOCL_ENABLE_THREADS)
+#define AOCL_ENABLE_THREADS_LZ4HC 1 // Multi-threaded implementation enabled only for >= AVX
+#endif
+#endif /* AOCL_ENABLE_THREADS_LZ4HC */
+
 #ifdef AOCL_LZ4HC_OPT
 /* The array to be used as HASH_CHAIN_SLOT_SIZE array for levels, 
  * This strategy is only for level 6, 7, 8 and 9, So HASH_CHAIN_SLOT_SIZE
@@ -1398,8 +1404,7 @@ _dest_overflow:
     return 0;
 }
 
-#ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
 /*
  * LZ4HC_compress_hashChain_mt(): Same as LZ4HC_compress_hashChain, but accepts
  * two additional parameters named 'last_anchor_ptr' and 'last_bytes_len'
@@ -1666,8 +1671,7 @@ _dest_overflow:
     LOG_UNFORMATTED(ERR, logCtx, "Compression failed");
     return 0;
 }
-#endif /* AOCL_ENABLE_THREADS */
-#endif /* AOCL_LZ4HC_OPT */
+#endif /* AOCL_ENABLE_THREADS_LZ4HC */
 
 #ifdef AOCL_LZ4HC_OPT
 /* AOCL variant of LZ4HC_compress_hashchain() which disables the Pattern Analysis for level 9
@@ -1935,8 +1939,7 @@ static int LZ4HC_compress_optimal( LZ4HC_CCtx_internal* ctx,
     const dictCtx_directive dict,
     const HCfavor_e favorDecSpeed);
 
-#ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
 static int LZ4HC_compress_optimal_mt( LZ4HC_CCtx_internal* ctx,
     const char* const source, char* dst,
     int* srcSizePtr, int dstCapacity, unsigned char** last_anchor_ptr,
@@ -1945,8 +1948,7 @@ static int LZ4HC_compress_optimal_mt( LZ4HC_CCtx_internal* ctx,
     const limitedOutput_directive limit, int const fullUpdate,
     const dictCtx_directive dict,
     const HCfavor_e favorDecSpeed);
-#endif /* AOCL_ENABLE_THREADS */
-#endif /* AOCL_LZ4HC_OPT */
+#endif /* AOCL_ENABLE_THREADS_LZ4HC */
 
 LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal (
     LZ4HC_CCtx_internal* const ctx,
@@ -2013,8 +2015,7 @@ LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal (
     }
 }
 
-#ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
 /**
  * LZ4HC_compress_generic_internal_mt(): This function is AOCL MT variant of LZ4HC_compress_generic_internal()
  * that runs compression on multiple threads and additionally accepts two parameters 'last_anchor_ptr' and
@@ -2086,8 +2087,7 @@ LZ4_FORCE_INLINE int LZ4HC_compress_generic_internal_mt (
         return result;
     }
 }
-#endif /*AOCL_ENABLE_THREADS*/
-#endif /* AOCL_LZ4HC_OPT */
+#endif /*AOCL_ENABLE_THREADS_LZ4HC*/
 
 /* This function is AOCL variant of LZ4HC_compress_generic_internal() 
  * which uses Cache Efficient Hash Chain for performance improvement. 
@@ -2171,8 +2171,7 @@ LZ4HC_compress_generic_noDictCtx (
     return LZ4HC_compress_generic_internal(ctx, src, dst, srcSizePtr, dstCapacity, cLevel, limit, noDictCtx);
 }
 
-#ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
 static int
 LZ4HC_compress_generic_noDictCtx_mt(
         LZ4HC_CCtx_internal* const ctx,
@@ -2189,8 +2188,7 @@ LZ4HC_compress_generic_noDictCtx_mt(
     assert(ctx->dictCtx == NULL);
     return LZ4HC_compress_generic_internal_mt(ctx, src, dst, srcSizePtr, dstCapacity, cLevel, last_anchor_ptr, last_bytes_len, limit, noDictCtx);
 }
-#endif /* AOCL_ENABLE_THREADS */
-#endif /* AOCL_LZ4HC_OPT */
+#endif /* AOCL_ENABLE_THREADS_LZ4HC */
 
 #ifdef AOCL_LZ4HC_OPT
 /* AOCL variant of LZ4HC_compress_generic_noDictCtx() which is used
@@ -2290,8 +2288,7 @@ LZ4HC_compress_generic (
     }
 }
 
-#ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
 static int
 LZ4HC_compress_generic_mt(
     LZ4HC_CCtx_internal* const ctx,
@@ -2309,8 +2306,7 @@ LZ4HC_compress_generic_mt(
     return LZ4HC_compress_generic_noDictCtx_mt(ctx, src, dst, srcSizePtr, dstCapacity, cLevel, limit, last_anchor_ptr, last_bytes_len);
     
 }
-#endif /* AOCL_ENABLE_THREADS */
-#endif /* AOCL_LZ4HC_OPT */
+#endif /* AOCL_ENABLE_THREADS_LZ4HC */
 
 #ifdef AOCL_LZ4HC_OPT
 /* AOCL variant of LZ4HC_compress_generic() which is used
@@ -2387,8 +2383,7 @@ int LZ4_compress_HC_extStateHC_fastReset_internal (void* state, const char* src,
         return LZ4HC_compress_generic (ctx, src, dst, &srcSize, dstCapacity, compressionLevel, notLimited);
 }
 
-#ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
 /**
  * LZ4_compress_HC_extStateHC_fastReset_internal_mt(): This function is AOCL MT variant of LZ4_compress_HC_extStateHC_fastReset_internal()
  * that runs compression on multiple threads and additionally accepts two parameters 'last_anchor_ptr' and 'last_bytes_len' to support
@@ -2410,8 +2405,7 @@ int LZ4_compress_HC_extStateHC_fastReset_internal_mt(void* state, const char* sr
     else
         return LZ4HC_compress_generic_mt(ctx, src, dst, &srcSize, dstCapacity, compressionLevel, notLimited, last_anchor_ptr, last_bytes_len);
 }
-#endif /* AOCL_ENABLE_THREADS */
-#endif /* AOCL_LZ4HC_OPT */
+#endif /* AOCL_ENABLE_THREADS_LZ4HC */
 
 #ifdef AOCL_LZ4HC_OPT
 /* AOCL variant of LZ4_compress_HC_extStateHC_fastReset() which is used
@@ -2459,8 +2453,7 @@ int LZ4_compress_HC_extStateHC_internal (void* state, const char* src, char* dst
     return LZ4_compress_HC_extStateHC_fastReset_internal(state, src, dst, srcSize, dstCapacity, compressionLevel);
 }
 
-#ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
 int LZ4_compress_HC_extStateHC_internal_mt (void* state, const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel,
                             unsigned char** last_anchor_ptr, unsigned int* last_bytes_len)
 {
@@ -2468,8 +2461,7 @@ int LZ4_compress_HC_extStateHC_internal_mt (void* state, const char* src, char* 
     if (ctx==NULL) { LOG_UNFORMATTED(ERR, logCtx, "init failure, ctx is NULL"); return 0; }   /* init failure */
     return LZ4_compress_HC_extStateHC_fastReset_internal_mt(state, src, dst, srcSize, dstCapacity, compressionLevel, last_anchor_ptr, last_bytes_len);
 }
-#endif /* AOCL_ENABLE_THREADS */
-#endif /* AOCL_LZ4HC_OPT */
+#endif /* AOCL_ENABLE_THREADS_LZ4HC */
 
 #ifdef AOCL_LZ4HC_OPT
 /* AOCL variant of LZ4_compress_HC_extStateHC() which is used
@@ -2544,8 +2536,7 @@ int AOCL_LZ4_compress_HC_internal(const char* src, char* dst, int srcSize, int d
 // function pointer to variants of LZ4_compress_HC() function, used for integration with the dynamic dispatcher.
 static int (*LZ4_compress_HC_fp)(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel) = LZ4_compress_HC_internal;
 
-#ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
 /**
  * LZ4_compress_HC_internal_mt(): This function is AOCL MT variant of LZ4_compress_HC_internal()
  * that runs compression on multiple threads.
@@ -2682,22 +2673,22 @@ else
 
 static int (*LZ4_compress_HC_internal_mt_fp)(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel) = LZ4_compress_HC_internal_st;
 
-#endif /* AOCL_ENABLE_THREADS */
-#endif /* AOCL_LZ4HC_OPT */
+#endif /* AOCL_ENABLE_THREADS_LZ4HC */
+
 int LZ4_compress_HC(const char* src, char* dst, int srcSize, int dstCapacity, int compressionLevel)
 {
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     int ret = 0;
     AOCL_SETUP_NATIVE_HC();
 #ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
     ret = LZ4_compress_HC_internal_mt_fp(src, dst, srcSize, dstCapacity, compressionLevel);
-#else /* !AOCL_ENABLE_THREADS */
+#else /* !AOCL_ENABLE_THREADS_LZ4HC */
 if(LZ4HC_USE_CEHC(compressionLevel))
     return LZ4_compress_HC_fp(src, dst, srcSize, dstCapacity, compressionLevel);
 else
     ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
-#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_ENABLE_THREADS_LZ4HC */
 #else /* !AOCL_LZ4HC_OPT */
     ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
 #endif /* AOCL_LZ4HC_OPT */
@@ -3219,9 +3210,7 @@ LZ4HC_FindLongerMatch(LZ4HC_CCtx_internal* const ctx,
     return match;
 }
 
-
-#ifdef AOCL_LZ4HC_OPT
-#ifdef AOCL_ENABLE_THREADS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
 /**
  * LZ4HC_compress_optimal_mt(): This function is AOCL MT variant of LZ4HC_compress_optimal() that
  * runs compression on multiple threads and additionally accepts two parameters 'last_anchor_ptr'
@@ -3557,8 +3546,7 @@ _return_label:
 #endif
      return retval;
 }
-#endif /* AOCL_ENABLE_THREADS*/
-#endif /* AOCL_LZ4HC_OPT */
+#endif /* AOCL_ENABLE_THREADS_LZ4HC*/
 
 static int LZ4HC_compress_optimal ( LZ4HC_CCtx_internal* ctx,
                                     const char* const source,
@@ -3870,14 +3858,24 @@ _return_label:
      return retval;
 }
 
+#define SET_LZ4HC_COMPRESS_DEFAULT_FUNCTIONS \
+LZ4HC_countBack_fp = LZ4HC_countBack; \
+LZ4_compress_HC_fp = LZ4_compress_HC_internal; \
+LZ4_compress_HC_extStateHC_fp = LZ4_compress_HC_extStateHC_internal; \
+LZ4_compress_HC_extStateHC_fastReset_fp = LZ4_compress_HC_extStateHC_fastReset_internal; \
+LZ4_compress_HC_destSize_fp = LZ4_compress_HC_destSize_internal;
+
+#define SET_LZ4HC_COMPRESS_OPT_FUNCTIONS \
+LZ4HC_countBack_fp = AOCL_LZ4HC_countBack; \
+LZ4_compress_HC_fp = AOCL_LZ4_compress_HC_internal; \
+LZ4_compress_HC_extStateHC_fp = AOCL_LZ4_compress_HC_extStateHC_internal; \
+LZ4_compress_HC_extStateHC_fastReset_fp = AOCL_LZ4_compress_HC_extStateHC_fastReset_internal; \
+LZ4_compress_HC_destSize_fp = AOCL_LZ4_compress_HC_destSize_internal;
+
 static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
     if (optOff)
     {
-        LZ4HC_countBack_fp = LZ4HC_countBack;
-        LZ4_compress_HC_fp = LZ4_compress_HC_internal;
-        LZ4_compress_HC_extStateHC_fp = LZ4_compress_HC_extStateHC_internal;
-        LZ4_compress_HC_extStateHC_fastReset_fp = LZ4_compress_HC_extStateHC_fastReset_internal;
-        LZ4_compress_HC_destSize_fp = LZ4_compress_HC_destSize_internal;
+        SET_LZ4HC_COMPRESS_DEFAULT_FUNCTIONS
     }
     else
     {
@@ -3886,27 +3884,22 @@ static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
 #ifdef AOCL_LZ4HC_OPT
         case 0://C version
         case 1://SSE version
+            SET_LZ4HC_COMPRESS_OPT_FUNCTIONS
+            break;
         case 2://AVX version
         case 3://AVX2 version
         default://AVX512 and other versions
-            LZ4HC_countBack_fp = AOCL_LZ4HC_countBack;
-            LZ4_compress_HC_fp = AOCL_LZ4_compress_HC_internal;
-            LZ4_compress_HC_extStateHC_fp = AOCL_LZ4_compress_HC_extStateHC_internal;
-            LZ4_compress_HC_extStateHC_fastReset_fp = AOCL_LZ4_compress_HC_extStateHC_fastReset_internal;
-            LZ4_compress_HC_destSize_fp = AOCL_LZ4_compress_HC_destSize_internal;
-#ifdef AOCL_ENABLE_THREADS
-        LZ4_compress_HC_internal_mt_fp = LZ4_compress_HC_internal_mt;
-#endif /* AOCL_ENABLE_THREADS */
+            SET_LZ4HC_COMPRESS_OPT_FUNCTIONS
+#ifdef AOCL_ENABLE_THREADS_LZ4HC
+            // Set only for >= AVX as AOCL_LZ4_decompress_safe_mt is supported only for >= AVX
+            LZ4_compress_HC_internal_mt_fp = LZ4_compress_HC_internal_mt;
+#endif /* AOCL_ENABLE_THREADS_LZ4HC */
             break;
 #else /* !AOCL_LZ4HC_OPT */
         default:
-            LZ4HC_countBack_fp = LZ4HC_countBack;
-            LZ4_compress_HC_fp = LZ4_compress_HC_internal;
-            LZ4_compress_HC_extStateHC_fp = LZ4_compress_HC_extStateHC_internal;
-            LZ4_compress_HC_extStateHC_fastReset_fp = LZ4_compress_HC_extStateHC_fastReset_internal;
-            LZ4_compress_HC_destSize_fp = LZ4_compress_HC_destSize_internal;
+            SET_LZ4HC_COMPRESS_DEFAULT_FUNCTIONS
             break;
-#endif
+#endif /* AOCL_LZ4HC_OPT */
         }
     }
 }

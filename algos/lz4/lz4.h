@@ -180,7 +180,6 @@ LZ4LIB_API const char* LZ4_versionString (void);
 /**----- AOCL Optimization flags -----*/
 
 #ifdef AOCL_LZ4_OPT
-#define AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
 //#define AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
 //#define AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
 #ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
