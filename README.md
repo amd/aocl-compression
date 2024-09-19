@@ -69,10 +69,6 @@ Building on Linux
    The option `-v` will print verbose build logs on the console.
 4. To clear or delete the build folder or files, manually remove the build directory or its files.
 
-__Note:__ When using cmake version older than 3.15, `-B` option is not supported. <br>
-So the build folder must be created manually. <br>
-The option `-v` is also not supported in cmake version older than 3.15.
-
 
 Building on Windows
 -------------------
@@ -193,7 +189,7 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
    * `AOCL_ENABLE_LOG=INFO`  for Error, Info logs.
    * `AOCL_ENABLE_LOG=DEBUG` for Error, Info, Debug logs.
    * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.<br>
-  Note: When building the library for highest performance, do not enable `DAOCL_ENABLE_LOG_FEATURE`.
+  Note: When building the library for highest performance, do not enable `AOCL_ENABLE_LOG_FEATURE`.
 
 
 * To run the test bench but only compression or decompression <br>
