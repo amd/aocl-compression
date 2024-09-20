@@ -51,10 +51,6 @@ Building on Linux
    The option `-v` will print verbose build logs on the console.
 4. To clear or delete the build folder or files, manually remove the build directory or its files.
 
-__Note:__ When using cmake version older than 3.15, `-B` option is not supported. <br>
-So the build folder must be created manually. <br>
-The option `-v` is also not supported in cmake version older than 3.15.
-
 
 Building on Windows
 -------------------
