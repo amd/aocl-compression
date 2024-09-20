@@ -118,6 +118,7 @@ TEST_COVERAGE_THIRD_PARTY           |  Enable third party test bench based CTest
 NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression for supported methods (Disabled by default)
 AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
 AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
+ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
 
 * NOTE: <br>
    1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by <br>
