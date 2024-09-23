@@ -226,3 +226,79 @@
    fun:_dl_map_object
    fun:dl_open_worker_begin
 }
+{
+   dlopen_memory_leak_5
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:UnknownInlinedFun
+   fun:_dl_check_map_versions
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+   fun:dl_open_worker
+   fun:*
+}
+{
+   dlopen_memory_leak_6
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:UnknownInlinedFun
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+   fun:*
+}
+{
+   dlopen_memory_leak_7
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:UnknownInlinedFun
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+   fun:*
+}
+{
+   dlopen_memory_leak_8
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:UnknownInlinedFun
+   fun:open_path
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+   fun:*
+}
+{
+   dlopen_memory_leak_9
+   Memcheck:Value8
+   fun:_itoa_word
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:*
+}
+{
+   dlopen_memory_leak_10
+   Memcheck:Cond
+   fun:_itoa_word
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:*
+}
+{
+   dlopen_memory_leak_11
+   Memcheck:Cond
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:*
+}
