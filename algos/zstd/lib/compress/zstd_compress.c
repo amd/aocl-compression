@@ -5638,6 +5638,9 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
     }
     else
     {
+        size_t maxSrcSize = thread_group_handle.common_part_src_size +
+                                thread_group_handle.leftover_part_src_bytes;
+        AOCL_UINT32 cmpr_bound_pad = (ZSTD_compressBound_st(maxSrcSize) - maxSrcSize);
 #ifdef AOCL_THREADS_LOG
         printf("Compress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
 #endif
@@ -5647,9 +5650,6 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
 #ifdef AOCL_THREADS_LOG
             printf("Compress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
 #endif
-            size_t maxSrcSize = thread_group_handle.common_part_src_size +
-                                thread_group_handle.leftover_part_src_bytes;
-            AOCL_UINT32 cmpr_bound_pad = (ZSTD_compressBound(maxSrcSize) - maxSrcSize); //Number of additional bytes beyond srcSize that could be written
             AOCL_UINT32 is_error = 1;
             AOCL_UINT32 thread_id = omp_get_thread_num();
             size_t local_result = 0;
