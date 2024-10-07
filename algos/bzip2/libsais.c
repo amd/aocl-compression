@@ -463,6 +463,7 @@ static void libsais_accumulate_counts_s32(sa_sint_t * RESTRICT buckets, fast_sin
 
 #endif
 
+#ifndef AOCL_BWT
 static void libsais_gather_lms_suffixes_8u(const uint8_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, fast_sint_t m, fast_sint_t omp_block_start, fast_sint_t omp_block_size)
 {
     if (omp_block_size > 0)
@@ -546,6 +547,7 @@ static void libsais_gather_lms_suffixes_8u_omp(const uint8_t * RESTRICT T, sa_si
 #endif
     }
 }
+#endif /* AOCL_BWT */
 
 static sa_sint_t libsais_gather_lms_suffixes_32s(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n)
 {
@@ -780,7 +782,7 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_8u(const uint8_t * RESTRI
             3. comparision of previous character to present char  : "T[i-1]>T[i]"
             
             so all these are encoded as:
-                (T[i] << 2)    (T[i]>T[i-1])   (T[i-1]>T[i])
+                (T[i] << 2)    (T[i]>T[i+1])   (T[i-1]>T[i])
                     ^                ^               ^
                     |                |               |
             2nd bit to 9th bit    1st bit          0th bit
@@ -7489,6 +7491,10 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
 
     if (m > 0)
     {
+        #ifdef AOCL_BWT
+            sa_sint_t * temp_SA = (sa_sint_t *)libsais_alloc_aligned(sizeof(sa_sint_t)*m, 4096);
+            memcpy(temp_SA, &SA[n-m], sizeof(sa_sint_t)*m);
+        #endif /* AOCL_BWT */
         /* Represents first lms suffix index */
         sa_sint_t first_lms_suffix    = SA[n - m];
 
@@ -7634,6 +7640,9 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
             */
             if (libsais_main_32s_entry(SA + n + fs - m, SA, m, names, fs + n - 2 * m, threads, thread_state) != 0)
             {
+                #ifdef AOCL_BWT
+                    libsais_free_aligned(temp_SA);
+                #endif /* AOCL_BWT */
                 return -2;
             }
             /*
@@ -7651,7 +7660,11 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
                                     last element of 1st half which would be in the middle of SA array.
                                     To prevent this, the function exits once the pointer moves beyond first half.
             */
-            libsais_gather_lms_suffixes_8u_omp(T, SA, n, threads, thread_state);
+            #ifdef AOCL_BWT
+                memcpy(&SA[n-m], temp_SA,  sizeof(sa_sint_t)*m);
+            #else
+                libsais_gather_lms_suffixes_8u_omp(T, SA, n, threads, thread_state);
+            #endif /* AOCL_BWT */
             /*
                 From the above step, all LMS indexes are gathered from SA[n-m] to SA[n-1]
                 The rank of these indexes are stored from SA[0] to SA[m-1], in the recursion step.
@@ -7669,6 +7682,9 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
             */
             libsais_reconstruct_lms_suffixes_omp(SA, n, m, threads);
         }
+        #ifdef AOCL_BWT
+            libsais_free_aligned(temp_SA);
+        #endif /* AOCL_BWT */
         /*
             Distributes all LMS indexes in accordance to their order in last part of each character's respective bucket.
 
