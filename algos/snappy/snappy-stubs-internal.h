@@ -178,27 +178,6 @@ inline void UNALIGNED_STORE64(void *p, uint64_t v) {
 //    x = LittleEndian.Load16(p);
 class LittleEndian {
  public:
- #ifdef AOCL_SNAPPY_OPT
-  // Functions to do unaligned loads and stores in little-endian order.
-    static inline uint16_t AOCL_Load16(const void *ptr) {
-    uint16_t x;
-    memcpy(&x, ptr, 2);
-    return x;
-  }
-
-  static inline uint32_t AOCL_Load32(const void *ptr) {
-    uint32_t x;
-    memcpy(&x, ptr, 4);
-    return x;
-  }
-
-  static inline uint64_t AOCL_Load64(const void *ptr) {
-    uint64_t x;
-    memcpy(&x, ptr, 8);
-    return x;
-  }
-#endif /* AOCL_SNAPPY_OPT */
-
   // Functions to do unaligned loads and stores in little-endian order.
   static inline uint16_t Load16(const void *ptr) {
     // Compiles to a single mov/str on recent clang and gcc.
