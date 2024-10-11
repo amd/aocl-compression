@@ -1,6 +1,6 @@
 /* inflate.c -- zlib decompression
  * Copyright (C) 1995-2022 Mark Adler
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -517,14 +517,14 @@ local int aocl_updatewindow(z_streamp strm, const Bytef *end, unsigned copy)
 #ifdef GUNZIP
 #ifdef AOCL_ZLIB_OPT
 #  define UPDATE_CHECK(check, buf, len) \
-    (state->flags ? crc32(check, buf, len) : adler32_x86_internal(check, buf, len))
+    (state->flags ? crc32(check, buf, len) : adler32_x86_internal_with_copy(check, Z_NULL, buf, len, 0))
 #else
 #  define UPDATE_CHECK(check, buf, len) \
     (state->flags ? crc32(check, buf, len) : adler32(check, buf, len))
 #endif /* AOCL_ZLIB_OPT */
 #else
 #ifdef AOCL_ZLIB_OPT
-#  define UPDATE_CHECK(check, buf, len) adler32_x86_internal(check, buf, len)
+#  define UPDATE_CHECK(check, buf, len) adler32_x86_internal_with_copy(check, Z_NULL, buf, len, 0)
 #else
 #  define UPDATE_CHECK(check, buf, len) adler32(check, buf, len)
 #endif /* AOCL_ZLIB_OPT */
@@ -774,7 +774,7 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
             state->flags = 0;               /* indicate zlib header */
             Tracev((stderr, "inflate:   zlib header ok\n"));
 #ifdef AOCL_ZLIB_OPT
-            strm->adler = state->check = adler32_x86_internal(0L, Z_NULL, 0);
+            strm->adler = state->check = adler32_x86_internal_with_copy(0L, Z_NULL, Z_NULL, 0, 0);
 #else
             strm->adler = state->check = adler32(0L, Z_NULL, 0);
 #endif
@@ -933,7 +933,7 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
                 return Z_NEED_DICT;
             }
 #ifdef AOCL_ZLIB_OPT
-            strm->adler = state->check = adler32_x86_internal(0L, Z_NULL, 0);
+            strm->adler = state->check = adler32_x86_internal_with_copy(0L, Z_NULL, Z_NULL, 0, 0);
 #else
             strm->adler = state->check = adler32(0L, Z_NULL, 0);
 #endif
@@ -1556,8 +1556,8 @@ int ZEXPORT inflateSetDictionary(z_streamp strm, const Bytef *dictionary,
     /* check for correct dictionary identifier */
     if (state->mode == DICT) {
 #ifdef AOCL_ZLIB_OPT
-        dictid = adler32_x86_internal(0L, Z_NULL, 0);
-        dictid = adler32_x86_internal(dictid, dictionary, dictLength);
+        dictid = adler32_x86_internal_with_copy(0L, Z_NULL, Z_NULL, 0, 0);
+        dictid = adler32_x86_internal_with_copy(dictid, Z_NULL, dictionary, dictLength, 0);
 #else
         dictid = adler32(0L, Z_NULL, 0);
         dictid = adler32(dictid, dictionary, dictLength);

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -39,6 +39,7 @@
 #include <string>
 #include <climits>
 #include "gtest/gtest.h"
+#include "gtest/gtest_utils.h"
 
 #include "algos/lzma/Alloc.h"
 #include "algos/lzma/LzFind.h"
@@ -47,9 +48,17 @@
 #include "algos/lzma/LzmaDec.h"
 #include "algos/common/aoclHashChain.h"
 
+#ifdef AOCL_TEST_FUZZER
+#include "fuzztest/fuzztest.h"
+#endif
+
 using namespace std;
 
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
+#ifndef kLzmaMaxHistorySize
+#define kLzmaMaxHistorySize ((UInt32)15 << 28)
+#endif
+
 
 #ifdef AOCL_LZMA_OPT
 void aocl_setup_lzma_test() {
@@ -58,12 +67,44 @@ void aocl_setup_lzma_test() {
     aocl_setup_lzma_decode(0, optLevel, 0, 0, 0);
 }
 
-/* This base class can be used for all fixtures
-* that require dynamic dispatcher setup */
+void aocl_setup_lzma(int optOff, int level) {
+    aocl_setup_lzma_encode(optOff, level, 0, 0, 0);
+    aocl_setup_lzma_decode(optOff, level, 0, 0, 0);
+}
+
+void aocl_destroy_lzma() {
+    aocl_destroy_lzma_decode();
+    aocl_destroy_lzma_encode();
+}
+
+/* This base classes can be used for all fixtures
+ * that require dynamic dispatcher setup */
 class AOCL_setup_lzma : public ::testing::Test {
 public:
     AOCL_setup_lzma() {
         aocl_setup_lzma_test();
+    }
+};
+
+class Standalone_Dynamic_dispatcher: public ::testing::TestWithParam<int>
+{
+public:
+    Standalone_Dynamic_dispatcher()
+    {
+        int optoff = GetParam();
+        aocl_destroy_lzma();
+        aocl_setup_lzma(optoff, DEFAULT_OPT_LEVEL);
+    }
+};
+
+class Combined_Dynamic_dispatcher: public ::testing::TestWithParam<tuple<int, size_t>>
+{
+public:
+     Combined_Dynamic_dispatcher()
+     {
+         int optoff = get<0>(::testing::TestWithParam<tuple<int, size_t>>::GetParam());
+         aocl_destroy_lzma();
+         aocl_setup_lzma(optoff, DEFAULT_OPT_LEVEL);     
     }
 };
 
@@ -98,7 +139,7 @@ public:
     }
 };
 
-TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_match_common)
+TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_pass_common_1) /* match pass */
 {
     unsigned lenLimit = 9;
     for (unsigned len = 0; len < 8; ++len) {
@@ -109,7 +150,7 @@ TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_mat
     }
 }
 
-TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_mismatch_common)
+TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_pass_common_2) /*  mismatch */
 {
     unsigned lenLimit = 9;
     unsigned len = 0;
@@ -136,9 +177,8 @@ TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_mis
     }
 }
 
-TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_shortStr_common)
+TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_pass_common_3) /* shortStr */
 {
-    unsigned lenLimit = 9;
     unsigned len = 0;
     Byte cur[] = "abcd1234";
     {
@@ -158,7 +198,7 @@ TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_sho
     }
 }
 
-TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_lenLimit_common)
+TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_pass_common_4) /* lenLimit */
 {
     unsigned lenLimit = 5;
     unsigned len = 0;
@@ -175,7 +215,7 @@ TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_len
     }
 }
 
-TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_longStr_common)
+TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_pass_common_5) /* longStr */
 {
     unsigned lenLimit = 9;
     unsigned len = 0;
@@ -192,7 +232,7 @@ TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_lon
     }
 }
 
-TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_remBytes_common)
+TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_pass_common_6) /* remBytes */
 {
     unsigned lenLimit = 4;
     unsigned len = 1;
@@ -219,7 +259,7 @@ TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_rem
     }
 }
 
-TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_lenLimitShort_common)
+TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_pass_common_7) /* lenLimitShort */
 {
     unsigned len = 0;
     for (unsigned lenLimit = 0; lenLimit < 4; ++lenLimit) {
@@ -230,7 +270,7 @@ TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_len
     }
 }
 
-TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_lenGreaterThanLimit_common)
+TEST_F(LZMA_byteMatching, AOCL_Compression_lzma_AOCL_FIND_MATCHING_BYTES_LEN_pass_common_8) /* lenGreaterThanLimit */
 {
     unsigned lenLimit = 5;
     unsigned len = 7;
@@ -274,7 +314,7 @@ public:
     }
 };
 
-TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_pow2Size_common_1)
+TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_pass_common_1) /* pow2Size */
 {
     UInt32 sz, block_cnt, mask;
     sz = (1 << 20);
@@ -283,7 +323,7 @@ TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_pow2S
     is_mask_valid(mask, block_cnt);
 }
 
-TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_powGt2Size_common_1)
+TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_pass_common_2) /* powGt2Size */
 {
     UInt32 sz, block_cnt, mask;
     sz = (1 << 20) + 1;
@@ -292,7 +332,7 @@ TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_powGt
     is_mask_valid(mask, block_cnt);
 }
 
-TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_powLt2Size_common_1)
+TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_pass_common_3) /* powLt2Size */
 {
     UInt32 sz, block_cnt, mask;
     sz = (1 << 20) - 1;
@@ -301,7 +341,7 @@ TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_powLt
     is_mask_valid(mask, block_cnt);
 }
 
-TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_blkGtSize_common_1)
+TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_pass_common_4) /* blkGtSize */
 {
     UInt32 sz, block_cnt, mask;
     sz = (1 << 20);
@@ -310,7 +350,7 @@ TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_blkGt
     is_mask_valid(mask, block_cnt);
 }
 
-TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_randomSize_common_1)
+TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_pass_common_5) /* randomSize */
 {
     UInt32 sz, block_cnt, mask;
     sz = 0x1F503F0;
@@ -319,7 +359,7 @@ TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_rando
     is_mask_valid(mask, block_cnt);
 }
 
-TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_minSize_common_1)
+TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_pass_common_6) /* minSize */
 {
     UInt32 sz, block_cnt, mask;
     sz = kHashGuarentee - 1;
@@ -328,7 +368,7 @@ TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_minSi
     is_mask_valid(mask, block_cnt);
 }
 
-TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_negMinSize_common_1)
+TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_fail_common_7) /* negMinSize */
 {
     UInt32 sz, block_cnt, mask;
     sz = kHashGuarentee - 1;
@@ -337,7 +377,7 @@ TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_negMi
     is_mask_invalid(mask, block_cnt);
 }
 
-TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_maxSize_common_1)
+TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_pass_common_8) /* maxSize */
 {
     UInt32 sz, block_cnt, mask;
     sz = 0xFFFFFFFF;
@@ -346,7 +386,7 @@ TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_maxSi
     is_mask_valid(mask, block_cnt);
 }
 
-TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_szZero_common_1)
+TEST_F(LZMA_hashMaskLimit, AOCL_Compression_lzma_AOCL_HC_COMPUTE_HASH_MASK_pass_common_9) /* szZero */
 {
     UInt32 sz, block_cnt, mask;
     sz = 0;
@@ -406,7 +446,7 @@ public:
     CMatchFinder p;
 };
 
-TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_pos5h19b_common_1)
+TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_pass_common_1) /* pos5h19b */
 {
     Byte cur[5]; //5 - byte hash test
     cur[1] = (Byte)'q'; cur[2] = (Byte)'w';
@@ -415,7 +455,7 @@ TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_pos5h19b_co
     EXPECT_NE(validate_hash_collision(cur, &p, cur[1], cur[2]), true);
 }
 
-TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_pos5hMax32b_common_1)
+TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_pass_common_2) /* pos5hMax32b */
 {
     Byte cur[5]; //5 - byte hash test
     cur[1] = (Byte)'-'; cur[2] = (Byte)'+';
@@ -424,7 +464,7 @@ TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_pos5hMax32b
     EXPECT_NE(validate_hash_collision(cur, &p, cur[1], cur[2]), true);
 }
 
-TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_pos5hMin16b_common_1)
+TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_pass_common_3) /* pos5hMin16b */
 {
     Byte cur[5]; //5 - byte hash test
     cur[1] = (Byte)'1'; cur[2] = (Byte)'0';
@@ -433,7 +473,7 @@ TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_pos5hMin16b
     EXPECT_NE(validate_hash_collision(cur, &p, cur[1], cur[2]), true);
 }
 
-TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_neg5hMask15b_common_1)
+TEST_F(LZMA_hashMaskCollision, AOCL_Compression_lzma_AOCL_HASH5_CALC_pass_common_4) /* neg5hMask15b */
 {
     Byte cur[5]; //5 - byte hash test
     cur[1] = (Byte)'1'; cur[2] = (Byte)'0';
@@ -662,7 +702,7 @@ private:
     UInt32 cyclicBufferSize, fixedHashSize, hashMask, sonSize;
 };
 
-TEST_F(LZMA_normalizeLzFind, AOCL_Compression_lzma_AOCL_MatchFinder_Normalize3_Hc8_common_1)
+TEST_F(LZMA_normalizeLzFind, AOCL_Compression_lzma_AOCL_MatchFinder_Normalize3_pass_common_1) /* Hc8 */
 {
     UInt32 historySize = (1 << 20);
     UInt32 flexHashSize = historySize >> 2;
@@ -672,7 +712,7 @@ TEST_F(LZMA_normalizeLzFind, AOCL_Compression_lzma_AOCL_MatchFinder_Normalize3_H
     run_normalize_lzfind(historySize, flexHashSize, level, slot_sz);
 }
 
-TEST_F(LZMA_normalizeLzFind, AOCL_Compression_lzma_AOCL_MatchFinder_Normalize3_Hc16_common_1)
+TEST_F(LZMA_normalizeLzFind, AOCL_Compression_lzma_AOCL_MatchFinder_Normalize3_pass_common_2) /* Hc16*/
 {
     UInt32 historySize = (1 << 20);
     UInt32 flexHashSize = historySize >> 2;
@@ -796,7 +836,7 @@ private:
     const UInt32 cyclicBufferSize = UINT_MAX; //large value
 };
 
-TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_common_1) //longer matches down the chain
+TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_pass_common_1) //longer matches down the chain
 {
     const size_t blockSz = 8;
     CLzRef son[blockSz];
@@ -824,7 +864,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
-TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_common_2) //longest match at closest offset
+TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_pass_common_2) //longest match at closest offset
 {
     const size_t blockSz = 8;
     CLzRef son[blockSz];
@@ -852,7 +892,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
-TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_common_3) //does not get longest match due to UInt16 optimization
+TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_pass_common_3) //does not get longest match due to UInt16 optimization
 {
     const size_t blockSz = 8;
     CLzRef son[blockSz];
@@ -886,7 +926,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
-TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_common_4) //Head at 4
+TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_pass_common_4) //Head at 4
 {
     const size_t blockSz = 8;
     CLzRef son[blockSz];
@@ -915,7 +955,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
-TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_common_5) //Head at 1
+TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_pass_common_5) //Head at 1
 {
     const size_t blockSz = 8;
     CLzRef son[blockSz];
@@ -944,7 +984,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
-TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_common_6) //match length > lenLimit
+TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_8_pass_common_6) //match length > lenLimit
 {
     const size_t blockSz = 8;
     const size_t lenLimit = 6;
@@ -975,7 +1015,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, curSz);
 }
 
-TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_16_common_1) //block sz 16
+TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_16_pass_common_1) //block sz 16
 {
     const size_t blockSz = 16;
     CLzRef son[blockSz];
@@ -1011,7 +1051,7 @@ TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec
     test_hc_get_matches_spec(inp, lenLimit, hcHead, son, blockSz, lenLimit);
 }
 
-TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_16_common_2) //block sz 16, partially full buffer
+TEST_F(LZMA_hcGetMatchesSpecLzFind, AOCL_Compression_lzma_AOCL_Hc_GetMatchesSpec_16_pass_common_2) //block sz 16, partially full buffer
 {
     const size_t blockSz = 16;
     CLzRef son[blockSz];
@@ -1135,7 +1175,7 @@ public:
     CLzmaProb prob[NUM_BASE_PROBS];
 };
 
-TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_GET_BIT2_common_1) {
+TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_GET_BIT2_pass_common_1) {
     CLzmaProb prob_ref[NUM_BASE_PROBS];
     for (int i = 0; i < NUM_BASE_PROBS; ++i) {
         prob_ref[i] = prob[i];
@@ -1151,7 +1191,7 @@ TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_GET_BIT2_common_1) {
     check_equal(prob_ref, prob_opt, rc_ref, rc_opt);
 }
 
-TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_REV_BIT_common_1) {
+TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_REV_BIT_pass_common_1) {
     CLzmaProb prob_ref[NUM_BASE_PROBS];
     for (int i = 0; i < NUM_BASE_PROBS; ++i) {
         prob_ref[i] = prob[i];
@@ -1167,7 +1207,7 @@ TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_REV_BIT_common_1) {
     check_equal(prob_ref, prob_opt, rc_ref, rc_opt);
 }
 
-TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_GET_BIT2_lowRange_common_1) {
+TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_GET_BIT2_pass_common_2) { /* lowRange */
     CLzmaProb prob_ref[NUM_BASE_PROBS];
     for (int i = 0; i < NUM_BASE_PROBS; ++i) {
         prob_ref[i] = prob[i];
@@ -1183,7 +1223,7 @@ TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_GET_BIT2_lowRange_common_1
     check_equal(prob_ref, prob_opt, rc_ref, rc_opt);
 }
 
-TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_REV_BIT_lowRange_common_1) {
+TEST_F(LZMA_decRangeCoder, AOCL_Compression_lzma_AOCL_REV_BIT_pass_common_2) { /* lowRange */
     CLzmaProb prob_ref[NUM_BASE_PROBS];
     for (int i = 0; i < NUM_BASE_PROBS; ++i) {
         prob_ref[i] = prob[i];
@@ -1217,7 +1257,7 @@ static void SzFreeDummy(ISzAllocPtr p, void* address) { return; }
 /*********************************************
 * Begin of LZMA_encPropsInit
 *********************************************/
-TEST(LZMA_encPropsInit, AOCL_Compression_lzma_LzmaEncProps_Init_common_1) //check initialization is valid
+TEST(LZMA_encPropsInit, AOCL_Compression_lzma_LzmaEncProps_pass_common_1) //check initialization is valid
 {
     CLzmaEncProps p;
     LzmaEncProps_Init(&p);
@@ -1236,8 +1276,18 @@ TEST(LZMA_encPropsInit, AOCL_Compression_lzma_LzmaEncProps_Init_common_1) //chec
     EXPECT_EQ(p.numThreads, -1);
 #ifdef AOCL_LZMA_OPT
     EXPECT_EQ(p.srcLen, 0);
+    EXPECT_EQ(p.cacheEfficientStrategy, -1);
 #endif
 }
+
+TEST(LZMA_encPropsInit, AOCL_Compression_lzma_LzmaEncProps_fail_common_2) // passing null ptr
+{
+    CLzmaEncProps *p = NULL;
+    LzmaEncProps_Init(p);
+    EXPECT_EQ(p, nullptr); // no initialisation since it is a null ptr.
+}
+
+
 /*********************************************
  * End of LZMA_encPropsInit
  *********************************************/
@@ -1323,18 +1373,25 @@ public:
     }
 };
 
-TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_defaults_common) //defaults
+TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_fail_common_1) //p is NULL
+{
+    CLzmaEncProps *p = NULL;
+    Test_LzmaEncProps_Normalize_Dyn(p); // return without normalizing
+    EXPECT_EQ(p, nullptr);
+}
+
+TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_pass_common_2) //defaults
 {
     CLzmaEncProps p;
     for (int i = LZMA_MIN_LEVEL; i <= LZMA_MAX_LEVEL; ++i) {
         LzmaEncProps_Init(&p); //reset for each test
         p.level = i;
         Test_LzmaEncProps_Normalize_Dyn(&p);
-        validate_defaults(&p, i); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_defaults_common_1 - 10
+        validate_defaults(&p, i);
     }
 }
 
-TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_dictSize_common) //dictSizes
+TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_pass_common_3) //dictSizes
 {
     { //reference settings
         CLzmaEncProps p;
@@ -1343,7 +1400,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
             LzmaEncProps_Init(&p); //reset for each test
             p.level = i;
             LzmaEncProps_Normalize(&p);
-            EXPECT_EQ(p.dictSize, dictSizes[i]); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_dictSizeRef_common_1 - 10
+            EXPECT_EQ(p.dictSize, dictSizes[i]);
         }
     }
 #ifdef AOCL_LZMA_OPT
@@ -1355,7 +1412,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
             p.level = i;
             p.cacheEfficientStrategy = 1;
             AOCL_LzmaEncProps_Normalize(&p);
-            EXPECT_EQ(p.dictSize, dictSizes[i]); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_dictSizeOpt_common_11 - 20
+            EXPECT_EQ(p.dictSize, dictSizes[i]);
         }
     }
     { //optimized settings
@@ -1366,13 +1423,13 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
             p.level = i;
             p.cacheEfficientStrategy = 0;
             AOCL_LzmaEncProps_Normalize(&p);
-            EXPECT_EQ(p.dictSize, dictSizes[i]); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_dictSizeOpt_common_21 - 30
+            EXPECT_EQ(p.dictSize, dictSizes[i]);
         }
     }
 #endif
 }
 
-TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_ces_common) //cache efficient settings
+TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_pass_common_4) //cache efficient settings
 {
     /* Test strategy to enable cache efficient hash chain implementation:
     * If ces = -1, use this strategy:
@@ -1393,14 +1450,14 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
     validate_ces(0,    MIN_SIZE_FOR_CE_HC_ON, 5,  0, 0); //ces=0
 }
 
-TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_reduceSize_common) //reduceSize
+TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_pass_common_5) //reduceSize
 {
     { //reference settings
         CLzmaEncProps p;
         LzmaEncProps_Init(&p);
         p.reduceSize = ((UInt32)1 << 16);
         LzmaEncProps_Normalize(&p);
-        EXPECT_EQ(p.dictSize, p.reduceSize); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_reduceSize_common_1
+        EXPECT_EQ(p.dictSize, p.reduceSize);
     }
 #ifdef AOCL_LZMA_OPT
     { //optimized settings
@@ -1408,12 +1465,12 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         LzmaEncProps_Init(&p);
         p.reduceSize = ((UInt32)1 << 16);
         AOCL_LzmaEncProps_Normalize(&p);
-        EXPECT_EQ(p.dictSize, p.reduceSize); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_reduceSize_common_2
+        EXPECT_EQ(p.dictSize, p.reduceSize);
     }
 #endif
 }
 
-TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_kReduceMin_common) //kReduceMin
+TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_pass_common_6) //kReduceMin
 {
     const UInt32 kReduceMin = ((UInt32)1 << 12);
     { //reference settings
@@ -1421,7 +1478,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         LzmaEncProps_Init(&p);
         p.reduceSize = ((UInt32)1 << 10);
         LzmaEncProps_Normalize(&p);
-        EXPECT_EQ(p.dictSize, kReduceMin); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_kReduceMin_common_1
+        EXPECT_EQ(p.dictSize, kReduceMin);
     }
 #ifdef AOCL_LZMA_OPT
     { //optimized settings
@@ -1429,19 +1486,19 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         LzmaEncProps_Init(&p);
         p.reduceSize = ((UInt32)1 << 10);
         AOCL_LzmaEncProps_Normalize(&p);
-        EXPECT_EQ(p.dictSize, kReduceMin); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_kReduceMin_common_2
+        EXPECT_EQ(p.dictSize, kReduceMin);
     }
 #endif
 }
 
-TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_userSettings_common) //userSettings
+TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_pass_common_7) //userSettings
 {
     { //reference settings
         CLzmaEncProps p;
         LzmaEncProps_Init(&p);
         set_user_settings(&p);
         LzmaEncProps_Normalize(&p);
-        validate_user_settings(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_userSettings_common_1
+        validate_user_settings(&p);
     }
 #ifdef AOCL_LZMA_OPT
     { //optimized settings
@@ -1449,12 +1506,12 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         LzmaEncProps_Init(&p);
         set_user_settings(&p);
         AOCL_LzmaEncProps_Normalize(&p);
-        validate_user_settings(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_userSettings_common_2
+        validate_user_settings(&p);
     }
 #endif
 }
 
-TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_minDictSize_common) //minDictSize for hash chain dict
+TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_pass_common_8) //minDictSize for hash chain dict
 {
 #ifdef AOCL_LZMA_OPT
     {
@@ -1464,7 +1521,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         p.dictSize = kHashGuarentee;
         p.level = HASH_CHAIN_16_LEVEL - 1;
         p.cacheEfficientStrategy = 1;
-        AOCL_LzmaEncProps_Normalize(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_minDictSize_common_1
+        AOCL_LzmaEncProps_Normalize(&p);
         EXPECT_EQ(p.dictSize, kHashGuarentee * HASH_CHAIN_SLOT_SZ_8);
     }
     {
@@ -1474,7 +1531,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
         p.dictSize = kHashGuarentee;
         p.level = HASH_CHAIN_16_LEVEL;
         p.cacheEfficientStrategy = 1;
-        AOCL_LzmaEncProps_Normalize(&p); //AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize_minDictSize_common_2
+        AOCL_LzmaEncProps_Normalize(&p);
         EXPECT_EQ(p.dictSize, kHashGuarentee * HASH_CHAIN_SLOT_SZ_16);
     }
 #endif
@@ -1489,7 +1546,7 @@ TEST_F(LZMA_encPropsNormalize, AOCL_Compression_lzma_AOCL_LzmaEncProps_Normalize
 class LZMA_encPropsGetDictSize : public AOCL_setup_lzma {
 };
 
-TEST_F(LZMA_encPropsGetDictSize, AOCL_Compression_lzma_LzmaEncProps_GetDictSize_common_1)
+TEST_F(LZMA_encPropsGetDictSize, AOCL_Compression_lzma_LzmaEncProps_GetDictSize_pass_common_1)
 {
     CLzmaEncProps p;
     LzmaEncProps_Init(&p);
@@ -1497,6 +1554,13 @@ TEST_F(LZMA_encPropsGetDictSize, AOCL_Compression_lzma_LzmaEncProps_GetDictSize_
     UInt32 dictSize = LzmaEncProps_GetDictSize(&p);
     EXPECT_EQ(p.dictSize, dictSize);
 }
+
+TEST_F(LZMA_encPropsGetDictSize, AOCL_Compression_lzma_LzmaEncProps_GetDictSize_fail_common_2)
+{
+    UInt32 dictSize = LzmaEncProps_GetDictSize(NULL);
+    EXPECT_EQ(dictSize, 0);
+}
+
 /*********************************************
 * End of LZMA_encPropsGetDictSize
 *********************************************/
@@ -1515,7 +1579,7 @@ TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Create_pass_common_1) //LzmaE
     LzmaEnc_Destroy(p, &g_Alloc, &g_AllocBig);
 }
 
-TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Create_fail_common_1) //LzmaEnc create with invalid allocator
+TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Create_fail_common_2) //LzmaEnc create with invalid allocator
 {
     const ISzAlloc g_Alloc = { SzAllocDummy, SzFreeDummy };
     CLzmaEncHandle p = LzmaEnc_Create(&g_Alloc);
@@ -1523,7 +1587,7 @@ TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Create_fail_common_1) //LzmaE
     EXPECT_EQ(p, nullptr);
 }
 
-TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Create_nullAlloc_common_1) //LzmaEnc create with no allocator
+TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Create_fail_common_1) //LzmaEnc create with no allocator (nullAlloc)
 {
     CLzmaEncHandle p = LzmaEnc_Create(NULL);
 
@@ -1559,7 +1623,7 @@ private:
     const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
 };
 
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_valid_common_1)
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_fail_common_1) /* valid SetProps */
 {
     LzmaEncProps_Init(&props); //necessary, else props might have invalid values
     SRes res = Test_SetProps_Dyn(p, &props);
@@ -1583,7 +1647,7 @@ TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_valid_commo
     //EXPECT_EQ(params.cacheEfficientSearch, 0);
 }
 
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_invalid_common_1)
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_fail_common_2) /* invalid  SetProps */
 {
     {
         LzmaEncProps_Init(&props); //necessary, else props might have invalid values
@@ -1613,7 +1677,7 @@ TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_invalid_com
     }*/
 }
 
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_fbLow_common_1) //test numFastBytes setting
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_pass_common_3) // SetProps_fbLow - test numFastBytes setting
 {
     LzmaEncProps_Init(&props); //necessary, else props might have invalid values
     props.fb = 4; // fb < 5
@@ -1623,7 +1687,17 @@ TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_fbLow_commo
     EXPECT_EQ(params.numFastBytes, 5);
 }
 
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_fbHigh_common_1) //test numFastBytes setting
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_pass_common_4) // SetProps_dictSize 
+{
+    LzmaEncProps_Init(&props); //necessary, else props might have invalid values
+    props.dictSize = kLzmaMaxHistorySize + 1;
+    SRes res = Test_SetProps_Dyn(p, &props);
+    EXPECT_EQ(res, SZ_OK);
+    TestCLzmaEnc params = Get_CLzmaEnc_Params(p);
+    EXPECT_EQ(params.dictSize, kLzmaMaxHistorySize);
+}
+
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_pass_common_5) //SetProps_fbHigh - test numFastBytes setting
 {
     LzmaEncProps_Init(&props); //necessary, else props might have invalid values
     const unsigned c_LZMA_MATCH_LEN_MAX = 273; //#define LZMA_MATCH_LEN_MAX (LZMA_MATCH_LEN_MIN + kLenNumSymbolsTotal - 1) // max match len 273
@@ -1634,7 +1708,7 @@ TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_fbHigh_comm
     EXPECT_EQ(params.numFastBytes, c_LZMA_MATCH_LEN_MAX);
 }
 
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_nhb_common_1) //test numHashBytes setting
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_pass_common_6) //SetProps_nhb - test numHashBytes setting
 {
     unsigned nhb_expected[7] = { 2,2,2,3,4,5,5 }; // SetProps should set nhb values to these
     for (unsigned nhb = 0; nhb < 7; ++nhb) {
@@ -1648,7 +1722,21 @@ TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_nhb_common_
     }
 }
 
-TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_ces_common_1) //test cacheEfficientSearch setting
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_pass_common_7) //SetProps_nhb - test numHashBytes setting
+{
+    unsigned nhb_expected[7] = { 4,4,4,4,4,5,5 }; // SetProps should set nhb values to these
+    for (unsigned nhb = 0; nhb < 7; ++nhb) {
+        LzmaEncProps_Init(&props); //necessary, else props might have invalid values
+        props.btMode = 0; // btMode
+        props.numHashBytes = nhb;
+        SRes res = Test_SetProps_Dyn(p, &props);
+        EXPECT_EQ(res, SZ_OK);
+        TestCLzmaEnc params = Get_CLzmaEnc_Params(p);
+        EXPECT_EQ(params.numHashBytes, nhb_expected[nhb]); //p->numHashBytes should be set to expected values
+    }
+}
+
+TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_pass_common_8) //SetProps_ces - test cacheEfficientSearch setting
 {
     {
         LzmaEncProps_Init(&props); //necessary, else props might have invalid values
@@ -1685,7 +1773,7 @@ TEST_F(LZMA_encSetProps, AOCL_Compression_lzma_AOCL_LzmaEnc_SetProps_ces_common_
 /*********************************************
 * Begin of LZMA_encSetDataSize
 *********************************************/
-TEST(LZMA_encSetDataSize, AOCL_Compression_lzma_LzmaEnc_SetDataSize_common_1)
+TEST(LZMA_encSetDataSize, AOCL_Compression_lzma_LzmaEnc_SetDataSize_pass_common)
 {
     const ISzAlloc g_Alloc = { SzAlloc, SzFree };
     const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
@@ -1727,7 +1815,7 @@ private:
     const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
 };
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_valid_common_1) //set value derived from pb,lp,lc in props
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_pass_common_1) //set value derived from pb,lp,lc in props
 {
     Byte props[LZMA_PROPS_SIZE];
     SizeT size = LZMA_PROPS_SIZE;
@@ -1737,7 +1825,7 @@ TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_valid
     EXPECT_EQ(*((UInt32*)(props + 1)), ((UInt32)1 << 24));
 }
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_invalidSz_common_1)
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_fail_common_2) /* invalidSz */
 {
     Byte props[LZMA_PROPS_SIZE];
     SizeT size = 4; //invalid size
@@ -1745,7 +1833,7 @@ TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_inval
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_nullCLzmaEncHandle_common_1)
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_fail_common_3) /* nullCLzmaEncHandle */
 {
     Byte props[LZMA_PROPS_SIZE];
     SizeT size = LZMA_PROPS_SIZE;
@@ -1753,21 +1841,21 @@ TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_nullC
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_nullProps_common_1)
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_fail_common_4) /* nullProps */
 {
     SizeT size = LZMA_PROPS_SIZE;
     SRes res = LzmaEnc_WriteProperties(p, NULL, &size);
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_nullpropsSz_common_1)
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_fail_common_5) /* nullpropsSz */
 {
     Byte props[LZMA_PROPS_SIZE];
     SRes res = LzmaEnc_WriteProperties(p, props, NULL);
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_dictSize_common) //adjust and set dictSize in props 
+TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_pass_common_6) //adjust and set dictSize in props 
 {
     Byte props[LZMA_PROPS_SIZE];
     SizeT size = LZMA_PROPS_SIZE;
@@ -1791,7 +1879,7 @@ TEST_F(LZMA_writeProperties, AOCL_Compression_lzma_LzmaEnc_WriteProperties_dictS
 /*********************************************
 * Begin of LZMA_isWriteEndMark
 *********************************************/
-TEST(LZMA_isWriteEndMark, AOCL_Compression_lzma_LzmaEnc_IsWriteEndMark_common_1)
+TEST(LZMA_isWriteEndMark, AOCL_Compression_lzma_LzmaEnc_IsWriteEndMark_pass_common)
 {
     const ISzAlloc g_Alloc = { SzAlloc, SzFree };
     const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
@@ -1810,64 +1898,57 @@ TEST(LZMA_isWriteEndMark, AOCL_Compression_lzma_LzmaEnc_IsWriteEndMark_common_1)
 /*
     Base class for allocating and filling up buffers used for compression/decompression tests
 */
+static size_t LZMA_compression_bound(size_t inSize)
+{
+    size_t outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
+    return outSize;
+}
+
 class LZMA_buffersBase {
 public:
     const ISzAlloc g_Alloc = { SzAlloc, SzFree };
     const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
 
+    virtual ~LZMA_buffersBase() {
+        //free buffers
+        if (dataGen)
+            delete dataGen; // free inPtr and compPtr
+        if (decompPtr) free(decompPtr);
+    }
+
 protected:
     void buffers_setup()
     {
-        //allocate buffers
-        outSize = compression_bound(inSize);
-        inPtr = (char*)allocMem(inSize, 1);
-        compPtr = (char*)allocMem(outSize, 0);
+        //allocate buffers and load input data
+        dataGen   = new gtest_data_gen_t(LZMA_compression_bound, inSize, gtest_data_gen_type::repeated);
+        outSize   = dataGen->getCompressedSize();
+        inPtr     = dataGen->getOrigBuff();
+        compPtr   = dataGen->getCompressedBuff();
         decompPtr = (char*)allocMem(inSize, 0);
         ASSERT_NE(inPtr, nullptr);
         ASSERT_NE(compPtr, nullptr);
         ASSERT_NE(decompPtr, nullptr);
-
-        //load input buffer
-        memset(inPtr, 0, inSize);
-        size_t cur = 0;
-        while (cur < inSize) { //fill buffer with repeating patterns
-            int randId = rand() % randomStrs.size(); //pick a string at random
-            int randLen = rand() % randomStrs[randId].size(); //select sub string length
-            if (cur + randLen >= inSize) break;
-
-            memcpy(inPtr + cur, randomStrs[randId].c_str(), randLen * sizeof(char));
-            cur += randLen;
-        }
     }
+
+    char* inPtr = nullptr, * compPtr = nullptr, * decompPtr = nullptr;
+    size_t inSize = 0;
+    size_t outSize = 0;
+    SizeT outLen;
+
+private:
+    gtest_data_gen_t* dataGen = nullptr;
 
     void* allocMem(size_t size, ptrdiff_t zeroInit)
     {
         void* bufPtr = (zeroInit == 0) ? calloc(1, size) : malloc(size);
         return bufPtr;
     }
-
-    size_t compression_bound(size_t inSize)
-    {
-        size_t outSize = (inSize + (inSize / 6) + MIN_PAD_SIZE);
-        return outSize;
-    }
-
-    std::vector<std::string> randomStrs = { "qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890",
-        "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM", "!@#$%^&*()" };
-
-    char* inPtr = nullptr, * compPtr = nullptr, * decompPtr = nullptr;
-    size_t inSize = 0;
-    size_t outSize = 0;
-    SizeT outLen;
 };
 
-/*********************************************
-* Begin of LZMA_memEncode
-*********************************************/
 /*
     Base class for all fixtures that test/use lzma encoder
 */
-class LZMA_encodeBase : public LZMA_buffersBase, public ::testing::TestWithParam<size_t> {
+class LZMA_encodeBase : public LZMA_buffersBase, public Combined_Dynamic_dispatcher {
 public:
     void decomp_validate(size_t resultComp) {
         //compress
@@ -1890,13 +1971,6 @@ protected:
         headerSize = LZMA_PROPS_SIZE;
     }
 
-    void TearDownEncode() {
-        //free buffers
-        if (inPtr) free(inPtr);
-        if (compPtr) free(compPtr);
-        if (decompPtr) free(decompPtr);
-    }
-
     CLzmaEncProps props;
     size_t headerSize;
 
@@ -1917,6 +1991,193 @@ private:
     }
 };
 
+/*********************************************
+* Begin of LZMAEnc_Encode
+*********************************************/
+
+/* struct for input stream */
+typedef struct
+{
+  ISeqInStream vt;
+  Byte *data;
+  SizeT bufPos;
+  SizeT bufSize;
+} CLzmaEnc_SeqInStreamBuf;
+
+static SRes SeqInStreamBuf_Read(const ISeqInStream *pp, void *data, size_t *size)
+{
+  CLzmaEnc_SeqInStreamBuf *p = CONTAINER_FROM_VTBL(pp, CLzmaEnc_SeqInStreamBuf, vt);
+  *size = min(*size, p->bufSize - p->bufPos);
+  if (*size != 0)
+  {
+    memcpy(data, p->data + p->bufPos, *size);
+    p->bufPos += *size;
+  }
+  return SZ_OK;
+}
+
+/* struct for output stream */
+typedef struct
+{
+  ISeqOutStream vt;
+  Byte *data;
+  SizeT bufPos;
+  SizeT bufSize;
+} CLzmaEnc_SeqOutStreamBuf;
+
+static size_t SeqOutStreamBuf_Write(const ISeqOutStream *pp, const void *data, size_t size)
+{
+  CLzmaEnc_SeqOutStreamBuf *p = CONTAINER_FROM_VTBL(pp, CLzmaEnc_SeqOutStreamBuf, vt);
+  size = min(size, p->bufSize - p->bufPos);
+  
+  if (size != 0)
+  {
+    memcpy(p->data + p->bufPos, data , size);
+    p->bufPos += size;
+  }
+  return size;
+}
+
+class LZMAEnc_Encode : public LZMA_encodeBase
+{
+public:
+    CLzmaEnc_SeqInStreamBuf inStream;
+    CLzmaEnc_SeqOutStreamBuf outStream;
+
+    void SetUp() override {
+        size_t inSize = get<1>(::testing::TestWithParam<tuple<int, size_t>>::GetParam());
+        SetUpEncode(inSize);
+        outStream.vt.Write = SeqOutStreamBuf_Write;
+        outStream.data = (Byte *)compPtr + LZMA_PROPS_SIZE;
+        outStream.bufSize = outSize - LZMA_PROPS_SIZE;
+        outStream.bufPos = 0;
+
+        inStream.vt.Read = SeqInStreamBuf_Read;
+        inStream.data = (Byte *)inPtr;
+        inStream.bufSize = inSize;
+        inStream.bufPos = 0;
+    }
+
+    void setup_encoder() {
+        outLen = outSize - LZMA_PROPS_SIZE;
+        p = LzmaEnc_Create(&g_Alloc);
+        ASSERT_NE(p, nullptr);
+    }
+
+    void free_encoder() {
+        LzmaEnc_Destroy(p, &g_Alloc, &g_AllocBig);
+    }
+
+    void set_properties() {
+        LzmaEncProps_Init(&props); //necessary, else props will have invalid values
+#ifdef AOCL_LZMA_OPT
+        props.srcLen = get<1>(::testing::TestWithParam<tuple<int, size_t>>::GetParam());
+#endif
+        SRes res = Test_SetProps_Dyn(p, &props);
+        ASSERT_EQ(res, SZ_OK);
+
+        //write header
+        res = LzmaEnc_WriteProperties(p, (uint8_t*)compPtr, &headerSize);
+        ASSERT_EQ(res, SZ_OK);
+    }
+
+    void test_fail_lzmaEnc_Encode(CLzmaEncHandle p, ISeqOutStream *outStream, 
+                                        ISeqInStream *inStream, ICompressProgress *progress, 
+                                        ISzAllocPtr alloc, ISzAllocPtr allocBig)
+    {
+        setup_encoder();
+        props.level = 6;
+        set_properties();
+
+        //compress using LzmaEnc_Encode
+        SRes res = LzmaEnc_Encode(p, outStream, inStream, progress, alloc, allocBig);
+        EXPECT_EQ(res, SZ_ERROR_PARAM);
+
+        //free
+        free_encoder();
+    }
+    
+    void decompress_and_validate()
+    {
+        CLzmaDec dec;
+        memset(decompPtr, 0, inSize);
+        ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
+        size_t srcLen = outStream.bufPos;
+        size_t destLen = inSize;
+        EXPECT_GE(srcLen, 5 /* RC_INIT_SIZE */);
+
+        LzmaDec_Construct(&dec);
+        dec.dicBufSize = 1024 * 8;
+        EXPECT_EQ(LzmaDec_Allocate(&dec, (uint8_t*)compPtr, LZMA_PROPS_SIZE, &g_Alloc), SZ_OK);
+        LzmaDec_Init(&dec);
+        SRes res1 = LzmaDec_DecodeToBuf(&dec, (uint8_t*)decompPtr, &destLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+            &srcLen, LZMA_FINISH_END, &status);
+        EXPECT_EQ(res1, SZ_OK);
+
+        EXPECT_EQ(memcmp(decompPtr, inPtr, inSize), 0);
+
+        LzmaDec_Free(&dec, &g_Alloc);
+    }
+
+        CLzmaEncHandle p = nullptr;
+};
+
+TEST_P(LZMAEnc_Encode, AOCL_Compression_lzma_LzmaEnc_Encode_pass_common_1) /* simple pass case */
+{
+    setup_encoder();
+    for(int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
+    {
+        props.level = level;
+        set_properties();
+
+        //compress using LzmaEnc_Encode
+        SRes res = LzmaEnc_Encode(p, &(outStream.vt), &(inStream.vt), NULL, &g_Alloc, &g_AllocBig);
+        EXPECT_EQ(res, SZ_OK);
+
+        // decompress and validate
+        decompress_and_validate();
+    }
+
+    //free
+    free_encoder();
+}
+
+TEST_P(LZMAEnc_Encode, AOCL_Compression_lzma_LzmaEnc_Encode_fail_common_2) /* outStream is NULL */
+{
+    test_fail_lzmaEnc_Encode(p, NULL /* &(outStream.vt) */, &(inStream.vt), NULL, &g_Alloc, &g_AllocBig);
+}
+
+TEST_P(LZMAEnc_Encode, AOCL_Compression_lzma_LzmaEnc_Encode_fail_common_3) /* inStream is NULL */
+{
+    test_fail_lzmaEnc_Encode(p, &(outStream.vt), NULL /*&(inStream.vt)*/, NULL, &g_Alloc, &g_AllocBig);
+}
+
+TEST_P(LZMAEnc_Encode, AOCL_Compression_lzma_LzmaEnc_Encode_fail_common_4) /* alloc is NULL */
+{
+    test_fail_lzmaEnc_Encode(p, &(outStream.vt), &(inStream.vt), NULL, NULL /*&g_Alloc*/, &g_AllocBig);
+}
+
+TEST_P(LZMAEnc_Encode, AOCL_Compression_lzma_LzmaEnc_Encode_fail_common_5) /* allocBig is NULL */
+{
+    test_fail_lzmaEnc_Encode(p, &(outStream.vt), &(inStream.vt), NULL, &g_Alloc, NULL /*&g_AllocBig*/);
+}
+/*
+* Run all LZMAEnc_Encode tests for 2 settings:
+*   + Not USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize < MAX_SIZE_FOR_CE_HC_OFF
+*   + USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize >= MIN_SIZE_FOR_CE_HC_ON
+*/
+INSTANTIATE_TEST_SUITE_P(
+    LZMA_encode,
+    LZMAEnc_Encode,
+    ::testing::Combine(::testing::Values(0, 1), 
+                       ::testing::Values((size_t)(MAX_SIZE_FOR_CE_HC_OFF-1), (size_t)(MIN_SIZE_FOR_CE_HC_ON))));
+/*********************************************
+* End of LZMAEnc_Encode
+*********************************************/
+
+/*********************************************
+* Begin of LZMA_memEncode
+*********************************************/
 /*
     Fixture class for testing LZMA_memEncode
     LZMA_memEncode API is used for in-memory encoding
@@ -1925,13 +2186,8 @@ class LZMA_memEncode : public LZMA_encodeBase
 {
 public:
     void SetUp() override {
-        size_t inSize = GetParam();
+        size_t inSize = get<1>(::testing::TestWithParam<tuple<int, size_t>>::GetParam());
         SetUpEncode(inSize);
-    }
-
-    void TearDown() override
-    {
-        TearDownEncode();
     }
 
     void setup_encoder() {
@@ -1948,7 +2204,7 @@ public:
     void set_properties() {
         LzmaEncProps_Init(&props); //necessary, else props will have invalid values
 #ifdef AOCL_LZMA_OPT
-        props.srcLen = GetParam();
+        props.srcLen = get<1>(::testing::TestWithParam<tuple<int, size_t>>::GetParam());
 #endif
         SRes res = Test_SetProps_Dyn(p, &props);
         ASSERT_EQ(res, SZ_OK);
@@ -1958,13 +2214,28 @@ public:
         ASSERT_EQ(res, SZ_OK);
     }
 
+    void test_fail_lzmaEnc_MemEncode(CLzmaEncHandle p, Byte *dest, SizeT *destLen, const Byte *src, 
+                                    SizeT srcLen, int writeEndMark, ICompressProgress *progress, 
+                                    ISzAllocPtr alloc, ISzAllocPtr allocBig) {
+        setup_encoder();
+        props.level = LZMA_MAX_LEVEL;
+        set_properties();
+
+        SRes res = LzmaEnc_MemEncode(p, (uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, (uint8_t*)inPtr, inSize,
+                                0, progress, &g_Alloc, &g_AllocBig);
+        EXPECT_EQ(res, SZ_ERROR_PARAM);
+    
+        //free
+        free_encoder();
+    }
+
     CLzmaEncHandle p = nullptr;
 };
 
-TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_common)
+TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_pass_common_1) /* simple pass case */
 {
     //Test for all levels
-    for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level) { //AOCL_Compression_lzma_LzmaEnc_MemEncode_common_1 - 10
+    for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level) {
         //setup
         setup_encoder();
         props.level = level;
@@ -1983,6 +2254,48 @@ TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_common)
     }
 }
 
+TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_fail_common_2) /* p is NULL */
+{
+    test_fail_lzmaEnc_MemEncode(NULL, (uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, (uint8_t*)inPtr, inSize,
+                                0, NULL, &g_Alloc, &g_AllocBig);
+}
+
+TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_fail_common_3) /* dest is NULL */
+{
+    test_fail_lzmaEnc_MemEncode(p, NULL, &outLen, (uint8_t*)inPtr, inSize,
+                                0, NULL, &g_Alloc, &g_AllocBig);
+}
+
+TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_fail_common_4) /* destLen is NULL */
+{
+    test_fail_lzmaEnc_MemEncode(p, (uint8_t*)compPtr + LZMA_PROPS_SIZE, NULL, (uint8_t*)inPtr, inSize,
+                                0, NULL, &g_Alloc, &g_AllocBig);
+}
+
+TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_fail_common_5) /* src is NULL */
+{
+    test_fail_lzmaEnc_MemEncode(p, (uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, NULL /* src */, inSize,
+                                0, NULL, &g_Alloc, &g_AllocBig);
+}
+
+TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_fail_common_6) /* srcLen is zero */
+{
+    test_fail_lzmaEnc_MemEncode(p, (uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, (uint8_t*)inPtr, 0,
+                                0, NULL, &g_Alloc, &g_AllocBig);
+}
+
+TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_fail_common_7) /* g_Alloc is null */
+{
+    test_fail_lzmaEnc_MemEncode(p, (uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, (uint8_t*)inPtr, inSize,
+                                0, NULL, NULL, &g_AllocBig);
+}
+
+TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_fail_common_8) /* g_AllocBig is null */
+{
+    test_fail_lzmaEnc_MemEncode(p, (uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, (uint8_t*)inPtr, inSize,
+                                0, NULL, &g_Alloc, NULL);
+}
+
 /*
 * Run all LZMA_memEncode tests for 2 settings:
 *   + Not USE_CACHE_EFFICIENT_HASH_CHAIN: expectedDataSize < MAX_SIZE_FOR_CE_HC_OFF
@@ -1991,7 +2304,8 @@ TEST_P(LZMA_memEncode, AOCL_Compression_lzma_LzmaEnc_MemEncode_common)
 INSTANTIATE_TEST_SUITE_P(
     LZMA_encode,
     LZMA_memEncode,
-    ::testing::Values((size_t)(MAX_SIZE_FOR_CE_HC_OFF-1), (size_t)(MIN_SIZE_FOR_CE_HC_ON)));
+    ::testing::Combine(::testing::Values(0, 1), 
+                       ::testing::Values((size_t)(MAX_SIZE_FOR_CE_HC_OFF-1), (size_t)(MIN_SIZE_FOR_CE_HC_ON))));
 /*********************************************
 * End of LZMA_memEncode
 *********************************************/
@@ -2007,13 +2321,8 @@ class LZMA_encodeFile : public LZMA_encodeBase
 {
 public:
     void SetUp() override {
-        size_t inSize = GetParam();
+        size_t inSize = get<1>(::testing::TestWithParam<tuple<int, size_t>>::GetParam());
         SetUpEncode(inSize);
-    }
-
-    void TearDown() override
-    {
-        TearDownEncode();
     }
 
     void init() {
@@ -2021,10 +2330,14 @@ public:
         LzmaEncProps_Init(&props); //necessary, else props will have invalid values
     }
 
-    void execute() {
+    void execute(bool insufficient_mem_override = false) {
         //compress using LzmaEncode
         SRes res = LzmaEncode((uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, (uint8_t*)inPtr, inSize,
             &props, (uint8_t*)compPtr, &headerSize, 0, NULL, &g_Alloc, &g_AllocBig);
+        
+        if (insufficient_mem_override && res == SZ_ERROR_MEM)
+            return; // tests with larger memory requirments might fail on machines with insufficient memory. Make an exception for such cases.
+
         EXPECT_EQ(res, SZ_OK);
 
         //decompress and validate
@@ -2039,7 +2352,7 @@ public:
     }
 };
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_valid_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_1) /* simple pass case */
 {
     //Test for all levels
     for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level) {
@@ -2047,11 +2360,11 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_valid_common)
         init();
         props.level = level;
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_valid_common_1 - 10
+        execute();
     }
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_minDict_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_2) /* minDict */
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -2062,18 +2375,21 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_minDict_common_1)
     execute();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_maxDict_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_3) /* maxDict */
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
     init();
     props.level = 9;
-    props.dictSize = (unsigned)3 << 29; //64-bit version
+    if (sizeof(size_t) == 8)
+        props.dictSize = (unsigned)3 << 29; //64-bit version
+    else
+        props.dictSize = (unsigned)1 << 27; //32-bit version
 
-    execute();
+    execute(true);
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_2ByteHashHc_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_4) /* 2ByteHashHc */
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -2084,7 +2400,7 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_2ByteHashHc_common_1)
     execute();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_2ByteHashBt_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_5) /* 2ByteHashBt */
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -2095,7 +2411,7 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_2ByteHashBt_common_1)
     execute();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_3ByteHashHc_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_6) /* 3ByteHashHc */
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -2106,7 +2422,7 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_3ByteHashHc_common_1)
     execute();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_3ByteHashBt_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_7) /* 3ByteHashBt */
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -2117,7 +2433,7 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_3ByteHashBt_common_1)
     execute();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_4ByteHashHc_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_8) /* 4ByteHashHc */
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -2128,7 +2444,7 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_4ByteHashHc_common_1)
     execute();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_4ByteHashBt_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_9) /* 4ByteHashBt */
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -2139,7 +2455,7 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_4ByteHashBt_common_1)
     execute();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_5ByteHashHc_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_10) /* 5ByteHashHc */
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -2150,7 +2466,7 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_5ByteHashHc_common_1)
     execute();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_5ByteHashBt_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_11) /* 5ByteHashBt */
 {
     //for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level)
     //setup
@@ -2161,7 +2477,7 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_5ByteHashBt_common_1)
     execute();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_lc_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_12) /* valid lc */
 {
     for (int lc = -1; lc <= 8; ++lc) { /* 0 <= lc <= 8, default = 3 */
         //setup
@@ -2169,18 +2485,20 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_lc_common)
         props.level = 1;
         props.lc = lc;
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_lc_common_1 - 10
-    }
-    {
-        init();
-        props.level = 1;
-        props.lc = 9; //out of bound
-
-        execute_invalid(); //AOCL_Compression_lzma_LzmaEncode_lc_common_11
+        execute();
     }
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_lp_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_13) /* lc */
+{
+    init();
+    props.level = 1;
+    props.lc = 9; //out of bound
+
+    execute_invalid();
+}
+
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_14) /* lp */
 {
     for (int lp = -1; lp <= 4; ++lp) { /* 0 <= lp <= 4, default = 0 */
         //setup
@@ -2188,18 +2506,19 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_lp_common)
         props.level = 1;
         props.lp = lp;
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_lp_common_1 - 6
+        execute();
     }
-    {
+}
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_15) /* lp */
+{
         init();
         props.level = 1;
         props.lp = 5; //out of bound
 
-        execute_invalid(); //AOCL_Compression_lzma_LzmaEncode_lp_common_7
-    }
+        execute_invalid();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pb_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_16)
 {
     for (int pb = -1; pb <= 4; ++pb) { /* 0 <= pb <= 4, default = 2 */
         //setup
@@ -2207,52 +2526,57 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pb_common)
         props.level = 1;
         props.pb = pb;
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_pb_common_1 - 6
-    }
-    {
-        init();
-        props.level = 1;
-        props.pb = 5; //out of bound
-
-        execute_invalid(); //AOCL_Compression_lzma_LzmaEncode_pb_common_7
+        execute();
     }
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_algo_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_17)
+{
+    init();
+    props.level = 1;
+    props.pb = 5; //out of bound
+
+    execute_invalid();
+}
+
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_18) /* algo */
 {
     for (int algo = -1; algo <= 1;++algo) { /* 0 - fast, 1 - normal, default = 1 */
         //setup
         init();
         props.algo = algo;
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_algo_common_1 - 3
-    }
-    {
-        init();
-        props.algo = 2; //out of bound
-
-        execute_invalid(); //AOCL_Compression_lzma_LzmaEncode_algo_common_4
+        execute();
     }
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_btMode_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_19) /* algo */
+{
+    init();
+    props.algo = 2; //out of bound
+
+    execute_invalid(); //AOCL_Compression_lzma_LzmaEncode_algo_common_4
+}
+
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_20) /* btMode */
 {
     for (int btMode = -1; btMode <= 1; ++btMode) { /* 0 - hashChain Mode, 1 - binTree mode - normal, default = 1 */
         //setup
         init();
         props.btMode = btMode;
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_btMode_common_1 - 3
-    }
-    {
-        init();
-        props.btMode = 2; //out of bound
-
-        execute_invalid(); //AOCL_Compression_lzma_LzmaEncode_btMode_common_4
+        execute();
     }
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_invalidNumHashBytes_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_21) /* btMode */
+{
+    init();
+    props.btMode = 2; //out of bound
+    execute_invalid();
+}
+
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_22) /* invalidNumHashBytes */
 {
     //setup
     init();
@@ -2261,7 +2585,7 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_invalidNumHashBytes_com
     execute_invalid();
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fb_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_23) /* fb */
 {
     /* 5 <= fb <= 273, default = 32 */
     {
@@ -2269,46 +2593,50 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fb_common)
         props.level = 1;
         props.fb = -1; //auto
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_fb_common_1
+        execute();
     }
     { 
         init();
         props.level = 1;
         props.fb = 5; //min
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_fb_common_2
+        execute();
     }
     {
         init();
         props.level = 1;
         props.fb = 139; //mid
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_fb_common_3
+        execute();
     }
     {
         init();
         props.level = 1;
         props.fb = 273; //max
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_fb_common_4
+        execute();
     }
+}
+
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_24) /* fb */
+{
     {
         init();
         props.level = 1;
         props.fb = 4; //out of bound
 
-        execute_invalid(); //AOCL_Compression_lzma_LzmaEncode_fb_common_5
+        execute_invalid();
     }
     {
         init();
         props.level = 1;
         props.fb = 274; //out of bound
 
-        execute_invalid(); //AOCL_Compression_lzma_LzmaEncode_fb_common_6
+        execute_invalid();
     }
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_mc_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_25) /* pass */
 {
     /* 1 <= mc <= (1 << 30), default = 32 */
     {
@@ -2316,85 +2644,89 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_mc_common)
         props.level = 1;
         props.mc = 0; //auto
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_mc_common_1
+        execute();
     }
     {
         init();
         props.level = 1;
         props.mc = 1; //min
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_mc_common_2
+        execute();
     }
     {
         init();
         props.level = 1;
         props.mc = ((UInt32)1 << 15); //mid
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_mc_common_3
+        execute();
     }
     {
         init();
         props.level = 1;
         props.mc = ((UInt32)1 << 30); //max
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_mc_common_4
-    }
-    {
-        init();
-        props.level = 1;
-        props.mc = ((UInt32)1 << 30) + 1; //out of bound
-
-        execute_invalid(); //AOCL_Compression_lzma_LzmaEncode_mc_common_5
+        execute();
     }
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_writeEndMark_common)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_26) /* pass */
+{
+    init();
+    props.level = 1;
+    props.mc = ((UInt32)1 << 30) + 1; //out of bound
+
+    execute_invalid();
+}
+
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_27) /* writeEndMark */
 {
     for (int wem = 0; wem <= 1; ++wem) { /* 0 - do not write EOPM, 1 - write EOPM, default = 0 */
         //setup
         init();
         props.writeEndMark = wem;
 
-        execute(); //AOCL_Compression_lzma_LzmaEncode_writeEndMark_common_1 - 2
-    }
-    {
-        init();
-        props.writeEndMark = 2; //out of bound
-
-        execute_invalid(); //AOCL_Compression_lzma_LzmaEncode_writeEndMark_common_3
+        execute();
     }
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noSrc_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_pass_common_28) /* writeEndMark */
+{
+    init();
+    props.writeEndMark = 2; //out of bound
+
+    execute_invalid();
+}
+
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_29) /* noSrc */
 {
     //input buffer: src: = nullptr
     SRes res = LzmaEncode((uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, nullptr, inSize,
         &props, (uint8_t*)compPtr, &headerSize, 0, NULL, &g_Alloc, &g_AllocBig);
-    EXPECT_NE(res, SZ_OK);
+    EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noSrcSz_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_30) /* noSrcSz */
 {
     SizeT invalidInSize = 0; //srcLen empty
     SRes res = LzmaEncode((uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, (uint8_t*)inPtr, invalidInSize,
         &props, (uint8_t*)compPtr, &headerSize, 0, NULL, &g_Alloc, &g_AllocBig);
-    EXPECT_NE(res, SZ_OK);
+    EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noDst_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_31) /* noDst */
 {
     //output buffer: dest = nullptr
     SRes res = LzmaEncode(nullptr, &outLen, (uint8_t*)inPtr, inSize,
         &props, (uint8_t*)compPtr, &headerSize, 0, NULL, &g_Alloc, &g_AllocBig);
-    EXPECT_NE(res, SZ_OK);
+    EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noHeader_common_1)
+TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_fail_common_32) /* noHeader */
 {
     //header buffer: propsEncoded = nullptr
     SRes res = LzmaEncode((uint8_t*)compPtr + LZMA_PROPS_SIZE, &outLen, (uint8_t*)inPtr, inSize,
         &props, nullptr, &headerSize, 0, NULL, &g_Alloc, &g_AllocBig);
-    EXPECT_NE(res, SZ_OK);
+    EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
 /*
@@ -2405,8 +2737,8 @@ TEST_P(LZMA_encodeFile, AOCL_Compression_lzma_LzmaEncode_noHeader_common_1)
 INSTANTIATE_TEST_SUITE_P(
     LZMA_encode,
     LZMA_encodeFile,
-    ::testing::Values((size_t)(MAX_SIZE_FOR_CE_HC_OFF-1), (size_t)(MIN_SIZE_FOR_CE_HC_ON)));
-
+    ::testing::Combine(::testing::Values(0, 1), 
+                       ::testing::Values((size_t)(MAX_SIZE_FOR_CE_HC_OFF-1), (size_t)(MIN_SIZE_FOR_CE_HC_ON))));
 /*********************************************
 * End of LZMA_encodeFile
 *********************************************/
@@ -2423,7 +2755,7 @@ INSTANTIATE_TEST_SUITE_P(
 * Begin of LZMA_decInit
 *********************************************/
 #define kMatchSpecLenStartTest 274
-TEST(LZMA_decInit, AOCL_Compression_lzma_LzmaDec_Init_common_1) //check initialization is valid
+TEST(LZMA_decInit, AOCL_Compression_lzma_LzmaDec_pass_common_1) //check initialization is valid
 {
     CLzmaDec p;
     LzmaDec_Init(&p);
@@ -2433,6 +2765,35 @@ TEST(LZMA_decInit, AOCL_Compression_lzma_LzmaDec_Init_common_1) //check initiali
     EXPECT_EQ(p.checkDicSize, 0);
     EXPECT_EQ(p.remainLen, kMatchSpecLenStartTest + 2);
 }
+
+TEST(LZMA_decInit, AOCL_Compression_lzma_LzmaDec_fail_common_2) // input NULL 
+{
+    CLzmaDec *p = NULL;
+    LzmaDec_Init(p);
+    EXPECT_EQ(p, nullptr); // no initialisation
+}
+
+TEST(LZMA_decInit, AOCL_Compression_lzma_LzmaDec_pass_common_3) // p as random generated data 
+{
+    char *ptr = NULL;
+    CLzmaDec *p = (CLzmaDec*)malloc(sizeof(CLzmaDec));
+    ptr = (char *)p;
+    for(int i=0; i<sizeof(CLzmaDec); i++)
+    {
+        ptr[i] = rand() % 255;
+    }
+
+    LzmaDec_Init((CLzmaDec *)p);
+    EXPECT_EQ(p->dicPos, 0);
+    EXPECT_EQ(p->tempBufSize, 0);
+    EXPECT_EQ(p->processedPos, 0);
+    EXPECT_EQ(p->checkDicSize, 0);
+    EXPECT_EQ(p->remainLen, kMatchSpecLenStartTest + 2);
+
+    free(p);
+}
+
+
 /*********************************************
  * End of LZMA_decInit
  *********************************************/
@@ -2512,7 +2873,7 @@ public:
     CLzmaProps propNew;
 };
 
-TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_defaults_common_1)
+TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_pass_common_1) /* default */
 {
     write_default_properties(); //write default properties into props
 
@@ -2525,7 +2886,7 @@ TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_defaults_common_
     validate_props(3, 0, 2, ((UInt32)1 << 24));
 }
 
-TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_user_common_1)
+TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_pass_common_2) /* user defined properties */
 {
     //set user defined properties
     const int lc = 4, lp = 1, pb = 2;
@@ -2550,7 +2911,7 @@ TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_user_common_1)
     validate_props(lc, lp, pb, dicSize);
 }
 
-TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_minDict_common_1)
+TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_pass_common_3) /* minDict */
 {
     //set user defined properties
     const int lc = 3, lp = 0, pb = 2;
@@ -2575,7 +2936,7 @@ TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_minDict_common_1
     validate_props(lc, lp, pb, LZMA_DIC_MIN);
 }
 
-TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_invalidSz_common_1)
+TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_fail_common_4) /* invalidSz */
 {
     write_default_properties(); //write default properties into props
 
@@ -2586,7 +2947,7 @@ TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_invalidSz_common
     EXPECT_EQ(res, SZ_ERROR_UNSUPPORTED);
 }
 
-TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_invalidParam_common_1)
+TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_fail_common_5) /* invalidParam */
 {
     write_default_properties(); //write default properties into props
 
@@ -2597,6 +2958,23 @@ TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_invalidParam_com
     //validate properties are set correctly
     EXPECT_EQ(res, SZ_ERROR_UNSUPPORTED);
 }
+
+TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_fail_common_6) /* propNew is NULL */
+{
+    write_default_properties(); //write default properties into props
+
+    //set pd entries by reading bytes in props
+    SRes res = LzmaProps_Decode(NULL, (uint8_t*)(&props[0]), LZMA_PROPS_SIZE);
+    EXPECT_EQ(res, SZ_ERROR_PARAM);
+}
+
+TEST_F(LZMA_propsDecode, AOCL_Compression_lzma_LzmaProps_Decode_fail_common_7) /* props is NULL */
+{
+    //set pd entries by reading bytes in props
+    SRes res = LzmaProps_Decode(&propNew, NULL, LZMA_PROPS_SIZE);
+    EXPECT_EQ(res, SZ_ERROR_PARAM);
+}
+
 /*********************************************
  * End of LZMA_propsDecode
  *********************************************/
@@ -2628,7 +3006,7 @@ public:
     }
 };
 
-TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_defaults_common_1)
+TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_pass_common_1) /* default */
 {
     write_default_properties(); //write default properties into props
 
@@ -2643,7 +3021,7 @@ TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_defaults
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_user_common_1)
+TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_pass_common_2) /* set to user defined values*/
 {
     //set user defined properties
     const int lc = 4, lp = 1, pb = 2;
@@ -2670,7 +3048,7 @@ TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_user_com
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_minDict_common_1)
+TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_pass_common_3) /* minDict */
 {
     //set user defined properties
     const int lc = 3, lp = 0, pb = 2;
@@ -2697,7 +3075,7 @@ TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_minDict_
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_invalidSz_common_1)
+TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_fail_common_4) /* invalid size */
 {
     write_default_properties(); //write default properties into props
 
@@ -2711,7 +3089,7 @@ TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_invalidS
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_invalidParam_common_1)
+TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_fail_common_5) /* invalid params */
 {
     write_default_properties(); //write default properties into props
 
@@ -2726,7 +3104,7 @@ TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_invalidP
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_nullCLzmaDec_common_1)
+TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_fail_common_6) /* null CLzmaDec */
 {
     write_default_properties(); //write default properties into props
 
@@ -2734,7 +3112,7 @@ TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_nullCLzm
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_nullProps_common_1)
+TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_fail_common_7) /* null props */
 {
     write_default_properties(); //write default properties into props
 
@@ -2742,12 +3120,36 @@ TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_nullProp
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_nullAlloc_common_1)
+TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_AllocateProbs_fail_common_8) /* null alloc */
 {
     write_default_properties(); //write default properties into props
 
     SRes res = LzmaDec_AllocateProbs(&pd, (uint8_t*)(&props[0]), LZMA_PROPS_SIZE, NULL);
     EXPECT_EQ(res, SZ_ERROR_PARAM);
+}
+
+TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_FreeProbs_fail_common_1) /* null ptr passed to LzmaDec_FreeProbs() */
+{
+    CLzmaDec *dec = NULL;
+    LzmaDec_FreeProbs(dec, &g_Alloc);
+    EXPECT_EQ(dec, nullptr);
+}
+
+TEST_F(LZMA_allocFreeProbs, AOCL_Compression_lzma_LzmaDec_FreeProbs_fail_common_2) /* null alloc passed to LzmaDec_FreeProbs() */
+{
+    write_default_properties(); //write default properties into props
+
+    SRes res = LzmaDec_AllocateProbs(&pd, (uint8_t*)(&props[0]), LZMA_PROPS_SIZE, &g_Alloc);
+    EXPECT_EQ(res, SZ_OK);
+
+    LzmaDec_FreeProbs(&pd, NULL); /* can't free the allocation */
+    EXPECT_NE(pd.probs, nullptr);
+    EXPECT_NE(&pd, nullptr);
+
+    // need to free once more with proper inputs
+    LzmaDec_FreeProbs(&pd, &g_Alloc); /* can't free the allocation */
+    validate_free(&pd);
+
 }
 
 /*********************************************
@@ -2784,7 +3186,7 @@ public:
     }
 };
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_defaults_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_pass_common_1) /* default values */
 {
     write_default_properties(); //write default properties into props
 
@@ -2799,7 +3201,7 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_defaults_common_1)
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_user_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_pass_common_2)  /* user */
 {
     //set user defined properties
     const int lc = 4, lp = 1, pb = 2;
@@ -2826,7 +3228,7 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_user_common_1)
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_minDict_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_pass_common_3) /* minDict*/
 {
     //set user defined properties
     const int lc = 3, lp = 0, pb = 2;
@@ -2853,7 +3255,7 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_minDict_common_1)
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_invalidSz_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_fail_common_4) /* propsSize < LZMA_PROPS_SIZE */
 {
     write_default_properties(); //write default properties into props
 
@@ -2867,7 +3269,7 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_invalidSz_common_1
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_invalidParam_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_fail_common_5) /* invalidParam */
 {
     write_default_properties(); //write default properties into props
 
@@ -2882,7 +3284,7 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_invalidParam_commo
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_dicFree_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_pass_common_6) /* dicFree */
 {
     write_default_properties(); //write default properties into props
 
@@ -2898,7 +3300,7 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_dicFree_common_1)
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_dicBufAlter_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_pass_common_7) /* dictBufAlter */
 {
     write_default_properties(); //write default properties into props
 
@@ -2914,7 +3316,7 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_dicBufAlter_common
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_highDictSz_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_pass_common_8) /* highDictSz */
 {
     //set user defined properties
     const int lc = 3, lp = 0, pb = 2;
@@ -2941,7 +3343,7 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_highDictSz_common_
     validate_free(&pd);
 }
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_nullCLzmaDec_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_fail_common_9) /* nullClzmaDec */
 {
     write_default_properties(); //write default properties into props
 
@@ -2949,7 +3351,7 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_nullCLzmaDec_commo
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_nullProps_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_fail_common_10) /* nullProps */
 {
     write_default_properties(); //write default properties into props
 
@@ -2957,12 +3359,35 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_nullProps_common_1
     EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_nullAlloc_common_1)
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_fail_common_11) /* nullAlloc */
 {
     write_default_properties(); //write default properties into props
 
     SRes res = LzmaDec_Allocate(&pd, (uint8_t*)(&props[0]), LZMA_PROPS_SIZE, NULL);
     EXPECT_EQ(res, SZ_ERROR_PARAM);
+}
+
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Free_fail_common_1) /* null ptr passed to LzmaDec_Free() */
+{
+    CLzmaDec *dec = NULL;
+    LzmaDec_Free(dec, &g_Alloc);
+    EXPECT_EQ(dec, nullptr);
+}
+
+TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Free_fail_common_2) /* null alloc passed to LzmaDec_Free() */
+{
+    write_default_properties(); //write default properties into props
+
+    SRes res = LzmaDec_Allocate(&pd, (uint8_t*)(&props[0]), LZMA_PROPS_SIZE, &g_Alloc);
+    EXPECT_EQ(res, SZ_OK);
+
+    LzmaDec_Free(&pd, NULL); /* can't free the allocation */
+    EXPECT_NE(pd.probs, nullptr);
+    EXPECT_NE(&pd, nullptr);
+
+    // need to free once more with proper inputs
+    LzmaDec_Free(&pd, &g_Alloc); /* can't free the allocation */
+    validate_free(&pd);
 }
 /*********************************************
  * End of LZMA_allocFree
@@ -2974,10 +3399,14 @@ TEST_F(LZMA_allocFree, AOCL_Compression_lzma_LzmaDec_Allocate_nullAlloc_common_1
 /*
     Fixture class for testing
 */
-class LZMA_decodeBase : public LZMA_buffersBase, public AOCL_setup_lzma {
+class LZMA_decodeBase : public LZMA_buffersBase, public Standalone_Dynamic_dispatcher {
 public:
     void validate() {
         EXPECT_EQ(memcmp(inPtr, decompPtr, inSize), 0); //decompressed data must match input
+    }
+
+    void validate(size_t size) {
+        EXPECT_EQ(memcmp(inPtr, decompPtr, size), 0); //decompressed data must match input uptill size
     }
 
 protected:
@@ -2986,13 +3415,6 @@ protected:
         inSize = 1024 * 1024; //1MB
         buffers_setup();
         headerSize = LZMA_PROPS_SIZE;
-    }
-
-    void TearDownBuffers() {
-        //free buffers
-        if (inPtr) free(inPtr);
-        if (compPtr) free(compPtr);
-        if (decompPtr) free(decompPtr);
     }
 
     CLzmaEncProps props;
@@ -3009,6 +3431,7 @@ protected:
 /*
     Fixture class for testing LzmaDec_DecodeToDic
 */
+using test_exec = std::function<void(SRes, ELzmaFinishMode, ELzmaStatus)>;
 class LZMA_decodeDict : public LZMA_decodeBase
 {
 public:
@@ -3018,11 +3441,6 @@ public:
 
     void SetUp() override {
         SetUpBuffers();
-    }
-
-    void TearDown() override
-    {
-        TearDownBuffers();
     }
 
     void encode() {
@@ -3035,14 +3453,23 @@ public:
         ASSERT_EQ(res, SZ_OK);
     }
 
-    void decode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
-        const Byte* propData, unsigned propSize) {
+    void setup_for_decoding()
+    {
+        size_t d_inSize = LZMA_PROPS_SIZE + outLen;
+        size_t d_outSize = inSize;
+        outLen = d_outSize;
+        srcLen = d_inSize - LZMA_PROPS_SIZE;
+    }
+
+    void run_decode_DecodeToDic(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
+        const Byte* propData, unsigned propSize, ELzmaFinishMode finishMode, 
+        test_exec execute_fp) 
+    {
         CLzmaDec p;
         SizeT outSize = *destLen, inSize = *srcLen;
         *destLen = *srcLen = 0;
         ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
         EXPECT_GE(inSize, RC_INIT_SIZE);
-
         LzmaDec_Construct(&p);
         EXPECT_EQ(LzmaDec_AllocateProbs(&p, propData, propSize, &g_Alloc), SZ_OK);
 
@@ -3050,15 +3477,15 @@ public:
         p.dicBufSize = outSize;
         LzmaDec_Init(&p);
         *srcLen = inSize;
-        SRes res = LzmaDec_DecodeToDic(&p, outSize, src, srcLen, LZMA_FINISH_END, &status);
+        SRes res = LzmaDec_DecodeToDic(&p, outSize, src, srcLen, finishMode, &status);
         *destLen = p.dicPos;
-        EXPECT_EQ(res, SZ_OK);
-        EXPECT_EQ(status, LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK);
+
+        execute_fp(res, finishMode, status);
 
         LzmaDec_FreeProbs(&p, &g_Alloc);
     }
 
-    void decode_invalid_init(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
+    void decode_invalid_init_DecodeToDic(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
         const Byte* propData, unsigned propSize) {
         CLzmaDec p;
         SizeT outSize = *destLen, inSize = *srcLen;
@@ -3086,7 +3513,7 @@ public:
         LzmaDec_FreeProbs(&p, &g_Alloc);
     }
 
-    void decode_null_checks(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
+    void decode_null_checks_DecodeToDic(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
         const Byte* propData, unsigned propSize, NullCase nullCase) {
         CLzmaDec p;
         SizeT outSize = *destLen, inSize = *srcLen;
@@ -3122,97 +3549,453 @@ public:
         
         LzmaDec_FreeProbs(&p, &g_Alloc);
     }
+    size_t srcLen = 0;
 };
 
-TEST_F(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_valid_common_1)
+TEST_P(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_pass_common_1) /* simple pass case */
 {
     encode(); //encode and get compressed stream
 
     //decompress
-    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
-    size_t d_outSize = inSize;
-    SizeT outLen = d_outSize;
-    SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+    setup_for_decoding();
 
-    decode((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
-        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
-    EXPECT_GT(outLen, 0);
+    auto simple_pass = [](SRes res, ELzmaFinishMode finishmode, ELzmaStatus status)
+        {
+            EXPECT_EQ(res, SZ_OK);
+            if(finishmode == LZMA_FINISH_ANY){
+                EXPECT_EQ(status, LZMA_STATUS_NOT_FINISHED);
+            }
+            else if(finishmode == LZMA_FINISH_END)
+            {
+                EXPECT_EQ(status, LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK);
+            }  
+        };
+
+    /* Decompressing uptill outLen (outLen < required decompressed length) */
+    run_decode_DecodeToDic((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_END, simple_pass);
+    EXPECT_EQ(outLen, inSize);
 
     //validate
     validate();
 }
 
-TEST_F(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_invalidInit_common_1)
+TEST_P(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_fail_common_2) /* invalidInit */
 {
     encode(); //encode and get compressed stream
 
     //decompress
-    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
-    size_t d_outSize = inSize;
-    SizeT outLen = d_outSize;
-    SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+    setup_for_decoding();
 
-    decode_invalid_init((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+    decode_invalid_init_DecodeToDic((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
         &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
 }
 
-TEST_F(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_nullCLzmaDec_common_1)
+TEST_P(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_pass_common_3) /* LZMA_FINISH_ANY */
 {
     encode(); //encode and get compressed stream
 
     //decompress
-    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
-    size_t d_outSize = inSize;
-    SizeT outLen = d_outSize;
-    SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+    setup_for_decoding();
+    outLen = inSize - 1024;
 
-    decode_null_checks((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+    auto simple_pass = [](SRes res, ELzmaFinishMode finishmode, ELzmaStatus status)
+    {
+        EXPECT_EQ(res, SZ_OK);
+        if(finishmode == LZMA_FINISH_ANY){
+            EXPECT_EQ(status, LZMA_STATUS_NOT_FINISHED);
+        }
+        else if(finishmode == LZMA_FINISH_END)
+        {
+            EXPECT_EQ(status, LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK);
+        }  
+    };
+
+    /* Decompressing uptill outLen (outLen < required decompressed length) */
+    run_decode_DecodeToDic((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_ANY, simple_pass);
+    EXPECT_EQ(outLen, inSize - 1024);
+
+    // validate
+    validate(outLen);
+}
+
+TEST_P(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_fail_common_4) /* LZMA_FINISH_END for wrong scenario */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    setup_for_decoding();
+    outLen = inSize - 1024;
+
+    /* Decompressing uptill outLen (outLen < required decompressed length) */
+    auto wrong_finish_mode = [](SRes res, ELzmaFinishMode finishmode, ELzmaStatus status)
+    {
+        EXPECT_EQ(res, SZ_ERROR_DATA);
+        EXPECT_EQ(status, LZMA_STATUS_NOT_FINISHED);
+    };
+    run_decode_DecodeToDic((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_END, wrong_finish_mode);
+}
+
+TEST_P(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_fail_common_5) /* nullCLzmaDec */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    setup_for_decoding();
+
+    decode_null_checks_DecodeToDic((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
         &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, NullCase::DEC_PTR); // CLzmaDec NULL
 }
 
-TEST_F(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_nullSrc_common_1)
+TEST_P(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_fail_common_6) /* src is NULL */
 {
     encode(); //encode and get compressed stream
 
     //decompress
-    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
-    size_t d_outSize = inSize;
-    SizeT outLen = d_outSize;
-    SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+    setup_for_decoding();
 
-    decode_null_checks((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+    decode_null_checks_DecodeToDic((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
         &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, NullCase::SRC); // src NULL
 }
 
-TEST_F(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_nullSrcLen_common_1)
+TEST_P(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_fail_common_7) /* srcLen is NULL */
 {
     encode(); //encode and get compressed stream
 
     //decompress
-    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
-    size_t d_outSize = inSize;
-    SizeT outLen = d_outSize;
-    SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+    setup_for_decoding();
 
-    decode_null_checks((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+    decode_null_checks_DecodeToDic((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
         &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, NullCase::SRC_LEN); // srcLen NULL
 }
 
-TEST_F(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_nullStatus_common_1)
+TEST_P(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_fail_common_8) /* status is NULL */
 {
     encode(); //encode and get compressed stream
 
     //decompress
-    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
-    size_t d_outSize = inSize;
-    SizeT outLen = d_outSize;
-    SizeT srcLen = d_inSize - LZMA_PROPS_SIZE;
+    setup_for_decoding();
 
-    decode_null_checks((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+    decode_null_checks_DecodeToDic((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
         &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, NullCase::STATUS); // status NULL
 }
+
+TEST_P(LZMA_decodeDict, AOCL_Compression_lzma_LzmaDec_DecodeToDic_fail_common_9) /*  */
+{
+    encode(); //encode and get compressed stream
+
+    compPtr[LZMA_PROPS_SIZE+1] = 'E';
+    compPtr[LZMA_PROPS_SIZE+2] = 'R';
+    compPtr[LZMA_PROPS_SIZE+3] = 'R';
+    compPtr[LZMA_PROPS_SIZE+4] = 'O';
+    compPtr[LZMA_PROPS_SIZE+5] = 'R';
+
+    //decompress
+    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
+    size_t d_outSize = inSize;
+
+    auto corrupted_input = [](SRes res, ELzmaFinishMode finishmode, ELzmaStatus status)
+    {
+        EXPECT_EQ(res, SZ_ERROR_DATA); 
+    };
+
+    {
+        outLen = d_outSize;
+        srcLen = d_inSize - LZMA_PROPS_SIZE;
+        run_decode_DecodeToDic((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+                &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_ANY, corrupted_input);
+    }
+    memset(decompPtr, 0, d_outSize);
+    {
+        outLen = d_outSize;
+        srcLen = d_inSize - LZMA_PROPS_SIZE;
+        run_decode_DecodeToDic((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+                &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_END, corrupted_input);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    LZMA_decode,
+    LZMA_decodeDict,
+    ::testing::Values(0, 1));
 /*********************************************
 * End of LZMA_decodeDict
+*********************************************/
+
+/*********************************************
+* Begin of LZMA_LzmaDec_DecodeToBuf
+*********************************************/
+class LZMA_LzmaDec_DecodeToBuf : public LZMA_decodeDict
+{
+public:
+    enum class NullCase {
+        DEC_PTR, SRC, SRC_LEN, DEST, DEST_LEN, STATUS
+    };
+
+    void SetUp() override {
+        SetUpBuffers();
+    }
+
+    void run_decode_DecodeToBuf(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
+        const Byte* propData, unsigned propSize, ELzmaFinishMode finishMode, 
+        test_exec execute_fp) 
+    {
+        CLzmaDec p;
+        ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
+        EXPECT_GE(*srcLen, RC_INIT_SIZE);
+
+        LzmaDec_Construct(&p);
+        p.dicBufSize = 1024 * 8;
+        EXPECT_EQ(LzmaDec_Allocate(&p, propData, propSize, &g_Alloc), SZ_OK);
+        LzmaDec_Init(&p);
+        SRes res = LzmaDec_DecodeToBuf(&p, dest, destLen, src, srcLen, finishMode, &status);
+
+        execute_fp(res, finishMode, status);
+
+        LzmaDec_Free(&p, &g_Alloc);
+    }
+
+    void decode_invalid_init_DecodeToBuf(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
+        const Byte* propData, unsigned propSize, ELzmaFinishMode finishMode) {
+        CLzmaDec p;
+        ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
+        EXPECT_GE(*srcLen, RC_INIT_SIZE);
+
+        LzmaDec_Construct(&p);
+        p.dicBufSize = 1024 * 8;
+        EXPECT_EQ(LzmaDec_Allocate(&p, propData, propSize, &g_Alloc), SZ_OK);
+        // LzmaDec_Init(&p); //skip init. Set invalid values
+
+        p.dicPos = 0;
+        p.processedPos = 0;
+        p.checkDicSize = 0;
+        p.tempBufSize = 0;
+        p.remainLen = kMatchSpecLenStartTest + 3;
+        SRes res = LzmaDec_DecodeToBuf(&p, dest, destLen, src, srcLen, finishMode, &status);
+        EXPECT_NE(res, SZ_OK); //expect error code
+
+        LzmaDec_Free(&p, &g_Alloc);
+    }
+
+    void decode_null_checks_DecodeToBuf(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
+        const Byte* propData, unsigned propSize, NullCase nullCase) {
+        CLzmaDec p;
+        SizeT outSize = *destLen, inSize = *srcLen;
+        ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
+        EXPECT_GE(inSize, RC_INIT_SIZE);
+
+        LzmaDec_Construct(&p);
+        EXPECT_EQ(LzmaDec_Allocate(&p, propData, propSize, &g_Alloc), SZ_OK);
+
+        p.dicBufSize = 1024 * 8;
+        LzmaDec_Init(&p);
+        *srcLen = inSize;
+        SRes res;
+        switch (nullCase) { // test for various NULL input cases based on nullCase value passed
+        case NullCase::DEC_PTR:
+            res = LzmaDec_DecodeToBuf(NULL, dest, destLen, src, srcLen, LZMA_FINISH_END, &status);
+            break;
+        case NullCase::SRC:
+            res = LzmaDec_DecodeToBuf(&p, dest, destLen, NULL, srcLen, LZMA_FINISH_END, &status);
+            break;
+        case NullCase::SRC_LEN:
+            res = LzmaDec_DecodeToBuf(&p, dest, destLen, src, NULL, LZMA_FINISH_END, &status);
+            break;
+        case NullCase::DEST:
+            res = LzmaDec_DecodeToBuf(&p, NULL, destLen, NULL, srcLen, LZMA_FINISH_END, &status);
+            break;
+        case NullCase::DEST_LEN:
+            res = LzmaDec_DecodeToBuf(&p, dest, NULL, src, srcLen, LZMA_FINISH_END, &status);
+            break;
+        case NullCase::STATUS:
+            res = LzmaDec_DecodeToBuf(&p, dest, destLen, src, srcLen, LZMA_FINISH_END, NULL);
+            break;
+        default:
+            return;
+        }
+        EXPECT_EQ(res, SZ_ERROR_PARAM); // all NULL cases should return SZ_ERROR_PARAM
+        
+        LzmaDec_Free(&p, &g_Alloc);
+    }
+};
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_fail_common_1) /* nullCLzmaDec */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    setup_for_decoding();
+
+    decode_null_checks_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, NullCase::DEC_PTR); // CLzmaDec NULL
+}
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_fail_common_2) /* invalidInit */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    setup_for_decoding();
+
+    decode_invalid_init_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_END);
+}
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_fail_common_3) /* src is NULL */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    setup_for_decoding();
+
+    decode_null_checks_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, NullCase::SRC); // src NULL
+}
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_fail_common_4) /* srcLen is NULL */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    setup_for_decoding();
+
+    decode_null_checks_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, NullCase::SRC_LEN); // srcLen NULL
+}
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_fail_common_5) /* Dest is NULL */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    setup_for_decoding();
+
+    decode_null_checks_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, NullCase::DEST); // Dest NULL
+}
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_fail_common_6) /* DestLen is NULL */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    setup_for_decoding();
+
+    decode_null_checks_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, NullCase::DEST_LEN); // DestLen NULL
+}
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_fail_common_7) /* status is NULL */
+{
+    encode(); //encode and get compressed stream
+    //decompress
+    setup_for_decoding();
+
+    decode_null_checks_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, NullCase::STATUS); // status NULL
+}
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_pass_common_8) /* simple pass case for finishmode LZMA_FINISH_END */
+{
+    encode(); //encode and get compressed stream
+    //decompress with finish mode LZMA_FINISH_END
+    setup_for_decoding();
+
+    auto simple_pass = [](SRes res, ELzmaFinishMode finishmode, ELzmaStatus status)
+    {
+        EXPECT_EQ(res, SZ_OK);
+        EXPECT_EQ(status, LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK);
+    };
+    run_decode_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+         &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_END, simple_pass);
+    EXPECT_EQ(outLen, inSize);
+
+    //validate
+    validate();
+}
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_pass_common_9) /* simple pass case for finishmode LZMA_FINISH_ANY */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress with finish mode LZMA_FINISH_ANY
+    setup_for_decoding();
+
+    auto simple_pass = [](SRes res, ELzmaFinishMode finishmode, ELzmaStatus status)
+    {
+        EXPECT_EQ(res, SZ_OK);
+        EXPECT_EQ(status, LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK);
+    };
+    run_decode_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_ANY, simple_pass);
+    EXPECT_EQ(outLen, inSize);
+
+    // validating
+    validate(outLen);
+}
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_fail_common_10) /* wrong finish mode used when destLen is less than required one. */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    setup_for_decoding();
+    outLen -= 1024;
+
+    auto wrong_finish_mode = [](SRes res, ELzmaFinishMode finishmode, ELzmaStatus status)
+    {
+        EXPECT_EQ(res, SZ_ERROR_DATA);
+        EXPECT_EQ(status, LZMA_STATUS_NOT_FINISHED);
+    };
+
+    run_decode_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+            &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_END, wrong_finish_mode);
+    EXPECT_LT(outLen, inSize);
+}
+
+TEST_P(LZMA_LzmaDec_DecodeToBuf, AOCL_Compression_lzma_LzmaDec_DecodeToBuf_fail_common_11) /* corrupted input */
+{
+    encode(); //encode and get compressed stream
+
+    compPtr[LZMA_PROPS_SIZE+1] = 'E';
+    compPtr[LZMA_PROPS_SIZE+2] = 'R';
+    compPtr[LZMA_PROPS_SIZE+3] = 'R';
+    compPtr[LZMA_PROPS_SIZE+4] = 'O';
+    compPtr[LZMA_PROPS_SIZE+5] = 'R';
+
+    auto corrupted_input = [](SRes res, ELzmaFinishMode finishmode, ELzmaStatus status)
+    {
+        EXPECT_EQ(res, SZ_ERROR_DATA);
+    }; 
+
+    //decompress
+    size_t d_inSize = LZMA_PROPS_SIZE + outLen;
+    size_t d_outSize = inSize;
+
+    {
+        outLen = d_outSize;
+        srcLen = d_inSize - LZMA_PROPS_SIZE;
+        run_decode_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+                &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_ANY, corrupted_input);
+    }
+
+    memset(decompPtr, 0, inSize);
+    {
+        outLen = d_outSize;
+        srcLen = d_inSize - LZMA_PROPS_SIZE;
+        run_decode_DecodeToBuf((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+                &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE, LZMA_FINISH_END, corrupted_input);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    LZMA_decode,
+    LZMA_LzmaDec_DecodeToBuf,
+    ::testing::Values(0, 1));
+/*********************************************
+* End of LZMA_LzmaDec_DecodeToBuf
 *********************************************/
 
 /*********************************************
@@ -3226,11 +4009,6 @@ class LZMA_decodeFile : public LZMA_decodeBase
 public:
     void SetUp() override {
         SetUpBuffers();
-    }
-
-    void TearDown() override
-    {
-        TearDownBuffers();
     }
 
     void encode() {
@@ -3251,7 +4029,7 @@ public:
     }
 };
 
-TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_valid_common_1)
+TEST_P(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_pass_common_1) /* simple pass case */
 {
     encode(); //encode and get compressed stream
 
@@ -3271,7 +4049,7 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_valid_common_1)
     validate();
 }
 
-TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_invalidInSize_common_1)
+TEST_P(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_fail_common_2) /* invalid srcLen */
 {
     encode(); //encode and get compressed stream
 
@@ -3287,7 +4065,7 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_invalidInSize_common_1)
     EXPECT_EQ(res, SZ_ERROR_INPUT_EOF);
 }
 
-TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_invalidHeader_common_1)
+TEST_P(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_fail_common_3) /* invalid header */
 {
     encode(); //encode and get compressed stream
 
@@ -3304,7 +4082,7 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_invalidHeader_common_1)
     EXPECT_NE(res, SZ_OK);
 }
 
-TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_invalidHeaderSz_common_1)
+TEST_P(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_fail_common_4) /* invalid properites sz */
 {
     encode(); //encode and get compressed stream
 
@@ -3318,10 +4096,10 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_invalidHeaderSz_common_
     SRes res = decode((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
         &srcLen, (uint8_t*)compPtr, invalidPropSize);
 
-    EXPECT_NE(res, SZ_OK);
+    EXPECT_EQ(res, SZ_ERROR_UNSUPPORTED);
 }
 
-TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_invalidCompressedInp_common_1)
+TEST_P(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_fail_common_5) /* invalidCompressedInp */
 {
     encode(); //encode and get compressed stream
 
@@ -3337,10 +4115,11 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_invalidCompressedInp_co
     SRes res = decode((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
         &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
 
-    EXPECT_NE(res, SZ_OK);
+    // EXPECT_NE(res, SZ_OK);
+    EXPECT_EQ(res, SZ_ERROR_DATA);
 }
 
-TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_srcNull_common_1)
+TEST_P(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_fail_common_6) /* srcNull */
 {
     encode(); //encode and get compressed stream
 
@@ -3354,10 +4133,10 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_srcNull_common_1)
     SRes res = decode((uint8_t*)decompPtr, &outLen, nullptr,
         &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
 
-    EXPECT_NE(res, SZ_OK);
+    EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_srcSzZero_common_1)
+TEST_P(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_fail_common_7) /* srcSzZero */
 {
     encode(); //encode and get compressed stream
 
@@ -3370,10 +4149,25 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_srcSzZero_common_1)
     SRes res = decode((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
         &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
 
-    EXPECT_NE(res, SZ_OK);
+    EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_dstNull_common_1)
+TEST_P(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_fail_common_8) /* ptr to srcLen is NULL */
+{
+    encode(); //encode and get compressed stream
+
+    //decompress
+    //size_t d_inSize = LZMA_PROPS_SIZE + outLen;
+    size_t d_outSize = inSize;
+    SizeT outLen = d_outSize;
+
+    SRes res = decode((uint8_t*)decompPtr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
+        NULL /* &srcLen */, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
+
+    EXPECT_EQ(res, SZ_ERROR_PARAM);
+}
+
+TEST_P(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_fail_common_9) /* dstNull */
 {
     encode(); //encode and get compressed stream
 
@@ -3387,10 +4181,10 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_dstNull_common_1)
     SRes res = decode(nullptr, &outLen, (uint8_t*)compPtr + LZMA_PROPS_SIZE,
         &srcLen, (uint8_t*)compPtr, LZMA_PROPS_SIZE);
 
-    EXPECT_NE(res, SZ_OK);
+    EXPECT_EQ(res, SZ_ERROR_PARAM);
 }
 
-TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_headerNull_common_1)
+TEST_P(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_fail_common_10) /* headerNull */
 {
     encode(); //encode and get compressed stream
 
@@ -3407,6 +4201,10 @@ TEST_F(LZMA_decodeFile, AOCL_Compression_lzma_LzmaDecode_headerNull_common_1)
     EXPECT_NE(res, SZ_OK);
 }
 
+INSTANTIATE_TEST_SUITE_P(
+    LZMA_decode,
+    LZMA_decodeFile,
+    ::testing::Values(0, 1));
 /*********************************************
 * End of LZMA_decodeFile
 *********************************************/
@@ -3446,7 +4244,7 @@ const char* Test_lzma_version_string(void) {
 /*
     Base class for all fixtures that test/use xz lzma encoder
 */
-class LZMA_XZ_encodeBase : public LZMA_buffersBase, public AOCL_setup_lzma {
+class LZMA_XZ_encodeBase : public LZMA_buffersBase, public Combined_Dynamic_dispatcher {
 public:
     void decomp_validate(size_t resultComp) {
         //compress
@@ -3464,16 +4262,9 @@ public:
 
 protected:
     void SetUpEncode() {
-        inSize = 1024 * 1024; //1MB
+        inSize = get<1>(::testing::TestWithParam<tuple<int, size_t>>::GetParam());
         //setup buffers
         buffers_setup();
-    }
-
-    void TearDownEncode() {
-        //free buffers
-        if (inPtr) free(inPtr);
-        if (compPtr) free(compPtr);
-        if (decompPtr) free(decompPtr);
     }
 
 private:
@@ -3497,7 +4288,7 @@ private:
 /*
     Base class for all fixtures that test/use xz lzma decoder
 */
-class LZMA_XZ_decodeBase : public LZMA_buffersBase, public AOCL_setup_lzma 
+class LZMA_XZ_decodeBase : public LZMA_buffersBase, public Standalone_Dynamic_dispatcher
 {
 public:
     void validate() {
@@ -3509,13 +4300,6 @@ protected:
         //setup buffers
         inSize = 1024 * 1024; //1MB
         buffers_setup();
-    }
-
-    void TearDownBuffers() {
-        //free buffers
-        if (inPtr) free(inPtr);
-        if (compPtr) free(compPtr);
-        if (decompPtr) free(decompPtr);
     }
 };
 
@@ -3531,10 +4315,6 @@ class LZMA_XZ_encodeFile : public LZMA_XZ_encodeBase
 public:
     void SetUp() override {
         SetUpEncode();
-    }
-
-    void TearDown() override {
-        TearDownEncode();
     }
 
     void execute(uint32_t preset, lzma_check check) {
@@ -3561,7 +4341,7 @@ public:
     }
 };
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_valid_common)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_pass_common_1) /* valid */
 {
     //Test for all levels
     for (int level = LZMA_MIN_LEVEL; level <= LZMA_MAX_LEVEL; ++level) {
@@ -3569,17 +4349,17 @@ TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_valid_c
     }
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidPreset_common_1)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_2) /* invalidPreset for min level */
 {
     execute_invalid(LZMA_MIN_LEVEL-1, LZMA_CHECK_NONE); //level < LZMA_MIN_LEVEL
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidPreset_common_2)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_3) /* invalidPreset for MAx level */
 {
     execute_invalid(LZMA_MAX_LEVEL + 1, LZMA_CHECK_NONE); //level > LZMA_MAX_LEVEL
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidPreset_common_3)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_4) /* invalidPreset */
 {
     //preset format : extreme....flags......level
     //bit number    : 31.........30_to_6....5_to_0
@@ -3590,29 +4370,29 @@ TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalid
     }
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidPreset_common_4)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_5) /* invalidPreset */
 {
     uint32_t preset = LZMA_MIN_LEVEL;
     preset |= (UINT32_C(1) << 31); //LZMA_PRESET_EXTREME
     execute_invalid(preset, LZMA_CHECK_NONE);
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidCheck_common_1)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_6) /* invalidCheck */
 {
     execute_invalid(LZMA_MAX_LEVEL, LZMA_CHECK_CRC32); //check not supported in aocl lzma
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidCheck_common_2)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_7) /* invalidCheck */
 {
     execute_invalid(LZMA_MAX_LEVEL, LZMA_CHECK_CRC64); //check not supported in aocl lzma
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidCheck_common_3)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_8) /* invalidCheck */
 {
     execute_invalid(LZMA_MAX_LEVEL, LZMA_CHECK_SHA256); //check not supported in aocl lzma
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noSrc_common_1)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_9) /* noSrc */
 {
     //input buffer: in = nullptr
     size_t out_pos = 0;
@@ -3622,7 +4402,7 @@ TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noSrc_c
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noSrcSz_common_1)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_10) /* noSrcSz */
 {
     SizeT invalidInSize = 0; //in_size empty
     size_t out_pos = 0;
@@ -3632,7 +4412,7 @@ TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noSrcSz
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noDst_common_1)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_11) /* noDst */
 {
     //output buffer: out = nullptr
     size_t out_pos = 0;
@@ -3642,7 +4422,7 @@ TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noDst_c
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noDstPos_common_1)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_12) /* noDstPos */
 {
     //output buffer pos: out_pos = nullptr
     lzma_ret ret_lzma = Test_lzma_easy_buffer_encode(LZMA_MIN_LEVEL, LZMA_CHECK_NONE, NULL /*lzma_allocator*/,
@@ -3651,7 +4431,7 @@ TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_noDstPo
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalidDstPos_common_1)
+TEST_P(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_fail_common_13) /* invalidDstPos */
 {
     //output buffer pos: out_pos > out_size
     size_t out_pos = outSize + 1;
@@ -3661,6 +4441,11 @@ TEST_F(LZMA_XZ_encodeFile, AOCL_Compression_lzma_lzma_easy_buffer_encode_invalid
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
+INSTANTIATE_TEST_SUITE_P(
+    LZMA_encode,
+    LZMA_XZ_encodeFile,
+    ::testing::Combine(::testing::Values(0, 1), 
+                       ::testing::Values((size_t)(MAX_SIZE_FOR_CE_HC_OFF-1), (size_t)(MIN_SIZE_FOR_CE_HC_ON))));
 /*********************************************
 * End of LZMA_XZ_encodeFile
 *********************************************/
@@ -3676,11 +4461,6 @@ class LZMA_XZ_decodeFile : public LZMA_XZ_decodeBase
 public:
     void SetUp() override {
         SetUpBuffers();
-    }
-
-    void TearDown() override
-    {
-        TearDownBuffers();
     }
 
     size_t encode() {
@@ -3723,13 +4503,13 @@ public:
     }
 };
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_valid_common_1)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_pass_common_1) /* valid */
 {
     size_t compSz = encode(); //encode and get compressed stream
     decode_valid(compSz); //decompress and validate
 }
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_invalidCompressedInp_common_1)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_fail_common_2) /* invalidCompressedInp */
 {
     size_t compSz = encode(); //encode and get compressed stream
 
@@ -3740,7 +4520,7 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_inval
     decode_invalid(compSz); //decompress and validate
 }
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_srcNull_common_1)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_fail_common_3) /* srcNull */
 {
     size_t compSz = encode(); //encode and get compressed stream
 
@@ -3749,7 +4529,7 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_srcNu
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_srcSzZero_common_1)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_fail_common_4) /* srcSzZero */
 {
     encode(); //encode and get compressed stream
 
@@ -3758,7 +4538,7 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_srcSz
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_dstNull_common_1)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_fail_common_5) /* dstNull */
 {
     size_t compSz = encode(); //encode and get compressed stream
 
@@ -3767,7 +4547,7 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_dstNu
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_inPosNull_common_1)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_fail_common_6) /* inPosNull */
 {
     size_t compSz = encode(); //encode and get compressed stream
 
@@ -3778,7 +4558,7 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_inPos
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_outPosNull_common_1)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_fail_common_7) /* outPosNull */
 {
     size_t compSz = encode(); //encode and get compressed stream
 
@@ -3789,7 +4569,7 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_outPo
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_invalidInPos_common_1)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_fail_common_8) /* invalidInPos */
 {
     size_t compSz = encode(); //encode and get compressed stream
 
@@ -3800,7 +4580,7 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_inval
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_invalidOutPos_common_1)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_fail_common_9) /* invalidOutPos */
 {
     size_t compSz = encode(); //encode and get compressed stream
 
@@ -3811,7 +4591,7 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_inval
     EXPECT_NE(ret_lzma, LZMA_OK);
 }
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_invalidFlag_common_1)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_fail_common_10) /* invalidFlag */
 {
     size_t compSz = encode(); //encode and get compressed stream
 
@@ -3823,7 +4603,7 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_inval
     EXPECT_EQ(ret_lzma, LZMA_OPTIONS_ERROR);
 }
 
-TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_invalidFlag_common_2)
+TEST_P(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_fail_common_11) /* invalidFlag */
 {
     size_t compSz = encode(); //encode and get compressed stream
 
@@ -3835,6 +4615,10 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_inval
     EXPECT_EQ(ret_lzma, LZMA_OPTIONS_ERROR);
 }
 
+INSTANTIATE_TEST_SUITE_P(
+    LZMA_decode,
+    LZMA_XZ_decodeFile,
+    ::testing::Values(0, 1));
 /*********************************************
 * End of LZMA_XZ_decodeFile
 *********************************************/
@@ -3842,13 +4626,13 @@ TEST_F(LZMA_XZ_decodeFile, AOCL_Compression_lzma_lzma_stream_buffer_decode_inval
 /*********************************************
 * Begin of LZMA_XZ_version
 *********************************************/
-TEST(LZMA_XZ_version, AOCL_Compression_lzma_lzma_version_number_common_1)
+TEST(LZMA_XZ_version, AOCL_Compression_lzma_lzma_version_number_pass_common)
 {
     uint32_t ver = Test_lzma_version_number();
     EXPECT_EQ(ver, LZMA_VERSION);
 }
 
-TEST(LZMA_XZ_version, AOCL_Compression_lzma_lzma_version_string_common_1)
+TEST(LZMA_XZ_version, AOCL_Compression_lzma_lzma_version_string_pass_common)
 {
     const char* ver = Test_lzma_version_string();
     EXPECT_STREQ(ver, LZMA_VERSION_STRING);
@@ -3861,4 +4645,84 @@ TEST(LZMA_XZ_version, AOCL_Compression_lzma_lzma_version_string_common_1)
 #endif
 /*********************************************
  * End API tests for xz utils lzma
+ *********************************************/
+
+/*********************************************
+ * Begin fuzz tests for lzma
+ *********************************************/
+#ifdef AOCL_TEST_FUZZER
+#include <vector>
+
+void LzmaEncode_fuzz(std::vector<Byte> source, size_t dest_sz,
+                     int level, int optOff, int optLevel)
+{
+    aocl_setup_lzma_encode(optOff, optLevel, 0, 0, 0);
+
+    if (dest_sz < LZMA_PROPS_SIZE) return;
+
+    SizeT destLen = dest_sz;
+    SizeT srcLen = source.size();
+    vector<Byte> dest(destLen, 0);
+
+    CLzmaEncProps encProps;
+    SizeT headerSize = LZMA_PROPS_SIZE;
+    SizeT outLen = destLen - LZMA_PROPS_SIZE;
+    LzmaEncProps_Init(&encProps);
+    encProps.level = level;
+
+    LzmaEncode(dest.data() + LZMA_PROPS_SIZE, &outLen, source.data(),
+        srcLen, &encProps, dest.data(), &headerSize, 0, NULL,
+        &g_Alloc, &g_Alloc);
+
+    aocl_destroy_lzma_encode();
+}
+FUZZ_TEST(AOCL_Compression_lzma, LzmaEncode_fuzz)
+.WithDomains(fuzztest::Arbitrary<std::vector<Byte>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 9),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_cpr_seed_t<Byte> {
+    auto seed_files = READ_FUZZ_CPR_SEED();
+    return get_fuzz_cpr_seeds<Byte>([](size_t src_sz) -> size_t {
+        size_t dst_sz = (size_t)Lzma_compressBound(src_sz);
+        return limit_fuzz_size_max(dst_sz);
+    }, 0, 9, seed_files);
+})
+#endif
+;
+
+void LzmaDecode_fuzz(std::vector<Byte> source, size_t dest_sz,
+                    int optOff, int optLevel)
+{
+    aocl_setup_lzma_decode(optOff, optLevel, 0, 0, 0);
+    if (source.size() < LZMA_PROPS_SIZE) return;
+
+    SizeT destLen = dest_sz;
+    SizeT srcLen = source.size() - LZMA_PROPS_SIZE;
+    vector<Byte> dest(destLen, 0);
+
+    ELzmaStatus status;
+    LzmaDecode(dest.data(), &destLen, source.data() + LZMA_PROPS_SIZE,
+                &srcLen, source.data(), LZMA_PROPS_SIZE, LZMA_FINISH_END,
+                &status, &g_Alloc);
+    aocl_destroy_lzma_decode();
+}
+FUZZ_TEST(AOCL_Compression_lzma, LzmaDecode_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Byte>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<Byte> {
+  auto seed_files = READ_FUZZ_DPR_SEED();
+  return get_fuzz_dpr_seeds<Byte>(seed_files);
+})
+#endif
+;
+
+#endif /* AOCL_TEST_FUZZER */
+/*********************************************
+ * End fuzz tests for lzma
  *********************************************/

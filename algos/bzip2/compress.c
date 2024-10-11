@@ -10,6 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
+   Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -27,7 +28,7 @@
 */
 
 #include "bzlib_private.h"
-
+#include "libsais.h"
 
 /*---------------------------------------------------*/
 /*--- Bit stream I/O                              ---*/
@@ -253,8 +254,8 @@ void sendMTFValues ( EState* s )
    --*/
 
 
-   UInt16 cost[BZ_N_GROUPS];
-   Int32  fave[BZ_N_GROUPS];
+   UInt16 cost[BZ_N_GROUPS] = {0};
+   Int32  fave[BZ_N_GROUPS] = {0};
 
    UInt16* mtfv = s->mtfv;
 
@@ -612,8 +613,15 @@ void BZ2_compressBlock ( EState* s, Bool is_last_block )
          VPrintf4( "    block %d: crc = 0x%08x, "
                    "combined CRC = 0x%08x, size = %d\n",
                    s->blockNo, s->blockCRC, s->combinedCRC, s->nblock );
-
-      BZ2_blockSort ( s );
+      /*
+         SA-IS implementation of BWT, atmost additional memory that can be needed is s->block * 6,
+         max s->block is 9*10^5,
+         max additional memory is 6*9*10^5, i.e, ~5.4 Mb.
+      */
+      if(AOCL_use_libsais)
+         s->origPtr = libsais(s->block, (Int32 *)s->ptr, s->nblock, 0, NULL);
+      else
+         BZ2_blockSort ( s );
    }
 
    s->zbits = (UChar*) (&((UChar*)s->arr2)[s->nblock]);

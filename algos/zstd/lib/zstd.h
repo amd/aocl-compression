@@ -8,33 +8,34 @@
  * You may select, at your option, one of the above-listed licenses.
  */
 
- /*
-  * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
-  *
-  * Redistribution and use in source and binary forms, with or without
-  * modification, are permitted provided that the following conditions are met:
-  *
-  * 1. Redistributions of source code must retain the above copyright notice,
-  * this list of conditions and the following disclaimer.
-  * 2. Redistributions in binary form must reproduce the above copyright notice,
-  * this list of conditions and the following disclaimer in the documentation
-  * and/or other materials provided with the distribution.
-  * 3. Neither the name of the copyright holder nor the names of its
-  * contributors may be used to endorse or promote products derived from this
-  * software without specific prior written permission.
-  *
-  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-  * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-  * POSSIBILITY OF SUCH DAMAGE.
-  */
+/*
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its
+ * contributors may be used to endorse or promote products derived from this
+ * software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #if defined (__cplusplus)
 extern "C" {
 #endif
@@ -47,6 +48,7 @@ extern "C" {
 #include <stddef.h>   /* size_t */
 
 #include "aoclAlgoOpt.h" /* AOCL Optimization flags */
+#include "aoclFds.h" /* AOCL FDS flags */
 
 /* =====   ZSTDLIB_API : control library symbols visibility   ===== */
 #ifndef ZSTDLIB_VISIBLE
@@ -116,6 +118,7 @@ extern "C" {
  * typically with -Wno-deprecated-declarations for gcc or _CRT_SECURE_NO_WARNINGS in Visual.
  * Otherwise, it's also possible to define ZSTD_DISABLE_DEPRECATE_WARNINGS.
  */
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 #ifdef ZSTD_DISABLE_DEPRECATE_WARNINGS
 #  define ZSTD_DEPRECATED(message) /* disable deprecation warnings */
 #else
@@ -132,7 +135,7 @@ extern "C" {
 #    define ZSTD_DEPRECATED(message)
 #  endif
 #endif /* ZSTD_DISABLE_DEPRECATE_WARNINGS */
-
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*******************************************************************************
   Introduction
@@ -175,6 +178,11 @@ extern "C" {
 #define ZSTD_VERSION_NUMBER  (ZSTD_VERSION_MAJOR *100*100 + ZSTD_VERSION_MINOR *100 + ZSTD_VERSION_RELEASE)
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
+/**
+ * @name Helper functions
+ * 
+ */
+
 /*! 
  * @brief
  *  Library Version number.
@@ -199,6 +207,10 @@ ZSTDLIB_API unsigned ZSTD_versionNumber(void);
  */
 
 ZSTDLIB_API const char* ZSTD_versionString(void);
+
+/**
+ * @}
+ */
 
 /* *************************************
  *  Default constant
@@ -405,51 +417,75 @@ ZSTDLIB_API size_t ZSTD_findFrameCompressedSize(const void* src, size_t srcSize)
  * @}
  */
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
 /**
- * @brief AOCL-Compression defined setup functions that configures ZSTD
- * compression with the right AMD optimized ZSTD routines depending upon the
- * detected CPU features.
- *
- * | Parameters | Description |
- * |:-----------|:------------|
- * | \b optOff    |Turn off all optimizations .                                                                   |
- * | \b optLevel  |Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .              |
- * | \b insize    |Input data length.                                                                             |
- * | \b level     |Requested compression level.                                                                   |
- * | \b windowLog | Largest match distance : larger == more compression, more memory needed during decompression. |
- *
- * @return \b NULL
+ * @name AOCL Functions
+ * @brief These functions are not part of open source code, these are introduced by AOCL-Compression
+ * library to control AOCL introduced optimization levels dynamically.
+ * 
+ * @note These functions are for internal purposes only, not recommended for external use.
+ * 
+ * @{
+ */
+
+/**
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized zstd routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_zstd_encode() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in zstd following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * 
+ * @return \b NULL .
  */
 ZSTDLIB_API char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 
 /**
- * @brief AOCL-Compression defined setup functions that configures ZSTD
- * decompression with the right AMD optimized ZSTD routines depending upon the
- * detected CPU features.
- *
- * | Parameters | Description |
- * |:-----------|:------------|
- * | \b optOff    |Turn off all optimizations .                                                                  |
- * | \b optLevel  |Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .             |
- * | \b insize    |Input data length.                                                                            |
- * | \b level     |Requested compression level.                                                                  |
- * | \b windowLog |Largest match distance : larger == more compression, more memory needed during decompression. |
- *
- * @return \b NULL
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized zstd routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_zstd_decode() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in zstd following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * 
+ * @return \b NULL .
  */
 ZSTDLIB_API char* aocl_setup_zstd_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog);
 
 /**
- * @brief AOCL-Compression defined destroy function for zstd encode.
+ * @brief It is necessary to execute this destroy function after the initial invocation of
+ * the aocl_setup_zstd_encode() function, prior to initiating the setup function again.
  */
 ZSTDLIB_API void aocl_destroy_zstd_encode(void);
 
 /**
- * @brief AOCL-Compression defined destroy function for zstd decode.
+ * @brief It is necessary to execute this destroy function after the initial invocation of
+ * the aocl_setup_zstd_decode() function, prior to initiating the setup function again.
  */
 ZSTDLIB_API void aocl_destroy_zstd_decode(void);
+
+/**
+ * @}
+ */
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*======  Helper functions  ======*/
 /* ZSTD_compressBound() :
@@ -470,7 +506,7 @@ ZSTDLIB_API void aocl_destroy_zstd_decode(void);
  */
  /// @cond DOXYGEN_SHOULD_SKIP_THIS
 #define ZSTD_MAX_INPUT_SIZE ((sizeof(size_t)==8) ? 0xFF00FF00FF00FF00LLU : 0xFF00FF00U)
-#define ZSTD_COMPRESSBOUND(srcSize)   (((size_t)(srcSize) >= ZSTD_MAX_INPUT_SIZE) ? 0 : (srcSize) + ((srcSize)>>8) + (((srcSize) < (128<<10)) ? (((128<<10) - (srcSize)) >> 11) /* margin, from 64 to 0 */ : 0))  /* this formula ensures that bound(A) + bound(B) <= bound(A+B) as long as A and B >= 128 KB */
+#define ZSTD_COMPRESSBOUND_ORG(srcSize)   (((size_t)(srcSize) >= ZSTD_MAX_INPUT_SIZE) ? 0 : (srcSize) + ((srcSize)>>8) + (((srcSize) < (128<<10)) ? (((128<<10) - (srcSize)) >> 11) /* margin, from 64 to 0 */ : 0))  /* this formula ensures that bound(A) + bound(B) <= bound(A+B) as long as A and B >= 128 KB */
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 /*!
  * @name Helper functions
@@ -504,6 +540,11 @@ typedef struct ZSTD_CCtx_s ZSTD_CCtx;
  *         It doesn't change the compression ratio, which remains identical.
  *  @note 2 : In multi-threaded environments,
  *         use one different context per thread for parallel execution.
+ */
+
+/**
+ * @name Explicit context
+ * @{
  */
 ZSTDLIB_API ZSTD_CCtx* ZSTD_createCCtx(void); /**< @brief Creates compression context. */
 ZSTDLIB_API size_t     ZSTD_freeCCtx(ZSTD_CCtx* cctx);  /**< @brief Releases compression context. Accept NULL pointer */
@@ -544,6 +585,9 @@ ZSTDLIB_API size_t ZSTD_compressCCtx(ZSTD_CCtx* cctx,
                                const void* src, size_t srcSize,
                                      int compressionLevel);
 
+/**
+ * @}
+ */
 typedef struct ZSTD_DCtx_s ZSTD_DCtx;
 /**< Decompression context : 
  *  When decompressing many times,
@@ -552,6 +596,10 @@ typedef struct ZSTD_DCtx_s ZSTD_DCtx;
  *  This will make workload friendlier for system's memory.
  *  @note Use one context per thread for parallel execution. */
 
+/**
+ * @name Explicit context
+ * @{
+ */
 ZSTDLIB_API ZSTD_DCtx* ZSTD_createDCtx(void); /**< @brief Creates decompression context. */
 ZSTDLIB_API size_t     ZSTD_freeDCtx(ZSTD_DCtx* dctx);  /**< @brief Releases decompression context. Accept NULL pointer */
 
@@ -582,6 +630,9 @@ ZSTDLIB_API size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx,
                                        void* dst, size_t dstCapacity,
                                  const void* src, size_t srcSize);
 
+/**
+ * @}
+ */
 
 /*********************************************
 *  Advanced compression API (Requires v1.4.0+)
@@ -919,7 +970,7 @@ ZSTDLIB_API ZSTD_bounds ZSTD_cParam_getBounds(ZSTD_cParameter cParam);
   *  @return
   * | Result     | Description |
   * |:-----------|:------------|
-  * | Success    |0            |
+  * | Success    |Non error code non-negative integer. |
   * | Fail       |An error code (which can be tested using ZSTD_isError()). |
   *  @note When using multi-threading mode (nbWorkers >= 1),
   *              the following parameters can be updated _during_ compression (within same frame):
@@ -1294,10 +1345,18 @@ typedef ZSTD_CCtx ZSTD_CStream;  /**<
                                 Continue to distinguish them for compatibility with older versions <= v1.2.0
                                 */
 /*===== ZSTD_CStream management functions =====*/
+/**
+ * @name ZSTD_CStream management functions
+ * @{
+ */
 /*! @brief Used to create resource.*/
 ZSTDLIB_API ZSTD_CStream* ZSTD_createCStream(void);
 /*! @brief Used to release resource. Accept NULL pointer */
 ZSTDLIB_API size_t ZSTD_freeCStream(ZSTD_CStream* zcs);  
+
+/**
+ * @}
+ */
 
 /*===== Streaming compression functions =====*/
 typedef enum {
@@ -1531,9 +1590,18 @@ typedef ZSTD_DCtx ZSTD_DStream;  /**<  @brief A ZSTD_DStream object is required 
                                  For compatibility with versions <= v1.2.0, prefer differentiating them.
                                  */
 /*===== ZSTD_DStream management functions =====*/
+/**
+ * @name ZSTD_DStream management functions
+ * @{
+ */
+/*! @brief This is used to create ZSTD_DStream to track streaming operations which can be re-used multiple times.*/
 ZSTDLIB_API ZSTD_DStream* ZSTD_createDStream(void);
 /*! @brief Used to release resources. Accept NULL pointer */
 ZSTDLIB_API size_t ZSTD_freeDStream(ZSTD_DStream* zds);  
+
+/**
+ * @}
+ */
 
 /*===== Streaming decompression functions =====*/
 
@@ -2272,11 +2340,17 @@ ZSTDLIB_API size_t ZSTD_DCtx_refPrefix(ZSTD_DCtx* dctx,
  * \n \b Note Requires v1.4.0+
  * @{
  */
+/** @brief Returs the size of `ZSTD_CCtx` */
 ZSTDLIB_API size_t ZSTD_sizeof_CCtx(const ZSTD_CCtx* cctx);
+/** @brief Returs the size of `ZSTD_DCtx` */
 ZSTDLIB_API size_t ZSTD_sizeof_DCtx(const ZSTD_DCtx* dctx);
+/** @brief Returs the size of `ZSTD_CStream` */
 ZSTDLIB_API size_t ZSTD_sizeof_CStream(const ZSTD_CStream* zcs);
+/** @brief Returs the size of `ZSTD_DStream` */
 ZSTDLIB_API size_t ZSTD_sizeof_DStream(const ZSTD_DStream* zds);
+/** @brief Returs the size of `ZSTD_CDict` */
 ZSTDLIB_API size_t ZSTD_sizeof_CDict(const ZSTD_CDict* cdict);
+/** @brief Returs the size of `ZSTD_DDict` */
 ZSTDLIB_API size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 
 /**
@@ -2323,6 +2397,15 @@ ZSTDLIB_API size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 #define ZSTD_FRAMEHEADERSIZE_MIN(format)    ((format) == ZSTD_f_zstd1 ? 6 : 2)
 #define ZSTD_FRAMEHEADERSIZE_MAX   18   /* can be useful for static allocation */
 #define ZSTD_SKIPPABLEHEADERSIZE    8
+
+#if AOCL_DECOMPRESS_FAST > 1
+#define ZSTD_COMPRESSBOUND(srcSize)   (((size_t)(srcSize) >= ZSTD_MAX_INPUT_SIZE) ? 0 : \
+                                      ((ZSTD_COMPRESSBOUND_ORG(srcSize) > (SIZE_MAX - (FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE))) ? 0 : \
+                                      ((FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE) + ZSTD_COMPRESSBOUND_ORG(srcSize)) /* with additional bytes for FDS skippable frame */ \
+                                      ))
+#else
+#define ZSTD_COMPRESSBOUND(srcSize)   ZSTD_COMPRESSBOUND_ORG(srcSize)
+#endif
 
 /* compression parameter bounds */
 #define ZSTD_WINDOWLOG_MAX_32    30
@@ -2556,6 +2639,7 @@ typedef enum {
 /***************************************
 *  Frame header and size functions
 ***************************************/
+ZSTDLIB_API size_t      AOCL_ZSTD_compressBound(size_t srcSize, ZSTD_parameters params); /*!< @brief A tighter upper bound on compressed size than the one provided by ZSTD_compressBound(). */
 
 /* ZSTD_findDecompressedSize() :
  *  `src` should point to the start of a series of ZSTD encoded and/or skippable frames
@@ -2925,10 +3009,18 @@ ZSTDLIB_API unsigned ZSTD_isSkippableFrame(const void* buffer, size_t size);
 #ifdef AOCL_UNIT_TEST
 ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag);
 ZSTDLIB_API size_t Test_ZSTD_decompressDCtxRef(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+ZSTDLIB_API ZSTD_compressionParameters Test_Get_ZSTD_defaultCParameters(size_t srcSize, int level, int opt_on);
+ZSTDLIB_API void Test_AOCL_ZSTD_storeSequences(void* seqStore, const unsigned char* ip, const unsigned char* anchor,
+                                               const unsigned char* const iend, unsigned offBase, size_t mLength);                                   
+#if AOCL_DECOMPRESS_FAST > 1
+ZSTDLIB_API void Test_AOCL_ZSTD_readFdsFrame(ZSTD_DCtx* dctx, void const* src, size_t srcSize);
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 #ifdef AOCL_ENABLE_THREADS
 ZSTDLIB_API int Test_ZSTD_getWindowFactor(size_t srcSize);
-#endif
-#endif
+ZSTDLIB_API size_t Test_AOCL_ZSTD_readSkippableRAPFrameHeader(const void* src, size_t srcSize);
+ZSTDLIB_API size_t Test_AOCL_ZSTD_writeSkippableFrameHeader(void* dst, size_t dstCapacity, size_t srcSize, unsigned magicVariant);
+#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_UNIT_TEST */
 
 /***************************************
 *  Memory management
@@ -4257,9 +4349,6 @@ ZSTDLIB_STATIC_API ZSTD_nextInputType_e ZSTD_nextInputType(ZSTD_DCtx* dctx);
 
 
 
-/** 
- * @} 
- */
 
 /* ========================================= */
 /**       Block level API (DEPRECATED)       */
@@ -4314,6 +4403,11 @@ ZSTD_DEPRECATED("The block API is deprecated in favor of the normal compression 
 ZSTDLIB_STATIC_API size_t ZSTD_insertBlock    (ZSTD_DCtx* dctx, const void* blockStart, size_t blockSize);  /**< insert uncompressed block into `dctx` history. Useful for multi-blocks decompression. */
 
 #endif   /* ZSTD_H_ZSTD_STATIC_LINKING_ONLY */
+
+/** 
+ * @} 
+ */
+
 
 #if defined (__cplusplus)
 }

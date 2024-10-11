@@ -9,7 +9,6 @@ LZMA features:
 Compression speed: 3 MB/s on 3 GHz dual-core CPU.
 Decompression speed:
 20-50 MB/s on modern 3 GHz CPU (Intel, AMD, ARM).
-5-15 MB/s on simple 1 GHz RISC CPU (ARM, MIPS, PowerPC).
 Small memory requirements for decompression: 8-32 KB + DictionarySize
 Small code size for decompression: 2-8 KB (depending on speed optimizations)
 

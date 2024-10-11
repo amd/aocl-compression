@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,12 +33,18 @@
 #ifdef AOCL_ZLIB_OPT
 ZEXTERN void slide_hash_x86(deflate_state *s);
 ZEXTERN uInt longest_match_x86 (deflate_state *s, IPos cur_match);
+ZEXTERN uInt longest_match_lazy_x86 (deflate_state *s, IPos cur_match);
 
 /* Equivalent functions for adler32_x86
  * that do not call AOCL_SETUP_NATIVE(). When these functions are called
  * from other APIs, dynamic dispatcher setup is already done, and overhead
- * from calling AOCL_SETUP_NATIVE() can be avoided. */
-ZEXTERN uint32_t adler32_x86_internal(uint32_t adler, const Bytef *buf, z_size_t len);
+ * from calling AOCL_SETUP_NATIVE() can be avoided. 
+ * This function also take care of copying data to sliding window when it 
+ * does not have enough data for further processing. It prevents copying
+ * twice, once during checksum calculation and other when data is copied
+ * to sliding window.
+ */
+ZEXTERN uint32_t adler32_x86_internal_with_copy(uint32_t adler, Bytef *dst, const Bytef *buf, z_size_t len, const short copy);
 #endif
 
 #endif

@@ -10,7 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
-   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+   Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -31,6 +31,7 @@
 
 #include "utils/utils.h"
 #include "bzlib_private.h"
+#include "libsais.h"
 
 #ifdef AOCL_BZIP2_OPT
 /* Dynamic dispatcher setup function for native APIs.
@@ -44,6 +45,7 @@ static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE()
 #endif
 
+int AOCL_use_libsais = 0;
 static int setup_ok_bzip2 = 0; // flag to indicate status of dynamic dispatcher setup
 
 /*---------------------------------------------------*/
@@ -99,6 +101,14 @@ void BZ2_bz__AssertH__fail ( int errcode )
    exit(3);
 }
 #endif
+
+//Minimum compressed buffer size
+#define MIN_PAD_SIZE (16*1024)
+unsigned int BZ2_bzCompressBound(unsigned int insize)
+{
+   unsigned int outSize = (insize + (insize / 6) + MIN_PAD_SIZE);
+   return outSize;
+}
 
 static Bool copy_input_until_stop ( EState* s );
 static Bool copy_output_until_stop ( EState* s );
@@ -202,6 +212,11 @@ void aocl_register_copy_fmv(int optOff, int optLevel)
    }
 }
 
+void aocl_register_bwt(int optOff)
+{
+   AOCL_use_libsais = !optOff;
+}
+
 BZ_EXTERN char * BZ_API(aocl_setup_bzip2) 
                      ( int optOff,
                        int optLevel,
@@ -212,6 +227,7 @@ BZ_EXTERN char * BZ_API(aocl_setup_bzip2)
     AOCL_ENTER_CRITICAL(setup_bzip2)
     if (!setup_ok_bzip2) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_register_bwt(optOff);
         aocl_register_decompress_fmv(optOff, optLevel);
         aocl_register_copy_fmv(optOff, optLevel);
         aocl_register_mainSimpleSort_fmv(optOff, optLevel);
@@ -227,6 +243,7 @@ static void aocl_setup_native(void) {
     if (!setup_ok_bzip2) {
         int optLevel = get_cpu_opt_flags(0);
         int optOff = get_disable_opt_flags(0);
+        aocl_register_bwt(optOff);
         aocl_register_decompress_fmv(optOff, optLevel);
         aocl_register_copy_fmv(optOff, optLevel);
         aocl_register_mainSimpleSort_fmv(optOff, optLevel);
@@ -803,10 +820,10 @@ int BZ_API(BZ2_bzDecompressInit)
    if (strm->bzfree == NULL) strm->bzfree = default_bzfree;
 
    s = BZALLOC( sizeof(DState) );
+   if (s == NULL) return BZ_MEM_ERROR;
 #ifdef AOCL_UNIT_TEST
    memset(s,0,sizeof(DState));
 #endif
-   if (s == NULL) return BZ_MEM_ERROR;
    s->strm                  = strm;
    strm->state              = s;
    s->state                 = BZ_X_MAGIC_1;
@@ -1546,6 +1563,11 @@ void BZ_API(BZ2_bzReadGetUnused)
 }
 #endif
 
+
+int Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq)
+{
+   return libsais(T, SA, n, fs, freq);
+}
 
 /*---------------------------------------------------*/
 /*--- Misc convenience stuff                      ---*/

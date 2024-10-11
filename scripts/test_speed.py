@@ -21,16 +21,20 @@
 """
 
 ##  Usage example for AMD optimized vs Reference for methods lz4, snappy and zlib levels 1 and 2:
-#
 #   python3 test_speed.py --dataset $PATH_DATASETS_DIR -m lz4 snappy zlib:1 zlib:2 -cw vanilla
+##
 
 ##  Usage example for AMD optimized vs IPP for lz4 Method:
-#
 #   python3 test_speed.py --dataset $PATH_DATASETS_DIR -m lz4 -cw ipp --ipp $IPP_PATCHED_LZ4_LIBS_PATH
+##
+
+##  Usage example for running multi-threaded test for methods lz4, snappy
+#   python3 test_speed.py --dataset $PATH_DATASETS_DIR -m lz4 snappy -mt $LIST_OF_THREADS
+##
 
 
 __copyright__ = """
-    Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+    Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
     * 
     * Redistribution and use in source and binary forms, with or without
     * modification, are permitted provided that the following conditions are met:
@@ -543,10 +547,11 @@ if __name__ == '__main__':
         '--iterations', '-itr',
         help='Specify number of iterations for compression/decompression.', default=ITERS)
     parser.add_argument('--optionalFlags', '-flags',
-                        help='Pass a list of supported optional flags (SNAPPY_MATCH_SKIP_OPT, AOCL_LZ4_OPT_PREFETCH_BACKWARDS, AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST, AOCL_ZSTD_WILDCOPY_LONG and LZ4_FRAME_FORMAT_SUPPORT) as required. For example: -flags SNAPPY_MATCH_SKIP_OPT=ON AOCL_LZ4_OPT_PREFETCH_BACKWARDS=ON AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON AOCL_ZSTD_WILDCOPY_LONG=ON LZ4_FRAME_FORMAT_SUPPORT=ON',
+                        help='Pass a list of supported optional flags (SNAPPY_MATCH_SKIP_OPT, AOCL_LZ4_OPT_PREFETCH_BACKWARDS, AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST, AOCL_DECOMPRESS_FAST and LZ4_FRAME_FORMAT_SUPPORT) as required. For example: -flags SNAPPY_MATCH_SKIP_OPT=ON AOCL_LZ4_OPT_PREFETCH_BACKWARDS=ON AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON AOCL_DECOMPRESS_FAST=1 LZ4_FRAME_FORMAT_SUPPORT=ON',
                         type=str, nargs="*", default=[])
     parser.add_argument('--VSVersion', '-vs',
                         type=str, help='This is a Windows platform specific option. Use this option to provide an installed Visual Studio version available on the system. Default is "Visual Studio 17 2022"', default="Visual Studio 17 2022")
+    parser.add_argument('-mt', '--multithread', type=str, nargs='+', help='List of thread counts for multithreading or "automode" to run with auto thread count. Default is single thread.')
     args = parser.parse_args()
 
     run_command.cwd = DEFAULT_REPO
@@ -560,18 +565,23 @@ if __name__ == '__main__':
             DEFAULT_BUILD, 'Release/aocl_compression_bench')
     else:
         bench_cmd = os.path.join(
-            installation_path, 'aocl_compression/bin/aocl_compression_bench')
+            DEFAULT_BUILD, 'aocl_compression_bench')
         
     # Linux specific library configuration and installation commands with default flags
     compression_cmds = {
-        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
+        'config_cmd': 'cmake -B build . -DCMAKE_BUILD_TYPE=Release -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON -DENABLE_FAST_MATH=ON -DCMAKE_INSTALL_PREFIX={}'.format(installation_path),
         'install_cmd': 'cmake --build build -v -j --target uninstall --target install'}
     # Windows specific library configuration and installation commands with default flags
     compression_cmds_windows = {
-        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
+        'config_cmd': 'cmake -B build . -T ClangCl -G "{}" -DAOCL_LZ4_NEW_PRIME_NUMBER=ON -DSNAPPY_MATCH_SKIP_OPT=ON -DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST=ON -DENABLE_FAST_MATH=ON -DCMAKE_INSTALL_PREFIX={}'.format(args.VSVersion, installation_path),
         'install_cmd': 'cmake --build ./build --config Release --target INSTALL'
     }
-                
+
+    # enable multi-threaded compression and decompression if specified by the user
+    if args.multithread:
+        compression_cmds['config_cmd'] = compression_cmds['config_cmd'] + " -DAOCL_ENABLE_THREADS=ON" + " "
+        compression_cmds_windows['config_cmd'] = compression_cmds_windows['config_cmd'] + " -DAOCL_ENABLE_THREADS=ON" + " "   
+
     def install_compression(cmds, optionalFlags):
         """
         Install aocl-compression library. This will generate libs/bin to the specified prefix path.
@@ -663,9 +673,6 @@ if __name__ == '__main__':
     elif args.comparewith == "vanilla" and args.ipp != "off":
         print(error + "Comparewith(vanilla) and IPP path flags can not be enabled together \n")
         exit()
-    elif args.comparewith == "ipp" and len(args.method) >1:
-        print(error + "--method/-m argument does not accept list of methods when comparing with IPP. Instead, only pass the specific method that you want to compare with IPP.")
-        exit()
     
     ## ===========================
     # Compression building control  
@@ -689,8 +696,20 @@ if __name__ == '__main__':
     
     # Check list of methods passed in the arguments and run benchmarks for each of them
     for m in args.method:
-        run_benchmark_test(datasetFile_lst, m, args.iterations,
+        if args.multithread:
+            for count in args.multithread:
+                if count.lower() == 'automode':
+                    if 'OMP_NUM_THREADS' in os.environ:
+                        del os.environ['OMP_NUM_THREADS']
+                    print("Unset OMP_NUM_THREADS for auto mode")
+                else:
+                    os.environ['OMP_NUM_THREADS'] = str(count)
+                    print(f"Set OMP_NUM_THREADS to {count}")
+                run_benchmark_test(datasetFile_lst, m, args.iterations, 
+                                      args.optimization, args.comparewith, args.ipp)
+                time.sleep(1)
+        else:
+            run_benchmark_test(datasetFile_lst, m, args.iterations,
                        args.optimization, args.comparewith, args.ipp)
 
     print("Compression benchmarking tests are completed. Please check the generated reports for details.")
-    

@@ -2,7 +2,7 @@
 2021-04-01 : Igor Pavlov : Public domain */
 
 /**
-* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+* Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -33,7 +33,6 @@
 
 #include <string.h>
 
-#include "utils/utils.h"
 /* #include "CpuArch.h" */
 #include "LzmaDec.h"
 
@@ -1537,6 +1536,10 @@ void LzmaDec_InitDicAndState(CLzmaDec* p, BoolInt initDic, BoolInt initState)
 
 void LzmaDec_Init(CLzmaDec* p)
 {
+    if(p == NULL){
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaDec");
+        return;
+    }
     p->dicPos = 0;
     LzmaDec_InitDicAndState(p, True, True);
 }
@@ -1569,8 +1572,10 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
     ELzmaFinishMode finishMode, ELzmaStatus* status)
 {
     AOCL_SETUP_NATIVE();
-    if (p == NULL || src == NULL || srcLen == NULL || status == NULL)
+    if (p == NULL || src == NULL || srcLen == NULL || status == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return SZ_ERROR_PARAM;
+    }
 
     SizeT inSize = *srcLen;
     (*srcLen) = 0;
@@ -1578,16 +1583,21 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
 
     if (p->remainLen > kMatchSpecLenStart)
     {
-        if (p->remainLen > kMatchSpecLenStart + 2)
+        if (p->remainLen > kMatchSpecLenStart + 2) {
+            LOG_UNFORMATTED(ERR, logCtx, "Invalid remainLen");
             return p->remainLen == kMatchSpecLen_Error_Fail ? SZ_ERROR_FAIL : SZ_ERROR_DATA;
+        }
 
         for (; inSize > 0 && p->tempBufSize < RC_INIT_SIZE; (*srcLen)++, inSize--)
             p->tempBuf[p->tempBufSize++] = *src++;
-        if (p->tempBufSize != 0 && p->tempBuf[0] != 0)
+        if (p->tempBufSize != 0 && p->tempBuf[0] != 0) {
+            LOG_UNFORMATTED(ERR, logCtx, "Invalid tempBuf value");
             return SZ_ERROR_DATA;
+        }
         if (p->tempBufSize < RC_INIT_SIZE)
         {
             *status = LZMA_STATUS_NEEDS_MORE_INPUT;
+            LOG_UNFORMATTED(DEBUG, logCtx, "Decode completed with status LZMA_STATUS_NEEDS_MORE_INPUT");
             return SZ_OK;
         }
         p->code =
@@ -1598,8 +1608,10 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
 
         if (p->checkDicSize == 0
             && p->processedPos == 0
-            && p->code >= kBadRepCode)
+            && p->code >= kBadRepCode) {
+            LOG_UNFORMATTED(ERR, logCtx, "Bad rep code");
             return SZ_ERROR_DATA;
+        }
 
         p->range = 0xFFFFFFFF; // 2^32 - 1
         p->tempBufSize = 0;
@@ -1622,9 +1634,12 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
     {
         if (p->remainLen == kMatchSpecLenStart)
         {
-            if (p->code != 0)
+            if (p->code != 0) {
+                LOG_UNFORMATTED(ERR, logCtx, "Invalid data");
                 return SZ_ERROR_DATA;
+            }
             *status = LZMA_STATUS_FINISHED_WITH_MARK;
+            LOG_UNFORMATTED(DEBUG, logCtx, "Decode completed with status LZMA_STATUS_FINISHED_WITH_MARK");
             return SZ_OK;
         }
 
@@ -1640,15 +1655,18 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
                 if (p->remainLen == 0 && p->code == 0)
                 {
                     *status = LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK;
+                    LOG_UNFORMATTED(DEBUG, logCtx, "Decode completed with status LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK");
                     return SZ_OK;
                 }
                 if (finishMode == LZMA_FINISH_ANY)
                 {
                     *status = LZMA_STATUS_NOT_FINISHED;
+                    LOG_UNFORMATTED(DEBUG, logCtx, "Decode completed with status LZMA_STATUS_NOT_FINISHED");
                     return SZ_OK;
                 }
                 if (p->remainLen != 0)
                 {
+                    LOG_UNFORMATTED(ERR, logCtx, "Invalid data, status LZMA_STATUS_NOT_FINISHED");
                     RETURN__NOT_FINISHED__FOR_FINISH;
                 }
                 checkEndMarkNow = 1;
@@ -1677,6 +1695,7 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
                         for (i = 0; i < inSize; i++)
                             p->tempBuf[i] = src[i];
                         *status = LZMA_STATUS_NEEDS_MORE_INPUT;
+                        LOG_UNFORMATTED(DEBUG, logCtx, "Decode completed with status LZMA_STATUS_NEEDS_MORE_INPUT");
                         return SZ_OK;
                     }
 
@@ -1723,6 +1742,7 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
                     if (res != SZ_OK)
                     {
                         p->remainLen = kMatchSpecLen_Error_Data;
+                        LOG_UNFORMATTED(ERR, logCtx, "Invalid data");
                         return SZ_ERROR_DATA;
                     }
                 }
@@ -1757,6 +1777,7 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
                         p->tempBufSize = rem;
                         (*srcLen) += (SizeT)ahead;
                         *status = LZMA_STATUS_NEEDS_MORE_INPUT;
+                        LOG_UNFORMATTED(DEBUG, logCtx, "Decode completed with status LZMA_STATUS_NEEDS_MORE_INPUT");
                         return SZ_OK;
                     }
 
@@ -1803,6 +1824,7 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
                     if (res != SZ_OK)
                     {
                         p->remainLen = kMatchSpecLen_Error_Data;
+                        LOG_UNFORMATTED(ERR, logCtx, "Invalid data");
                         return SZ_ERROR_DATA;
                     }
                 }
@@ -1812,6 +1834,7 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
 
     /*  Some unexpected error: internal error of code, memory corruption or hardware failure */
     p->remainLen = kMatchSpecLen_Error_Fail;
+    LOG_UNFORMATTED(ERR, logCtx, "Decode failed");
     return SZ_ERROR_FAIL;
 }
 
@@ -1820,8 +1843,10 @@ SRes LzmaDec_DecodeToDic(CLzmaDec* p, SizeT dicLimit, const Byte* src, SizeT* sr
 SRes LzmaDec_DecodeToBuf(CLzmaDec* p, Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen, ELzmaFinishMode finishMode, ELzmaStatus* status)
 {
     AOCL_SETUP_NATIVE();
-    if (p == NULL || src == NULL || srcLen == NULL || status == NULL)
+    if (p == NULL || src == NULL || srcLen == NULL || status == NULL || destLen == NULL || dest == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return SZ_ERROR_PARAM;
+    }
 
     SizeT outSize = *destLen;
     SizeT inSize = *srcLen;
@@ -1863,6 +1888,11 @@ SRes LzmaDec_DecodeToBuf(CLzmaDec* p, Byte* dest, SizeT* destLen, const Byte* sr
 
 void LzmaDec_FreeProbs(CLzmaDec* p, ISzAllocPtr alloc)
 {
+    if(p==NULL || alloc == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaDec or alloc");
+        return;
+    }
     ISzAlloc_Free(alloc, p->probs);
     p->probs = NULL;
 }
@@ -1875,17 +1905,30 @@ static void LzmaDec_FreeDict(CLzmaDec* p, ISzAllocPtr alloc)
 
 void LzmaDec_Free(CLzmaDec* p, ISzAllocPtr alloc)
 {
+    if(p==NULL || alloc == NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaDec or alloc");
+        return;
+    }
     LzmaDec_FreeProbs(p, alloc);
     LzmaDec_FreeDict(p, alloc);
 }
 
 SRes LzmaProps_Decode(CLzmaProps* p, const Byte* data, unsigned size)
 {
+    if(p==NULL || data==NULL)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid CLzmaProps or data");
+        return SZ_ERROR_PARAM;
+    }
+
     UInt32 dicSize;
     Byte d;
 
-    if (size < LZMA_PROPS_SIZE)
+    if (size < LZMA_PROPS_SIZE) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid properties field");
         return SZ_ERROR_UNSUPPORTED;
+    }
     else
         dicSize = data[1] | ((UInt32)data[2] << 8) | ((UInt32)data[3] << 16) | ((UInt32)data[4] << 24);
 
@@ -1894,8 +1937,10 @@ SRes LzmaProps_Decode(CLzmaProps* p, const Byte* data, unsigned size)
     p->dicSize = dicSize;
 
     d = data[0];
-    if (d >= (9 * 5 * 5))
+    if (d >= (9 * 5 * 5)) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid properties field");
         return SZ_ERROR_UNSUPPORTED;
+    }
 
     p->lc = (Byte)(d % 9);
     d /= 9;
@@ -1912,8 +1957,10 @@ static SRes LzmaDec_AllocateProbs2(CLzmaDec* p, const CLzmaProps* propNew, ISzAl
     {
         LzmaDec_FreeProbs(p, alloc);
         p->probs = (CLzmaProb*)ISzAlloc_Alloc(alloc, numProbs * sizeof(CLzmaProb));
-        if (!p->probs)
+        if (!p->probs) {
+            LOG_UNFORMATTED(ERR, logCtx, "Allocation failed");
             return SZ_ERROR_MEM;
+        }
         p->probs_1664 = p->probs + 1664;
         p->numProbs = numProbs;
     }
@@ -1922,8 +1969,10 @@ static SRes LzmaDec_AllocateProbs2(CLzmaDec* p, const CLzmaProps* propNew, ISzAl
 
 SRes LzmaDec_AllocateProbs(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAllocPtr alloc)
 {
-    if (p == NULL || props == NULL || alloc == NULL)
+    if (p == NULL || props == NULL || alloc == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return SZ_ERROR_PARAM;
+    }
 
     CLzmaProps propNew;
     RINOK(LzmaProps_Decode(&propNew, props, propsSize));
@@ -1934,8 +1983,10 @@ SRes LzmaDec_AllocateProbs(CLzmaDec* p, const Byte* props, unsigned propsSize, I
 
 SRes LzmaDec_Allocate(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAllocPtr alloc)
 {
-    if (p == NULL || props == NULL || alloc == NULL)
+    if (p == NULL || props == NULL || alloc == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return SZ_ERROR_PARAM;
+    }
 
     CLzmaProps propNew;
     SizeT dicBufSize;
@@ -1958,6 +2009,7 @@ SRes LzmaDec_Allocate(CLzmaDec* p, const Byte* props, unsigned propsSize, ISzAll
         p->dic = (Byte*)ISzAlloc_Alloc(alloc, dicBufSize);
         if (!p->dic)
         {
+            LOG_UNFORMATTED(ERR, logCtx, "Allocation failed for dic");
             LzmaDec_FreeProbs(p, alloc);
             return SZ_ERROR_MEM;
         }
@@ -1975,16 +2027,20 @@ SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
     AOCL_SETUP_NATIVE();
     if (src == NULL || srcLen == NULL || dest == NULL || propData == NULL ||
         destLen == NULL || *srcLen == 0 ||
-        *srcLen > (ULLONG_MAX - LZMA_PROPS_SIZE)) // handles case when src size is < LZMA_PROPS_SIZE, resulting in destLen rolling over in calling APIs
+        *srcLen > (ULLONG_MAX - LZMA_PROPS_SIZE)) { // handles case when src size is < LZMA_PROPS_SIZE, resulting in destLen rolling over in calling APIs
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return SZ_ERROR_PARAM;
+    }
 
     CLzmaDec p;
     SRes res;
     SizeT outSize = *destLen, inSize = *srcLen;
     *destLen = *srcLen = 0;
     *status = LZMA_STATUS_NOT_SPECIFIED;
-    if (inSize < RC_INIT_SIZE)
+    if (inSize < RC_INIT_SIZE) {
+        LOG_UNFORMATTED(ERR, logCtx, "Input size too small");
         return SZ_ERROR_INPUT_EOF;
+    }
     LzmaDec_Construct(&p);
     RINOK(LzmaDec_AllocateProbs(&p, propData, propSize, alloc));
     p.dic = dest;

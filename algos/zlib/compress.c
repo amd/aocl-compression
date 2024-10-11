@@ -1,6 +1,6 @@
 /* compress.c -- compress a memory buffer
  * Copyright (C) 1995-2005, 2014, 2016 Jean-loup Gailly, Mark Adler
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -11,6 +11,7 @@
 #include "utils/utils.h"
 
 #ifdef AOCL_ZLIB_OPT
+#include "aocl_zlib_utils.h"
 #include "aocl_zlib_setup.h"
 
 int zlibOptOff = 0; // default, run reference code
@@ -75,7 +76,7 @@ ZEXTERN void ZEXPORT aocl_destroy_zlib (void) {
 }
 
 #ifdef AOCL_ENABLE_THREADS
-#define ZLIB_MT_WINDOW_LEN 32768
+#define ZLIB_MT_WINDOW_LEN (32768 << 1)
 #include <string.h>
 #include "threads/threads.h"
 #endif
@@ -145,8 +146,25 @@ static inline int compress2_ST(aocl_thread_info_t *cThread, int level, int final
 }
 
 uLong ZEXPORT compressBound_ST(uLong sourceLen) {
-    return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
-           (sourceLen >> 25) + 13;
+    /* Worst case: each byte -> 9 bits (fixed Huffman deflate). 13 bytes for zlib wrapper + safety. */
+    uLong fixed_size = FIXED_HUFFFMAN_COMPRESSED_SIZE(sourceLen) + 13;
+
+    /* stored_size: size with stored deflate (no compression). Adds 5 bytes/block (worst case as per deflate specification).
+       Assumes default memLevel/windowbits. */
+    uLong stored_size = STORED_ZLIB_COMPRESSED_SIZE(sourceLen);
+    if(aocl_zlib_get_enable_dquick()) {
+        return (fixed_size > stored_size) ? fixed_size : stored_size;
+    }
+    return stored_size;
+}
+
+uLong ZEXPORT compressBound_MT(uLong sourceLen) {
+
+    uLong sz1 = compressBound_ST(sourceLen);
+    uLong sz2 = 0;
+    COMPRESS_BOUND_MT(sourceLen, compressBound_ST, ZLIB_MT_WINDOW_LEN, WINDOW_FACTOR, sz1, sz2, 0)
+
+   return sz2;
 }
 #endif /* AOCL_ENABLE_THREADS */
 
@@ -202,6 +220,10 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
     
     return err == Z_STREAM_END ? Z_OK : err;
 #else //Threaded
+
+    if ((*destLen) < compressBound_MT(sourceLen))
+        RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(Z_BUF_ERROR)
+
     int result = Z_OK;
     aocl_thread_group_t thread_group_handle;
     aocl_thread_info_t cur_thread_info;
@@ -279,7 +301,38 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
 
         // <-- RAP Metadata payload -->
         AOCL_UINT32 offset = 0, adler = 1;
-        for (; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+        
+        // For the first thread:
+        cur_thread_info = thread_group_handle.threads_info_list[0];
+        // In case of any thread partitioning or alloc errors, exit the compression process with error
+        if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
+        {
+            result = cur_thread_info.is_error;
+            aocl_destroy_parallel_compress_mt(&thread_group_handle);
+    #ifdef AOCL_THREADS_LOG
+            printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+    #endif
+            return result;
+        }
+
+        *(AOCL_UINT32*)dst_ptr = *destLen;
+        dst_ptr += RAP_OFFSET_BYTES;
+        *(AOCL_INT32*)dst_ptr = cur_thread_info.dst_trap_size - offset;
+        dst_ptr += RAP_LEN_BYTES;
+        *(AOCL_INT32*)dst_ptr = cur_thread_info.partition_src_size;
+        dst_ptr += DECOMP_LEN_BYTES;
+
+        *destLen += (cur_thread_info.dst_trap_size - offset);
+        // combining partition checksum value stored in last_bytes_len of thread info
+        adler = adler32_combine(adler, cur_thread_info.last_bytes_len, cur_thread_info.partition_src_size);
+        /* save the offset (zlib header bytes) in last_bytes_len */
+        thread_group_handle.threads_info_list[0].last_bytes_len = offset;
+
+        /* compute cumulative dst_trap_size and save in unsued member partition_src_size */
+        thread_group_handle.threads_info_list[0].partition_src_size = 0;
+        offset = 2; // skip 2 bytes zlib header
+
+        for (thread_cnt = 1 ; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
         {
             cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
             //In case of any thread partitioning or alloc errors, exit the compression process with error
@@ -293,9 +346,6 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
                 return result;
             }
 
-            //Copy this thread's chunk to the output final buffer
-            memcpy(thread_group_handle.dst, cur_thread_info.dst_trap + offset, cur_thread_info.dst_trap_size - offset);
-
             *(AOCL_UINT32*)dst_ptr = *destLen; //For storing this thread's RAP offset
             dst_ptr += RAP_OFFSET_BYTES;
             *(AOCL_INT32*)dst_ptr = cur_thread_info.dst_trap_size - offset; //For storing this thread's RAP length
@@ -305,12 +355,30 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
 
             *(AOCL_INT32*)dst_ptr = decomp_len;
             dst_ptr += DECOMP_LEN_BYTES;
-            thread_group_handle.dst += (cur_thread_info.dst_trap_size - offset);
             *destLen += (cur_thread_info.dst_trap_size - offset);
-            offset = 2; // skip 2 bytes zlib header
             // combining partition checksum value stored in last_bytes_len of thread info
             adler = adler32_combine(adler, cur_thread_info.last_bytes_len, cur_thread_info.partition_src_size);
+            thread_group_handle.threads_info_list[thread_cnt].last_bytes_len = offset; /* save the offset (zlib header bytes) in last_bytes_len */
+
+            /* compute cumulative dst_trap_size and save in unsued member partition_src_size
+            * This is used as offset to indicate starting points of compressed data blocks in dst */
+            thread_group_handle.threads_info_list[thread_cnt].partition_src_size =
+                    thread_group_handle.threads_info_list[thread_cnt - 1].partition_src_size +
+                    thread_group_handle.threads_info_list[thread_cnt - 1].dst_trap_size - 
+                    thread_group_handle.threads_info_list[thread_cnt - 1].last_bytes_len; //cur_offset i.e. cumulative dst_trap_size
+
+            offset = 2; // skip 2 bytes zlib header
         }
+
+        /* copy compressed data from threads to dst multi-threaded */
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+        {
+            AOCL_UINT32 thread_cnt = omp_get_thread_num();
+            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+            memcpy(thread_group_handle.dst + cur_thread_info.partition_src_size, //cur_thread_info.partition_src_size contains cur_offset
+                cur_thread_info.dst_trap + cur_thread_info.last_bytes_len, cur_thread_info.dst_trap_size - cur_thread_info.last_bytes_len);
+        }
+        thread_group_handle.dst += *destLen - rap_metadata_len;
         //Update checksum
         adler = ((((adler) >> 24) & 0xff) + (((adler) >> 8) & 0xff00) + (((adler) & 0xff00) << 8) + (((adler) & 0xff) << 24));
         memcpy((thread_group_handle.dst - 4), &adler, 4);
@@ -334,10 +402,22 @@ int ZEXPORT compress(Bytef *dest, uLongf *destLen, const Bytef *source,
      If the default memLevel or windowBits for deflateInit() is changed, then
    this function needs to be updated.
  */
+
 uLong ZEXPORT compressBound(uLong sourceLen) {
+    AOCL_SETUP_NATIVE();
 #ifdef AOCL_ENABLE_THREADS
-    return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
-           (sourceLen >> 25) + 13 + RAP_FRAME_LEN_WITH_DECOMP_LENGTH(omp_get_max_threads(), 0);
+    return compressBound_MT(sourceLen);
+#elif defined(AOCL_ZLIB_OPT)
+    /* Worst case: each byte -> 9 bits (fixed Huffman deflate). 13 bytes for zlib wrapper + safety. */
+    uLong fixed_size = FIXED_HUFFFMAN_COMPRESSED_SIZE(sourceLen) + 13;
+    /* stored_size: size with stored deflate (no compression). Adds 5 bytes/block (worst case as per deflate specification).
+       Assumes default memLevel/windowbits. */
+    uLong stored_size = STORED_ZLIB_COMPRESSED_SIZE(sourceLen);
+
+    if(aocl_zlib_get_enable_dquick()) {
+        return (fixed_size > stored_size) ? fixed_size : stored_size;
+    }
+    return stored_size;
 #else
     return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
            (sourceLen >> 25) + 13;

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -41,40 +41,68 @@
 #include <random>
 #include <limits.h>
 #include "gtest/gtest.h"
+#include "gtest/gtest_utils.h"
 
 #include "algos/snappy/snappy.h"
 #include "algos/snappy/snappy-sinksource.h"
 #include "algos/snappy/snappy-internal.h"
+#include "algos/snappy/snappy-c.h"
 
 using namespace std;
 using namespace snappy;
 
-#define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
-
 /*******************************************
  * "Begin" of Utility functions
  *******************************************/
-
-void aocl_setup_snappy_test() {
-    int optLevel = DEFAULT_OPT_LEVEL;
-    aocl_setup_snappy(0, optLevel, 0, 0, 0);
-}
-
- /* This base class can be used for all fixtures
- * that require dynamic dispatcher setup */
-class AOCL_setup_snappy : public ::testing::Test {
+#define get_dynamic_dispatcher_flags()  get_dynamic_dispatcher_flags(SNAPPY)
+// This class acts as a parent class for all the test cases which takes
+// a combination of input parameters and different optimization levels.
+template <typename T>
+class Combined_Dynamic_dispatcher: public ::testing::TestWithParam<tuple<DynamicDispatch, T>>
+{
 public:
-    AOCL_setup_snappy() {
-        aocl_setup_snappy_test();
+    Combined_Dynamic_dispatcher()
+    {
+        DynamicDispatch opt = get<0>(::testing::TestWithParam<tuple<DynamicDispatch, T>>::GetParam());
+        aocl_destroy_snappy();
+        aocl_setup_snappy(opt.optOff, opt.optLevel, 0, 0, 0);
+    }
+};
+
+// Parameterised tests take more time if raw strings are passed directly when ran in ctest mode.
+// So a class is wrapped around a string so that direct access of string
+// for test case name generation is restricted.
+class STR_WRAPPER
+{
+    public:
+    string parameter;
+};
+
+// Similar to the above class but to wrap around a pair of strings.
+class PAIR_WRAPPER
+{
+    public:
+    pair<string,string> parameter;
+};
+
+
+// This class acts as a parent class for test cases which needs to run with available optimization levels.
+class Standalone_Dynamic_dispatcher: public ::testing::TestWithParam<DynamicDispatch>
+{
+public:
+    Standalone_Dynamic_dispatcher()
+    {
+        DynamicDispatch opt = GetParam();
+        aocl_destroy_snappy();
+        aocl_setup_snappy(opt.optOff, opt.optLevel, 0, 0, 0);
     }
 };
 
 // This a test case generating function, which returns vector of 
 // flawed compressed string to test if the responsible functions catches 
 // fault compressed strings.
-vector<string> fail_cases()
+vector<STR_WRAPPER> uncompress_fail_cases()
 {
-    aocl_setup_snappy_test();
     vector<string> cases;
     string compressed;
 
@@ -218,11 +246,18 @@ vector<string> fail_cases()
     // AOCL_Compression_snappy_RawUncompress_common_9
     cases.push_back(dest);
 
-    return cases;
+    vector<STR_WRAPPER> temp_vec;
+    for(auto &element: cases)
+    {
+        STR_WRAPPER temp_str_wrapper;
+        temp_str_wrapper.parameter = element;
+        temp_vec.push_back(temp_str_wrapper);
+    }
+    return temp_vec;
 }
 
 // This function generates simple pass cases.
-vector<string> pass_cases()
+vector<STR_WRAPPER> pass_cases()
 {
     vector<string> v;
 
@@ -263,7 +298,14 @@ vector<string> pass_cases()
     // AOCL_Compression_snappy_RawUncompress_src_common_13
     v.push_back("abcaaaaaaa" + std::string(65536, 'b') + std::string("aaaaa") + "abc");
 
-    return v;
+    vector<STR_WRAPPER> temp_vec;
+    for(auto &element: v)
+    {
+        STR_WRAPPER temp_str_wrapper;
+        temp_str_wrapper.parameter = element;
+        temp_vec.push_back(temp_str_wrapper);
+    }
+    return temp_vec;
 }
 
 // After decompression of the string `compressed` the length obtained
@@ -386,18 +428,17 @@ pair<string, string> fourByteOffset()
 
 // Test case generating function for testing uncompress functions supported
 // by snappy.
-vector<pair<string, string>> uncompress_pass_cases()
+vector<PAIR_WRAPPER> uncompress_pass_cases()
 {
-    aocl_setup_snappy_test();
-    vector<string> v = pass_cases();
+    vector<STR_WRAPPER> inputs_to_compress = pass_cases();
     vector<pair<string, string>> cmpr_orig;
 
-    for (auto &element : v)
+    for (auto &element : inputs_to_compress)
     {
         string compressed;
         compressed.clear();
-        Compress(element.data(), element.size(), &compressed);
-        cmpr_orig.push_back({compressed, element});
+        Compress(element.parameter.data(), element.parameter.size(), &compressed);
+        cmpr_orig.push_back({compressed, element.parameter});
     }
     // The new compressor cannot generate four-byte offsets since
     // it chops up the input into 32KB pieces.  So we hand-emit the
@@ -443,7 +484,14 @@ vector<pair<string, string>> uncompress_pass_cases()
     // AOCL_Compression_snappy_RawUncompress_src_common_19
     cmpr_orig.push_back({ compressed, original });
 
-    return cmpr_orig;
+    vector<PAIR_WRAPPER> temp_vec;
+    for(auto &element: cmpr_orig)
+    {
+        PAIR_WRAPPER temp_pair_wrapper;
+        temp_pair_wrapper.parameter = element;
+        temp_vec.push_back(temp_pair_wrapper);
+    }
+    return temp_vec;
 }
 
 // Utility function for data allocation of iovec datatype, according to
@@ -457,52 +505,6 @@ void iov_init(iovec iov[],const int kLengths[],int kLengths_size)
     }
 }
 
-// Interface for Implementing two variants of a function
-// which checks if compressed buffer is valid:
-// 1.IsValidCompressedBuffer.
-// 2.IsValidCompressed.
-class isValid
-{
-public:
-    virtual ~isValid() {};
-    virtual bool isVldCmpBfr(string s) = 0;
-    virtual bool isVldCmpBfr(const char *c, size_t sz) = 0;
-};
-
-// Interface implementation supporting `IsValidCompressedBuffer` function.
-class isValidCompressedBuffer : public isValid
-{
-public:
-    bool isVldCmpBfr(string s)
-    {
-        return IsValidCompressedBuffer(s.data(), s.size());
-    }
-    bool isVldCmpBfr(const char *c, size_t sz)
-    {
-        return IsValidCompressedBuffer(c, sz);
-    }
-};
-
-// Interface implementation supporting `IsValidCompressed` function.
-class isValidCompressed : public isValid
-{
-public:
-    bool isVldCmpBfr(string str)
-    {
-        Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(str.data(), str.size());
-        bool return_result = IsValidCompressed(source);
-        delete source;
-        return return_result;
-    }
-    bool isVldCmpBfr(const char *c, size_t sz)
-    {
-        Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(c, sz);
-        bool return_result = IsValidCompressed(source);
-        delete source;
-        return return_result;
-    }
-};
-
 /*******************************************
  * "End" of Utility functions              *
  ********************************************/
@@ -511,111 +513,300 @@ public:
  * "Begin" of Test cases
  **************************************************/
 
+/*********************************************
+* Begin of MaxCompressedLength
+**********************************************/
+
 TEST(SNAPPY_MaxCompressedLength, all_tests)
 {
     EXPECT_EQ(MaxCompressedLength(0), 32);                  // AOCL_Compression_snappy_MaxCompressedLength_common_1
+#ifndef AOCL_ENABLE_THREADS
     EXPECT_EQ(MaxCompressedLength(393216), 458784);         // AOCL_Compression_snappy_MaxCompressedLength_common_2
     EXPECT_EQ(MaxCompressedLength(INT_MAX), 2505397620);    // AOCL_Compression_snappy_MaxCompressedLength_common_3
     size_t inp = LLONG_MAX / 2;
     EXPECT_EQ(MaxCompressedLength(inp),5380300354831952585);// AOCL_Compression_snappy_MaxCompressedLength_common_4
+#endif
 }
 
-class SNAPPY_IsValidCompressed_ : public ::testing::TestWithParam<string>
+/*********************************************
+* End of MaxCompressedLength
+**********************************************/
+
+/*********************************************
+* Begin of snappy_max_compressed_length
+**********************************************/
+
+TEST(SNAPPY_snappy_max_compressed_length, all_tests)
 {
-    void SetUp() override {
-        aocl_setup_snappy_test();
-    }
-};
-
-TEST_P(SNAPPY_IsValidCompressed_, Buffer_fail)
-{
-    isValid *var = new isValidCompressedBuffer();
-    string compressed = GetParam();
-
-    EXPECT_FALSE(var->isVldCmpBfr(compressed));
-
-    delete var;
+    EXPECT_EQ(snappy_max_compressed_length(0), 32);                  // AOCL_Compression_snappy_snappy_max_compressed_length_common_1
+#ifndef AOCL_ENABLE_THREADS
+    EXPECT_EQ(snappy_max_compressed_length(393216), 458784);         // AOCL_Compression_snappy_snappy_max_compressed_length_common_2
+    EXPECT_EQ(snappy_max_compressed_length(INT_MAX), 2505397620);    // AOCL_Compression_snappy_snappy_max_compressed_length_common_3
+    size_t inp = LLONG_MAX / 2;
+    EXPECT_EQ(snappy_max_compressed_length(inp), 5380300354831952585);// AOCL_Compression_snappy_snappy_max_compressed_length_common_4
+#endif
 }
 
-class SNAPPY_IsValidCompressed : public AOCL_setup_snappy {
-};
+/*********************************************
+* End of snappy_max_compressed_length
+**********************************************/
 
-TEST_F(SNAPPY_IsValidCompressed, pass)    // AOCL_Compression_snappy_IsValidCompressed_common_10
+/*********************************************
+* Begin of IsValidCompressed
+**********************************************/
+
+bool IsValidCompressed(string str)
 {
-    isValid *var = new isValidCompressed();
-    string s = "hello world";
-    string compressed;
-
-    Compress(s.data(), s.size(), &compressed);
-    EXPECT_TRUE(var->isVldCmpBfr(compressed));
-
-    delete var;
+    Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(str.data(), str.size());
+    bool return_result = IsValidCompressed(source);
+    delete source;
+    return return_result;
 }
 
-TEST_F(SNAPPY_IsValidCompressed, fail_case)   // AOCL_Compression_snappy_IsValidCompressed_common_11
+class SNAPPY_IsValidCompressed_multiple_fail : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_IsValidCompressed_multiple : public Combined_Dynamic_dispatcher<PAIR_WRAPPER>
+{};
+
+class SNAPPY_IsValidCompressed_single : public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_IsValidCompressed_multiple_fail, AOCL_Compression_snappy_IsValidCompressed_fail_common_1_to_9)
+{
+    string compressed = get<1>(GetParam()).parameter;
+
+    EXPECT_FALSE(IsValidCompressed(compressed));
+}
+
+TEST_P(SNAPPY_IsValidCompressed_single, AOCL_Compression_snappy_IsValidCompressed_fail_common_10)
 {
     EXPECT_FALSE(IsValidCompressed(NULL));
 }
 
-TEST_P(SNAPPY_IsValidCompressed_, source_fail)
+TEST_P(SNAPPY_IsValidCompressed_single, AOCL_Compression_snappy_IsValidCompressed_common_pass_11)
 {
-    isValid *var = new isValidCompressed();
-    string compressed = GetParam();
+    string s = "hello world";
+    string compressed;
 
-    EXPECT_FALSE(var->isVldCmpBfr(compressed));
-
-    delete var;
+    Compress(s.data(), s.size(), &compressed);
+    EXPECT_TRUE(IsValidCompressed(compressed));
 }
 
-class SNAPPY_IsValidCompressedBuffer : public AOCL_setup_snappy {
-};
-
-TEST_F(SNAPPY_IsValidCompressedBuffer, pass) // AOCL_Compression_snappy_IsValidCompressedBuffer_common_10
+TEST_P(SNAPPY_IsValidCompressed_multiple, AOCL_Compression_snappy_IsValidCompressed_pass_common_12)
 {
-    isValid *var = new isValidCompressedBuffer();
+    pair<string, string> p = get<1>(GetParam()).parameter;
+    string compressed = p.first;
+
+    EXPECT_TRUE(IsValidCompressed(compressed));
+}
+
+TEST_P(SNAPPY_IsValidCompressed_single, AOCL_Compression_snappy_IsValidCompressed_fail_common_13)
+{
+    pair<string, string> p = fourByteOffset();
+    string compressed = p.first.substr(0, p.first.size() - 1);
+
+    EXPECT_FALSE(IsValidCompressed(compressed));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_IsValidCompressed_multiple_fail,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_fail_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_IsValidCompressed_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_pass_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_IsValidCompressed_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/*********************************************
+* End of IsValidCompressed
+**********************************************/
+
+/*********************************************
+* Begin of IsValidCompressedBuffer
+**********************************************/
+
+class SNAPPY_IsValidCompressedBuffer_multiple_fail : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_IsValidCompressedBuffer_multiple : public Combined_Dynamic_dispatcher<PAIR_WRAPPER>
+{};
+
+class SNAPPY_IsValidCompressedBuffer_single: public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_IsValidCompressedBuffer_multiple_fail, AOCL_Compression_snappy_IsValidCompressedBuffer_fail_common_1_to_9)
+{
+    string compressed = get<1>(GetParam()).parameter;
+
+    EXPECT_FALSE(IsValidCompressedBuffer(compressed.data(), compressed.size()));
+}
+
+TEST_P(SNAPPY_IsValidCompressedBuffer_single, AOCL_Compression_snappy_IsValidCompressedBuffer_fail_common_10)
+{
+    EXPECT_FALSE(IsValidCompressedBuffer(NULL, 100));
+}
+
+TEST_P(SNAPPY_IsValidCompressedBuffer_single, AOCL_Compression_snappy_IsValidCompressedBuffer_pass_common_11)
+{
     string s = "hello world";
     string compressed;
 
     Compress(s.data(), s.size(), &compressed);
 
-    EXPECT_TRUE(var->isVldCmpBfr(compressed));
-
-    delete var;
+    EXPECT_TRUE(IsValidCompressedBuffer(compressed.data(), compressed.size()));
 }
 
-TEST_F(SNAPPY_IsValidCompressedBuffer, fail_case) // AOCL_Compression_snappy_IsValidCompressedBuffer_common_11
+TEST_P(SNAPPY_IsValidCompressedBuffer_multiple, AOCL_Compression_snappy_IsValidCompressedBuffer_pass_common_12)
 {
-    EXPECT_FALSE(IsValidCompressedBuffer(NULL, 100));
+    pair<string, string> p = get<1>(GetParam()).parameter;
+    string compressed = p.first;
+
+    EXPECT_TRUE(IsValidCompressedBuffer(compressed.data(), compressed.size()));
+}
+
+TEST_P(SNAPPY_IsValidCompressedBuffer_multiple, AOCL_Compression_snappy_IsValidCompressedBuffer_fail_common_13)
+{
+    pair<string, string> p = get<1>(GetParam()).parameter;
+    string compressed = p.first;
+
+    // Partial compressed buffer provided
+    EXPECT_FALSE(IsValidCompressedBuffer(compressed.data(), compressed.size()-1));
 }
 
 INSTANTIATE_TEST_SUITE_P(
     SNAPPY,
-    SNAPPY_IsValidCompressed_,
-    ::testing::ValuesIn(fail_cases()));
+    SNAPPY_IsValidCompressedBuffer_multiple_fail,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_fail_cases())));
 
-class SNAPPY_GetUncompressedLength : public AOCL_setup_snappy {
-};
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_IsValidCompressedBuffer_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_pass_cases())));
 
-TEST_F(SNAPPY_GetUncompressedLength, failure_cases)
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_IsValidCompressedBuffer_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/*********************************************
+* End of IsValidCompressedBuffer
+**********************************************/
+
+/*********************************************
+* Begin of snappy_validate_compressed_buffer
+**********************************************/
+
+class SNAPPY_snappy_validate_compressed_buffer_multiple_fail : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_snappy_validate_compressed_buffer_multiple : public Combined_Dynamic_dispatcher<PAIR_WRAPPER>
+{};
+
+class SNAPPY_snappy_validate_compressed_buffer_single: public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_snappy_validate_compressed_buffer_multiple_fail, AOCL_Compression_snappy_snappy_validate_compressed_buffer_fail_common_1_to_9) // Fail cases
+{
+    string compressed = get<1>(GetParam()).parameter;
+
+    EXPECT_EQ(snappy_validate_compressed_buffer(compressed.data(), compressed.size()), SNAPPY_INVALID_INPUT);
+}
+
+TEST_P(SNAPPY_snappy_validate_compressed_buffer_single, AOCL_Compression_snappy_snappy_validate_compressed_buffer_fail_common_10) // Buffer is NULL
+{
+    EXPECT_EQ(snappy_validate_compressed_buffer(NULL, 100), SNAPPY_INVALID_INPUT);
+}
+
+
+TEST_P(SNAPPY_snappy_validate_compressed_buffer_multiple, AOCL_Compression_snappy_snappy_validate_compressed_buffer_pass_common_11) // edge cases for successfull compression
+{
+    pair<string, string> p = get<1>(GetParam()).parameter;
+    string compressed = p.first;
+
+    EXPECT_EQ(snappy_validate_compressed_buffer(compressed.data(), compressed.size()), SNAPPY_OK);
+}
+
+TEST_P(SNAPPY_snappy_validate_compressed_buffer_multiple, AOCL_Compression_snappy_snappy_validate_compressed_buffer_fail_common_12)
+{
+    pair<string, string> p = get<1>(GetParam()).parameter;
+    string compressed = p.first;
+
+    // Partial compressed buffer provided
+    EXPECT_EQ(snappy_validate_compressed_buffer(compressed.data(), compressed.size()-1), SNAPPY_INVALID_INPUT);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_snappy_validate_compressed_buffer_multiple_fail,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_fail_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_snappy_validate_compressed_buffer_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_pass_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_snappy_validate_compressed_buffer_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/*********************************************
+* End of snappy_validate_compressed_buffer
+**********************************************/
+
+/*********************************************
+* Begin of GetUncompressedLength
+**********************************************/
+
+TEST(SNAPPY_GetUncompressedLength, AOCL_Compression_snappy_GetUncompressedLength_fail_common_1)
 {
     string s = "Hello world";
     string result;
-    size_t uncompressed_length;
-    std::string compressed;
     size_t ulength;
 
     Compress(s.data(), s.size(), &result);
 
-    EXPECT_FALSE(GetUncompressedLength(NULL, result.size(), &uncompressed_length));         // AOCL_Compression_snappy_GetUncompressedLength_common_1
-    EXPECT_FALSE(GetUncompressedLength(result.data(), result.size(), NULL));                // AOCL_Compression_snappy_GetUncompressedLength_common_2
+    EXPECT_FALSE(GetUncompressedLength(NULL, result.size(), &ulength));
+}
 
-    // TruncatedVarint
+TEST(SNAPPY_GetUncompressedLength, AOCL_Compression_snappy_GetUncompressedLength_fail_common_2) // compressed length = 0
+{
+    size_t ulength;
+    string compressed;
+
+    EXPECT_FALSE(GetUncompressedLength(compressed.data(), 0, &ulength));
+}
+
+TEST(SNAPPY_GetUncompressedLength, AOCL_Compression_snappy_GetUncompressedLength_fail_common_3)
+{
+    string s = "Hello world";
+    string result;
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_FALSE(GetUncompressedLength(result.data(), result.size(), NULL));
+}
+
+TEST(SNAPPY_GetUncompressedLength, AOCL_Compression_snappy_GetUncompressedLength_fail_common_4) // TruncatedVarint
+{
+    size_t ulength;
+    string compressed;
     compressed.push_back('\xf0');
 
-    EXPECT_FALSE(GetUncompressedLength(compressed.data(), compressed.size(), &ulength));    // AOCL_Compression_snappy_GetUncompressedLength_common_3
+    EXPECT_FALSE(GetUncompressedLength(compressed.data(), compressed.size(), &ulength));
+}
 
-    // UnterminatedVarint
-    compressed.clear();
+TEST(SNAPPY_GetUncompressedLength, AOCL_Compression_snappy_GetUncompressedLength_fail_common_5) // UnterminatedVarint
+{
+    string compressed;
+    size_t ulength;
     compressed.push_back('\x80');
     compressed.push_back('\x80');
     compressed.push_back('\x80');
@@ -623,20 +814,40 @@ TEST_F(SNAPPY_GetUncompressedLength, failure_cases)
     compressed.push_back('\x80');
     compressed.push_back(10);
 
-    EXPECT_FALSE(GetUncompressedLength(compressed.data(), compressed.size(), &ulength));    // AOCL_Compression_snappy_GetUncompressedLength_common_4
+    EXPECT_FALSE(GetUncompressedLength(compressed.data(), compressed.size(), &ulength));
+}
 
-    // OverflowingVarint
+TEST(SNAPPY_GetUncompressedLength, AOCL_Compression_snappy_GetUncompressedLength_fail_common_6) // Value too long edge case
+{
+    string compressed;
+    size_t ulength;
     compressed.clear();
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x10');
+
+    EXPECT_FALSE(GetUncompressedLength(compressed.data(), compressed.size(), &ulength));
+}
+
+TEST(SNAPPY_GetUncompressedLength, AOCL_Compression_snappy_GetUncompressedLength_fail_common_7) // OverflowingVarint
+{
+    string compressed;
+    size_t ulength;
     compressed.push_back('\xfb');
     compressed.push_back('\xff');
     compressed.push_back('\xff');
     compressed.push_back('\xff');
     compressed.push_back('\x7f');
 
-    EXPECT_FALSE(GetUncompressedLength(compressed.data(), compressed.size(), &ulength));    // AOCL_Compression_snappy_GetUncompressedLength_common_5
+    for(int i=compressed.size();i>=0;i--)
+    {
+        EXPECT_FALSE(GetUncompressedLength(compressed.data(), i, &ulength));
+    }
 }
 
-TEST_F(SNAPPY_GetUncompressedLength, pass_case)
+TEST(SNAPPY_GetUncompressedLength, AOCL_Compression_snappy_GetUncompressedLength_pass_common_8) // simple pass test case
 {
     string s = "Hello world";
     string result;
@@ -644,32 +855,359 @@ TEST_F(SNAPPY_GetUncompressedLength, pass_case)
 
     Compress(s.data(), s.size(), &result);
 
-    EXPECT_TRUE(GetUncompressedLength(result.data(), result.size(), &uncompressed_length)); // // AOCL_Compression_snappy_GetUncompressedLength_common_6
+    EXPECT_TRUE(GetUncompressedLength(result.data(), result.size(), &uncompressed_length));
     EXPECT_EQ(s.size(), uncompressed_length);
 }
 
-class SNAPPY_GetUncompressedLength_source : public AOCL_setup_snappy {
-};
+TEST(SNAPPY_GetUncompressedLength, AOCL_Compression_snappy_GetUncompressedLength_pass_common_9) // input of 0 uncompressed length
+{
+    string result;
+    result.push_back('\x00');
+    size_t uncompressed_length;
+    EXPECT_TRUE(GetUncompressedLength(result.data(), result.size(), &uncompressed_length));
+    EXPECT_EQ(uncompressed_length, 0);
+}
 
-TEST_F(SNAPPY_GetUncompressedLength_source, failure_cases)
+TEST(SNAPPY_GetUncompressedLength, AOCL_Compression_snappy_GetUncompressedLength_pass_common_10) // input of max uncompressed length for each character
+{
+    string result;
+    result.push_back('\x7f');
+    size_t uncompressed_length;
+    for(int i=0;i<4;i++)
+    {
+        EXPECT_TRUE(GetUncompressedLength(result.data(), result.size(), &uncompressed_length));
+        EXPECT_EQ(uncompressed_length, (1<<(7*(i+1)))-1);
+        result[i] = '\xff';
+        result.push_back('\x7f');
+    }
+    result[4] = '\x0f';
+    // Max supported length
+    EXPECT_TRUE(GetUncompressedLength(result.data(), result.size(), &uncompressed_length));
+    EXPECT_EQ(uncompressed_length, ((1ULL)<<32) - 1);
+}
+
+/*********************************************
+* End of GetUncompressedLength
+**********************************************/
+
+/*********************************************
+* Begin of snappy_uncompressed_length
+**********************************************/
+
+TEST(SNAPPY_snappy_uncompressed_length, AOCL_Compression_snappy_snappy_uncompressed_length_fail_common_1)
+{
+    string s = "Hello world";
+    string result;
+    size_t ulength;
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_EQ(snappy_uncompressed_length(NULL, result.size(), &ulength), SNAPPY_INVALID_INPUT);
+}
+
+TEST(SNAPPY_snappy_uncompressed_length, AOCL_Compression_snappy_snappy_uncompressed_length_fail_common_2)
+{
+    string s = "Hello world";
+    string result;
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_EQ(snappy_uncompressed_length(result.data(), result.size(), NULL), SNAPPY_INVALID_INPUT);
+}
+
+TEST(SNAPPY_snappy_uncompressed_length, AOCL_Compression_snappy_snappy_uncompressed_length_fail_common_3) // TruncatedVarint
+{
+    size_t ulength;
+    string compressed;
+    compressed.push_back('\xf0');
+
+    EXPECT_EQ(snappy_uncompressed_length(compressed.data(), compressed.size(), &ulength), SNAPPY_INVALID_INPUT);
+}
+
+TEST(SNAPPY_snappy_uncompressed_length, AOCL_Compression_snappy_snappy_uncompressed_length_fail_common_4) // UnterminatedVarint
+{
+    string compressed;
+    size_t ulength;
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back(10);
+
+    EXPECT_EQ(snappy_uncompressed_length(compressed.data(), compressed.size(), &ulength), SNAPPY_INVALID_INPUT);
+}
+
+TEST(SNAPPY_snappy_uncompressed_length, AOCL_Compression_snappy_snappy_uncompressed_length_fail_common_5) // Value too long edge case
+{
+    string compressed;
+    size_t ulength;
+    compressed.clear();
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x10');
+
+    EXPECT_EQ(snappy_uncompressed_length(compressed.data(), compressed.size(), &ulength), SNAPPY_INVALID_INPUT);
+}
+
+TEST(SNAPPY_snappy_uncompressed_length, AOCL_Compression_snappy_snappy_uncompressed_length_fail_common_6) // OverflowingVarint
+{
+    string compressed;
+    size_t ulength;
+    compressed.push_back('\xfb');
+    compressed.push_back('\xff');
+    compressed.push_back('\xff');
+    compressed.push_back('\xff');
+    compressed.push_back('\x7f');
+
+    for(int i=compressed.size();i>=0;i--)
+    {
+        EXPECT_EQ(snappy_uncompressed_length(compressed.data(), i, &ulength), SNAPPY_INVALID_INPUT);
+    }
+}
+
+TEST(SNAPPY_snappy_uncompressed_length, AOCL_Compression_snappy_snappy_uncompressed_length_pass_common_7) // simple pass test case
+{
+    string s = "Hello world";
+    string result;
+    size_t uncompressed_length;
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_EQ(snappy_uncompressed_length(result.data(), result.size(), &uncompressed_length), SNAPPY_OK);
+    EXPECT_EQ(s.size(), uncompressed_length);
+}
+
+TEST(SNAPPY_snappy_uncompressed_length, AOCL_Compression_snappy_snappy_uncompressed_length_pass_common_8) // input of 0 uncompressed length
+{
+    string result;
+    result.push_back('\x00');
+    size_t uncompressed_length;
+    EXPECT_EQ(snappy_uncompressed_length(result.data(), result.size(), &uncompressed_length), SNAPPY_OK);
+    EXPECT_EQ(uncompressed_length, 0);
+}
+
+TEST(SNAPPY_snappy_uncompressed_length, AOCL_Compression_snappy_snappy_uncompressed_length_pass_common_9) // input of max uncompressed length for each character
+{
+    string result;
+    result.push_back('\x7f');
+    size_t uncompressed_length;
+    for(int i=0;i<4;i++)
+    {
+        EXPECT_EQ(snappy_uncompressed_length(result.data(), result.size(), &uncompressed_length), SNAPPY_OK);
+        EXPECT_EQ(uncompressed_length, (1<<(7*(i+1)))-1);
+        result[i] = '\xff';
+        result.push_back('\x7f');
+    }
+    result[4] = '\x0f';
+    // Max supported length
+    EXPECT_EQ(snappy_uncompressed_length(result.data(), result.size(), &uncompressed_length), SNAPPY_OK);
+    EXPECT_EQ(uncompressed_length, ((1ULL)<<32) - 1);
+}
+
+/*********************************************
+* End of snappy_uncompressed_length
+**********************************************/
+
+#ifdef AOCL_ENABLE_THREADS
+/********************************************************
+* Begin of GetUncompressedLengthFromMTCompressedBuffer
+*********************************************************/
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_fail_common_1)
+{
+    string s = "Hello world";
+    string result;
+    size_t ulength;
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(NULL, result.size(), &ulength));
+}
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_fail_common_2)
+{
+    string s = "Hello world";
+    string result;
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(result.data(), result.size(), NULL));
+}
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_fail_common_3) // TruncatedVarint
+{
+    size_t ulength;
+    string compressed;
+    compressed.push_back('\xf0');
+
+    EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(compressed.data(), compressed.size(), &ulength));
+}
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_fail_common_4) // UnterminatedVarint
+{
+    string compressed;
+    size_t ulength;
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back(10);
+
+    EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(compressed.data(), compressed.size(), &ulength));
+}
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_fail_common_5) // Value too long edge case
+{
+    string compressed;
+    size_t ulength;
+    compressed.clear();
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x10');
+
+    EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(compressed.data(), compressed.size(), &ulength));
+}
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_fail_common_6) // OverflowingVarint
+{
+    string compressed;
+    size_t ulength;
+    compressed.push_back('\xfb');
+    compressed.push_back('\xff');
+    compressed.push_back('\xff');
+    compressed.push_back('\xff');
+    compressed.push_back('\x7f');
+
+    for(int i=compressed.size();i>=0;i--)
+    {
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(compressed.data(), i, &ulength));
+    }
+}
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_pass_common_7) // simple pass test case
+{
+    string s = "Hello world";
+    string result;
+    size_t uncompressed_length;
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(result.data(), result.size(), &uncompressed_length));
+    EXPECT_EQ(s.size(), uncompressed_length);
+}
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_pass_common_8) // input of 0 uncompressed length
+{
+    string result;
+    result.push_back('\x00');
+    size_t uncompressed_length;
+    EXPECT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(result.data(), result.size(), &uncompressed_length));
+    EXPECT_EQ(uncompressed_length, 0);
+}
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_pass_common_9) // input of max uncompressed length for each character
+{
+    string result;
+    result.push_back('\x7f');
+    size_t uncompressed_length;
+    for(int i=0;i<4;i++)
+    {
+        EXPECT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(result.data(), result.size(), &uncompressed_length));
+        EXPECT_EQ(uncompressed_length, (1<<(7*(i+1)))-1);
+        result[i] = '\xff';
+        result.push_back('\x7f');
+    }
+    result[4] = '\x0f';
+    // Max supported length
+    EXPECT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(result.data(), result.size(), &uncompressed_length));
+    EXPECT_EQ(uncompressed_length, ((1ULL)<<32) - 1);
+}
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_pass_common_10) // Huge input size is provided, to ensure multi-thread code path
+{
+    size_t original_size = 1e6;
+    string orig(original_size, 'a');
+    vector<char> compressed(MaxCompressedLength(original_size));
+    size_t compressed_length;
+    size_t uncompressed_length;
+    for(int i=0; i < original_size ; i++)
+    {
+        orig[i]= rand()%256;
+    }
+
+    RawCompress(orig.data(), orig.size(), compressed.data(), &compressed_length);
+    EXPECT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(compressed.data(), compressed.size(), &uncompressed_length));
+    EXPECT_EQ(original_size, uncompressed_length);
+}
+
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_fail_common_11) // compressed buffer corrupted
+{
+    size_t original_size = 1e6;
+    string orig(original_size, 'a');
+    vector<char> compressed(MaxCompressedLength(original_size));
+    size_t compressed_length;
+    size_t uncompressed_length;
+    for(int i=0; i < original_size ; i++)
+    {
+        orig[i] = rand()%256;
+    }
+
+    RawCompress(orig.data(), orig.size(), compressed.data(), &compressed_length);
+    // Compressed data being corrupted
+    compressed[0]--;
+    (GetUncompressedLengthFromMTCompressedBuffer(compressed.data(), compressed.size(), &uncompressed_length));
+    EXPECT_NE(original_size, uncompressed_length);
+}
+
+/****************************************************
+* End of GetUncompressedLengthFromMTCompressedBuffer
+*****************************************************/
+#endif
+
+/*************************************************************************
+* Begin of `bool GetUncompressedLength(Source* source, uint32_t* result)`
+**************************************************************************/
+class SNAPPY_GetUncompressedLength_src_single :  public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_GetUncompressedLength_src_single, AOCL_Compression_snappy_GetUncompressedLength_src_fail_common_1)
 {
     uint32_t ulength;
+
+    EXPECT_FALSE(GetUncompressedLength(NULL, &ulength));
+}
+
+TEST_P(SNAPPY_GetUncompressedLength_src_single, AOCL_Compression_snappy_GetUncompressedLength_src_fail_common_2)
+{
     string s = "Hello world";
     string compressed;
     Compress(s.data(), s.size(), &compressed);
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
 
-    EXPECT_FALSE(GetUncompressedLength(NULL, &ulength));                // AOCL_Compression_snappy_GetUncompressedLength_src_common_1
-    EXPECT_FALSE(GetUncompressedLength(src, NULL));                     // AOCL_Compression_snappy_GetUncompressedLength_src_common_2
+    EXPECT_FALSE(GetUncompressedLength(src, NULL));
+    delete src;
+}
 
-    compressed.clear();
-    // TruncatedVarint
+TEST_P(SNAPPY_GetUncompressedLength_src_single, AOCL_Compression_snappy_GetUncompressedLength_src_fail_common_3)    // TruncatedVarint
+{
+    uint32_t ulength;
+    string compressed;
     compressed.push_back('\xf0');
 
-    EXPECT_FALSE(checkUncompressedLength(compressed, &ulength));        // AOCL_Compression_snappy_GetUncompressedLength_src_common_3
+    EXPECT_FALSE(checkUncompressedLength(compressed, &ulength));
+}
 
-    // UnterminatedVarint
-    compressed.clear();
+TEST_P(SNAPPY_GetUncompressedLength_src_single, AOCL_Compression_snappy_GetUncompressedLength_src_fail_common_4)    // UnterminatedVarint
+{
+    uint32_t ulength;
+    string compressed;
+
     compressed.push_back('\x80');
     compressed.push_back('\x80');
     compressed.push_back('\x80');
@@ -677,22 +1215,45 @@ TEST_F(SNAPPY_GetUncompressedLength_source, failure_cases)
     compressed.push_back('\x80');
     compressed.push_back(10);
 
-    EXPECT_FALSE(checkUncompressedLength(compressed, &ulength));        // AOCL_Compression_snappy_GetUncompressedLength_src_common_4
+    EXPECT_FALSE(checkUncompressedLength(compressed, &ulength));
+}
 
-    // OverflowingVarint
-    compressed.clear();
+TEST_P(SNAPPY_GetUncompressedLength_src_single, AOCL_Compression_snappy_GetUncompressedLength_src_fail_common_5)    // Value too long edge case
+{
+    uint32_t ulength;
+    string compressed;
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x80');
+    compressed.push_back('\x10');
+
+    EXPECT_FALSE(checkUncompressedLength(compressed, &ulength));
+}
+
+TEST_P(SNAPPY_GetUncompressedLength_src_single, AOCL_Compression_snappy_GetUncompressedLength_src_fail_common_6)    // OverflowingVarint
+{
+    uint32_t ulength;
+    string compressed;
+
     compressed.push_back('\xfb');
     compressed.push_back('\xff');
     compressed.push_back('\xff');
     compressed.push_back('\xff');
     compressed.push_back('\x7f');
 
-    EXPECT_FALSE(checkUncompressedLength(compressed, &ulength));        // AOCL_Compression_snappy_GetUncompressedLength_src_common_5
-
-    delete src;
+    for(int i=compressed.size(); i>=0; i--)
+    {   
+        {
+            Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), i);
+            bool return_value = snappy::GetUncompressedLength(src, &ulength);
+            EXPECT_FALSE(return_value);
+            delete src;
+        }
+    }
 }
 
-TEST_F(SNAPPY_GetUncompressedLength_source, pass_cases_UncompressedLength)
+TEST_P(SNAPPY_GetUncompressedLength_src_single, AOCL_Compression_snappy_GetUncompressedLength_src_pass_common_7)    // Simple pass case
 {
     string s = "Hello world";
     string result;
@@ -700,11 +1261,203 @@ TEST_F(SNAPPY_GetUncompressedLength_source, pass_cases_UncompressedLength)
 
     Compress(s.data(), s.size(), &result);
 
-    EXPECT_TRUE(checkUncompressedLength(result, &ulength));             // AOCL_Compression_snappy_GetUncompressedLength_src_common_6
+    EXPECT_TRUE(checkUncompressedLength(result, &ulength));
     EXPECT_EQ(s.size(), ulength);
 }
 
-TEST(SNAPPY_RawUncompressToIOVec, IOVecSinkEdgeCases)   // AOCL_Compression_snappy_RawUncompressToIoVec_common_1
+TEST_P(SNAPPY_GetUncompressedLength_src_single, AOCL_Compression_snappy_GetUncompressedLength_src_pass_common_8)    // Highest permissable length
+{
+    string result;
+    uint32_t ulength;
+    result.push_back('\xff');
+    result.push_back('\xff');
+    result.push_back('\xff');
+    result.push_back('\xff');
+    result.push_back('\x0f');
+
+    EXPECT_TRUE(checkUncompressedLength(result, &ulength));
+    EXPECT_EQ(ulength, ((1ULL)<<32) - 1);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_GetUncompressedLength_src_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/*************************************************************************
+* End of `bool GetUncompressedLength(Source* source, uint32_t* result)`
+**************************************************************************/
+
+/*********************************************
+* Begin of RawUncompressToIOVec
+**********************************************/
+
+class SNAPPY_RawUncompressToIOVec_multiple :  public Combined_Dynamic_dispatcher<PAIR_WRAPPER>
+{
+    public:
+
+    ~SNAPPY_RawUncompressToIOVec_multiple()
+    {
+        for (int i = 0; i < iov.size(); ++i)
+        {
+            delete[] reinterpret_cast<char *>(iov[i].iov_base);
+        }
+    }
+
+    void init(int original_length, int iov_number_elements, vector<int> &kLengths, vector<iovec> &iov)
+    {
+        iov = vector<iovec>(iov_number_elements);
+        kLengths = vector<int>(iov_number_elements);
+        size_t remaining_sum = original_length;
+        for(int i=0; i<iov_number_elements-1; i++)
+        {
+            int max_limit = remaining_sum - (iov_number_elements-i-1);
+            kLengths[i] = 1 + rand()%max_limit;
+            remaining_sum -= kLengths[i];
+        }
+        kLengths[iov_number_elements-1] = remaining_sum;
+        iov_init(iov.data(), kLengths.data(), iov_number_elements);
+    }
+
+    vector<iovec> iov;
+};
+
+class SNAPPY_RawUncompressToIOVec_multiple_fail_cases :  public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{
+    public:
+
+    ~SNAPPY_RawUncompressToIOVec_multiple_fail_cases()
+    {
+        for (int i = 0; i < iov.size(); ++i)
+        {
+            delete[] reinterpret_cast<char *>(iov[i].iov_base);
+        }
+    }
+
+    vector<iovec> iov;
+};
+
+class SNAPPY_RawUncompressToIOVec_single :  public Standalone_Dynamic_dispatcher
+{
+    public:
+
+    ~SNAPPY_RawUncompressToIOVec_single()
+    {
+        for (int i = 0; i < iov.size(); ++i)
+        {
+            delete[] reinterpret_cast<char *>(iov[i].iov_base);
+        }
+    }
+
+    void init(int original_length, int iov_number_elements, vector<int> &kLengths, vector<iovec> &iov)
+    {
+        iov = vector<iovec>(iov_number_elements);
+        kLengths = vector<int>(iov_number_elements);
+        size_t remaining_sum = original_length;
+        for(int i=0; i<iov_number_elements-1; i++)
+        {
+            int max_limit = remaining_sum - (iov_number_elements-i-1);
+            kLengths[i] = 1 + rand()%max_limit;
+            remaining_sum -= kLengths[i];
+        }
+        kLengths[iov_number_elements-1] = remaining_sum;
+        iov_init(iov.data(), kLengths.data(), iov_number_elements);
+    }
+
+    vector<iovec> iov;
+};
+
+TEST_P(SNAPPY_RawUncompressToIOVec_multiple, AOCL_Compression_snappy_RawUncompressToIOVec_pass_common_1) // pass cases
+{
+    pair<string,string> c_u_pair = get<1>(GetParam()).parameter;
+
+    size_t original_length = c_u_pair.second.size();
+    if(original_length == 0)
+    {
+        return;
+    }
+
+    int iov_number_elements = 5;
+    if(original_length < 5)
+    {
+        iov_number_elements = original_length;
+    }
+
+    vector<int> kLengths;
+    init(original_length, iov_number_elements, kLengths, iov);
+
+    EXPECT_TRUE(snappy::RawUncompressToIOVec(c_u_pair.first.data(), c_u_pair.first.size(), iov.data(), iov_number_elements));
+    
+    int compare_from_index = 0;
+    for(int i=0;i<iov_number_elements;i++)
+    {
+        EXPECT_EQ(0, memcmp(iov[i].iov_base, &c_u_pair.second[compare_from_index], kLengths[i]));
+        compare_from_index += kLengths[i];
+    }
+}
+
+
+TEST_P(SNAPPY_RawUncompressToIOVec_single, AOCL_Compression_snappy_RawUncompressToIOVec_fail_common_2) // Insufficeint uncompress memory
+{
+    pair<string,string> c_u_pair = fourByteOffset();
+
+    size_t original_length = c_u_pair.second.size();
+    if(original_length == 0)
+    {
+        return;
+    }
+
+    int iov_number_elements = 5;
+    if(original_length < 5)
+    {
+        iov_number_elements = original_length;
+    }
+
+    vector<int> kLengths;
+    init(original_length, iov_number_elements, kLengths, iov);
+
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(c_u_pair.first.data(), c_u_pair.first.size(), iov.data(), iov_number_elements-1));
+
+}
+
+TEST_P(SNAPPY_RawUncompressToIOVec_single, AOCL_Compression_snappy_RawUncompressToIOVec_fail_common_3) // partial_compressed_buffer
+{
+    pair<string,string> c_u_pair = fourByteOffset();
+
+    size_t original_length = c_u_pair.second.size();
+    if(original_length == 0)
+    {
+        return;
+    }
+
+    int iov_number_elements = 5;
+    if(original_length < 5)
+    {
+        iov_number_elements = original_length;
+    }
+
+    vector<int> kLengths;
+    init(original_length, iov_number_elements, kLengths, iov);
+
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(c_u_pair.first.data(), min(c_u_pair.first.size()-1, (size_t)0), iov.data(), iov_number_elements));
+
+}
+
+TEST_P(SNAPPY_RawUncompressToIOVec_multiple_fail_cases, AOCL_Compression_snappy_RawUncompressToIOVec_fail_common_4) // failure edge cases
+{
+    string compressed = get<1>(GetParam()).parameter;
+
+    const int iov_number_elements = 5;
+    static const int kLengths[] = {2, 20, 4, 100000, 128};
+
+    iov = vector<iovec>(iov_number_elements);
+    iov_init(iov.data(), kLengths, iov_number_elements);
+
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), iov.data(), iov_number_elements));
+    
+}
+
+TEST_P(SNAPPY_RawUncompressToIOVec_single, AOCL_Compression_snappy_RawUncompressToIOVec_pass_common_5)   // IOVecSinkEdgeCases
 {
     // Test some tricky edge cases in the iovec output that are not necessarily
     // exercised by random tests.
@@ -714,8 +1467,8 @@ TEST(SNAPPY_RawUncompressToIOVec, IOVecSinkEdgeCases)   // AOCL_Compression_snap
     // [  ] [ ] [    ] [        ] [        ]
     static const int kLengths[] = {2, 1, 4, 8, 128};
 
-    struct iovec iov[ARRAYSIZE(kLengths)];
-    iov_init(iov, kLengths, ARRAYSIZE(kLengths));
+    iov = vector<iovec>(ARRAYSIZE(kLengths));
+    iov_init(iov.data(), kLengths, ARRAYSIZE(kLengths));
 
     std::string compressed;
     SNAPPY_Gtest_Util::Append32(&compressed, 22);
@@ -756,26 +1509,21 @@ TEST(SNAPPY_RawUncompressToIOVec, IOVecSinkEdgeCases)   // AOCL_Compression_snap
     //           ^-                     ^-
     AppendCopy(compressed, 17, 4);
 
-    EXPECT_TRUE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), iov, ARRAYSIZE(iov)));
+    EXPECT_TRUE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), iov.data(), ARRAYSIZE(kLengths)));
     EXPECT_EQ(0, memcmp(iov[0].iov_base, "ab", 2));
     EXPECT_EQ(0, memcmp(iov[1].iov_base, "c", 1));
     EXPECT_EQ(0, memcmp(iov[2].iov_base, "1231", 4));
     EXPECT_EQ(0, memcmp(iov[3].iov_base, "23123123", 8));
     EXPECT_EQ(0, memcmp(iov[4].iov_base, "123bc12", 7));
 
-    for (int i = 0; i < ARRAYSIZE(kLengths); ++i)
-    {
-        delete[] reinterpret_cast<char *>(iov[i].iov_base);
-    }
 }
 
-TEST(SNAPPY_RawUncompressToIOVec, IOVecLiteralOverflow) // AOCL_Compression_snappy_RawUncompressToIoVec_common_2
+TEST_P(SNAPPY_RawUncompressToIOVec_single, AOCL_Compression_snappy_RawUncompressToIOVec_fail_common_6)    // IOVecLiteralOverflow
 {
     // Total length is 7.
     static const int kLengths[] = {3, 4};
 
-    struct iovec iov[ARRAYSIZE(kLengths)];
-    iov_init(iov, kLengths, ARRAYSIZE(kLengths));
+    iov = vector<iovec>(ARRAYSIZE(kLengths));
 
     std::string compressed;
     // We are constructing a compressed string of length 8.
@@ -784,21 +1532,17 @@ TEST(SNAPPY_RawUncompressToIOVec, IOVecLiteralOverflow) // AOCL_Compression_snap
     AppendLiteral(compressed, "12345678");
 
     // Total length of iovec is 7 but uncompressed length is 8 so overflow occurs.
-    EXPECT_FALSE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), iov, ARRAYSIZE(iov)));
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), iov.data(), ARRAYSIZE(kLengths)));
 
-    for (int i = 0; i < ARRAYSIZE(kLengths); ++i)
-    {
-        delete[] reinterpret_cast<char *>(iov[i].iov_base);
-    }
 }
 
-TEST(SNAPPY_RawUncompressToIOVec, IOVecCopyOverflow)    // AOCL_Compression_snappy_RawUncompressToIoVec_common_3
+TEST_P(SNAPPY_RawUncompressToIOVec_single, AOCL_Compression_snappy_RawUncompressToIOVec_fail_common_7)    // IOVecCopyOverflow
 {
     // Total length is 7.
     static const int kLengths[] = {3, 4};
 
-    struct iovec iov[ARRAYSIZE(kLengths)];
-    iov_init(iov, kLengths, ARRAYSIZE(kLengths));
+    iov = vector<iovec>(ARRAYSIZE(kLengths));
+    iov_init(iov.data(), kLengths, ARRAYSIZE(kLengths));
 
     std::string compressed;
     // We are constructing a compressed string of length 8.
@@ -808,46 +1552,17 @@ TEST(SNAPPY_RawUncompressToIOVec, IOVecCopyOverflow)    // AOCL_Compression_snap
     AppendCopy(compressed, 3, 5);
 
     // Total length of iovec is 7 but uncompressed length is 8 so overflow occurs.
-    EXPECT_FALSE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), iov, ARRAYSIZE(iov)));
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), iov.data(), ARRAYSIZE(kLengths)));
 
-    for (int i = 0; i < ARRAYSIZE(kLengths); ++i)
-    {
-        delete[] reinterpret_cast<char *>(iov[i].iov_base);
-    }
 }
 
-TEST(SNAPPY_RawUncompressToIOVec_source, fail_cases)
+TEST_P(SNAPPY_RawUncompressToIOVec_single, AOCL_Compression_snappy_RawUncompressToIOVec_fail_common_8)   // compressed data is NULL
 {
-    // The first two arguments should not point to NULL.
+    // If the pointers points to a NULL value then failure occurs.
     static const int kLengths[] = {2, 1, 4, 8, 128};
-    struct iovec iov[ARRAYSIZE(kLengths)];
+    iov = vector<iovec>(ARRAYSIZE(kLengths));
     std::string compressed;
-    iov_init(iov, kLengths, ARRAYSIZE(kLengths));
-
-    SNAPPY_Gtest_Util::Append32(&compressed, 22);
-    AppendLiteral(compressed, "abc123");
-    AppendCopy(compressed, 3, 3);
-    AppendCopy(compressed, 6, 9);
-    AppendCopy(compressed, 17, 4);
-    Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
-
-    EXPECT_FALSE(snappy::RawUncompressToIOVec(NULL, iov, ARRAYSIZE(iov)));  // AOCL_Compression_snappy_RawUncompressToIoVec_src_4
-    EXPECT_FALSE(snappy::RawUncompressToIOVec(src, NULL, ARRAYSIZE(iov)));  // AOCL_Compression_snappy_RawUncompressToIoVec_src_5
-
-    for (int i = 0; i < ARRAYSIZE(kLengths); ++i)
-    {
-        delete[] reinterpret_cast<char *>(iov[i].iov_base);
-    }
-    delete src;
-}
-
-TEST(SNAPPY_RawUncompressToIOVec, fail_cases)
-{
-    // The pointers if points to a NULL value then failure occurs.
-    static const int kLengths[] = {2, 1, 4, 8, 128};
-    struct iovec iov[ARRAYSIZE(kLengths)];
-    std::string compressed;
-    iov_init(iov, kLengths, ARRAYSIZE(kLengths));
+    iov_init(iov.data(), kLengths, ARRAYSIZE(kLengths));
     
     SNAPPY_Gtest_Util::Append32(&compressed, 22);
     AppendLiteral(compressed, "abc123");
@@ -855,16 +1570,92 @@ TEST(SNAPPY_RawUncompressToIOVec, fail_cases)
     AppendCopy(compressed, 6, 9);
     AppendCopy(compressed, 17, 4);
 
-    EXPECT_FALSE(snappy::RawUncompressToIOVec(NULL, compressed.size(), iov, ARRAYSIZE(iov)));               //  AOCL_Compression_snappy_RawUncompressToIoVec_common_4
-    EXPECT_FALSE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), NULL, ARRAYSIZE(iov))); //  AOCL_Compression_snappy_RawUncompressToIoVec_common_5
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(NULL, compressed.size(), iov.data(), ARRAYSIZE(kLengths)));
 
-    for (int i = 0; i < ARRAYSIZE(kLengths); ++i)
-    {
-        delete[] reinterpret_cast<char *>(iov[i].iov_base);
-    }
 }
 
-TEST(SNAPPY_RawUncompressToIOVec_source, IOVecSinkEdgeCases)    //  AOCL_Compression_snappy_RawUncompressToIoVec_src_1
+TEST_P(SNAPPY_RawUncompressToIOVec_single, AOCL_Compression_snappy_RawUncompressToIOVec_fail_common_9)    // iovec is NULL
+{
+    // The pointers if points to a NULL value then failure occurs.
+    static const int kLengths[] = {2, 1, 4, 8, 128};
+    iov = vector<iovec>(ARRAYSIZE(kLengths));
+    std::string compressed;
+    iov_init(iov.data(), kLengths, ARRAYSIZE(kLengths));
+    
+    SNAPPY_Gtest_Util::Append32(&compressed, 22);
+    AppendLiteral(compressed, "abc123");
+    AppendCopy(compressed, 3, 3);
+    AppendCopy(compressed, 6, 9);
+    AppendCopy(compressed, 17, 4);
+
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(compressed.data(), compressed.size(), NULL, ARRAYSIZE(kLengths)));
+
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_RawUncompressToIOVec_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_RawUncompressToIOVec_multiple_fail_cases,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_fail_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_RawUncompressToIOVec_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_pass_cases())));
+
+/***********************************************
+* End of RawUncompressToIOVec
+************************************************/
+
+/************************************************************************************************
+* Begin of `RawUncompressToIOVec(Source* compressed, const struct iovec* iov, size_t iov_cnt);`
+*************************************************************************************************/
+
+class SNAPPY_RawUncompressToIOVec_src_single :  public Standalone_Dynamic_dispatcher
+{
+    public:
+    ~SNAPPY_RawUncompressToIOVec_src_single()
+    {
+        for (int i = 0; i < iov.size(); ++i)
+        {
+            delete[] reinterpret_cast<char *>(iov[i].iov_base);
+        }
+    }
+
+    vector<iovec> iov;
+};
+
+TEST_P(SNAPPY_RawUncompressToIOVec_src_single, AOCL_Compression_snappy_RawUncompressToIoVec_src_fail_common_1)
+{
+    // The first two arguments should not point to NULL.
+    static const int kLengths[] = {2, 1, 4, 8, 128};
+    iov = vector<iovec>(ARRAYSIZE(kLengths));
+    iov_init(iov.data(), kLengths, ARRAYSIZE(kLengths));
+
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(NULL, iov.data(), ARRAYSIZE(kLengths)));
+
+}
+
+TEST_P(SNAPPY_RawUncompressToIOVec_src_single, AOCL_Compression_snappy_RawUncompressToIoVec_src_fail_common_2)
+{
+    // The first two arguments should not point to NULL.
+    std::string compressed;
+
+    SNAPPY_Gtest_Util::Append32(&compressed, 22);
+    AppendLiteral(compressed, "abc123");
+    AppendCopy(compressed, 3, 3);
+    AppendCopy(compressed, 6, 9);
+    AppendCopy(compressed, 17, 4);
+    Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(src, NULL, 5));
+    delete src;
+}
+
+TEST_P(SNAPPY_RawUncompressToIOVec_src_single, AOCL_Compression_snappy_RawUncompressToIoVec_src_pass_common_3)    // IOVecSinkEdgeCases
 {
     // Test some tricky edge cases in the iovec output that are not necessarily
     // exercised by random tests.
@@ -874,8 +1665,8 @@ TEST(SNAPPY_RawUncompressToIOVec_source, IOVecSinkEdgeCases)    //  AOCL_Compres
     // [  ] [ ] [    ] [        ] [        ]
     static const int kLengths[] = {2, 1, 4, 8, 128};
     std::string compressed;
-    struct iovec iov[ARRAYSIZE(kLengths)];
-    iov_init(iov, kLengths, ARRAYSIZE(kLengths));
+    iov = vector<iovec>(ARRAYSIZE(kLengths));
+    iov_init(iov.data(), kLengths, ARRAYSIZE(kLengths));
 
     SNAPPY_Gtest_Util::Append32(&compressed, 22);
 
@@ -916,26 +1707,22 @@ TEST(SNAPPY_RawUncompressToIOVec_source, IOVecSinkEdgeCases)    //  AOCL_Compres
     AppendCopy(compressed, 17, 4);
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
 
-    EXPECT_TRUE(snappy::RawUncompressToIOVec(src, iov, ARRAYSIZE(iov)));
+    EXPECT_TRUE(snappy::RawUncompressToIOVec(src, iov.data(), ARRAYSIZE(kLengths)));
     EXPECT_EQ(0, memcmp(iov[0].iov_base, "ab", 2));
     EXPECT_EQ(0, memcmp(iov[1].iov_base, "c", 1));
     EXPECT_EQ(0, memcmp(iov[2].iov_base, "1231", 4));
     EXPECT_EQ(0, memcmp(iov[3].iov_base, "23123123", 8));
     EXPECT_EQ(0, memcmp(iov[4].iov_base, "123bc12", 7));
 
-    for (int i = 0; i < ARRAYSIZE(kLengths); ++i)
-    {
-        delete[] reinterpret_cast<char *>(iov[i].iov_base);
-    }
     delete src;
 }
 
-TEST(SNAPPY_RawUncompressToIOVec_source, IOVecLiteralOverflow)  // AOCL_Compression_snappy_RawUncompressToIoVec_src_2
+TEST_P(SNAPPY_RawUncompressToIOVec_src_single, AOCL_Compression_snappy_RawUncompressToIoVec_src_fail_common_4)    // IOVecLiteralOverflow
 {
     static const int kLengths[] = {3, 4};
-    struct iovec iov[ARRAYSIZE(kLengths)];
+    iov = vector<iovec>(ARRAYSIZE(kLengths));
     std::string compressed;
-    iov_init(iov, kLengths, ARRAYSIZE(kLengths));
+    iov_init(iov.data(), kLengths, ARRAYSIZE(kLengths));
 
     // We are constructing a compressed string of length 8.
     SNAPPY_Gtest_Util::Append32(&compressed, 8);
@@ -943,21 +1730,17 @@ TEST(SNAPPY_RawUncompressToIOVec_source, IOVecLiteralOverflow)  // AOCL_Compress
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
 
     // Total length of iovec is 7 but uncompressed length is 8 so overflow occurs.
-    EXPECT_FALSE(snappy::RawUncompressToIOVec(src, iov, ARRAYSIZE(iov)));
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(src, iov.data(), ARRAYSIZE(kLengths)));
 
-    for (int i = 0; i < ARRAYSIZE(kLengths); ++i)
-    {
-        delete[] reinterpret_cast<char *>(iov[i].iov_base);
-    }
     delete src;
 }
 
-TEST(SNAPPY_RawUncompressToIOVec_source, IOVecCopyOverflow) //  AOCL_Compression_snappy_RawUncompressToIoVec_src_3
+TEST_P(SNAPPY_RawUncompressToIOVec_src_single, AOCL_Compression_snappy_RawUncompressToIoVec_src_fail_common_5)    // IOVecCopyOverflow
 {
     static const int kLengths[] = {3, 4};
-    struct iovec iov[ARRAYSIZE(kLengths)];
+    iov = vector<iovec>(ARRAYSIZE(kLengths));
     std::string compressed;
-    iov_init(iov, kLengths, ARRAYSIZE(kLengths));
+    iov_init(iov.data(), kLengths, ARRAYSIZE(kLengths));
 
     // We are constructing a compressed string of length 8.
     SNAPPY_Gtest_Util::Append32(&compressed, 8);
@@ -967,140 +1750,37 @@ TEST(SNAPPY_RawUncompressToIOVec_source, IOVecCopyOverflow) //  AOCL_Compression
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
 
     // Total length of iovec is 7 but uncompressed length is 8 so overflow occurs.
-    EXPECT_FALSE(snappy::RawUncompressToIOVec(src, iov, ARRAYSIZE(iov)));
-
-    for (int i = 0; i < ARRAYSIZE(kLengths); ++i)
-    {
-        delete[] reinterpret_cast<char *>(iov[i].iov_base);
-    }
-    delete src;
-}
-
-
-class SNAPPY_Uncompress_ : public ::testing::TestWithParam<string>
-{
-    void SetUp() override {
-        aocl_setup_snappy_test();
-    }
-};
-
-TEST_P(SNAPPY_Uncompress_, Uncompress_with_buffer)
-{
-
-    string compressed = GetParam();
-    string result;
-    EXPECT_FALSE(Uncompress(compressed.data(), compressed.size(), &result));
-}
-
-TEST_P(SNAPPY_Uncompress_, Uncompress_using_Source)
-{
-
-    string compressed = GetParam();
-    string result;
-    result.resize(100000);
-    Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
-    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
-
-    EXPECT_FALSE(Uncompress(src, sink));
-
-    delete src;
-    delete sink;
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    SNAPPY,
-    SNAPPY_Uncompress_,
-    ::testing::ValuesIn(fail_cases()));
-
-class SNAPPY_RawUncompress_ : public ::testing::TestWithParam<string>
-{
-    void SetUp() override {
-        aocl_setup_snappy_test();
-    }
-};
-
-TEST_P(SNAPPY_RawUncompress_, with_buffer)
-{
-    string compressed = GetParam();
-    char result[1000000];
-
-    EXPECT_FALSE(RawUncompress(compressed.data(), compressed.size(), result));
-}
-
-TEST_P(SNAPPY_RawUncompress_, using_Source)
-{
-
-    string compressed = GetParam();
-    char result[100000];
-    Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
-
-    EXPECT_FALSE(RawUncompress(src, result));
-
-    delete src;
-}
-
-TEST(SNAPPY_RawUncompress_source, fail_compress)
-{
-    // Arguments should not be NULL for the function `RawUncompress`.
-
-    char uncompressed[100];
-    string compressed = "helloWorld";
-    Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
-
-    EXPECT_FALSE(RawUncompress(NULL, uncompressed));    // AOCL_Compression_snappy_RawUncompress_src_common_16
-    EXPECT_FALSE(RawUncompress(src, NULL));             // AOCL_Compression_snappy_RawUncompress_src_common_17
+    EXPECT_FALSE(snappy::RawUncompressToIOVec(src, iov.data(), ARRAYSIZE(kLengths)));
 
     delete src;
 }
 
 INSTANTIATE_TEST_SUITE_P(
     SNAPPY,
-    SNAPPY_RawUncompress_,
-    ::testing::ValuesIn(fail_cases()));
+    SNAPPY_RawUncompressToIOVec_src_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
 
-class SNAPPY_Uncompress_f : public AOCL_setup_snappy
-{
-};
+/************************************************************************************************
+* End of `RawUncompressToIOVec(Source* compressed, const struct iovec* iov, size_t iov_cnt);`
+*************************************************************************************************/
 
-TEST_F(SNAPPY_Uncompress_f, pass_case) // AOCL_Compression_snappy_Uncompress_common_15
-{
-    // Check that we do not read past end of input
+/********************************************************************
+* Begin of `bool Uncompress(Source* compressed, Sink* uncompressed);`
+*********************************************************************/
 
-    // Make a compressed string that ends with a single-byte literal
-    std::string compressed;
-    std::string uncompressed;
+class SNAPPY_Uncompress_src_fail : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
 
-    SNAPPY_Gtest_Util::Append32(&compressed, 1);
-    AppendLiteral(compressed, "x");
-    string c(compressed);
+class SNAPPY_Uncompress_src : public Combined_Dynamic_dispatcher<PAIR_WRAPPER>
+{};
 
-    EXPECT_TRUE(snappy::Uncompress(c.data(), c.size(), &uncompressed));
-    EXPECT_EQ(uncompressed, std::string("x"));
-}
+class SNAPPY_Uncompress_src_single : public Standalone_Dynamic_dispatcher
+{};
 
-class SNAPPY_Uncompress_p : public ::testing::TestWithParam<pair<string, string>>
-{
-    void SetUp() override {
-        aocl_setup_snappy_test();
-    }
-};
-
-TEST_P(SNAPPY_Uncompress_p, Uncompress_with_buffer)
+TEST_P(SNAPPY_Uncompress_src, AOCL_Compression_snappy_Uncompress_src_pass_common_1) // pass cases
 {
 
-    pair<string, string> p = GetParam();
-    string &compressed = p.first;
-    string &original = p.second;
-    string result;
-
-    EXPECT_TRUE(Uncompress(compressed.data(), compressed.size(), &result));
-    EXPECT_EQ(original, result);
-}
-
-TEST_P(SNAPPY_Uncompress_p, Uncompress_using_Source)
-{
-
-    pair<string, string> p = GetParam();
+    pair<string, string> p = get<1>(GetParam()).parameter;
     string &compressed = p.first;
     string &original = p.second;
     string result;
@@ -1116,28 +1796,24 @@ TEST_P(SNAPPY_Uncompress_p, Uncompress_using_Source)
     delete sink;
 }
 
-class SNAPPY_Uncompress : public AOCL_setup_snappy {
-};
-
-TEST_F(SNAPPY_Uncompress, fail_case)
+TEST_P(SNAPPY_Uncompress_src_single, AOCL_Compression_snappy_Uncompress_src_fail_common_2) // Partial compressed buffer
 {
-    string decompressed;
-    char c[11] = "helloWorld";
-    
-    EXPECT_FALSE(Uncompress(NULL, 100, &decompressed)); // AOCL_Compression_snappy_Uncompress_common_16
-    EXPECT_FALSE(Uncompress(c, 10, NULL));              // AOCL_Compression_snappy_Uncompress_common_17
+    pair<string, string> p = fourByteOffset();
+    string &compressed = p.first;
+    string &original = p.second;
+    string result;
+    result.resize(original.size());
+
+    Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size() - 1);
+    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
+
+    EXPECT_FALSE(Uncompress(src, sink));
+
+    delete src;
+    delete sink;
 }
 
-TEST_F(SNAPPY_Uncompress, fail_case2)
-{
-    char c[1] = "";
-    string compressed;
-    int j=Compress(c,0,&compressed);
-
-    EXPECT_FALSE(Uncompress(compressed.data(), j, NULL));   // AOCL_Compression_snappy_Uncompress_common_18
-}
-
-TEST(SNAPPY_Uncompress_source, fail_cases)
+TEST_P(SNAPPY_Uncompress_src_single, AOCL_Compression_snappy_Uncompress_src_fail_common_3) // NULL checks
 {
     string compressed = "helloWorld";
     string result;
@@ -1146,8 +1822,23 @@ TEST(SNAPPY_Uncompress_source, fail_cases)
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
     Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
 
-    EXPECT_FALSE(Uncompress(NULL, sink));   // AOCL_Compression_snappy_Uncompress_src_common_16
-    EXPECT_FALSE(Uncompress(src, NULL));    // AOCL_Compression_snappy_Uncompress_src_common_17
+    EXPECT_FALSE(Uncompress(NULL, sink));
+    EXPECT_FALSE(Uncompress(src, NULL));
+
+    delete src;
+    delete sink;
+}
+
+TEST_P(SNAPPY_Uncompress_src_fail, AOCL_Compression_snappy_Uncompress_src_fail_common_4) // Fail cases
+{
+
+    string compressed = get<1>(GetParam()).parameter;
+    string result;
+    result.resize(100000);
+    Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
+    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
+
+    EXPECT_FALSE(Uncompress(src, sink));
 
     delete src;
     delete sink;
@@ -1155,26 +1846,122 @@ TEST(SNAPPY_Uncompress_source, fail_cases)
 
 INSTANTIATE_TEST_SUITE_P(
     SNAPPY,
-    SNAPPY_Uncompress_p,
-    ::testing::ValuesIn(uncompress_pass_cases()));
+    SNAPPY_Uncompress_src_fail,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_fail_cases())));
 
-class SNAPPY_UncompressAsMuchAsPossible_ : public ::testing::TestWithParam<pair<string, string>>
-{
-    void SetUp() override {
-        aocl_setup_snappy_test();
-    }
-};
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_Uncompress_src,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_pass_cases())));
 
-class SNAPPY_UncompressAsMuchAsPossible_f : public ::testing::TestWithParam<string>
-{
-    void SetUp() override {
-        aocl_setup_snappy_test();
-    }
-};
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_Uncompress_src_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
 
-TEST_P(SNAPPY_UncompressAsMuchAsPossible_, pass)
+/******************************************************************
+* End of `bool Uncompress(Source* compressed, Sink* uncompressed);`
+*******************************************************************/
+
+/*********************************************************************************************************
+* Begin of `bool Uncompress(const char* compressed, size_t compressed_length, std::string* uncompressed);`
+**********************************************************************************************************/
+class SNAPPY_Uncompress_multiple : public Combined_Dynamic_dispatcher<PAIR_WRAPPER>
+{};
+
+class SNAPPY_Uncompress_fail_multiple : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_Uncompress_single : public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_Uncompress_single, AOCL_Compression_snappy_Uncompress_pass_common_1) // pass case edge
 {
-    pair<string, string> p = GetParam();
+    // Check that we do not read past end of input
+
+    // Make a compressed string that ends with a single-byte literal
+    std::string compressed;
+    std::string uncompressed;
+
+    SNAPPY_Gtest_Util::Append32(&compressed, 1);
+    AppendLiteral(compressed, "x");
+    string c(compressed);
+
+    EXPECT_TRUE(snappy::Uncompress(c.data(), c.size(), &uncompressed));
+    EXPECT_EQ(uncompressed, std::string("x"));
+}
+
+TEST_P(SNAPPY_Uncompress_fail_multiple, AOCL_Compression_snappy_Uncompress_fail_common_2) // fail cases
+{
+    string compressed = get<1>(GetParam()).parameter;
+    string result;
+    EXPECT_FALSE(Uncompress(compressed.data(), compressed.size(), &result));
+}
+
+TEST_P(SNAPPY_Uncompress_multiple, AOCL_Compression_snappy_Uncompress_pass_common_3) // pass cases
+{
+    pair<string, string> p = get<1>(GetParam()).parameter;
+    string &compressed = p.first;
+    string &original = p.second;
+    string result;
+
+    EXPECT_TRUE(Uncompress(compressed.data(), compressed.size(), &result));
+    EXPECT_EQ(original, result);
+}
+
+TEST_P(SNAPPY_Uncompress_single, AOCL_Compression_snappy_Uncompress_fail_common_4) // NULL checks
+{
+    string decompressed;
+    char c[11] = "helloWorld";
+    
+    EXPECT_FALSE(Uncompress(NULL, 100, &decompressed));
+    EXPECT_FALSE(Uncompress(c, 10, NULL));
+}
+
+TEST_P(SNAPPY_Uncompress_single, AOCL_Compression_snappy_Uncompress_pass_common_5) // fourByteOffset
+{
+    pair<string, string> p = fourByteOffset();
+
+    string decompressed;
+
+    EXPECT_FALSE(Uncompress(p.first.data(), min(p.first.size()-10, (size_t)0), &decompressed));   // AOCL_Compression_snappy_Uncompress_common_18
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_Uncompress_fail_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_fail_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_Uncompress_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_pass_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_Uncompress_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/*********************************************************************************************************
+* End of `bool Uncompress(const char* compressed, size_t compressed_length, std::string* uncompressed);`
+**********************************************************************************************************/
+
+/****************************************************************************************
+* Begin of `size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed);`
+*****************************************************************************************/
+
+class SNAPPY_UncompressAsMuchAsPossible_multiple : public Combined_Dynamic_dispatcher<PAIR_WRAPPER>
+{};
+
+class SNAPPY_UncompressAsMuchAsPossible_fail_multiple : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_UncompressAsMuchAsPossible_single : public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_UncompressAsMuchAsPossible_multiple, AOCL_Compression_snappy_UncompressAsMuchAsPossible_pass_common_1) // pass
+{
+    pair<string, string> p = get<1>(GetParam()).parameter;
     string &original = p.second;
     string &compressed = p.first;
     string result;
@@ -1192,9 +1979,29 @@ TEST_P(SNAPPY_UncompressAsMuchAsPossible_, pass)
     delete sink;
 }
 
-TEST_P(SNAPPY_UncompressAsMuchAsPossible_f, fail_cases)
+TEST_P(SNAPPY_UncompressAsMuchAsPossible_single, AOCL_Compression_snappy_UncompressAsMuchAsPossible_pass_common_2)  // partial compressed buffer provided
 {
-    string compressed = GetParam();
+    pair<string, string> p = fourByteOffset();
+    string &original = p.second;
+    string &compressed = p.first;
+    string result;
+    result.resize(original.size());
+
+    Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size()-10);
+    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
+
+    size_t sz = UncompressAsMuchAsPossible(src, sink);
+
+    EXPECT_NE(sz, 0);
+    EXPECT_EQ(0, memcmp(original.data(), result.data(), sz));
+
+    delete src;
+    delete sink;
+}
+
+TEST_P(SNAPPY_UncompressAsMuchAsPossible_fail_multiple, AOCL_Compression_snappy_UncompressAsMuchAsPossible_fail_common_3) // fail cases
+{
+    string compressed = get<1>(GetParam()).parameter;
     string result;
     result.resize(100);
 
@@ -1209,7 +2016,7 @@ TEST_P(SNAPPY_UncompressAsMuchAsPossible_f, fail_cases)
     delete sink;
 }
 
-TEST(SNAPPY_UncompressAsMuchAsPossible, fail_cases_NULL)
+TEST_P(SNAPPY_UncompressAsMuchAsPossible_single, AOCL_Compression_snappy_UncompressAsMuchAsPossible_fail_common_4) // NULL checks
 {
     string compressed = "helloWorld";
     string result;
@@ -1218,8 +2025,8 @@ TEST(SNAPPY_UncompressAsMuchAsPossible, fail_cases_NULL)
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
     Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
 
-    EXPECT_FALSE(UncompressAsMuchAsPossible(NULL, sink));   // AOCL_Compression_snappy_UncompressAsMuchAsPossible_common_16
-    EXPECT_FALSE(UncompressAsMuchAsPossible(src, NULL));    // AOCL_Compression_snappy_UncompressAsMuchAsPossible_common_17
+    EXPECT_FALSE(UncompressAsMuchAsPossible(NULL, sink));
+    EXPECT_FALSE(UncompressAsMuchAsPossible(src, NULL));
 
     delete src;
     delete sink;
@@ -1227,25 +2034,47 @@ TEST(SNAPPY_UncompressAsMuchAsPossible, fail_cases_NULL)
 
 INSTANTIATE_TEST_SUITE_P(
     SNAPPY,
-    SNAPPY_UncompressAsMuchAsPossible_,
-    ::testing::ValuesIn(uncompress_pass_cases()));
+    SNAPPY_UncompressAsMuchAsPossible_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_pass_cases())));
 
 INSTANTIATE_TEST_SUITE_P(
     SNAPPY,
-    SNAPPY_UncompressAsMuchAsPossible_f,
-    ::testing::ValuesIn(fail_cases()));
+    SNAPPY_UncompressAsMuchAsPossible_fail_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_fail_cases())));
 
-class SNAPPY_RawUncompress_p : public ::testing::TestWithParam<pair<string, string>>
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_UncompressAsMuchAsPossible_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/****************************************************************************************
+* End of `size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed);`
+*****************************************************************************************/
+
+/*******************************************************************************************************
+* Begin of `bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed);`
+********************************************************************************************************/
+
+class SNAPPY_RawUncompress_multiple : public Combined_Dynamic_dispatcher<PAIR_WRAPPER>
+{};
+
+class SNAPPY_RawUncompress_fail_multiple : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_RawUncompress_single : public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_RawUncompress_fail_multiple, AOCL_Compression_snappy_RawUncompress_fail_common_1) // fail cases
 {
-    void SetUp() override {
-        aocl_setup_snappy_test();
-    }
-};
+    string compressed = get<1>(GetParam()).parameter;
+    char result[1000000];
 
-TEST_P(SNAPPY_RawUncompress_p, with_buffer)
+    EXPECT_FALSE(RawUncompress(compressed.data(), compressed.size(), result));
+}
+
+TEST_P(SNAPPY_RawUncompress_multiple, AOCL_Compression_snappy_RawUncompress_pass_common_2)
 {
-
-    pair<string, string> p = GetParam();
+    pair<string, string> p = get<1>(GetParam()).parameter;
     string &compressed = p.first;
     string &original = p.second;
     string result;
@@ -1255,10 +2084,182 @@ TEST_P(SNAPPY_RawUncompress_p, with_buffer)
     EXPECT_EQ(result, original);
 }
 
-TEST_P(SNAPPY_RawUncompress_p, using_Source)
+TEST_P(SNAPPY_RawUncompress_multiple, AOCL_Compression_snappy_RawUncompress_fail_common_3) // partial buffer provided
+{
+    pair<string, string> p = get<1>(GetParam()).parameter;
+    string &compressed = p.first;
+    string &original = p.second;
+    string result;
+    result.resize(original.size());
+
+    // Full compressed buffer is not provided
+    EXPECT_FALSE(RawUncompress(compressed.data(), min(compressed.size()-10, (size_t)0), string_as_array(&result)));
+}
+
+
+TEST_P(SNAPPY_RawUncompress_single, AOCL_Compression_snappy_RawUncompress_fail_common_4) // NULL checks
+{
+    char c[100];
+    string s = "Hello world";
+    string result;
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_FALSE(RawUncompress(NULL, 100, c));
+    EXPECT_FALSE(RawUncompress(result.data(), result.size(), NULL));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_RawUncompress_fail_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_fail_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_RawUncompress_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_pass_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_RawUncompress_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/*****************************************************************************************************
+* End of `bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed);`
+******************************************************************************************************/
+
+/***********************************************************************************************************
+* Begin of `snappy_status snappy_uncompress(const char* compressed,
+                                size_t compressed_length, char* uncompressed, size_t* uncompressed_length);`
+************************************************************************************************************/
+
+class SNAPPY_snappy_uncompress_multiple : public Combined_Dynamic_dispatcher<PAIR_WRAPPER>
+{};
+
+class SNAPPY_snappy_uncompress_fail_multiple : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_snappy_uncompress_single : public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_snappy_uncompress_fail_multiple, AOCL_Compression_snappy_snappy_uncompress_fail_common_1) // uncompress_fail_cases
+{
+    string compressed = get<1>(GetParam()).parameter;
+    size_t uncompressed_size = 1000000;
+    vector<char> uncompressed(uncompressed_size);
+
+    EXPECT_NE(snappy_uncompress(compressed.data(), compressed.size(), uncompressed.data(), &uncompressed_size), SNAPPY_OK);
+}
+
+TEST_P(SNAPPY_snappy_uncompress_multiple, AOCL_Compression_snappy_snappy_uncompress_pass_common_2) // pass cases
+{
+    pair<string, string> p = get<1>(GetParam()).parameter;
+    string &compressed = p.first;
+    string &original = p.second;
+    size_t uncompressed_size = original.size();
+    vector<char> uncompressed(uncompressed_size);
+
+    EXPECT_EQ(snappy_uncompress(compressed.data(), compressed.size(), uncompressed.data(), &uncompressed_size), SNAPPY_OK);
+    ASSERT_EQ(uncompressed_size, original.size());
+    EXPECT_EQ(0, memcmp(uncompressed.data(), original.data(), uncompressed_size));
+}
+
+TEST_P(SNAPPY_snappy_uncompress_single, AOCL_Compression_snappy_snappy_uncompress_fail_common_3) // uncompressed_buffer_size_insufficient
+{
+    pair<string, string> p = fourByteOffset();
+    string &compressed = p.first;
+    string &original = p.second;
+    string result;
+    size_t uncompressed_size = original.size()-1;
+    vector<char> uncompressed(uncompressed_size);
+
+    EXPECT_EQ(snappy_uncompress(compressed.data(), compressed.size(), uncompressed.data(), &uncompressed_size), SNAPPY_BUFFER_TOO_SMALL);
+}
+
+TEST_P(SNAPPY_snappy_uncompress_single, AOCL_Compression_snappy_snappy_uncompress_fail_common_4) // compressed is NULL
+{
+    char c[100];
+    string s = "Hello world";
+    string result;
+    size_t uncompressed_size = s.size();
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_EQ(snappy_uncompress(NULL, 100, c, &uncompressed_size), SNAPPY_INVALID_INPUT);                         // AOCL_Compression_snappy_snappy_uncompress_common_16
+}
+
+TEST_P(SNAPPY_snappy_uncompress_single, AOCL_Compression_snappy_snappy_uncompress_fail_common_5) // uncompress is NULL
+{
+    string s = "Hello world";
+    string result;
+    size_t uncompressed_size = s.size();
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_EQ(snappy_uncompress(result.data(), result.size(), NULL, &uncompressed_size), SNAPPY_INVALID_INPUT);   // AOCL_Compression_snappy_snappy_uncompress_common_17
+}
+
+TEST_P(SNAPPY_snappy_uncompress_single, AOCL_Compression_snappy_snappy_uncompress_fail_common_6) // uncompressed length pointer is NULL
+{
+    char c[100];
+    string s = "Hello world";
+    string result;
+    size_t uncompressed_size = snappy_max_compressed_length(s.size());
+
+    Compress(s.data(), s.size(), &result);
+
+    EXPECT_EQ(snappy_uncompress(result.data(), result.size(), c, NULL), SNAPPY_INVALID_INPUT);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_snappy_uncompress_fail_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_fail_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_snappy_uncompress_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_pass_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_snappy_uncompress_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/***********************************************************************************************************
+* End of `snappy_status snappy_uncompress(const char* compressed,
+                                size_t compressed_length, char* uncompressed, size_t* uncompressed_length);`
+************************************************************************************************************/
+
+/****************************************************************************
+* Begin of `bool RawUncompress(Source* compressed, char* uncompressed);`
+*****************************************************************************/
+
+class SNAPPY_RawUncompress_src_multiple : public Combined_Dynamic_dispatcher<PAIR_WRAPPER>
+{};
+
+class SNAPPY_RawUncompress_src_multiple_fail : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_RawUncompress_src_single : public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_RawUncompress_src_multiple_fail, AOCL_Compression_snappy_RawUncompress_src_fail_common_1) // fail cases
 {
 
-    pair<string, string> p = GetParam();
+    string compressed = get<1>(GetParam()).parameter;
+    char result[100000];
+    Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
+
+    EXPECT_FALSE(RawUncompress(src, result));
+
+    delete src;
+}
+
+TEST_P(SNAPPY_RawUncompress_src_multiple, AOCL_Compression_snappy_RawUncompress_src_pass_common_2) // pass cases
+{
+
+    pair<string, string> p = get<1>(GetParam()).parameter;
     string &compressed = p.first;
     string &original = p.second;
     char result[1000000];
@@ -1271,19 +2272,7 @@ TEST_P(SNAPPY_RawUncompress_p, using_Source)
     delete src;
 }
 
-TEST(SNAPPY_RawUncompress, fail_cases)
-{
-    char c[100];
-    string s = "Hello world";
-    string result;
-
-    Compress(s.data(), s.size(), &result);
-
-    EXPECT_FALSE(RawUncompress(NULL, 100, c));                         // AOCL_Compression_snappy_RawUncompress_common_16
-    EXPECT_FALSE(RawUncompress(result.data(), result.size(), NULL));   // AOCL_Compression_snappy_RawUncompress_common_17
-}
-
-TEST(SNAPPY_RawUncompress_source, fail_cases)
+TEST_P(SNAPPY_RawUncompress_src_single, AOCL_Compression_snappy_RawUncompress_src_fail_common_3) // NULL checks
 {
     string compressed = "helloWorld";
     string result;
@@ -1292,29 +2281,47 @@ TEST(SNAPPY_RawUncompress_source, fail_cases)
 
     Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
 
-    EXPECT_FALSE(RawUncompress(NULL, uncompressed));    // AOCL_Compression_snappy_RawUncompress_src_common_16
-    EXPECT_FALSE(RawUncompress(src, NULL));             // AOCL_Compression_snappy_RawUncompress_src_common_17
+    EXPECT_FALSE(RawUncompress(NULL, uncompressed));
+    EXPECT_FALSE(RawUncompress(src, NULL));
 
     delete src;
 }
 
 INSTANTIATE_TEST_SUITE_P(
     SNAPPY,
-    SNAPPY_RawUncompress_p,
-    ::testing::ValuesIn(uncompress_pass_cases()));
+    SNAPPY_RawUncompress_src_multiple_fail,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_fail_cases())));
 
-class SNAPPY_Compress_ : public ::testing::TestWithParam<string>
-{
-    void SetUp() override {
-        aocl_setup_snappy_test();
-    }
-};
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_RawUncompress_src_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(uncompress_pass_cases())));
 
-TEST_P(SNAPPY_Compress_, with_buffer)
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_RawUncompress_src_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+
+/****************************************************************************
+* End of `bool RawUncompress(Source* compressed, char* uncompressed);`
+*****************************************************************************/
+
+/**********************************************************************************************
+* Begin of `size_t Compress(const char* input, size_t input_length, std::string* compressed);`
+***********************************************************************************************/
+
+class SNAPPY_Compress_multiple : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_Compress_single : public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_Compress_multiple, AOCL_Compression_snappy_Compress_pass_common_1)  // simple pass case
 {
-    std::string compressed;
-    std::string uncompressed;
-    string input = GetParam();
+    string compressed;
+    string uncompressed;
+    string input = get<1>(GetParam()).parameter;
 
     const size_t written = snappy::Compress(input.data(), input.size(), &compressed);
 
@@ -1323,26 +2330,47 @@ TEST_P(SNAPPY_Compress_, with_buffer)
     EXPECT_EQ(uncompressed, input);
 }
 
-class SNAPPY_Compress : public AOCL_setup_snappy {
-};
-
-TEST_F(SNAPPY_Compress, fail_case1)   // AOCL_Compression_snappy_Compress_common_5
+TEST_P(SNAPPY_Compress_single, AOCL_Compression_snappy_Compress_fail_common_2)
 {
     string dest;
 
     EXPECT_FALSE(Compress(NULL, 10, &dest));
 }
 
-TEST_F(SNAPPY_Compress, fail_case2)   // AOCL_Compression_snappy_Compress_common_6
+TEST_P(SNAPPY_Compress_single, AOCL_Compression_snappy_Compress_fail_common_3)
 {
     const char src[11] = "helloWorld";
 
     EXPECT_FALSE(Compress(src, 10, NULL));
 }
 
-TEST_P(SNAPPY_Compress_, using_source)
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_Compress_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(pass_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_Compress_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/**********************************************************************************************
+* End of `size_t Compress(const char* input, size_t input_length, std::string* compressed);`
+***********************************************************************************************/
+
+/************************************************************
+* Begin of `size_t Compress(Source* source, Sink* sink);`
+*************************************************************/
+
+class SNAPPY_Compress_src_multiple : public SNAPPY_Compress_multiple
+{};
+
+class SNAPPY_Compress_src_single : public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_Compress_src_multiple, AOCL_Compression_snappy_Compress_src_pass_common_1)
 {
-    string input = GetParam();
+    string input = get<1>(GetParam()).parameter;
     Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(input.data(), input.size());
     char *c = (char *)malloc(MaxCompressedLength(input.size()));
     Sink *compressed = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(c);
@@ -1367,10 +2395,7 @@ TEST_P(SNAPPY_Compress_, using_source)
     delete source;
 }
 
-class SNAPPY_Compress_using_source : public AOCL_setup_snappy {
-};
-
-TEST_F(SNAPPY_Compress_using_source, fail_case1)  // AOCL_Compression_snappy_Compress_src_common_5
+TEST_P(SNAPPY_Compress_src_single, AOCL_Compression_snappy_Compress_src_fail_common_2)      // src is NULL
 {
     char result[10];
 
@@ -1381,7 +2406,7 @@ TEST_F(SNAPPY_Compress_using_source, fail_case1)  // AOCL_Compression_snappy_Com
     delete sink;
 }
 
-TEST_F(SNAPPY_Compress_using_source, fail_case2)  // AOCL_Compression_snappy_Compress_src_common_6
+TEST_P(SNAPPY_Compress_src_single, AOCL_Compression_snappy_Compress_src_fail_common_3)      // sink is NULL
 {
     string source = "helloWorld";
 
@@ -1394,19 +2419,32 @@ TEST_F(SNAPPY_Compress_using_source, fail_case2)  // AOCL_Compression_snappy_Com
 
 INSTANTIATE_TEST_SUITE_P(
     SNAPPY,
-    SNAPPY_Compress_,
-    ::testing::ValuesIn(pass_cases()));
+    SNAPPY_Compress_src_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(pass_cases())));
 
-class SNAPPY_RawCompress_ : public ::testing::TestWithParam<string>
-{
-    void SetUp() override {
-        aocl_setup_snappy_test();
-    }
-};
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_Compress_src_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
 
-TEST_P(SNAPPY_RawCompress_, pass_cases)
+/************************************************************
+* Begin of `size_t Compress(Source* source, Sink* sink);`
+*************************************************************/
+
+/***************************************************************************************************************
+* Begin of `void RawCompress(const char* input,size_t input_length,char* compressed, size_t* compressed_length)`
+****************************************************************************************************************/
+
+class SNAPPY_RawCompress_multiple : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_RawCompress_single : public Standalone_Dynamic_dispatcher
+{};
+
+
+TEST_P(SNAPPY_RawCompress_multiple, AOCL_Compression_snappy_RawCompress_pass_common_1)
 {
-    string input = GetParam();
+    string input = get<1>(GetParam()).parameter;
 
     std::string uncompressed;
     size_t written;
@@ -1430,20 +2468,40 @@ TEST_P(SNAPPY_RawCompress_, pass_cases)
     free(c);
 }
 
-class SNAPPY_RawCompress : public AOCL_setup_snappy {
-};
-
-TEST_F(SNAPPY_RawCompress, fail_case1)    // AOCL_Compression_snappy_RawCompress_common_5
+TEST_P(SNAPPY_RawCompress_single, AOCL_Compression_snappy_RawCompress_fail_common_2)
 {
-    size_t c_len = -1;
+    const size_t temp_len = 2+(rand()%50);
+    size_t c_len = temp_len;
+    vector<char> compressed(temp_len, 0);
+
+    RawCompress(NULL, 1, compressed.data(), &c_len);
+    EXPECT_FALSE(IsValidCompressedBuffer(compressed.data(), c_len));
+
+    EXPECT_EQ(c_len, temp_len);
+}
+
+TEST_P(SNAPPY_RawCompress_single, AOCL_Compression_snappy_RawCompress_pass_common_3) // Trying to compress empty buffer
+{
+    size_t c_len = 50;
     char compressed[50];
 
     RawCompress(NULL, 0, compressed, &c_len);
+    EXPECT_TRUE(IsValidCompressedBuffer(compressed, c_len));
 
-    EXPECT_EQ(c_len, (size_t)(-1));
+    char temp_buffer[10];
+    for(int i=0;i<10;i++)
+    {
+        temp_buffer[i] = rand()%256;
+    }
+    char uncompressed[10];
+    memcpy(uncompressed, temp_buffer, 10);
+
+    EXPECT_TRUE(RawUncompress(compressed, c_len, uncompressed));
+    // check if uncompressed buffer is not disturbed, because the raw data being compressed is of size 0
+    EXPECT_EQ(0, memcmp(uncompressed, temp_buffer, 10));
 }
 
-TEST_F(SNAPPY_RawCompress, fail_case2)    // AOCL_Compression_snappy_RawCompress_common_6
+TEST_P(SNAPPY_RawCompress_single, AOCL_Compression_snappy_RawCompress_fail_common_4) // NULL check for compressed buffer
 {
     char src[11] = "helloWorld";
     size_t c_len = -1;
@@ -1453,7 +2511,7 @@ TEST_F(SNAPPY_RawCompress, fail_case2)    // AOCL_Compression_snappy_RawCompress
     EXPECT_EQ(c_len, (size_t)(-1));
 }
 
-TEST_F(SNAPPY_RawCompress, fail_case3)    // AOCL_Compression_snappy_RawCompress_common_7
+TEST_P(SNAPPY_RawCompress_single, AOCL_Compression_snappy_RawCompress_fail_common_5) // NULL check for compressed length pointer
 {
     char src[11] = "helloWorld";
     char compressed[50];
@@ -1467,16 +2525,304 @@ TEST_F(SNAPPY_RawCompress, fail_case3)    // AOCL_Compression_snappy_RawCompress
 
 INSTANTIATE_TEST_SUITE_P(
     SNAPPY,
-    SNAPPY_RawCompress_,
-    ::testing::ValuesIn(pass_cases()),
-     [](const ::testing::TestParamInfo<string>& info) {
-        static int j=-1;
-        j++;
-        std::string name = "AOCL_Compresssion_snappy_RawCompress_";
-        name+=to_string(j);
-        return name;
-    });
+    SNAPPY_RawCompress_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(pass_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_RawCompress_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/**************************************************************************************************************
+* End of `void RawCompress(const char* input,size_t input_length,char* compressed, size_t* compressed_length)`
+***************************************************************************************************************/
+
+/***************************************************************************************************************
+* Begin of `void snappy_compress(const char* input,size_t input_length,char* compressed, size_t* compressed_length)`
+****************************************************************************************************************/
+
+class SNAPPY_snappy_compress_multiple : public Combined_Dynamic_dispatcher<STR_WRAPPER>
+{};
+
+class SNAPPY_snappy_compress_single : public Standalone_Dynamic_dispatcher
+{};
+
+TEST_P(SNAPPY_snappy_compress_multiple, AOCL_Compression_snappy_snappy_compress_pass_common_1)
+{
+    string input = get<1>(GetParam()).parameter;
+
+    std::string uncompressed;
+    size_t written = MaxCompressedLength(input.size());
+    char *c = (char *)malloc(written);
+    // Compress data from `input` to buffer `c`
+    EXPECT_EQ(snappy_compress(input.data(), input.size(), c, &written), SNAPPY_OK);
+    EXPECT_TRUE(snappy::IsValidCompressedBuffer(c, written));
+
+    uncompressed.resize(input.size());
+
+    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&uncompressed));
+    Source *src = SNAPPY_Gtest_Util::ByteArraySource_ext(c, written);
+
+    // Checks if compression happened successfully, by checking if Decompressed output matches
+    // the original input.
+    EXPECT_TRUE(snappy::Uncompress(src, sink));
+    EXPECT_EQ(uncompressed, input);
+
+    delete src;
+    delete sink;
+    free(c);
+}
+
+TEST_P(SNAPPY_snappy_compress_single, AOCL_Compression_snappy_snappy_compress_fail_common_2) // compressed buffer size insufficient
+{
+    vector<char> input(1000, 'a');
+
+    std::string uncompressed;
+    size_t written = MaxCompressedLength(input.size())-1;
+    vector<char> c(written);
+    // Compress data from `input` to buffer `c`
+    EXPECT_EQ(snappy_compress(input.data(), input.size(), c.data(), &written), SNAPPY_BUFFER_TOO_SMALL);
+    EXPECT_FALSE(snappy::IsValidCompressedBuffer(c.data(), written));
+}
+
+TEST_P(SNAPPY_snappy_compress_single, AOCL_Compression_snappy_snappy_compress_fail_common_3) // NULL check for compressed buffer
+{
+    const size_t temp_len = 2+(rand()%50);
+    size_t c_len = temp_len;
+    vector<char> compressed(temp_len, 0);
+
+    EXPECT_EQ(snappy_compress(NULL, 1, compressed.data(), &c_len), SNAPPY_INVALID_INPUT);
+    EXPECT_FALSE(IsValidCompressedBuffer(compressed.data(), c_len));
+
+    EXPECT_EQ(c_len, temp_len);
+}
+
+TEST_P(SNAPPY_snappy_compress_single, AOCL_Compression_snappy_snappy_compress_pass_common_4) // Trying to compress empty buffer
+{
+    size_t c_len = 50;
+    char compressed[50];
+
+    EXPECT_EQ(snappy_compress(NULL, 0, compressed, &c_len), SNAPPY_OK);
+    EXPECT_TRUE(IsValidCompressedBuffer(compressed, c_len));
+
+    char temp_buffer[10];
+    for(int i=0;i<10;i++)
+    {
+        temp_buffer[i] = rand()%256;
+    }
+    char uncompressed[10];
+    memcpy(uncompressed, temp_buffer, 10);
+
+    EXPECT_TRUE(RawUncompress(compressed, c_len, uncompressed));
+    // check if uncompressed buffer is not disturbed, because the raw data being compressed is of size 0
+    EXPECT_EQ(0, memcmp(uncompressed, temp_buffer, 10));
+}
+
+TEST_P(SNAPPY_snappy_compress_single, AOCL_Compression_snappy_snappy_compress_fail_common_5) // NULL check for compressed buffer
+{
+    char src[11] = "helloWorld";
+    size_t c_len = -1;
+
+    EXPECT_EQ(snappy_compress(src, 10, NULL, &c_len), SNAPPY_INVALID_INPUT);
+
+    EXPECT_EQ(c_len, (size_t)(-1));
+}
+
+TEST_P(SNAPPY_snappy_compress_single, AOCL_Compression_snappy_snappy_compress_fail_common_6) // NULL check for compressed length pointer
+{
+    char src[11] = "helloWorld";
+    char compressed[50];
+    compressed[0] = 5;
+
+    EXPECT_EQ(snappy_compress(src, 10, compressed, NULL), SNAPPY_INVALID_INPUT);
+
+    EXPECT_EQ(compressed[0], 5);
+    // check if uncompressed buffer is not disturbed, because the raw data being compressed is of size 0
+    EXPECT_STREQ(src,"helloWorld");
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_snappy_compress_multiple,
+    ::testing::Combine(::testing::ValuesIn(get_dynamic_dispatcher_flags()), ::testing::ValuesIn(pass_cases())));
+
+INSTANTIATE_TEST_SUITE_P(
+    SNAPPY,
+    SNAPPY_snappy_compress_single,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
+/**************************************************************************************************************
+* End of `void snappy_compress(const char* input,size_t input_length,char* compressed, size_t* compressed_length)`
+***************************************************************************************************************/
 
 /*******************************************
  * "End" of Test cases                     
  *******************************************/
+
+/*********************************************
+ * Begin fuzz tests for snappy
+ *********************************************/
+#ifdef AOCL_TEST_FUZZER
+#include "fuzztest/fuzztest.h"
+
+void RawCompress_fuzz(vector<char> source, size_t dest_sz,
+                      int level, int optOff, int optLevel)
+{
+    (void)(level); (void)(dest_sz);
+    aocl_setup_snappy(optOff, optLevel, 0, 0, 0);
+
+    // dest should be at least the size MaxCompressedLength(srcSize), or else out of bound memory access error occurs.
+    vector<char> dest = vector<char>(MaxCompressedLength(source.size()));
+    // destLen stores the size of the compressed data
+    size_t destLen;
+    RawCompress(source.data(), source.size(), dest.data(), &destLen);
+
+    aocl_destroy_snappy();
+}
+FUZZ_TEST(AOCL_Compression_snappy, RawCompress_fuzz)
+.WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 0),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_cpr_seed_t<char> {
+    auto seed_files = READ_FUZZ_CPR_SEED();
+        return get_fuzz_cpr_seeds<char>([](size_t src_sz) -> size_t {
+        size_t dst_sz = MaxCompressedLength(src_sz);
+        return limit_fuzz_size_max(dst_sz);
+    }, 0, 0, seed_files);
+})
+#endif
+;
+
+void RawUncompress_fuzz(vector<char> source, size_t dest_sz,
+                        int optOff, int optLevel)
+{
+    (void)(dest_sz);
+    aocl_setup_snappy(optOff, optLevel, 0, 0, 0);
+
+    size_t result = 0;
+    if(!GetUncompressedLength(source.data(), source.size(), &result))
+        return;
+    // dest should be at least the size of the uncompressed length, or else out of bound memory access error occurs.
+    vector<char> dest(result);
+    RawUncompress(source.data(), source.size(), dest.data());
+
+    aocl_destroy_snappy();
+}
+FUZZ_TEST(AOCL_Compression_snappy, RawUncompress_fuzz)
+.WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<char> {
+  auto seed_files = READ_FUZZ_DPR_SEED();
+  return get_fuzz_dpr_seeds<char>(seed_files);
+})
+#endif
+;
+
+void Compress_fuzz(vector<char> input)
+{
+    std::string compressed = "";
+    Compress(input.data(), input.size(), &compressed);
+}
+FUZZ_TEST(AOCL_Compression_snappy, Compress_fuzz);
+
+void Uncompress_fuzz(vector<char> input)
+{
+    std::string compressed = "";
+    Uncompress(input.data(), input.size(), &compressed);
+}
+FUZZ_TEST(AOCL_Compression_snappy, Uncompress_fuzz);
+
+void Uncompress_source_sink_fuzz(vector<char> compressed)
+{
+    string result;
+    result.resize(compressed.size()*10);
+
+    Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(compressed.data(), compressed.size());
+    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
+
+    Uncompress(source, sink);
+    delete source;
+    delete sink;
+}
+FUZZ_TEST(AOCL_Compression_snappy, Uncompress_source_sink_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>()
+                );
+
+void Compress_source_sink_fuzz(vector<char> input)
+{
+    string result;
+    result.resize(MaxCompressedLength(input.size()));
+
+    Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(input.data(), input.size());
+    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
+
+    Compress(source, sink);
+    delete source;
+    delete sink;
+}
+FUZZ_TEST(AOCL_Compression_snappy, Compress_source_sink_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>()
+                );
+
+void UncompressAsMuchAsPossible_fuzz(vector<char> src)
+{
+    string result;
+    result.resize(src.size()*10);
+
+    Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(src.data(), src.size());
+    Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
+    UncompressAsMuchAsPossible(source,sink);
+    delete source;
+    delete sink;
+}
+FUZZ_TEST(AOCL_Compression_snappy, UncompressAsMuchAsPossible_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>()                      
+                );
+
+void RawUncompress_source_fuzz(vector<char> src)
+{
+    string result;
+    result.resize(src.size()*10);
+
+    Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(src.data(), src.size());
+    RawUncompress(source, string_as_array(&result));
+    delete source;
+}
+FUZZ_TEST(AOCL_Compression_snappy, RawUncompress_source_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>()                             
+                );
+
+void IsValidCompressedBuffer_fuzz(vector<char> src)
+{
+    IsValidCompressedBuffer(src.data(), src.size());
+}
+FUZZ_TEST(AOCL_Compression_snappy, IsValidCompressedBuffer_fuzz);
+
+void RawUncompressToIOVec_fuzz(vector<char> src, vector<int> input)
+{
+    //int *kLengths = &input[0];
+    vector<iovec> iov = vector<iovec>(input.size());
+ 
+    iov_init(iov.data(), input.data(), input.size());
+    RawUncompressToIOVec(src.data(), src.size(), iov.data(), iov.size());
+
+    for (int i = 0; i < iov.size(); ++i)
+    {
+        delete[] reinterpret_cast<char *>(iov[i].iov_base);
+    }
+}
+FUZZ_TEST(AOCL_Compression_snappy, RawUncompressToIOVec_fuzz)
+    .WithDomains(fuzztest::Arbitrary<std::vector<char>>(),
+                fuzztest::VectorOf(fuzztest::InRange(1,10000)).WithMinSize(1).WithMaxSize(10)
+                );
+
+#endif /* AOCL_TEST_FUZZER */
+/*********************************************
+ * End fuzz tests for snappy
+ *********************************************/

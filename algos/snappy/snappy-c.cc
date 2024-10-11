@@ -1,4 +1,5 @@
 // Copyright 2011 Martin Gieseking <martin.gieseking@uos.de>.
+// Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -35,6 +36,11 @@ snappy_status snappy_compress(const char* input,
                               size_t input_length,
                               char* compressed,
                               size_t *compressed_length) {
+
+  if((input_length!=0 && input==NULL) || compressed==NULL || compressed_length==NULL) {
+    return SNAPPY_INVALID_INPUT;
+  }
+
   if (*compressed_length < snappy_max_compressed_length(input_length)) {
     return SNAPPY_BUFFER_TOO_SMALL;
   }
@@ -47,7 +53,7 @@ snappy_status snappy_uncompress(const char* compressed,
                                 char* uncompressed,
                                 size_t* uncompressed_length) {
   size_t real_uncompressed_length;
-  if (!snappy::GetUncompressedLength(compressed,
+  if (uncompressed_length == NULL || !snappy::GetUncompressedLength(compressed,
                                      compressed_length,
                                      &real_uncompressed_length)) {
     return SNAPPY_INVALID_INPUT;

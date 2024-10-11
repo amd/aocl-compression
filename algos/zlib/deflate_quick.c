@@ -3,25 +3,29 @@
  * at a premium.
  *
  * Copyright (C) 2013 Intel Corporation. All rights reserved.
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
 #include "aocl_zlib_x86.h"
 
-#ifdef AOCL_ZLIB_DEFLATE_FAST_MODE
 
 #define MAX_SEARCH_DIST 32768
 
 #include "aocl_send_bits.h"
-
+// refer longest_match_x86.c
+extern uint32_t (*aocl_compare256_fp) (const Bytef *src1, const Bytef *src2);
 extern void bi_windup(deflate_state *s);
 #ifdef AOCL_ZLIB_OPT
 extern void AOCL_bi_windup(deflate_state *s);
 #endif
 
 local z_const unsigned quick_len_codes[MAX_MATCH-MIN_MATCH+1];
+#ifdef AOCL_UNIT_TEST
+z_const ZLIB_INTERNAL unsigned quick_dist_codes[MAX_SEARCH_DIST];
+#else
 local z_const unsigned quick_dist_codes[MAX_SEARCH_DIST];
+#endif /* AOCL_UNIT_TEST */
 
 
 local inline void quick_send_bits(deflate_state *z_const s, z_const int value,
@@ -107,7 +111,7 @@ block_state ZLIB_INTERNAL deflate_quick(deflate_state *s, int flush)
 
     do {
         if (s->lookahead < MIN_LOOKAHEAD) {
-            fill_window_fp(s);
+            aocl_fill_window_fp(s);
             if (s->lookahead < MIN_LOOKAHEAD && flush == Z_NO_FLUSH) {
                 static_emit_end_block(s, 0);
                 return need_more;
@@ -116,35 +120,23 @@ block_state ZLIB_INTERNAL deflate_quick(deflate_state *s, int flush)
                 break;
         }
 
-        if (s->lookahead >= MIN_MATCH) {
-            INSERT_STRING_CRC(s, s->strstart, hash_head);
+        if (s->lookahead >= AOCL_MIN_MATCH) {
+            INSERT_STRING_MUL(s, s->strstart, hash_head);
             dist = s->strstart - hash_head;
 
             if ((dist-1) < (s->w_size - 1)) {
-                match_len = longest_match_x86(s, hash_head);
+				if(*(unsigned short *)(s->window + s->strstart) == *(unsigned short *)(s->window + s->strstart - dist)) {
+                	match_len = aocl_compare256_fp(s->window + s->strstart + 2, s->window + s->strstart - dist + 2) + 2;
 
-                if (match_len >= MIN_MATCH) {
-                    if (match_len > s->lookahead)
-                        match_len = s->lookahead;
+                	if (match_len >= AOCL_MIN_MATCH) {
+                    	if (match_len > s->lookahead)
+                     		match_len = s->lookahead;
 
-                    static_emit_ptr(s, match_len - MIN_MATCH, s->strstart - s->match_start);
-                    s->lookahead -= match_len;
-                    if (match_len <= s->max_insert_length &&
-                        s->lookahead >= MIN_MATCH) {
-                        match_len--; /* string at strstart already in table */
-                        do {
-                            s->strstart++;
-                            INSERT_STRING_CRC2(s, s->strstart);
-                            /* strstart never exceeds WSIZE-MAX_MATCH, so there are
-                            * always MIN_MATCH bytes ahead.
-                            */
-                        } while (--match_len != 0);
-                        s->strstart++;
-                    } else
-                    {
-                        s->strstart += match_len;
-                    }
-                    continue;
+                    	static_emit_ptr(s, match_len - MIN_MATCH, s->strstart - hash_head);
+                    	s->lookahead -= match_len;
+						s->strstart += match_len;
+                    	continue;
+					}
                 }
             }
         }
@@ -236,8 +228,11 @@ local z_const unsigned quick_len_codes[MAX_MATCH-MIN_MATCH+1] = {
 	0x0018230d, 0x0019230d, 0x001a230d, 0x001b230d,
 	0x001c230d, 0x001d230d, 0x001e230d, 0x0000a308,
 };
-
+#ifdef AOCL_UNIT_TEST
+z_const ZLIB_INTERNAL unsigned quick_dist_codes[MAX_SEARCH_DIST] = {
+#else
 local z_const unsigned quick_dist_codes[MAX_SEARCH_DIST] = {
+#endif /* AOCL_UNIT_TEST */
 	0x00000005, 0x00001005, 0x00000805, 0x00001805,
 	0x00000406, 0x00002406, 0x00001406, 0x00003406,
 	0x00000c07, 0x00002c07, 0x00004c07, 0x00006c07,
@@ -2285,7 +2280,7 @@ local z_const unsigned quick_dist_codes[MAX_SEARCH_DIST] = {
 	0x00fe1310, 0x00fe3310, 0x00fe5310, 0x00fe7310,
 	0x00fe9310, 0x00feb310, 0x00fed310, 0x00fef310,
 	0x00ff1310, 0x00ff3310, 0x00ff5310, 0x00ff7310,
-	0x00ff9310, 0x00ffb310, 0x00ffd310, 0x00fff310,
+	0x00ff9310, 0x00ffb310, 0x00ffd310, 0x00fff310, 
 	0xb11, 0x2b11, 0x4b11, 0x6b11, 
 	0x8b11, 0xab11, 0xcb11, 0xeb11, 
 	0x10b11, 0x12b11, 0x14b11, 0x16b11, 
@@ -8431,25 +8426,4 @@ local z_const unsigned quick_dist_codes[MAX_SEARCH_DIST] = {
 	0x3ff1712, 0x3ff3712, 0x3ff5712, 0x3ff7712, 
 	0x3ff9712, 0x3ffb712, 0x3ffd712, 0x3fff712, 
 };
-
-#ifdef AOCL_UNIT_TEST
-#include "aocl_zlib_test.h"
-extern z_const ct_data static_dtree[D_CODES];
-extern const int extra_dbits[D_CODES];
-extern const int base_dist[D_CODES];
-
-uint32_t ZEXPORT Test_quick_dist_code(void)
-{
-	unsigned value = 0;
-	for(unsigned i = 0; i < MAX_SEARCH_DIST; i++)
-	{
-		value = d_code(i);
-		value = ( static_dtree[value].fc.code << 8 ) | ( static_dtree[value].dl.len + extra_dbits[value] ) | ( (i - base_dist[value]) << 13);
-		if(quick_dist_codes[i] != value)
-			return 1;
-	}
-	return 0;
-}
-#endif /* AOCL_UNIT_TEST */
-#endif /* AOCL_ZLIB_DEFLATE_FAST_MODE */
 

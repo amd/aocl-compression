@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -44,6 +44,7 @@
 #include "threads/threads.h"
 #include "api/aocl_compression.h"
 #include "api/types.h"
+#include "algos/common/aoclThreadUtils.h"
 
 using namespace std;
 
@@ -98,18 +99,8 @@ vector<ATP_mt> get_api_test_params_mt() {
         atps.push_back({ szFactor, ZSTD });
 #endif
     }
-
-    if (atps.size() == 0) { //no algo enabled
-        atps.push_back({ 0, AOCL_COMPRESSOR_ALGOS_NUM }); //add dummy entry. Else parameterized tests will fail.
-    }
+    EXPECT_GT(atps.size(), 0);
     return atps;
-}
-
-#define skip_test_if_algo_invalid(algo) { \
-    if (algo == AOCL_COMPRESSOR_ALGOS_NUM) { \
-        EXPECT_EQ(algo, AOCL_COMPRESSOR_ALGOS_NUM); \
-        return; \
-    } \
 }
 
 class TestLoadBase {
@@ -389,14 +380,12 @@ private:
 
 TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_defaultOptOn_common_1) //default optOn
 {
-    skip_test_if_algo_invalid(atp.algo)
     reset_ACD(&desc, algo_levels[atp.algo].def);
     run_test();
 }
 
 TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_defaultOptOff_common_2) //default optOff
 {
-    skip_test_if_algo_invalid(atp.algo)
     reset_ACD(&desc, algo_levels[atp.algo].def);
     desc.optOff = 1; //switch off optimizations
     run_test();
@@ -404,7 +393,6 @@ TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_defaultOptOff_com
 
 TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_greater_than_decompr_thread_count_common) // compr_thread_count > decompr_thread_count
 {
-    skip_test_if_algo_invalid(atp.algo);
     reset_ACD(&desc, algo_levels[atp.algo].def);
     int max_threads = omp_get_max_threads();
     int compr_num_threads = max_threads - 1;
@@ -414,7 +402,6 @@ TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_grea
 
 TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_less_than_decompr_thread_count_common) // compr_thread_count < decompr_thread_count
 {
-    skip_test_if_algo_invalid(atp.algo);
     reset_ACD(&desc, algo_levels[atp.algo].def);
     int max_threads = omp_get_max_threads();
     int compr_num_threads = max_threads - 2;
@@ -424,7 +411,6 @@ TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_less
 
 TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_and_decompr_thread_count_greater_than_maximum_available_threads_common) // decompr_thread_count > omp_get_max_threads() & compr_thread_count > omp_get_max_threads()
 {
-    skip_test_if_algo_invalid(atp.algo);
     reset_ACD(&desc, algo_levels[atp.algo].def);
     int max_threads = omp_get_max_threads();
     int compr_num_threads = max_threads + 1;
@@ -447,6 +433,13 @@ AOCL_INT32 Test_aocl_setup_parallel_compress_mt(aocl_thread_group_t* thread_grp,
     AOCL_INT32 window_factor) {
     return aocl_setup_parallel_compress_mt(thread_grp, src, dst, in_size,
         out_size, window_len, window_factor);
+}
+
+AOCL_INT32 Test_aocl_set_partition_stats_mt(aocl_thread_group_t *thread_grp,
+    AOCL_INT32 in_size, AOCL_INT32 window_len, 
+    AOCL_INT32 window_factor) {
+    return aocl_set_partition_stats_mt(thread_grp, in_size,
+        window_len, window_factor);
 }
 
 AOCL_INT32 Test_aocl_do_partition_compress_mt(aocl_thread_group_t* thread_grp,
@@ -602,6 +595,8 @@ TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_
 TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_compress_mt_common_6) { // src = NULL, valid
     AOCL_INT32 window_len = in_size / 16;
     AOCL_INT32 window_factor = 2;
+    if (src) 
+        free(src); 
     src = NULL;
     AOCL_INT32 res = Test_aocl_setup_parallel_compress_mt(&thread_grp, src, dst, in_size,
         out_size, window_len, window_factor);
@@ -613,6 +608,8 @@ TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_
 TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_compress_mt_common_7) { // dst = NULL, invalid
     AOCL_INT32 window_len = in_size / 16;
     AOCL_INT32 window_factor = 2;
+    if (dst) 
+        free(dst); 
     dst = NULL;
     AOCL_INT32 res = Test_aocl_setup_parallel_compress_mt(&thread_grp, src, dst, in_size,
         out_size, window_len, window_factor);
@@ -661,6 +658,84 @@ TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_
 
 /*********************************************
 * End multi-threaded compress setup Tests
+*********************************************/
+
+/*********************************************
+* Begin multi-threaded set partition stats Tests
+*********************************************/
+class API_set_partition_stats_MT : public ::testing::Test {
+public:
+    void SetUp() override {
+        init_thread_group(&thread_grp);
+        in_size  = buff_size;
+    }
+
+    void validate(AOCL_INT32 window_len) {
+        // validate thread_grp is set
+        EXPECT_EQ(thread_grp.src, nullptr);
+        EXPECT_EQ(thread_grp.dst, nullptr);
+        EXPECT_EQ(thread_grp.src_size, in_size);
+        EXPECT_EQ(thread_grp.dst_size, 0);
+        EXPECT_EQ(thread_grp.search_window_length, window_len);
+        EXPECT_EQ(thread_grp.threads_info_list, nullptr);
+
+        if(thread_grp.num_threads > 1) {
+            EXPECT_GT(thread_grp.common_part_src_size, 0);
+            EXPECT_GE(thread_grp.leftover_part_src_bytes, 0);
+        }
+    }
+
+    aocl_thread_group_t thread_grp;
+    AOCL_INT32 in_size;
+    const AOCL_INT32 buff_size = 1024 * 16;
+};
+
+TEST_F(API_set_partition_stats_MT, AOCL_Compression_api_aocl_set_partition_stats_mt_common_1) { // window_len is a factor of in_size
+    AOCL_INT32 window_len = in_size / 16;
+    AOCL_INT32 window_factor = 2;
+    AOCL_INT32 res = Test_aocl_set_partition_stats_mt(&thread_grp, in_size,
+        window_len, window_factor);
+    validate(window_len);
+    EXPECT_LE(thread_grp.num_threads, 8); // num_parallel_partitions = 8 based on window_len and window_factor
+}
+
+TEST_F(API_set_partition_stats_MT, AOCL_Compression_api_aocl_set_partition_stats_mt_common_2) { // window_len is not a factor of in_size
+    AOCL_INT32 window_len = (in_size / 16) + 1;
+    AOCL_INT32 window_factor = 2;
+    AOCL_INT32 res = Test_aocl_set_partition_stats_mt(&thread_grp, in_size,
+        window_len, window_factor);
+    validate(window_len);
+    EXPECT_LE(thread_grp.num_threads, 8); // num_parallel_partitions = 8 based on window_len and window_factor
+}
+
+TEST_F(API_set_partition_stats_MT, AOCL_Compression_api_aocl_set_partition_stats_mt_common_3) { // in_size = 0, valid
+    AOCL_INT32 window_len = in_size / 16;
+    AOCL_INT32 window_factor = 2;
+    in_size = 0;
+    Test_aocl_set_partition_stats_mt(&thread_grp, in_size,
+        window_len, window_factor);
+    validate(window_len);
+    EXPECT_EQ(thread_grp.num_threads, 1); // single thread.
+}
+
+TEST_F(API_set_partition_stats_MT, AOCL_Compression_api_aocl_set_partition_stats_mt_common_4) { // window_len = 0, invalid
+    AOCL_INT32 window_len = 0;
+    AOCL_INT32 window_factor = 2;
+    AOCL_INT32 res = Test_aocl_set_partition_stats_mt(&thread_grp, in_size,
+        window_len, window_factor);
+    EXPECT_EQ(res, ERR_INVALID_INPUT);
+}
+
+TEST_F(API_set_partition_stats_MT, AOCL_Compression_api_aocl_set_partition_stats_mt_common_5) { // window_factor = 0, invalid
+    AOCL_INT32 window_len = in_size;
+    AOCL_INT32 window_factor = 0;
+    AOCL_INT32 res = Test_aocl_set_partition_stats_mt(&thread_grp, in_size,
+        window_len, window_factor);
+    EXPECT_EQ(res, ERR_INVALID_INPUT);
+}
+
+/*********************************************
+* End multi-threaded set partition stats Tests
 *********************************************/
 
 /*********************************************
@@ -720,7 +795,7 @@ public:
 TEST_F(API_do_partition_compress_MT, AOCL_Compression_api_aocl_do_partition_compress_mt_common_1) { // partition the problem
     aocl_thread_info_t cur_thread_info;
     const AOCL_UINT32 cmpr_bound_pad = 16;
-    #pragma omp parallel private(cur_thread_info) shared(thread_grp, cmpr_bound_pad) num_threads(thread_grp.num_threads)
+    #pragma omp parallel private(cur_thread_info) shared(thread_grp) num_threads(thread_grp.num_threads)
     {
         AOCL_UINT32 thread_id = omp_get_thread_num();
         EXPECT_EQ(Test_aocl_do_partition_compress_mt(&thread_grp, &cur_thread_info, cmpr_bound_pad, thread_id), 0);
@@ -784,9 +859,9 @@ AOCL_INT32 add_RAP_frame_header(AOCL_CHAR* buf, AOCL_INT32 num_threads) {
 /*********************************************
 * Begin multi-threaded decompress setup Tests
 *********************************************/
-class API_setup_parallel_decompress_MT : public ::testing::Test {
+class API_setup_parallel_decompress_MT_base {
 public:
-    void SetUp() override {
+    void setup_base() {
         init_thread_group(&thread_grp);
         in_size = 0;
         src = NULL;
@@ -794,7 +869,7 @@ public:
         dst = (AOCL_CHAR*)calloc(out_size, sizeof(AOCL_CHAR));
     }
 
-    void TearDown() override {
+    void teardown_base() {
         Test_aocl_destroy_parallel_decompress_mt(&thread_grp);
         if (src) free(src);
         if (dst) free(dst);
@@ -813,13 +888,22 @@ public:
         EXPECT_EQ(thread_grp.src_size, in_size);
         EXPECT_EQ(thread_grp.dst_size, out_size);
 
-        if (rap_metadata_len > 0 && thread_grp.num_threads > 1) { // RAP frame is added. Validate it.
-            // validate threads_info_list is set
-            EXPECT_NE(thread_grp.threads_info_list, nullptr);
+        if (thread_grp.threads_info_list != NULL) { // threads_info_list is set
+            EXPECT_GT(rap_metadata_len, 0); // RAP frame is added
             if (thread_grp.num_threads > 1) {
                 // access items in threads_info_list. If allocated properly, this should not produce any out of bound access in memory leak checks.
                 for (int i = 0; i < thread_grp.num_threads; ++i) {
                     thread_grp.threads_info_list[i].dst_trap = NULL;
+                }
+            }
+
+            // if next nodes are present, validate their memory locations are allocated sequentially and do not overlap
+            aocl_thread_info_t* next_ptr = thread_grp.threads_info_list + thread_grp.num_threads; // starts after num_threads items
+            for (int i = 0; i < thread_grp.num_threads; ++i) {
+                aocl_thread_info_t* cur_ptr = thread_grp.threads_info_list[i].next;
+                while (cur_ptr) {
+                    EXPECT_EQ(cur_ptr, next_ptr++); //next nodes expected to be allocated in contiguous memory
+                    cur_ptr = cur_ptr->next;
                 }
             }
         }
@@ -832,6 +916,16 @@ public:
     AOCL_CHAR* src, * dst;
     AOCL_INT32 in_size, out_size;
     const AOCL_INT32 buff_size = 1024 * 16;
+};
+
+class API_setup_parallel_decompress_MT : public API_setup_parallel_decompress_MT_base, public ::testing::Test {
+    void SetUp() override {
+        setup_base();
+    }
+
+    void TearDown() override {
+        teardown_base();
+    }
 };
 
 TEST_F(API_setup_parallel_decompress_MT, AOCL_Compression_api_aocl_setup_parallel_decompress_mt_common_1) { // RAP frame present
@@ -921,6 +1015,36 @@ TEST_F(API_setup_parallel_decompress_MT, AOCL_Compression_api_aocl_setup_paralle
         out_size, 0);
     validate(rap_metadata_len);
 }
+
+class API_setup_parallel_decompress_unequal_MT : public API_setup_parallel_decompress_MT_base,
+    public ::testing::TestWithParam<tuple<int, int>> {
+    void SetUp() override {
+        setup_base();
+    }
+
+    void TearDown() override {
+        teardown_base();
+    }
+};
+
+// Combinations of compress MT thread count and decompress MT thread counts
+TEST_P(API_setup_parallel_decompress_unequal_MT, AOCL_Compression_api_aocl_setup_parallel_decompress_mt_common_1) {
+    auto cpr_dpr_threads_pair = GetParam();
+    create_src_with_RAP_frame_header(get<0>(cpr_dpr_threads_pair));
+
+    test_omp_max_threads_set(get<1>(cpr_dpr_threads_pair));
+    AOCL_INT32 rap_metadata_len = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, in_size,
+        out_size, 0);
+    validate(rap_metadata_len);
+
+    test_omp_max_threads_reset();
+}
+INSTANTIATE_TEST_SUITE_P(
+    API,
+    API_setup_parallel_decompress_unequal_MT,
+    ::testing::Combine(::testing::ValuesIn({ 1, 2, 3, 4, 8, 16 } /* cpr thread count */),
+                       ::testing::ValuesIn({ 1, 2, 3, 4, 8, 16 } /* dpr thread count */)));
+
 /*********************************************
 * End multi-threaded decompress setup Tests
 *********************************************/
@@ -1009,22 +1133,24 @@ public:
 TEST_F(API_do_partition_decompress_MT, AOCL_Compression_api_aocl_do_partition_decompress_mt_common_1) { // partition the problem
     aocl_thread_info_t cur_thread_info;
     const AOCL_UINT32 cmpr_bound_pad = 16;
-    //for(int thread_id =0; thread_id< num_threads;++thread_id)
-#pragma omp parallel private(cur_thread_info) shared(thread_grp, cmpr_bound_pad) num_threads(thread_grp.num_threads)
+#pragma omp parallel private(cur_thread_info) shared(thread_grp) num_threads(thread_grp.num_threads)
     {
         AOCL_UINT32 thread_id = omp_get_thread_num();
-        EXPECT_EQ(Test_aocl_do_partition_decompress_mt(&thread_grp, &cur_thread_info, cmpr_bound_pad, thread_id), 0);
+        AOCL_MT_PROCESS_PARTITION_START(thread_grp, ti_cur, thread_id)
+        EXPECT_EQ(Test_aocl_do_partition_decompress_mt(&thread_grp,
+            &cur_thread_info, cmpr_bound_pad, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur)), 0);
 
-        thread_grp.threads_info_list[thread_id].partition_src         = cur_thread_info.partition_src;
-        thread_grp.threads_info_list[thread_id].dst_trap              = cur_thread_info.dst_trap;
-        thread_grp.threads_info_list[thread_id].additional_state_info = cur_thread_info.additional_state_info;
-        thread_grp.threads_info_list[thread_id].partition_src_size    = cur_thread_info.partition_src_size;
-        thread_grp.threads_info_list[thread_id].dst_trap_size         = cur_thread_info.dst_trap_size;
-        thread_grp.threads_info_list[thread_id].last_bytes_len        = cur_thread_info.last_bytes_len;
-        thread_grp.threads_info_list[thread_id].num_child_threads     = 0; // not used as of now
-        thread_grp.threads_info_list[thread_id].is_error              = cur_thread_info.is_error;
-        thread_grp.threads_info_list[thread_id].thread_id             = cur_thread_info.thread_id;
-        thread_grp.threads_info_list[thread_id].next                  = cur_thread_info.next;
+        ti_cur->partition_src         = cur_thread_info.partition_src;
+        ti_cur->dst_trap              = cur_thread_info.dst_trap;
+        ti_cur->additional_state_info = cur_thread_info.additional_state_info;
+        ti_cur->partition_src_size    = cur_thread_info.partition_src_size;
+        ti_cur->dst_trap_size         = cur_thread_info.dst_trap_size;
+        ti_cur->last_bytes_len        = cur_thread_info.last_bytes_len;
+        ti_cur->num_child_threads     = 0; // not used as of now
+        ti_cur->is_error              = cur_thread_info.is_error;
+        ti_cur->thread_id             = cur_thread_info.thread_id;
+        ti_cur->next                  = cur_thread_info.next;
+        AOCL_MT_PROCESS_PARTITION_END(ti_cur)
     } // #pragma omp parallel
     validate(cmpr_bound_pad);
 }

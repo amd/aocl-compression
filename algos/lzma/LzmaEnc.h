@@ -1,8 +1,8 @@
 /*  LzmaEnc.h -- LZMA Encoder
 2019-10-30 : Igor Pavlov : Public domain */
 
-/**
-* Copyright (C) 2022-23, Advanced Micro Devices. All rights reserved.
+/*
+* Copyright (C) 2022-24, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -45,6 +45,10 @@ EXTERN_C_BEGIN
 #define LZMA_PROPS_SIZE 5
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
+/**
+ * @brief Structure to hold configurable parameters that can be used by LZMA encoder.
+ * 
+ */
 typedef struct _CLzmaEncProps
 {
   int level;        /**< Control degree of compression. Lower level gives less compression at higher speed. \n 0 <= level <= 9 */
@@ -135,6 +139,7 @@ SRes:
   SZ_ERROR_THREAD - error in multithreading functions (only for Mt version)
 */
 
+/** @brief Pointer to context object that maintains state of LZMA encoder. */
 typedef void * CLzmaEncHandle;
 
 /*!
@@ -222,10 +227,30 @@ LZMALIB_API SRes LzmaEnc_WriteProperties(CLzmaEncHandle p, Byte *properties, Siz
 */
 LZMALIB_API unsigned LzmaEnc_IsWriteEndMark(CLzmaEncHandle p);
 
-/// @cond DOXYGEN_SHOULD_SKIP_THIS
+/*! @brief Incremental compression using streaming interfaces
+*
+* | Parameters      | Direction   | Description |
+* |:----------------|:-----------:|:------------|
+* | \b p            | in,out      | Lzma encoder handle |
+* | \b outStream    | in, out     | Properly initialized interface to save compressed data |
+* | \b inStream     | in          | Properly initialized interface to read uncompressed data |
+* | \b alloc        | in          | Allocator object |
+* | \b allocBig     | in          | Allocator object for large blocks |
+*
+* @return 
+* | Result     | Description |
+* |:-----------|:------------|
+* | Success    |SZ_OK                      |
+* | Fail       |SZ_ERROR_MEM        - Memory allocation error |
+* | ^          |SZ_ERROR_PARAM      - Incorrect parameters    |
+* | ^          |SZ_ERROR_WRITE      - ISeqOutStream write callback error |
+* | ^          |SZ_ERROR_READ       - ISeqOutStream read callback error  |
+* | ^          |SZ_ERROR_PROGRESS   - some break from progress callback  |
+* 
+* @note Passed allocator objects should be valid.
+*/
 LZMALIB_API SRes LzmaEnc_Encode(CLzmaEncHandle p, ISeqOutStream *outStream, ISeqInStream *inStream,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig);
-/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 
 /*! @brief Encode src in-memory and save compressed data to dest
@@ -252,6 +277,7 @@ LZMALIB_API SRes LzmaEnc_Encode(CLzmaEncHandle p, ISeqOutStream *outStream, ISeq
 * | ^          |SZ_ERROR_OUTPUT_EOF - output buffer overflow - version with (Byte *) output  |
 * | ^          |SZ_ERROR_PROGRESS   - some break from progress callback  |
 * 
+* @note Passed allocator objects should be valid.
 */
 LZMALIB_API SRes LzmaEnc_MemEncode(CLzmaEncHandle p, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig);
@@ -259,6 +285,14 @@ LZMALIB_API SRes LzmaEnc_MemEncode(CLzmaEncHandle p, Byte *dest, SizeT *destLen,
 /**
  * @}
  */
+
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+/*
+* Provides the maximum size that LZMA compression may output in a "worst case" scenario (input data not compressible)
+* where `insize` is the size of source buffer to be compressed.
+*/
+size_t Lzma_compressBound(size_t insize);
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /* ---------- One Call Interface ---------- */
 /*!
@@ -301,26 +335,49 @@ LZMALIB_API SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT s
  * @}
 */
 
-/*! @brief AOCL-Compression defined setup function that configures with the right
- * AMD optimized lzma routines depending upon the detected CPU features.
- *
-* | Parameters    | Description |
- * |:-------------|:------------|
- * | \b optOff    | Turn off all optimizations .                                                                  |
- * | \b optLevel  | Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .             |
- * | \b insize    | Input data length.                                                                            |
- * | \b level     | Requested compression level.                                                                  |
- * | \b windowLog | Largest match distance : larger == more compression, more memory needed during decompression. |
- *
- * @return \b NULL 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+
+/**
+ * @name AOCL Functions
+ * @brief These functions are not part of open source code, these are introduced by AOCL-Compression
+ * library to control AOCL introduced optimization levels dynamically.
+ * 
+ * @note These functions are for internal purposes only, not recommended for external use.
+ * 
+ * @{
+ */
+
+/*!
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized lzma routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_lzma_encode() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in lzma following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * 
+ * @return \b NULL .
  */
 LZMALIB_API void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
   size_t level, size_t windowLog);
 
-/**
- * @brief AOCL-Compression defined destroy function for lzma encode.
+/*!
+ * @brief It is necessary to execute this destroy function after the initial invocation of the
+ * aocl_setup_lzma_encode() function, prior to initiating the setup function again.
  */
 LZMALIB_API void aocl_destroy_lzma_encode(void);
+
+/**
+ * @}
+ */
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*!
  * @name Encode Functions

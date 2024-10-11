@@ -10,7 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
-   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+   Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -650,6 +650,14 @@ BZ_EXTERN void BZ_API(BZ2_bzWriteClose64) (
  * @{
 */
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
+/*
+* Provides the maximum size that BZIP2 compression may output in a "worst case" scenario (input data not compressible)
+* where `insize` is the size of source buffer to be compressed.
+*/
+unsigned int BZ2_bzCompressBound(unsigned int insize);
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
+
 /*!
 * @brief Attempts to compress the data in `source` into the destination buffer, `dest`. 
 * 
@@ -803,8 +811,34 @@ BZ_EXTERN const char * BZ_API(BZ2_bzerror) (
       int    *errnum
    );
 #endif
-/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
+/**
+ * @name AOCL Functions
+ * @brief These functions are not part of open source code, these are introduced by AOCL-Compression
+ * library to control AOCL introduced optimization levels dynamically.
+ * 
+ * @note These functions are for internal purposes only, not recommended for external use.
+ * 
+ * @{
+ */
+
+/**
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized bzip2 routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_bzip2() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in bzip2 following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
+ * @param insize Input data length.
+ * @param level Requested compression level.
+ * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
+ * 
+ * @return \b NULL .
+ */
 BZ_EXTERN char * BZ_API(aocl_setup_bzip2) (
       int optOff,
       int optLevel,
@@ -813,7 +847,22 @@ BZ_EXTERN char * BZ_API(aocl_setup_bzip2) (
       size_t windowLog
    );
 
+/**
+ * @brief It is necessary to execute this destroy function after the initial invocation of the
+ * aocl_setup_bzip2() function, prior to initiating the setup function again.
+ */
 BZ_EXTERN void BZ_API(aocl_destroy_bzip2) (void);
+
+/**
+ * @}
+ */
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
+
+#ifdef AOCL_UNIT_TEST
+/* Wrapper function for libsais function for unit testing. */
+BZ_EXTERN int BZ_API(Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq));
+#endif /* AOCL_UNIT_TEST */
 
 #ifdef __cplusplus
 }

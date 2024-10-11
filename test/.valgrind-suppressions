@@ -5,7 +5,7 @@
    fun:malloc
    fun:_Z9ompd_initv
    fun:_ZL26__kmp_do_serial_initializev
-   fun:__kmp_get_global_thread_id_reg
+   fun:*
 }
 {
    libomp_2
@@ -14,7 +14,7 @@
    fun:malloc
    fun:_Z23__kmp_init_nesting_modev
    fun:_ZL26__kmp_do_serial_initializev
-   fun:__kmp_get_global_thread_id_reg
+   fun:*
 }
 {
    libomp_3
@@ -35,7 +35,7 @@
    fun:_ZL21___kmp_allocate_alignmm
    fun:_Z14__kmp_env_dumpv
    fun:_ZL26__kmp_do_serial_initializev
-   fun:__kmp_get_global_thread_id_reg
+   fun:*
 }
 {
    libomp_5
@@ -45,4 +45,260 @@
    obj:*/libgomp.so.*
    obj:*/libgomp.so.*
    obj:*/libgomp.so.*
+}
+{
+   libomp_6
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   obj:*/libgomp.so.*
+   obj:*/libgomp.so.*
+}
+{
+   libomp_7
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   obj:*/libgomp.so.*
+   obj:*/libgomp.so.*
+   obj:*/libgomp.so.*
+}
+{
+   libomp_8
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   obj:*/libomp.so
+   obj:*/libomp.so
+   obj:*/libomp.so
+   obj:*/libomp.so
+   obj:*/libomp.so
+   obj:*/libomp.so
+   obj:*/libomp.so
+   fun:*
+}
+{
+   libomp_lz4
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:UnknownInlinedFun
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   obj:*/libc.so.*
+   obj:*/libgomp.so.*
+   fun:GOMP_parallel
+   fun:*
+}
+{
+   libomp_7_all_comb
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   obj:*/libgomp.so.*
+   obj:*/libgomp.so.*
+   fun:GOMP_parallel
+   fun:*
+}
+{
+   zlib_reference
+   Memcheck:Cond
+   fun:slide_hash
+   fun:fill_window_ref
+   fun:fill_window
+   fun:deflate_fast_ref
+   fun:deflate_fast
+   fun:deflate
+}
+{
+   snappy_test_1
+   Memcheck:Value8
+   fun:_itoa_word
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:_ZN7testing12_GLOBAL__N_126PrintByteSegmentInObjectToEPKhmmPSo
+   fun:_ZN7testing12_GLOBAL__N_124PrintBytesInObjectToImplEPKhmPSo
+   fun:_ZN7testing8internal20PrintBytesInObjectToEPKhmPSo
+   fun:_ZN7testing8internal15RawBytesPrinter10PrintValueI11STR_WRAPPERLm32EEEvRKT_PSo
+   fun:_ZN7testing8internal17PrintWithFallbackI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal7PrintToI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal16UniversalPrinterI11STR_WRAPPERE5PrintERKS2_PSo
+   fun:_ZN7testing8internal12PrintTupleToISt5tupleIJ15DynamicDispatch11STR_WRAPPEREELm2EEEvRKT_St17integral_constantImXT0_EEPSo
+}
+{
+   snappy_test_2
+   Memcheck:Cond
+   fun:_itoa_word
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:_ZN7testing12_GLOBAL__N_126PrintByteSegmentInObjectToEPKhmmPSo
+   fun:_ZN7testing12_GLOBAL__N_124PrintBytesInObjectToImplEPKhmPSo
+   fun:_ZN7testing8internal20PrintBytesInObjectToEPKhmPSo
+   fun:_ZN7testing8internal15RawBytesPrinter10PrintValueI11STR_WRAPPERLm32EEEvRKT_PSo
+   fun:_ZN7testing8internal17PrintWithFallbackI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal7PrintToI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal16UniversalPrinterI11STR_WRAPPERE5PrintERKS2_PSo
+   fun:_ZN7testing8internal12PrintTupleToISt5tupleIJ15DynamicDispatch11STR_WRAPPEREELm2EEEvRKT_St17integral_constantImXT0_EEPSo
+   fun:*
+}
+{
+   snappy_test_3
+   Memcheck:Cond
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:_ZN7testing12_GLOBAL__N_126PrintByteSegmentInObjectToEPKhmmPSo
+   fun:_ZN7testing12_GLOBAL__N_124PrintBytesInObjectToImplEPKhmPSo
+   fun:_ZN7testing8internal20PrintBytesInObjectToEPKhmPSo
+   fun:_ZN7testing8internal15RawBytesPrinter10PrintValueI11STR_WRAPPERLm32EEEvRKT_PSo
+   fun:_ZN7testing8internal17PrintWithFallbackI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal7PrintToI11STR_WRAPPEREEvRKT_PSo
+   fun:_ZN7testing8internal16UniversalPrinterI11STR_WRAPPERE5PrintERKS2_PSo
+   fun:_ZN7testing8internal12PrintTupleToISt5tupleIJ15DynamicDispatch11STR_WRAPPEREELm2EEEvRKT_St17integral_constantImXT0_EEPSo
+   fun:_ZN7testing8internal7PrintToIJ15DynamicDispatch11STR_WRAPPEREEEvRKSt5tupleIJDpT_EEPSo
+}
+{
+   snappy_test_4
+   Memcheck:Value8
+   fun:_itoa_word
+   fun:__printf_buffer
+   fun:__vsnprintf_internal
+   fun:snprintf
+}
+{
+   snappy_test_5
+   Memcheck:Cond
+   fun:_itoa_word
+   fun:__printf_buffer
+   fun:__vsnprintf_internal
+   fun:snprintf
+}
+{
+   snappy_test_6
+   Memcheck:Cond
+   fun:__printf_buffer
+   fun:__vsnprintf_internal
+   fun:snprintf
+}
+{
+   dlopen_memory_leak_1
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:malloc
+   fun:open_path
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+}
+{
+   dlopen_memory_leak_2
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:malloc
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+}
+{
+   dlopen_memory_leak_3
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:calloc
+   fun:_dl_check_map_versions
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+   fun:dl_open_worker
+}
+{
+   dlopen_memory_leak_4
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:calloc
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+}
+{
+   dlopen_memory_leak_5
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:UnknownInlinedFun
+   fun:_dl_check_map_versions
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+   fun:dl_open_worker
+   fun:*
+}
+{
+   dlopen_memory_leak_6
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:UnknownInlinedFun
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+   fun:*
+}
+{
+   dlopen_memory_leak_7
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:UnknownInlinedFun
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+   fun:*
+}
+{
+   dlopen_memory_leak_8
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:UnknownInlinedFun
+   fun:open_path
+   fun:_dl_map_object
+   fun:dl_open_worker_begin
+   fun:_dl_catch_exception
+   fun:*
+}
+{
+   dlopen_memory_leak_9
+   Memcheck:Value8
+   fun:_itoa_word
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:*
+}
+{
+   dlopen_memory_leak_10
+   Memcheck:Cond
+   fun:_itoa_word
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:*
+}
+{
+   dlopen_memory_leak_11
+   Memcheck:Cond
+   fun:__vfprintf_internal
+   fun:__vsnprintf_internal
+   fun:snprintf
+   fun:*
 }

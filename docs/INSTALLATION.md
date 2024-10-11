@@ -7,7 +7,7 @@ Installation
 ------------
 
 1. Download the latest stable release from the Github repository:<br>
-https://github.amd.com/AOCL/aocl-compression
+https://github.com/amd/aocl-compression
 2. Install CMake on the machine where the sources are to be compiled.
 3. Make any one of the compilers GCC or Clang available on the machine.
 4. Then, use the cmake based build system to compile and generate AOCL-Compression <br>
@@ -36,7 +36,7 @@ Building on Linux
    ```
    The library is generated in "lib" directory. <br>
    The test bench executable is generated in "build". <br>
-   The additional option `--target install` will install the library, binary, and <br>
+   The additional option `--target install` will install the library, and <br>
    interface header files in the installation path as specified with <br>
    `-DCMAKE_INSTALL_PREFIX` option or in the local system path. <br>
    The option `-j` will run the compilation process using multiple cores.
@@ -50,10 +50,6 @@ Building on Linux
    ```
    The option `-v` will print verbose build logs on the console.
 4. To clear or delete the build folder or files, manually remove the build directory or its files.
-
-__Note:__ When using cmake version older than 3.15, `-B` option is not supported. <br>
-So the build folder must be created manually. <br>
-The option `-v` is also not supported in cmake version older than 3.15.
 
 
 Building on Windows
@@ -74,17 +70,13 @@ Building with Visual Studio IDE (GUI)
    Microsoft Visual Studio project is generated.
 6. Click __Open Project__.
    Microsoft Visual Studio project for the source package __is launched__.
-7. For building multi-threaded library based on AOCL_ENABLE_THREADS, set the 
-   LLVM openMP library path in the Linker->General option and openMP library name
-   in the Linker->Input under the project properties. Set /openmp as the additional
-   compilation option.
-8. Build the entire solution or the required projects.
+7. Build the entire solution or the required projects.
 
 Building with Visual Studio IDE (command line)
 ----------------------------------------------
 1. Go to AOCL-Compression source package and create a folder named build.
 2. Go to the build folder.
-3. Use the following command to configure and build the library to test bench executable.
+3. Use the following command to configure and build the library and test bench executable.
 ```
 cmake .. -T ClangCl -G <installed Visual Studio version> && cmake --build . --config Release --target INSTALL
 ```
@@ -97,23 +89,22 @@ Use the following additional options to configure your build:
 Option                              |  Description
 ------------------------------------|----------------------------------------------------------------------------------------
 AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |  Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
-SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Disabled by default)
+SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Enabled by default)
 LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
-AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST|  Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Disabled by default)
-AOCL_ZSTD_WILDCOPY_LONG             |  Faster wildcopy when match lengths are long in ZSTD decompression (Disabled by default)
-AOCL_TEST_COVERAGE                  |  Enable GTest and AOCL test bench based CTest suite (Disabled by default)
+AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST|  Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Enabled by default)
+AOCL_DECOMPRESS_FAST                |  Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for ZSTD. (Disabled by default)
+AOCL_TEST_COVERAGE                  |  Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)
 AOCL_ENABLE_LOG_FEATURE             |  Enables logging through environment variable `AOCL_ENABLE_LOG` (Disabled by default)
 CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
 ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
 VALGRIND                            |  Enable Valgrind checks. Only supported on Linux/Debug and incompatible with ASAN=ON (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Disabled by default)
-ZLIB_DEFLATE_FAST_MODE              |  Enable ZLIB deflate quick strategy (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1  |  Enable LZ4 match skipping optimization strategy-1 based on a larger base step size applied for long distance search (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2  |  Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1. Preferred to be used with Silesia corpus (Disabled by default)
 AOCL_LZ4_NEW_PRIME_NUMBER           |  Enable the usage of a new prime number for LZ4 hashing function. Preferred to be used with Silesia corpus (Disabled by default)
 AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES   |  Enable storing of additional potential matches to improve compression ratio. Recommended for higher compressibility use cases (Disabled by default)
-AOCL_LZ4_HASH_BITS_USED             |  Control the number of bits used for LZ4 hashing, allowed values are LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (Disabled by default)
+AOCL_LZ4_HASH_BITS_USED             |  Control the number of bits used for LZ4 hashing, allowed values are OFF, LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (LOW by default)
 AOCL_EXCLUDE_BZIP2                  |  Exclude BZIP2 compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_LZ4                    |  Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)
 AOCL_EXCLUDE_LZ4HC                  |  Exclude LZ4HC compression method from the library build (Disabled by default)
@@ -123,107 +114,16 @@ AOCL_EXCLUDE_ZLIB                   |  Exclude ZLIB compression method from the 
 AOCL_EXCLUDE_ZSTD                   |  Exclude ZSTD compression method from the library build (Disabled by default)
 AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL |  Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)
 AOCL_ENABLE_THREADS                 |  Enable multi-threaded compression and decompression using SMP based openMP threads (Disabled by default)
+TEST_COVERAGE_THIRD_PARTY           |  Enable third party test bench based CTest suite (Disabled by default)
+NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression for supported methods (Disabled by default)
+AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
+AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
+ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
 
-Running AOCL-Compression Test Bench On Linux
---------------------------------------------
-
-Test bench supports several options to validate, benchmark or debug the supported
-compression methods.
-It uses the unified API set to invoke the compression methods supported by AOCL-Compression.
-Test bench can invoke and benchmark some of the IPP's compression methods as well.
-
-* To check various options supported by the test bench, use one of the following commands:<br>
-  `aocl_compression_bench -h`  
-  `aocl_compression_bench --help`
-
-* To check all the supported compression methods, use the command:<br>
-  `aocl_compression_bench -l`
-
-* To run the test bench with requested number of iterations, use the command:<br>
-  `aocl_compression_bench -i`
-
-* To run the test bench to check the performance of all the supported compression <br>
-   and decompression methods for a given input file, use the command:<br>
-   `aocl_compression_bench -a -p <input filename>`
-
-* To run the test bench to validate the outputs from all the supported compression <br>
-   and decompression methods for a given input file, use the command:<br>
-   `aocl_compression_bench -a -t <input filename>`
-
-* To run the test bench to check the performance of a compression and decompression <br>
-   method for a given input file, use the command:<br>
-   `aocl_compression_bench -ezstd:5:0 -p <input filename>`<br>
-Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
-
-
-* To run the test bench to validate the output of a compression and decompression <br>
-   method for a given input file, use the command:<br>
-   `aocl_compression_bench -ezstd:5:0 -t <input filename>`<br>
-   Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
-  
-
-* To run the test bench with error/debug/trace/info logs, build the library by using `-DAOCL_ENABLE_LOG_FEATURE=ON` & set the environment variable `AOCL_ENABLE_LOG` to any of the following:<br>
-   * `AOCL_ENABLE_LOG=ERR`   for Error logs.
-   * `AOCL_ENABLE_LOG=INFO`  for Error, Info logs.
-   * `AOCL_ENABLE_LOG=DEBUG` for Error, Info, Debug logs.
-   * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.
-
-
-* To run the test bench but only compression or decompression <br>
-   for a given input file, use the command:<br>
-   `aocl_compression_bench -rcompress <input filename>` or <br>
-   `aocl_compression_bench -rdecompress -ezstd <compressed input filename>` or <br>
-   `aocl_compression_bench -rdecompress -ezstd -t -f<uncompressed file for validation> <compressed input filename>` <br>
-   Note: In -rdecompress mode, compression method must be specified using -e option. <br>
-   If validation of decompressed data is needed, specify -t and -f options additionally.
-
-* To run the test bench and dump output data generated <br>
-   for a given input file, use the command:<br>
-   `aocl_compression_bench -d<dump filename> -ezstd:1 <input filename>` or <br>
-   `aocl_compression_bench -d<dump filename> -rcompress -ezstd:1 <input filename>` or <br>
-   `aocl_compression_bench -d<dump filename> -rdecompress -ezstd <compressed input filename>` <br>
-   Here, when -rcompress operation is selected, compressed file gets dumped <br>
-   and when -rdecompress operation is selected, decompressed file gets dumped. <br>
-   Method name and level must be specified using -e for default and -rcompress modes. <br>
-   Method name must be specified using -e for -rdecompress mode.
-
----
-  
-To test and benchmark the performance of IPP's compression methods, use the
-test bench option `-c<path to IPP library method>` along with other relevant options (as explained above).
-IPP's lz4, lz4hc, zlib and bzip2 methods are supported by the test bench.
-Check the following details for the exact steps:
-1. Set the library path environment variable (export LD_LIBRARY_PATH on <br>
-   Linux) to point to the installed IPP library path. <br>
-   Alternatively, you can also run vars.sh that comes along with the <br>
-   IPP installation to setup the environment variable.
-2. Download lz4-1.9.3, zlib-1.2.11 and bzip2-1.0.8 source packages.
-3. Apply IPP patch files using the command:<br>
-   `patch -p1 < path to corresponding patch file>`
-
-4. Build the patched IPP lz4, zlib and bzip2 libraries per the steps <br>
-   in the IPP readme files in the corresponding patch file <br>
-   locations for these compression methods.
-5. Append the library path to `-c` option and pass it to executable as command line argument <br>
-   (Linux is only supported) for running patched IPP lz4, zlib and bzip2 libraries.
-6. Run the test bench to benchmark the IPP library methods as follows:
-```
-    aocl_compression_bench -a -p -c/path/to/ipp_patch <input filename>
-    aocl_compression_bench -elz4 -p -c/path/to/ipp_patch <input filename>
-    aocl_compression_bench -elz4hc -p -c/path/to/ipp_patch <input filename>
-    aocl_compression_bench -ezlib -p -c/path/to/ipp_patch <input filename>
-    aocl_compression_bench -ebzip2 -p -c/path/to/ipp_patch <input filename>
-```
-
-Running AOCL-Compression Test Bench On Windows
-----------------------------------------------
-
-Test bench on Windows supports all the user options as Linux,
-except for the `-c` option to link and test IPP compression methods.
-For more information on various user options, refer to the previous section on Linux.
-To set and launch the test bench with a specific user option,
-go to project aocl_compression_bench -> Properties -> Debugging;
-specify the user options and the input test file.
+* NOTE: <br>
+   1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by <br>
+   setting environment variable AOCL_ZLIB_QUICK_MODE. It also improves performance for levels 2, 3 and 5 <br>
+   while trading off compression ratio. <br>
 
 Running tests with CTest
 ------------------------
@@ -241,6 +141,40 @@ Following are a few sample commands that can be executed in the build directory 
  
  To run GTest test cases for a specific method<br>
  `ctest -R <METHOD_NAME_IN_CAPITALS>`
+
+Running fuzzer tests
+--------------------
+
+To list all the fuzz tests available for a method, use the following command:
+   `<METHOD_GTEST_EXECUTABLE> --list_fuzz_tests`
+   example: `zlib_gtest --list_fuzz_tests`
+
+Fuzzer test can be run in two modes:
+
+1. Unit test mode: Default operation mode of AOCL_TEST_FUZZER. Can be run as part of ctest. No sanitizer and coverage instrumentation.
+   `ctest -R <TestSuiteName>.<FuzzTestName>`
+2. Fuzzing mode: Enabled with cmake option FUZZTEST_FUZZING_MODE. Runs each fuzz test with sanitizer and coverage instrumentation
+
+   To run all fuzz tests for a specified duration, use the following command:
+   `<METHOD_GTEST_EXECUTABLE> --fuzz_for=<DURATION>`
+   example: `zlib_gtest --fuzz_for=60s`
+
+   To run a single fuzz test until a bug is found or until manually stopped:
+   `<METHOD_GTEST_EXECUTABLE> --fuzz=<TestSuiteName>.<FuzzTestName>`
+
+   To run a single fuzz test by feeding in an external corpus of seeds: Enabled with cmake option AOCL_TEST_FUZZER_WITH_CORPUS.
+   Place folders containing seed files in the directory pointed by environment variable AOCL_FUZZ_CORPUS_DIR.
+   Sub-folders under this must be as follows:
+   *   /compress_fuzz : Must contain uncompressed raw files for compress API fuzz tests.
+   *   /*_fuzz        : Folders with individual fuzz test names must contain compressed files 
+                        for respective methods used for decompress API fuzz tests.
+                        Example: /LZ4_decompress_safe_fuzz, /RawUncompress_fuzz, etc
+   Run the single fuzz test:
+   `<METHOD_GTEST_EXECUTABLE> --fuzz=<TestSuiteName>.<FuzzTestName>`
+   example: `zlib_gtest --fuzz=AOCL_Compression_zlib.compress2_fuzz`
+   Additional seed properties can be specified by environment variables:
+   *  AOCL_FUZZ_SIZE_MAX : Max size in bytes to use for i/o buffers used in fuzz testing.
+   *  AOCL_FUZZ_CPR_RATIO : Compression ratio estimate of compressed files used for decompress API fuzz tests.
 
 Running Performance Benchmarking
 --------------------------------
@@ -263,8 +197,15 @@ Following are a few sample commands to use the script available in the 'scripts'
 Generating Documentation
 ------------------------
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
-- Documents will be generated in HTML format in the folder __docs/html__ . Open the index.html file in any browser to view the documentation.
-- CMake will use the existing Doxygen if available. Else, it will prompt the user to install doxygen and try again.
+- Documents will be generated in HTML format in the folder __docs/html__ as doxygen output &  __docs/sphinx/html__ as sphinx output. Open the index.html file from respective folders in any browser to view the documentation.
+- The following packages are expected before running CMake with `-DBUILD_DOC=ON` option:
+   1. Doxygen.
+   2. Python packages:
+      - Sphinx
+      - rocm_docs
+      - breathe
+      - myst_parser
+- CMake halts if required packages are missing by providing directives for installing the absent packages.
 
 Enabling/disabling optimizations
 --------------------------------

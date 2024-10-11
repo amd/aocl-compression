@@ -54,7 +54,7 @@ Building on Linux
    ```
    The library is generated in "lib" directory. <br>
    The test bench executable is generated in "build". <br>
-   The additional option `--target install` will install the library, binary, and <br>
+   The additional option `--target install` will install the library, and <br>
    interface header files in the installation path as specified with <br>
    `-DCMAKE_INSTALL_PREFIX` option or in the local system path. <br>
    The option `-j` will run the compilation process using multiple cores.
@@ -68,10 +68,6 @@ Building on Linux
    ```
    The option `-v` will print verbose build logs on the console.
 4. To clear or delete the build folder or files, manually remove the build directory or its files.
-
-__Note:__ When using cmake version older than 3.15, `-B` option is not supported. <br>
-So the build folder must be created manually. <br>
-The option `-v` is also not supported in cmake version older than 3.15.
 
 
 Building on Windows
@@ -92,17 +88,13 @@ Building with Visual Studio IDE (GUI)
    Microsoft Visual Studio project is generated.
 6. Click __Open Project__.
    Microsoft Visual Studio project for the source package __is launched__.
-7. For building multi-threaded library based on AOCL_ENABLE_THREADS, set the 
-   LLVM openMP library path in the Linker->General option and openMP library name
-   in the Linker->Input under the project properties. Set /openmp as the additional
-   compilation option.
-8. Build the entire solution or the required projects.
+7. Build the entire solution or the required projects.
 
 Building with Visual Studio IDE (command line)
 ----------------------------------------------
 1. Go to AOCL-Compression source package and create a folder named build.
 2. Go to the build folder.
-3. Use the following command to configure and build the library to test bench executable.
+3. Use the following command to configure and build the library and test bench executable.
 ```
 cmake .. -T ClangCl -G <installed Visual Studio version> && cmake --build . --config Release --target INSTALL
 ```
@@ -115,23 +107,23 @@ Use the following additional options to configure your build:
 Option                              |  Description
 ------------------------------------|----------------------------------------------------------------------------------------
 AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |  Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
-SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Disabled by default)
+SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Enabled by default)
 LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
-AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST|  Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Disabled by default)
-AOCL_ZSTD_WILDCOPY_LONG             |  Faster wildcopy when match lengths are long in ZSTD decompression (Disabled by default)
-AOCL_TEST_COVERAGE                  |  Enable GTest and AOCL test bench based CTest suite (Disabled by default)
+AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST|  Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Enabled by default)
+AOCL_DECOMPRESS_FAST                |  Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for ZSTD. (Disabled by default)
+AOCL_TEST_COVERAGE                  |  Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)
 AOCL_ENABLE_LOG_FEATURE             |  Enables logging through environment variable `AOCL_ENABLE_LOG` (Disabled by default)
 CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
 ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
 VALGRIND                            |  Enable Valgrind checks. Only supported on Linux/Debug and incompatible with ASAN=ON (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Disabled by default)
-ZLIB_DEFLATE_FAST_MODE              |  Enable ZLIB deflate quick strategy (Disabled by default)
+BUILD_EXAMPLE                       |  Build examples for aocl-compression (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1  |  Enable LZ4 match skipping optimization strategy-1 based on a larger base step size applied for long distance search (Disabled by default)
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2  |  Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1. Preferred to be used with Silesia corpus (Disabled by default)
 AOCL_LZ4_NEW_PRIME_NUMBER           |  Enable the usage of a new prime number for LZ4 hashing function. Preferred to be used with Silesia corpus (Disabled by default)
 AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES   |  Enable storing of additional potential matches to improve compression ratio. Recommended for higher compressibility use cases (Disabled by default)
-AOCL_LZ4_HASH_BITS_USED             |  Control the number of bits used for LZ4 hashing, allowed values are LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (Disabled by default)
+AOCL_LZ4_HASH_BITS_USED             |  Control the number of bits used for LZ4 hashing, allowed values are OFF, LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (LOW by default)
 AOCL_EXCLUDE_BZIP2                  |  Exclude BZIP2 compression method from the library build (Disabled by default)
 AOCL_EXCLUDE_LZ4                    |  Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)
 AOCL_EXCLUDE_LZ4HC                  |  Exclude LZ4HC compression method from the library build (Disabled by default)
@@ -141,9 +133,22 @@ AOCL_EXCLUDE_ZLIB                   |  Exclude ZLIB compression method from the 
 AOCL_EXCLUDE_ZSTD                   |  Exclude ZSTD compression method from the library build (Disabled by default)
 AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL |  Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)
 AOCL_ENABLE_THREADS                 |  Enable multi-threaded compression and decompression using SMP based openMP threads (Disabled by default)
+TEST_COVERAGE_THIRD_PARTY           |  Enable third party test bench based CTest suite (Disabled by default)
+NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression for supported methods (Disabled by default)
+AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
+AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
+ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
+
+* NOTE: <br>
+   1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by <br>
+   setting environment variable AOCL_ZLIB_QUICK_MODE. It also improves performance for levels 2, 3 and 5 <br>
+   while trading off compression ratio. <br>
 
 Running AOCL-Compression Test Bench On Linux
 --------------------------------------------
+
+* CAUTION: <br>
+   Before running the test bench, check whether it points to the right library dependency. <br>
 
 Test bench supports several options to validate, benchmark or debug the supported
 compression methods.
@@ -185,7 +190,7 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
    * `AOCL_ENABLE_LOG=INFO`  for Error, Info logs.
    * `AOCL_ENABLE_LOG=DEBUG` for Error, Info, Debug logs.
    * `AOCL_ENABLE_LOG=TRACE` for Error, Info, Debug, Trace logs.<br>
-  Note: When building the library for highest performance, do not enable `DAOCL_ENABLE_LOG_FEATURE`.
+  Note: When building the library for highest performance, do not enable `AOCL_ENABLE_LOG_FEATURE`.
 
 
 * To run the test bench but only compression or decompression <br>
@@ -205,6 +210,18 @@ Here, 5 is the level and 0 is the additional parameter passed to ZSTD method.
    and when -rdecompress operation is selected, decompressed file gets dumped. <br>
    Method name and level must be specified using -e for default and -rcompress modes. <br>
    Method name must be specified using -e for -rdecompress mode. <br>
+
+* To run the test bench and test native APIs, use the command: <br>
+   `aocl_compression_bench -n -p <input filename>` <br>
+   Other options -e, -i, -t, -r are supported when running with -n <br>
+
+* To run the test bench and test multi-threaded native APIs, <br>
+  for supported methods, use the command: <br>
+  `aocl_compression_bench -e<method>:<level>:<num-of-workers> -n -p <input filename>` <br>
+
+* To run the test bench and test native APIs with an external dictionary file <br>
+  for supported methods, use the command: <br>
+  `aocl_compression_bench -e<method> -n -p -y<dictionary filename> <input filename>` <br>
 
 * NOTE: <br>
    1. Compression and decompression of large files (>1GB) are supported in the test bench. <br>
@@ -242,6 +259,9 @@ Check the following details for the exact steps:
 Running AOCL-Compression Test Bench On Windows
 ----------------------------------------------
 
+* CAUTION: <br>
+   Before running the test bench, check whether it points to the right library dependency. <br>
+
 Test bench on Windows supports all the user options as Linux,
 except for the `-c` option to link and test IPP compression methods.
 For more information on various user options, refer to the previous section on Linux.
@@ -249,6 +269,25 @@ To set and launch the test bench with a specific user option,
 go to project aocl_compression_bench -> Properties -> Debugging;
 specify the user options and the input test file.
 
+Running AOCL-Compression Examples
+---------------------------------
+
+* CAUTION: <br>
+   Before running the example programs, check whether it points to the right library dependency. <br>
+
+Example programs are provided for both unified API and native APIs of each compression method.
+The library should be built with -DBUILD_EXAMPLE=ON. Other cmake options including 
+-DAOCL_ENABLE_THREADS=ON can be enabled as desired.
+
+* To run example program for unified API, use the command:<br>
+  `example_unified_api <input filename>`
+
+* To run example program for LZ4 native API, use the command:<br>
+  `example_LZ4_compress_default <input filename>`
+
+* To run example program that demonstrates obtaining format compliant compressed stream from multithreaded unified API,
+  build the library by using -DAOCL_ENABLE_THREADS=ON and run the command:<br>
+  `example_aocl_llc_skip_rap_frame <input filename>`
 
 Running tests with CTest
 ------------------------
@@ -267,12 +306,53 @@ Following are a few sample commands that can be executed in the build directory 
  To run GTest test cases for a specific method<br>
  `ctest -R <METHOD_NAME_IN_CAPITALS>`
 
+Running fuzzer tests
+--------------------
+
+To list all the fuzz tests available for a method, use the following command:
+   `<METHOD_GTEST_EXECUTABLE> --list_fuzz_tests`
+   example: `zlib_gtest --list_fuzz_tests`
+
+Fuzzer test can be run in two modes:
+
+1. Unit test mode: Default operation mode of AOCL_TEST_FUZZER. Can be run as part of ctest. No sanitizer and coverage instrumentation.
+   `ctest -R <TestSuiteName>.<FuzzTestName>`
+2. Fuzzing mode: Enabled with cmake option FUZZTEST_FUZZING_MODE. Runs each fuzz test with sanitizer and coverage instrumentation
+
+   To run all fuzz tests for a specified duration, use the following command:
+   `<METHOD_GTEST_EXECUTABLE> --fuzz_for=<DURATION>`
+   example: `zlib_gtest --fuzz_for=60s`
+
+   To run a single fuzz test until a bug is found or until manually stopped:
+   `<METHOD_GTEST_EXECUTABLE> --fuzz=<TestSuiteName>.<FuzzTestName>`
+   example: `zlib_gtest --fuzz=AOCL_Compression_zlib.compress2_fuzz`
+
+   To run a single fuzz test by feeding in an external corpus of seeds: Enabled with cmake option AOCL_TEST_FUZZER_WITH_CORPUS.
+   Place folders containing seed files in the directory pointed by environment variable AOCL_FUZZ_CORPUS_DIR.
+   Sub-folders under this must be as follows:
+   *   /compress_fuzz : Must contain uncompressed raw files for compress API fuzz tests.
+   *   /*_fuzz        : Folders with individual fuzz test names must contain compressed files 
+                        for respective methods used for decompress API fuzz tests.
+                        Example: /LZ4_decompress_safe_fuzz, /RawUncompress_fuzz, etc
+   Run the single fuzz test:
+   `<METHOD_GTEST_EXECUTABLE> --fuzz=<TestSuiteName>.<FuzzTestName>`
+   example: `zlib_gtest --fuzz=AOCL_Compression_zlib.compress2_fuzz`
+   Additional seed properties can be specified by environment variables:
+   *  AOCL_FUZZ_SIZE_MAX : Max size in bytes to use for i/o buffers used in fuzz testing.
+   *  AOCL_FUZZ_CPR_RATIO : Compression ratio estimate of compressed files used for decompress API fuzz tests.
+
 Running source code coverage using GCOV
 ---------------------------------------
 
 To measure source code coverage, use CODE_COVERAGE option while configuring the CMake build. Run CMake with the custom target option 'code-coverage' to execute tests and generate code coverage data. The code coverage reports are generated in the build directory under subdirectory called 'coverage/html_report'. Open the HTML files in browser to view the coverage information.
 
 Following is the sample command usage to run code coverage:
+`cmake -B <build directory> <CMakeList.txt filepath> 
+      -DCMAKE_INSTALL_PREFIX=<install path> 
+      -DCMAKE_BUILD_TYPE=Debug 
+      -DBUILD_STATIC_LIBS=ON
+      -DCODE_COVERAGE=ON
+      <Additional Library Build Options>`
 `cmake --build <build directory> --target install code-coverage`
 
 Running Valgrind and ASAN memory checks using CTest
@@ -309,8 +389,15 @@ Following are a few sample commands to use the script available in the 'scripts'
 Generating Documentation
 ------------------------
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
-- Documents will be generated in HTML format in the folder __docs/html__ . Open the index.html file in any browser to view the documentation.
-- CMake will use the existing Doxygen if available. Else, it will prompt the user to install doxygen and try again.
+- Documents will be generated in HTML format in the folder __docs/html__ as doxygen output &  __docs/sphinx/html__ as sphinx output. Open the index.html file from respective folders in any browser to view the documentation.
+- The following packages are expected before running CMake with `-DBUILD_DOC=ON` option:
+   1. Doxygen.
+   2. Python packages:
+      - Sphinx
+      - rocm_docs
+      - breathe
+      - myst_parser
+- CMake halts if required packages are missing by providing directives for installing the absent packages.
 
 Enabling/disabling optimizations
 --------------------------------

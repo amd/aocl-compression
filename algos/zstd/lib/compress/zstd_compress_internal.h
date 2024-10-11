@@ -1,5 +1,7 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * 
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -1346,7 +1348,219 @@ MEM_STATIC U32 ZSTD_getLowestPrefixIndex(const ZSTD_matchState_t* ms, U32 curr, 
     return matchLowest;
 }
 
+#ifdef AOCL_ZSTD_OPT
+#if AOCL_DECOMPRESS_FAST > 1
+#define MAX_TOTAL_BITS (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)) // value must match decompressor
+/* Functions based on mapping of lengths to number of bits based on zstd compression format:
+ * max_len = Baseline + (2^Number_of_Bits - 1)
+ * Number_of_Bits = log2((len-Baseline)+1) */
 
+/* Literals length codes:
+Baseline       <15 16 18 20 22 24 28 32 40 48 64 128 256 512 1024 2048 4096 8192 16384 32768 65536
+Number_of_Bits   0  1  1  1  1  2  2  3  3  4  6   7   8   9   10   11   12   13    14    15    16 */
+MEM_STATIC
+int assert_get_lit_bits(size_t len) {
+    if (len < 16)
+        return 0;
+    else if (len < 24)
+        return 1;
+    else if (len < 32)
+        return 2;
+    else if (len < 48)
+        return 3;
+    else if (len < 64)
+        return 4;
+    else
+        return (64 - ZSTD_countLeadingZeros64(len >> 1));
+}
+
+/* Match length codes : value = Match_Length_Code + 3
+Baseline       <34 35 37 39 41 43 47 51 59 67 83 99 131 259 515 1027 2051 4099 8195 16387 32771 65539
+Number_of_Bits   0  1  1  1  1  2  2  3  3  4  4  5   7   8   9   10   11   12   13    14    15    16 */
+MEM_STATIC
+int assert_get_mat_bits(size_t len) {
+    if (len < 32) //35-3
+        return 0;
+    else if (len < 40) // 43-3
+        return 1;
+    else if (len < 48) // 51-3
+        return 2;
+    else if (len < 64) // 67-3
+        return 3;
+    else if (len < 96) // 99-3
+        return 4;
+    else if (len < 128) // 131-3
+        return 5;
+    else
+        return (64 - ZSTD_countLeadingZeros64(len >> 1));
+}
+
+/* Offset codes
+Offset_Value = (1 << offsetCode) + readNBits(offsetCode);
+if (Offset_Value > 3) offset = Offset_Value - 3; */
+MEM_STATIC
+int assert_get_off_bits(size_t len) {
+    return (64 - ZSTD_countLeadingZeros64(len) - 1); // N = log2(len+1)-1 -> 64 - clz(len) - 1 
+}
+
+/* Return the largest possible length that can be represented using additional 'bits'. Capped at max_len. */
+MEM_STATIC
+size_t assert_get_mat_len(int bits, int max_len) {
+    int ret = 0;
+    if (bits == 0)
+        ret = 31;
+    else if (bits <= 1)
+        ret = 39;
+    else if (bits <= 2)
+        ret = 47;
+    else if (bits <= 3)
+        ret = 63;
+    else if (bits <= 4)
+        ret = 95;
+    else if (bits <= 6)
+        ret = 127;
+    else {
+        ret = ((size_t)1 << (bits + 1)) - 1;
+    }
+    return (ret > max_len) ? max_len : ret;
+}
+
+#if (DEBUGLEVEL>=1)
+MEM_STATIC
+void ZSTD_storeSeq_withAssert(seqStore_t* seqStorePtr,
+    size_t litLength, const BYTE* literals, const BYTE* litLimit,
+    U32 offBase, size_t matchLength) {
+    assert(matchLength >= MINMATCH);
+    int llbits = assert_get_lit_bits(litLength);
+    int mlbits = assert_get_mat_bits(matchLength);
+    size_t offset = OFFBASE_IS_OFFSET(offBase) ? OFFBASE_TO_OFFSET(offBase) : 1;
+#ifndef UNIT_TEST
+    if (OFFBASE_IS_OFFSET(offBase))
+        assert(offset >= WILDCOPY_VECLEN);
+#endif
+    int ofbits = assert_get_off_bits(offset);
+    int totalbits = llbits + mlbits + ofbits;
+    assert(totalbits < MAX_TOTAL_BITS);
+    ZSTD_storeSeq(seqStorePtr, litLength, literals, litLimit, offBase, matchLength);
+}
+#define ZSTD_STORE_SEQ ZSTD_storeSeq_withAssert
+#else
+#define ZSTD_STORE_SEQ ZSTD_storeSeq
+#endif /* (DEBUGLEVEL>=1) */
+
+FORCE_INLINE_TEMPLATE
+int get_lit_bits(size_t len) {
+    /* Finer mapping is disabled to improve compression speed(~7%) with small compromise on ratio(0.4%)
+    * Optimization for speed must ensure return value is >= actual bits needed to encode len. */
+    if (len < 64)
+        return 4;
+    else {
+        return (64 - ZSTD_countLeadingZeros64(len));
+    }
+}
+
+FORCE_INLINE_TEMPLATE
+int get_mat_bits(size_t len) {
+    /* Finer mapping is disabled to improve compression speed(~7%) with small compromise on ratio(0.4%)
+    * Optimization for speed must ensure return value is >= actual bits needed to encode len. */
+    if (len < 64)
+        return 3;
+    else {
+        return (64 - ZSTD_countLeadingZeros64(len));
+    }
+}
+
+FORCE_INLINE_TEMPLATE
+/* Offset len range is [1, N] */
+int get_off_bits(size_t len) {
+    return (64 - ZSTD_countLeadingZeros64(len)); 
+}
+
+FORCE_INLINE_TEMPLATE
+/* Return largest possible length that can be represented using additional 'bits' */
+size_t get_mat_len(int bits, int max_len) {
+    int ret = 0;
+    /* Finer mapping is disabled to improve compression speed(~7%) with small compromise on ratio(0.4%)
+    * Optimization for speed must ensure return value is <= actual max len that will get mapped to bits. */
+    if (bits <= 6)
+        ret = 31;
+    else {
+        ret = ((size_t)1 << (bits + 1)) - 1;
+    }
+    return (ret > max_len) ? max_len : ret;
+}
+
+/* Return 1 if strategy exists to keep totalbits < MAX_TOTAL_BITS */
+FORCE_INLINE_TEMPLATE
+int is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset) {
+    int llbits = get_lit_bits((size_t)(ip - anchor));
+    int mlbits = get_mat_bits(mLength);
+    int ofbits = get_off_bits(offset);
+    int totalbits = llbits + mlbits + ofbits;
+    if (LIKELY(totalbits < MAX_TOTAL_BITS)) return 1; // totalbits can fit
+
+    if ((llbits + ofbits) >= MAX_TOTAL_BITS) return 0; // unable to fit match
+    if (mLength < ((size_t)2 * MINMATCH)) return 0; // unable to split match as minimum match length is MINMATCH
+
+    return 1; // totalbits can fit by splitting sequences
+}
+
+FORCE_INLINE_TEMPLATE
+void AOCL_ZSTD_storeSequences(seqStore_t* seqStore, const BYTE* ip, const BYTE* anchor, const BYTE* const iend,
+    U32 offBase, size_t mLength)
+{
+    //store sequences such that totalbits for each sequence is < MAX_TOTAL_BITS
+    int llbits = get_lit_bits((size_t)(ip - anchor));
+    int mlbits = get_mat_bits(mLength);
+    U32 offset = OFFBASE_IS_OFFSET(offBase) ? (U32)OFFBASE_TO_OFFSET(offBase) : 1;
+    int ofbits = get_off_bits(offset);
+    int totalbits = llbits + mlbits + ofbits;
+    if (UNLIKELY(totalbits >= MAX_TOTAL_BITS)) { //store as multiple sequences
+        assert((llbits + ofbits) < MAX_TOTAL_BITS);
+        assert(mLength >= ((size_t)2 * MINMATCH));
+
+        //break into multiple sequences
+        int balancebits = (MAX_TOTAL_BITS - 1) - (llbits + ofbits); //max bits allowed for mlbits
+        size_t mlength1 = get_mat_len(balancebits, mLength); //max mLength that can fit
+        mlength1 = ((mLength == mlength1) || (mLength - mlength1) >= MINMATCH) ? mlength1 : (mLength - MINMATCH); // if balance remains, must leave at least MINMATCH for the next sequence
+        assert(mLength >= mlength1);
+        ZSTD_STORE_SEQ(seqStore, (size_t)(ip - anchor), anchor, iend, offBase, mlength1); // all literals go into first sequence
+        mLength -= mlength1;
+
+        //remaining matches go into separate sequences with no literals
+        while (mLength > 0) {
+            int balancebits = (MAX_TOTAL_BITS - 1) - ofbits; //max bits allowed for mlbits. llbits is 0.
+            mlength1 = get_mat_len(balancebits, mLength); //max mLength that can fit
+            mlength1 = ((mLength == mlength1) || (mLength - mlength1) >= MINMATCH) ? mlength1 : (mLength - MINMATCH); // if balance remains, must leave at least MINMATCH for the next sequence
+            assert(mLength >= mlength1);
+            ZSTD_STORE_SEQ(seqStore, 0, anchor, iend, offBase, mlength1);
+            mLength -= mlength1;
+        }
+    }
+    else { //store as single sequence
+        ZSTD_STORE_SEQ(seqStore, (size_t)(ip - anchor), anchor, iend, offBase, mLength);
+    }
+}
+
+#ifdef AOCL_UNIT_TEST
+ZSTDLIB_API int Test_is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset);
+ZSTDLIB_API int Test_get_lit_bits(size_t len);
+ZSTDLIB_API int Test_get_mat_bits(size_t len);
+ZSTDLIB_API int Test_get_off_bits(size_t len);
+ZSTDLIB_API size_t Test_get_mat_len(int bits, int max_len);
+ZSTDLIB_API int Test_assert_get_lit_bits(size_t len);
+ZSTDLIB_API int Test_assert_get_mat_bits(size_t len);
+ZSTDLIB_API int Test_assert_get_off_bits(size_t len);
+ZSTDLIB_API size_t Test_assert_get_mat_len(int bits, int max_len);
+ZSTDLIB_API int Test_AOCL_is_FdsSupported(int hasExtDict, ZSTD_CCtx* zc);
+ZSTDLIB_API int Test_AOCL_ZSTD_window_needsExtDict(const ZSTD_window_t* window, void const* src,
+                                       size_t srcSize, int forceNonContiguous);
+ZSTDLIB_API U32 Test_ZSTD_window_update(ZSTD_window_t* window, void const* src,
+                            size_t srcSize, int forceNonContiguous);
+ZSTDLIB_API size_t Test_AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity);
+#endif /* AOCL_UNIT_TEST */
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
+#endif /* AOCL_ZSTD_OPT */
 
 /* debug functions */
 #if (DEBUGLEVEL>=2)

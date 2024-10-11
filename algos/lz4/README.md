@@ -50,17 +50,21 @@ A list of known source ports is maintained on the [LZ4 Homepage].
 
 # LZ4 - Library Files
 
-The `/lib` directory contains many files, but depending on the project's objectives,
-not all of them are necessary.
+The `/lib` directory contains many files, but depending on project's objectives,
+not all of them are required.
+Limited systems may want to reduce the nb of source files to include
+as a way to reduce binary size and dependencies.
 
-### Minimal LZ4 build
+Capabilties are added at the "level" granularity, detailed below.
+
+### Level 1 : Minimal LZ4 build
 
 The minimum required is **lz4.c** and **lz4.h**,
 which provides the fast compression and decompression algorithms.
 They generate and decode data using the [LZ4 block format].
 
 
-### High Compression variant
+### Level 2 : High Compression variant
 
 For more compression ratio at the cost of compression speed,
 the High Compression variant called **lz4hc** is available.
@@ -69,22 +73,37 @@ This variant also compresses data using the [LZ4 block format]
 and depends on the regular `lib/lz4.*` source files.
 
 
-### Frame Support for Interoperability
+### Level 3 : Frame support, for interoperability
 
 To produce compressed data compatible with `lz4` command line utility,
 it's necessary to use the [official interoperable frame format].
 This format is generated and decoded automatically by the **lz4frame** library.
 Its public API is described in `lib/lz4frame.h`.
-To work properly, lz4frame needs all other modules present in `/lib`,
-including, lz4, lz4hc, and **xxhash**.
-So it's necessary to include all the `*.c` and `*.h` files present in `/lib`.
+In order to work properly, lz4frame needs all other modules present in `/lib`,
+including, lz4 and lz4hc, and also **xxhash**.
+So it's necessary to also include all `xxhash.c` and `xxhash.h`.
+
+
+### Level 4 : File compression operations
+
+As a helper around file operations,
+the library has been recently extended with `lz4file.c` and `lz4file.h`
+(still considered experimental at the time of this writing).
+These helpers allow opening, reading, writing, and closing files
+using transparent LZ4 compression / decompression.
+As a consequence, using `lz4file` adds a dependency on `<stdio.h>`.
+
+`lz4file` relies on `lz4frame` in order to produce compressed data
+conformant to the [LZ4 Frame format] specification.
+Consequently, to enable this capability,
+it's necessary to include all `*.c` and `*.h` files from `lib/` directory.
 
 
 ### Advanced / Experimental API
 
 Definitions which are not guaranteed to remain stable in future versions,
 are protected behind macros, such as `LZ4_STATIC_LINKING_ONLY`.
-As the name strongly implies, these definitions should only be invoked
+As the name suggests, these definitions should only be invoked
 in the context of static linking ***only***.
 Otherwise, the dependent application may fail on API or ABI break in the future.
 The associated symbols are also not exposed by the dynamic library by default.
@@ -103,11 +122,11 @@ The following build macro can be selected to adjust the source code behavior dur
   For example, with `GCC` : `-DLZ4_FAST_DEC_LOOP=1`
   and with `make` : `CPPFLAGS+=-DLZ4_FAST_DEC_LOOP=1 make lz4`.
 
-- `LZ4_DISTANCE_MAX` : Controls the maximum offset that the compressor will allow.
-  Set to 65535 by default, which is the maximum value supported by LZ4 format.
-  Reducing the maximum distance will reduce opportunities for LZ4 to find matches and
-  hence, will produce a worse compression ratio.
-  However, a smaller maximum distance can allow compatibility with specific decoders using a limited memory.
+- `LZ4_DISTANCE_MAX` : control the maximum offset that the compressor will allow.
+  Set to 65535 by default, which is the maximum value supported by lz4 format.
+  Reducing maximum distance will reduce opportunities for LZ4 to find matches,
+  hence will produce a worse compression ratio.
+  Setting a smaller max distance could allow compatibility with specific decoders with limited memory budget.
   This build macro only influences the compressed output of the compressor.
 
 - `LZ4_DISABLE_DEPRECATE_WARNINGS` : Invoking a deprecated function will make the compiler generate a warning.
@@ -129,20 +148,24 @@ The following build macro can be selected to adjust the source code behavior dur
   This is achieved by setting the build macros .
   In most cases, it can be considered for rare platforms.
 
-- `LZ4_ALIGN_TEST` : Alignment test ensures that the memory area
-  passed as an argument to become a compression state is suitably aligned.
+- `LZ4_USER_MEMORY_FUNCTIONS` : replace calls to `<stdlib,h>`'s `malloc()`, `calloc()` and `free()`
+  by user-defined functions, which must be named `LZ4_malloc()`, `LZ4_calloc()` and `LZ4_free()`.
+  User functions must be available at link time.
+
+- `LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION` :
+  Remove support of dynamic memory allocation. 
+  For more details, see discription of this macro in `lib/lz4.c`.
+
+- `LZ4_FREESTANDING` : by setting this build macro to 1, 
+  LZ4/HC removes dependencies on the C standard library,
+  including allocation functions and `memmove`, `memcpy`, and `memset`.
+  This build macro is designed to help use LZ4/HC in restricted environments
+  (embedded, bootloader, etc).
+  For more details, see discription of this macro in `lib/lz4.h`. 
+
+- `LZ4_ALIGN_TEST` : alignment test ensures that the memory area
+  passed as argument to become a compression state is suitably aligned.
   This test can be disabled if it proves flaky, by setting this value to 0.
-
-
-### Merging
-
-LZ4 source code can be merged into a single file.
-One can combine all source code into `lz4_all.c` by using following command:
-```
-cat lz4.c lz4hc.c lz4frame.c > lz4_all.c
-```
-(__Note:__ The `cat` file order is important). Compile `lz4_all.c`.
-All the `*.h` files present in `/lib` are mandatory to compile `lz4_all.c`.
 
 
 ### License

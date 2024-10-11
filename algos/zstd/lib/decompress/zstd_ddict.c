@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -193,6 +194,10 @@ const ZSTD_DDict* ZSTD_initStaticDDict(
     size_t const neededSpace = sizeof(ZSTD_DDict)
                              + (dictLoadMethod == ZSTD_dlm_byRef ? 0 : dictSize);
     ZSTD_DDict* const ddict = (ZSTD_DDict*)sBuffer;
+    if (ddict == NULL || dict == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid dictionary");
+        return NULL;
+    }
     assert(sBuffer != NULL);
     assert(dict != NULL);
     if ((size_t)sBuffer & 7) return NULL;   /* 8-aligned */

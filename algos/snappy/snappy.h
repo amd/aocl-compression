@@ -1,5 +1,5 @@
 // Copyright 2005 and onwards Google Inc.
-// Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+// Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -83,6 +83,10 @@ namespace snappy {
   class Source;
   class Sink;
 
+/**
+ * @name Generic compression/decompression routines.
+ */
+
   // ------------------------------------------------------------------------
   // Generic compression/decompression routines.
   // ------------------------------------------------------------------------
@@ -129,6 +133,16 @@ namespace snappy {
  */
 
  SNAPPYLIB_API bool GetUncompressedLength(Source* source, uint32_t* result);
+
+/**
+ * @}
+ */
+
+/**
+ * @name Higher-level string based routines.
+ * @brief Higher-level string based routines (should be sufficient for most users)
+ * @{
+ */
 
   // ------------------------------------------------------------------------
   // Higher-level string based routines (should be sufficient for most users)
@@ -178,6 +192,16 @@ namespace snappy {
 
  SNAPPYLIB_API bool Uncompress(const char* compressed, size_t compressed_length,
                   std::string* uncompressed);
+
+/**
+ * @}
+ */
+
+/**
+ * @name Generic compression/decompression routines.
+ * 
+ */
+
   /**
    * @brief Decompresses "compressed" to "*uncompressed".
    * 
@@ -218,6 +242,16 @@ namespace snappy {
 
  SNAPPYLIB_API size_t UncompressAsMuchAsPossible(Source* compressed, Sink* uncompressed);
 
+/**
+ * @}
+ */
+
+/**
+ * @name Lower-level character array based routines.
+ * @brief These May be useful for efficiency reasons in certain circumstances.
+ * @{
+ */
+
   // ------------------------------------------------------------------------
   // Lower-level character array based routines.  May be useful for
   // efficiency reasons in certain circumstances.
@@ -242,7 +276,7 @@ namespace snappy {
    * least "MaxCompressedLength(input_length)" bytes in length.
    * 
    * @note - Example:\n\n
-   *  \code{.c}
+   *  \code{.cpp}
    *            char  output = new char[snappy::MaxCompressedLength(input_length)];\n
    *            size_t output_length;\n
    *            RawCompress(input, input_length, output, &output_length);\n
@@ -352,6 +386,14 @@ namespace snappy {
  SNAPPYLIB_API bool RawUncompressToIOVec(Source* compressed, const struct iovec* iov,
                             size_t iov_cnt);
 
+/**
+ * @}
+ */
+
+/**
+ * @name Helper Functions.
+ * @{
+ */
   /**
    * @brief This function determines the maximal size of the compressed representation of
    * input data that is "source_bytes" bytes in length.
@@ -456,30 +498,56 @@ namespace snappy {
    *  |Failure| Returns \b false if error.                                                         |
    */
  SNAPPYLIB_API bool IsValidCompressed(Source* compressed);
+ 
+/**
+ * @}
+ */
+
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 
   /* AOCL-Compression defined setup function that configures with the right
 *  AMD optimized snappy routines depending upon the detected CPU features. */
 
 /**
- * @brief AOCL-Compression defined setup function that configures with the right
- * AMD optimized snappy routines depending upon the detected CPU features.
+ * @name AOCL Functions
+ * @brief These functions are not part of open source code, these are introduced by AOCL-Compression
+ * library to control AOCL introduced optimization levels dynamically.
  * 
- * @param optOff Turn off all optimizations
- * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512
+ * @note These functions are for internal purposes only, not recommended for external use.
+ * 
+ * @{
+ */
+
+/**
+ * @brief AOCL-Compression defined setup function that configures code path dynamically with the right
+ * AMD optimized snappy routines depending upon the detected CPU features if `optOff=0`.
+ * 
+ * Except for the initial call, it's necessary to execute aocl_destroy_snappy() before any subsequent calls
+ * to this function. Failure to call the destroy function prior to invoking this function will result
+ * in snappy following the code path of set at first setup call or  the most recent setup call that was
+ * preceded by the destroy function.
+ * 
+ * @param optOff Turn on/off all AOCL-Compression optimizations.
+ * @param optLevel Optimization level: 0 - C optimization, 1 - SSE2, 2 - AVX, 3 - AVX2, 4 - AVX512 .
  * @param insize Input data length.
  * @param level Requested compression level.
  * @param windowLog Largest match distance : larger == more compression, more memory needed during decompression.
  * 
- * @return NULL .
+ * @return \b NULL .
  */
 
  SNAPPYLIB_API char * aocl_setup_snappy(int optOff, int optLevel, size_t insize,
                            size_t level, size_t windowLog);
 
 /**
- * @brief AOCL-Compression defined destroy function.
+ * @brief It is necessary to execute this destroy function after the initial invocation of the
+ * aocl_setup_snappy() function, prior to initiating the setup function again.
  */
  SNAPPYLIB_API void aocl_destroy_snappy(void);
+
+/**
+ * @}
+ */
 
 /**
  * @brief This class is created to expose internal functions which are not available external to this method.
@@ -494,6 +562,8 @@ namespace snappy {
     static Sink * UncheckedByteArraySink_ext(char *dest);
     static void Append32(std::string* s, uint32_t value);
  };
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
   // The size of a compression block. Note that many parts of the compression
   // code assumes that kBlockSize <= 65536; in particular, the hash table

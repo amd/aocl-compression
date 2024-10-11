@@ -42,7 +42,7 @@ DOXYFILE_ENCODING      = UTF-8
 # title of most generated pages and in a few other places.
 # The default value is: My Project.
 
-PROJECT_NAME           = "AOCL-Compression 4.2"
+PROJECT_NAME           = "AOCL-Compression 5.0.0"
 
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This
 # could be handy for archiving the generated documentation or if some version
@@ -922,7 +922,8 @@ INPUT                  = ../api \
                          ./INSTALLATION.md \
                          ../algos/lz4 \
                          ../algos/snappy \
-                         ../algos/zlib \
+                         ../algos/zlib/zlib.h \
+                         ../algos/zlib/README.md \
                          ../algos/bzip2 \
                          ../algos/lzma \
                          ../algos/zstd/lib/zstd.h \
@@ -2230,7 +2231,7 @@ MAN_LINKS              = NO
 # captures the structure of the code including all documentation.
 # The default value is: NO.
 
-GENERATE_XML           = NO
+GENERATE_XML           = YES
 
 # The XML_OUTPUT tag is used to specify where the XML pages will be put. If a
 # relative path is entered the value of OUTPUT_DIRECTORY will be put in front of
@@ -2389,14 +2390,17 @@ INCLUDE_FILE_PATTERNS  =
 PREDEFINED             = OF(x)=x \
                          ZEXTERN= \
                          ZEXPORT= \
+                         ZEXPORTVA= \
                          LZ4LIB_API= \
+                         LZ4FLIB_API= \
                          Z_ARG(x)=x \
                          LZ4_DEPRECATED(x)= \
                          BZ_EXTERN= \
                          BZ_API(x)=x \
                          LZMALIB_API= \
                          ZSTDLIB_API= \
-                         EXPORT_SYM_DYN=
+                         EXPORT_SYM_DYN= \
+                         SNAPPYLIB_API=
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
 # tag can be used to specify a list of macro names that should be expanded. The

@@ -1,6 +1,6 @@
 /* zconf.h -- configuration of the zlib compression library
  * Copyright (C) 1995-2016 Jean-loup Gailly, Mark Adler
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -552,7 +552,6 @@ typedef uLong FAR uLongf;
 #ifdef AOCL_ZLIB_OPT
      #include <stdint.h>
 #endif /* AOCL_ZLIB_OPT */
-#include <stdint.h>
 #ifdef HAVE_BUILTIN_EXPECT
 #define LIKELY(x) (__builtin_expect((x), 1))
 #define UNLIKELY(x) (__builtin_expect((x), 0))

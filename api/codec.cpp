@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -75,6 +75,7 @@
 #include "algos/zstd/lib/zstd.h"
 #endif
 
+
 #define CODEC_ERROR -1
 
 //bzip2
@@ -83,6 +84,11 @@ AOCL_CHAR *aocl_bzip2_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
                        AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog)
 {
     return aocl_setup_bzip2(optOff, optLevel, insize, level, windowLog);
+}
+
+AOCL_UINTP aocl_bzip2_compressBound(AOCL_UINTP insize)
+{
+    return BZ2_bzCompressBound(insize);
 }
 
 AOCL_INT64 aocl_bzip2_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, 
@@ -119,6 +125,15 @@ AOCL_CHAR *aocl_lz4_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
                      AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog)
 {
     return aocl_setup_lz4(optOff, optLevel, insize, level, windowLog);
+}
+
+AOCL_UINTP aocl_lz4_compressBound(AOCL_UINTP insize)
+{
+    AOCL_INT32 res = LZ4_compressBound(insize);
+    if (res > 0)
+        return res;
+    
+    return CODEC_ERROR;
 }
 
 #if defined(__GNUC__) && defined(__x86_64__)
@@ -167,6 +182,15 @@ AOCL_CHAR *aocl_lz4hc_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
     return aocl_setup_lz4hc(optOff, optLevel, insize, level, windowLog);
 }
 
+AOCL_UINTP aocl_lz4hc_compressBound(AOCL_UINTP insize)
+{
+    AOCL_INT32 res = LZ4_compressBound(insize);
+    if (res > 0)
+        return res;
+    
+    return CODEC_ERROR;
+}
+
 AOCL_INT64 aocl_lz4hc_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
                           AOCL_UINTP outsize, AOCL_UINTP level, AOCL_UINTP, AOCL_CHAR *)
 {
@@ -203,6 +227,11 @@ AOCL_CHAR *aocl_lzma_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
     return NULL;
 }
 
+AOCL_UINTP aocl_lzma_compressBound(AOCL_UINTP insize)
+{
+    return Lzma_compressBound(insize);
+}
+
 AOCL_INT64 aocl_lzma_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
                          AOCL_UINTP outsize, AOCL_UINTP level, AOCL_UINTP, AOCL_CHAR *)
 {
@@ -226,10 +255,10 @@ AOCL_INT64 aocl_lzma_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *ou
 AOCL_INT64 aocl_lzma_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
 						   AOCL_UINTP outsize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR *)
 {
-    AOCL_INTP res;
+    AOCL_INTP res = SZ_OK;
     SizeT outLen = outsize;
     SizeT srcLen = insize - LZMA_PROPS_SIZE;
-    ELzmaStatus status;
+    ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
 	
     res = LzmaDecode((AOCL_UINT8 *)outbuf, &outLen, (AOCL_UINT8 *)inbuf+LZMA_PROPS_SIZE, 
                      &srcLen, (AOCL_UINT8 *)inbuf, LZMA_PROPS_SIZE, LZMA_FINISH_END,
@@ -256,11 +285,22 @@ AOCL_CHAR *aocl_snappy_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
     return snappy::aocl_setup_snappy(optOff, optLevel, insize, level, windowLog);
 }
 
+AOCL_UINTP aocl_snappy_compressBound(AOCL_UINTP insize)
+{
+    AOCL_UINTP res = snappy::MaxCompressedLength(insize);
+    if (res > 0)
+        return res;
+    
+    return CODEC_ERROR;
+}
+
 AOCL_INT64 aocl_snappy_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, 
 						   AOCL_UINTP outsize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR *)
 {
     AOCL_UINTP max_compressed_length = snappy::MaxCompressedLength(insize);
     if (outsize < max_compressed_length) {
+        LOG_FORMATTED(ERR, logCtx, "Insufficient outsize: %zu < MaxCompressedLength: %zu",
+            outsize, max_compressed_length);
         return CODEC_ERROR;
     }
     // RawCompress modifies the value of the 4th parameter after successful
@@ -281,16 +321,20 @@ AOCL_INT64 aocl_snappy_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
     return CODEC_ERROR;
 }
 
-AOCL_INT64 aocl_snappy_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf, 
-							 AOCL_UINTP outsize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR *)
+AOCL_INT64 aocl_snappy_decompress(AOCL_CHAR* inbuf, AOCL_UINTP insize, AOCL_CHAR* outbuf,
+    AOCL_UINTP outsize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR*)
 {
     AOCL_UINTP uncompressed_len;
 #ifdef AOCL_ENABLE_THREADS
-    if (!snappy::GetUncompressedLengthFromMTCompressedBuffer(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len)
+    if (!snappy::GetUncompressedLengthFromMTCompressedBuffer(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid uncompressed_len");
         return CODEC_ERROR;
+    }
 #else
-    if (!snappy::GetUncompressedLength(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len)
+    if (!snappy::GetUncompressedLength(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid uncompressed_len");
         return CODEC_ERROR;
+    }
 #endif
     bool res = snappy::RawUncompress(inbuf, insize, outbuf);
     if (res)
@@ -310,6 +354,15 @@ AOCL_CHAR *aocl_zlib_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
                       AOCL_UINTP insize, AOCL_UINTP level, AOCL_UINTP windowLog)
 {
     return aocl_setup_zlib (optOff, optLevel, insize, level, windowLog);
+}
+
+AOCL_UINTP aocl_zlib_compressBound(AOCL_UINTP insize)
+{
+    AOCL_UINTP res = compressBound(insize);
+    if (res > 0)
+        return res;
+    
+    return CODEC_ERROR;
 }
 
 AOCL_INT64 aocl_zlib_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
@@ -342,7 +395,6 @@ AOCL_VOID aocl_zlib_destroy(AOCL_CHAR* workmem) {
 
 
 #ifndef AOCL_EXCLUDE_ZSTD
-#define ZSTD_STATIC_LINKING_ONLY
 typedef struct {
     ZSTD_CCtx *cctx;
     ZSTD_DCtx *dctx;
@@ -359,8 +411,10 @@ AOCL_CHAR *aocl_zstd_setup(AOCL_INTP optOff, AOCL_INTP optLevel,
     aocl_setup_zstd_encode(optOff, optLevel, insize, level, windowLog);
     aocl_setup_zstd_decode(optOff, optLevel, insize, level, windowLog);
     
-    if (!zstd_params)
-		return NULL;
+    if (!zstd_params) {
+        LOG_UNFORMATTED(ERR, logCtx, "zstd_params_t allocation failed");
+        return NULL;
+    }
     zstd_params->cctx = ZSTD_createCCtx();
     zstd_params->dctx = ZSTD_createDCtx();
     zstd_params->cdict = NULL;
@@ -374,8 +428,10 @@ AOCL_VOID aocl_zstd_destroy(AOCL_CHAR *workmem)
     aocl_destroy_zstd_decode();
 
     zstd_params_t *zstd_params = (zstd_params_t *) workmem;
-    if (!zstd_params)
-		return;
+    if (!zstd_params) {
+        LOG_UNFORMATTED(ERR, logCtx, "zstd_params_t deallocation failed");
+        return;
+    }
     if (zstd_params->cctx)
 		ZSTD_freeCCtx(zstd_params->cctx);
     if (zstd_params->dctx)
@@ -385,6 +441,15 @@ AOCL_VOID aocl_zstd_destroy(AOCL_CHAR *workmem)
     free(workmem);
 }
 
+AOCL_UINTP aocl_zstd_compressBound(AOCL_UINTP insize)
+{
+    AOCL_UINTP res = ZSTD_compressBound(insize);
+    if (!ZSTD_isError(res))
+        return res;
+
+    return CODEC_ERROR;
+}
+
 AOCL_INT64 aocl_zstd_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *outbuf,
                          AOCL_UINTP outsize, AOCL_UINTP level, AOCL_UINTP windowLog,
                          AOCL_CHAR *workmem)
@@ -392,8 +457,10 @@ AOCL_INT64 aocl_zstd_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *ou
     AOCL_UINTP res;
     zstd_params_t *zstd_params = (zstd_params_t *) workmem;
     
-    if (!zstd_params || !zstd_params->cctx)
+    if (!zstd_params || !zstd_params->cctx) {
+        LOG_UNFORMATTED(ERR, logCtx, "zstd_params_t or context invalid");
         return 0;
+    }
 
     zstd_params->zparams = ZSTD_getParams(level, insize, 0);
     ZSTD_CCtx_setParameter(zstd_params->cctx, ZSTD_c_compressionLevel, level);
@@ -424,8 +491,10 @@ AOCL_INT64 aocl_zstd_decompress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
 {
     AOCL_UINTP res;
     zstd_params_t *zstd_params = (zstd_params_t *) workmem;
-    if (!zstd_params || !zstd_params->dctx)
+    if (!zstd_params || !zstd_params->dctx) {
+        LOG_UNFORMATTED(ERR, logCtx, "zstd_params_t or context invalid");
         return CODEC_ERROR;
+    }
 
     res = ZSTD_decompressDCtx(zstd_params->dctx, outbuf, outsize, 
                               inbuf, insize);

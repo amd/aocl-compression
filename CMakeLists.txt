@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -34,7 +34,7 @@
 # @author S. Biplab Raut
 
 
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.22.0)
 
 #set the project name
 project(AOCL-COMPRESSION-LIBRARY CXX C ASM)
@@ -46,8 +46,8 @@ add_compile_definitions(AOCL_BUILD_VERSION="Build ${TODAY}")
 message(STATUS "C Compiler: ${CMAKE_C_COMPILER_ID}")
 message(STATUS "CXX Compiler: ${CMAKE_CXX_COMPILER_ID}")
 if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-    if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 6.1)
-        message(FATAL_ERROR "Minimum GCC version supported is 6.1!")
+    if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 7.5)
+        message(FATAL_ERROR "Minimum GCC version supported is 7.5!")
     endif ()
 elseif ("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
     if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 11.0)
@@ -60,26 +60,30 @@ endif ()
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
 option (BUILD_STATIC_LIBS "Build static library (Default build type is shared library)" OFF)
 option (AOCL_LZ4_OPT_PREFETCH_BACKWARDS "Enable LZ4 optimizations related to backward prefetching of data" OFF)
-option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Disabled by default)" OFF)
+option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Enabled by default)" ON)
 option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Enabled by default)" ON)
-option (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST "Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Disabled by default)" OFF)
-option (AOCL_ZSTD_WILDCOPY_LONG "Faster wildcopy when match lengths are long in ZSTD decompression (Disabled by default) " OFF)
+option (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST "Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Enabled by default)" ON)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
-option (AOCL_TEST_COVERAGE "Enable GTest and AOCL test bench based CTest suite (Disabled by default)" OFF)
-option (CODE_COVERAGE "Enable source code coverage (only on Linux with GCC compiler)" OFF)
-option (ASAN "Enable Address Sanitizer checks (only on Linux/Debug build)" OFF)
-option (VALGRIND "Enable Valgrind checks (only on Linux/Debug. Incompatible with ASAN=ON)" OFF)
+option (AOCL_TEST_COVERAGE "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" OFF)
+if(UNIX)
+    option (CODE_COVERAGE "Enable source code coverage (only on Linux with GCC compiler)" OFF)
+    option (ASAN "Enable Address Sanitizer checks (only on Linux/Debug build)" OFF)
+    option (VALGRIND "Enable Valgrind checks (only on Linux/Debug. Incompatible with ASAN=ON)" OFF)
+endif()
 option (BUILD_DOC "Build documentation for aocl-compression (Disabled by default)" OFF)  
-option (ZLIB_DEFLATE_FAST_MODE "Enable ZLIB deflate quick strategy (Disabled by default)" OFF)
+option (BUILD_EXAMPLE "Build examples for aocl-compression (Disabled by default)" OFF)
 option (AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 "Enable LZ4 match skipping optimization strategy-1 based on a larger base step size (Disabled by default)" OFF)
 option (AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2 "Enable LZ4 match skipping optimization strategy-2 by aggressively setting search distance on top of strategy-1 (Disabled by default)" OFF)
 option (AOCL_LZ4_NEW_PRIME_NUMBER "Enable the usage of a new prime number for LZ4 hashing function (Disabled by default)" OFF)
 option (AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES "Enable storing of additional potential matches to improve compression ratio. Recommended for higher compressibility use cases (Disabled by default)" OFF)
-option (AOCL_LZ4_HASH_BITS_USED "Control the number of bits used for LZ4 hashing, allowed values are LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (Disabled by default)" OFF)
 option (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL "Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)" OFF)
 option (AOCL_ENABLE_LOG_FEATURE "Enable logging support in library, for which log level is determined by environement variable AOCL_ENABLE_LOG (go through README.md) (Disabled by default)" OFF)
 option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression using SMP openMP threads (Disabled by default)" OFF)
-
+option (TEST_COVERAGE_THIRD_PARTY "Enable third party test bench based CTest suite (Disabled by default)" OFF)
+option (NATIVE_ENABLE_THREADS "Enable native multi-threaded compression for supported methods (Disabled by default)" OFF)
+option (AOCL_TEST_FUZZER "Enable AOCL Compression fuzzer (only on Linux with Clang compiler)" OFF)
+option (AOCL_TEST_FUZZER_WITH_CORPUS "Run fuzzer tests with corpus (only on Linux with Clang compiler)" OFF)
+option (ENABLE_FAST_MATH "Enable fast-math optimizations (Disabled by default)" OFF)
 
 option (AOCL_EXCLUDE_BZIP2 "Exclude BZIP2 compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_LZ4 "Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)" OFF)
@@ -89,6 +93,97 @@ option (AOCL_EXCLUDE_SNAPPY "Exclude SNAPPY compression method from the library 
 option (AOCL_EXCLUDE_ZLIB "Exclude ZLIB compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_ZSTD "Exclude ZSTD compression method from the library build (Disabled by default)" OFF)
 
+set(AOCL_LZ4_HASH_BITS_USED "LOW" CACHE STRING "Control the number of bits used for LZ4 hashing, allowed values are OFF, LOW (low perf gain and less CR regression) and HIGH (high perf gain and high CR regression) (LOW by default)")
+set_property(
+    CACHE AOCL_LZ4_HASH_BITS_USED
+    PROPERTY STRINGS
+    "OFF" "LOW" "HIGH"
+)
+
+set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for ZSTD" )
+set_property(
+    CACHE AOCL_DECOMPRESS_FAST
+    PROPERTY STRINGS
+    "OFF" "1" "2" # higher generally leads to faster decompression with larger compromise on compression speed/ratio
+)
+# Faster decompress settings for supported methods
+if(NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF")
+    # ZSTD
+    set(AOCL_ZSTD_WILDCOPY_LONG "ON") # >= 1 
+    # AOCL_DECOMPRESS_FAST = 2 is supported when compression is performed using ZSTD_compress, ZSTD_compressCCtx, ZSTD_compress_advanced or aocl_llc_compress APIs.
+    # LZ4
+    set(AOCL_LZ4_DECOMPRESS_FAST "ON")
+endif()
+
+if (AOCL_EXCLUDE_LZ4 AND NOT AOCL_EXCLUDE_LZ4HC)
+    # as lz4hc depends on lz4, it should be excluded along with lz4
+    message(WARNING "lz4hc is excluded as it depends on lz4")
+    set(AOCL_EXCLUDE_LZ4HC ON)
+endif()
+
+if (AOCL_EXCLUDE_BZIP2 AND AOCL_EXCLUDE_LZ4 AND AOCL_EXCLUDE_LZ4HC AND AOCL_EXCLUDE_LZMA AND AOCL_EXCLUDE_SNAPPY AND AOCL_EXCLUDE_ZLIB AND AOCL_EXCLUDE_ZSTD)
+    message(FATAL_ERROR "All compression methods are excluded. Unable to build library.")
+endif()
+
+# setup to get source code coverage(GCOV)
+if (CODE_COVERAGE)
+    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${CMAKE_C_COMPILER_ID} STREQUAL "GNU"))
+        # Switch off GCOV: target not supported
+        set(CODE_COVERAGE OFF)
+        message(WARNING "Target not supported. Code coverage is only supported on Linux OS with GCC compiler")
+    endif()
+endif()
+
+# setup to run memory check using AddressSanitizer 
+if (ASAN)
+    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug"))
+        # Switch off ASAN: target not supported
+        set(ASAN OFF)
+        message(WARNING "Target not supported. ASAN is only supported on Linux/Debug build")
+    endif()
+endif()
+
+# setup to run memory check using Valgrind
+if (VALGRIND)
+    if ((NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug")) OR ASAN)
+        set(VALGRIND OFF)
+        message(WARNING "Target not supported. VALGRIND is only supported with Linux/Debug build and incompatible with ASAN=ON")
+    endif()
+endif()
+
+# Enable CTest for any of these cases
+if(VALGRIND OR ASAN)
+    set(AOCL_TEST_COVERAGE ON)
+endif()
+
+# validating google fuzz test environment
+if(AOCL_TEST_FUZZER_WITH_CORPUS)
+    set(AOCL_TEST_FUZZER ON)
+endif()
+if(AOCL_TEST_FUZZER)
+    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${CMAKE_C_COMPILER_ID} STREQUAL "Clang"))
+        set(AOCL_TEST_FUZZER OFF)
+        message(WARNING  "Target not supported. Fuzz tests are only supported on Linux OS with Clang compiler")
+    endif()
+endif()
+if(AOCL_TEST_FUZZER)
+    set(AOCL_TEST_COVERAGE ON)
+endif()
+
+#CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=ON                                 : run coverage for aocl + third_party ctests
+#CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=OFF, TEST_COVERAGE_THIRD_PARTY=OFF : run coverage for aocl + third_party ctests
+#CODE_COVERAGE=ON, AOCL_TEST_COVERAGE=OFF, TEST_COVERAGE_THIRD_PARTY=ON  : run coverage for third_party ctests only
+if(CODE_COVERAGE)
+    set(AOCL_EXCLUDE_DEPRECATED_APIS ON) # exclude deprecated APIs while getting code coverage statistics
+    if(NOT (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY))
+        set(AOCL_TEST_COVERAGE ON) # enable maximum coverage
+    endif()
+endif()
+
+if(AOCL_TEST_COVERAGE)
+    set(TEST_COVERAGE_THIRD_PARTY ON) # enable to maximize test coverage
+endif()
+
 #list source files to be compiled for the library
 set (API_SRC_FILES  api/code_alignment.cpp
                     api/api.cpp
@@ -96,26 +191,6 @@ set (API_SRC_FILES  api/code_alignment.cpp
                     api/aocl_compression.h
                     api/codec.h
                     api/types.h)
-
-if (AOCL_ENABLE_THREADS AND WIN32)
-    #openmp support
-    find_package(OpenMP)
-    if (NOT OPENMP_FOUND)
-        set(AOCL_ENABLE_THREADS OFF)
-        message(WARNING "OpenMP not found. Library is not built with multi-threaded support.")
-    endif ()
-endif ()
-
-if (AOCL_ENABLE_THREADS)
-set (API_SRC_FILES  ${API_SRC_FILES}
-                    api/aocl_threads.h)
-endif()
-
-set (BENCH_PATH test)
-set (TESTBENCH_SRC_FILES 
-                    ${BENCH_PATH}/codec_bench.c 
-                    ${BENCH_PATH}/codec_native_api_bench.c 
-                    ${BENCH_PATH}/codec_bench.h)
 
 set (ALGOS_PATH algos)
 if (NOT AOCL_EXCLUDE_BZIP2)
@@ -127,10 +202,11 @@ set (BZIP2_SRC_FILES    ${ALGOS_PATH}/bzip2/code_alignment.c
                         ${ALGOS_PATH}/bzip2/compress.c
                         ${ALGOS_PATH}/bzip2/decompress.c
                         ${ALGOS_PATH}/bzip2/bzlib.c
-                        ${ALGOS_PATH}/bzip2/bzlib.h)
+                        ${ALGOS_PATH}/bzip2/bzlib.h
+                        ${ALGOS_PATH}/bzip2/libsais.c
+                        ${ALGOS_PATH}/bzip2/libsais.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
 set (LZ4_SRC_FILES  ${ALGOS_PATH}/lz4/code_alignment_lz4.c
@@ -139,15 +215,13 @@ set (LZ4_SRC_FILES  ${ALGOS_PATH}/lz4/code_alignment_lz4.c
                     ${ALGOS_PATH}/lz4/xxhash.c)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4")
 endif ()
-if (NOT AOCL_EXCLUDE_LZ4HC AND NOT AOCL_EXCLUDE_LZ4)
+if (NOT AOCL_EXCLUDE_LZ4HC)
 set (LZ4HC_SRC_FILES    ${ALGOS_PATH}/lz4/code_alignment_lz4hc.c
                         ${ALGOS_PATH}/lz4/lz4hc.c
                         ${ALGOS_PATH}/lz4/lz4hc.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZ4HC")
 endif ()
 if (NOT AOCL_EXCLUDE_LZMA)
 set (LZMA_SRC_FILES ${ALGOS_PATH}/lzma/code_alignment.c
@@ -169,7 +243,6 @@ set (LZMA_SRC_FILES ${LZMA_SRC_FILES}
 endif()
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_LZMA")
 endif ()
 if (NOT AOCL_EXCLUDE_SNAPPY)
 set (SNAPPY_SRC_FILES   ${ALGOS_PATH}/snappy/code_alignment.cc
@@ -180,7 +253,6 @@ set (SNAPPY_SRC_FILES   ${ALGOS_PATH}/snappy/code_alignment.cc
                         ${ALGOS_PATH}/snappy/snappy.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_SNAPPY")
 endif ()
 if (NOT AOCL_EXCLUDE_ZLIB)
 set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
@@ -205,10 +277,10 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/trees.c
                     ${ALGOS_PATH}/zlib/uncompr.c
                     ${ALGOS_PATH}/zlib/zutil.c
-                    ${ALGOS_PATH}/zlib/zlib.h)
+                    ${ALGOS_PATH}/zlib/zlib.h
+                    ${ALGOS_PATH}/zlib/aocl_zlib_utils.c)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()
 if (NOT AOCL_EXCLUDE_ZSTD)
 set (ZSTD_SRC_FILES ${ALGOS_PATH}/zstd/lib/common/code_alignment.c
@@ -245,10 +317,10 @@ set (ZSTD_SRC_FILES ${ALGOS_PATH}/zstd/lib/common/code_alignment.c
                     ${ALGOS_PATH}/zstd/lib/zstd.h)
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
-set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
 set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h
-                      ${ALGOS_PATH}/common/aoclAlgoOpt.h)
+                      ${ALGOS_PATH}/common/aoclAlgoOpt.h
+                      ${ALGOS_PATH}/common/aoclFds.h)
 set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.cpp
 						utils/utils.h)
@@ -259,27 +331,22 @@ if (AOCL_ENABLE_THREADS)
                            threads/threads.h)
 endif ()
 
-#set the expected path variables
-include_directories(.)
-include_directories(${ALGOS_PATH}/common/)
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-link_directories(${ROOT_DIR}/build/)
-set(DEST_LIB_PATH aocl_compression/lib)
-set(DEST_INC_PATH aocl_compression/include)
-set(DEST_BIN_PATH aocl_compression/bin)
+set(DEST_LIB_PATH lib)
+set(DEST_INC_PATH include)
+set(DEST_EXAMPLES_PATH examples)
+#set(DEST_BIN_PATH bin)
 
 set(INC_FILES api/aocl_compression.h
-              ${ALGOS_PATH}/common/aoclAlgoOpt.h)
-if (AOCL_ENABLE_THREADS)
-    set(INC_FILES ${INC_FILES} api/aocl_threads.h)
-endif ()
+              ${ALGOS_PATH}/common/aoclAlgoOpt.h
+              ${ALGOS_PATH}/common/aoclFds.h)
 if (NOT AOCL_EXCLUDE_BZIP2)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/bzip2/bzlib.h)
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lz4/lz4.h)
 endif ()
-if (NOT AOCL_EXCLUDE_LZ4HC AND NOT AOCL_EXCLUDE_LZ4)
+if (NOT AOCL_EXCLUDE_LZ4HC)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/lz4/lz4hc.h)
 endif ()
 if (NOT AOCL_EXCLUDE_LZMA)
@@ -335,34 +402,35 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
 else ()
     message(STATUS "Build type selected is Debug")
     add_compile_definitions(CFLAGS_SET1="${CMAKE_C_FLAGS_DEBUG}")
-	if (NOT (AOCL_TEST_COVERAGE OR VALGRIND OR ASAN OR CODE_COVERAGE))
-		set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DBZ_DEBUG")
-		set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DEBUG")
-		set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUGLEVEL=1")
-	else()
+	if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY) # disable asserts to allow execution of unit tests without intermediate exit
 		set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DNDEBUG")
 		set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DNDEBUG")
 		set_property(SOURCE ${LZMA_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DNDEBUG")
 		set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DNDEBUG")
+    else () # enable all debug flags
+		set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DBZ_DEBUG")
+		set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DEBUG")
+		set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUGLEVEL=1")
 	endif()
 endif()
 
 #set(USER_DEBUG_ON "-g")
 message(STATUS "C Compiler used: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ Compiler used: ${CMAKE_CXX_COMPILER}")
-if(ZLIB_DEFLATE_FAST_MODE)
-set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1;-DAOCL_ZLIB_DEFLATE_FAST_MODE=1")
-else()
 set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
-endif()
+find_package(OpenMP REQUIRED) # openmp required for all configurations
 if (WIN32)
 	if (CMAKE_BUILD_TYPE STREQUAL "Release")
-		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /fp:fast /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /fp:fast /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
 	else()
-		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /fp:fast /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /fp:fast /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
 	endif()
+    if(ENABLE_FAST_MATH)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /fp:fast")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fp:fast")
+    endif()
 	set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_EXPECT=1")
 if(NOT BUILD_STATIC_LIBS)
     set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DLL_EXPORT=1")
@@ -372,12 +440,20 @@ if(NOT BUILD_STATIC_LIBS)
     set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_DLL_EXPORT=1")
     set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DBZIP2_DLL_EXPORT=1")
+    if (TEST_COVERAGE_THIRD_PARTY)
+        set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DFSE_DLL_EXPORT=1")
+        set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DXXH_EXPORT=1")
+    endif()
 endif()
 elseif (UNIX)
-set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_FLAGS "-msse4.1")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing -ffast-math -fopenmp")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing -ffast-math -fopenmp")
-set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
+    set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_FLAGS "-msse4.1")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
+    if(ENABLE_FAST_MATH)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffast-math")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
+    endif()
+    set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
 endif()
 
 include(CheckIncludeFile)
@@ -408,7 +484,12 @@ if (AOCL_LZ4_HASH_BITS_USED)
         set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_HASH_BITS_USED=41")
     elseif(AOCL_LZ4_HASH_BITS_USED  STREQUAL "HIGH")
         set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_HASH_BITS_USED=44")
+    elseif(NOT AOCL_LZ4_HASH_BITS_USED  STREQUAL "OFF")
+        message(FATAL_ERROR "AOCL_LZ4_HASH_BITS_USED can only be LOW or HIGH, the provided value is:${AOCL_LZ4_HASH_BITS_USED}")
     endif()
+endif()
+if (AOCL_LZ4_DECOMPRESS_FAST)
+    set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_DECOMPRESS_FAST")
 endif()
 if (SNAPPY_MATCH_SKIP_OPT)
     set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_MATCH_SKIP_OPT")
@@ -419,10 +500,19 @@ endif()
 if (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST")
 endif()
+if (AOCL_DECOMPRESS_FAST)
+    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
+endif()
 if (AOCL_ZSTD_WILDCOPY_LONG)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_WILDCOPY_LONG")
 endif()
-
+if (TEST_COVERAGE_THIRD_PARTY OR NATIVE_ENABLE_THREADS)
+    set_property(SOURCE ${ZSTD_SRC_FILES}  APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_MULTITHREAD")
+endif()
+if(AOCL_EXCLUDE_DEPRECATED_APIS)
+    set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_DEPRECATED_APIS")
+    set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_DEPRECATED_APIS")
+endif()
 include(CheckCSourceCompiles)
 #
 # Check if we can hide zlib internal symbols that are linked between separate source files using hidden
@@ -443,8 +533,6 @@ add_compile_definitions(CXXCompiler="${CMAKE_CXX_COMPILER}")
 add_compile_definitions(CFLAGS_SET2="${CMAKE_C_FLAGS}")
 
 #set library and sources
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${ROOT_DIR}/lib)
 set(lib_name aocl_compression)
 set(SRC_FILES 
         ${UTILS_SRC_FILES}
@@ -464,63 +552,37 @@ set(SRC_FILES
 #common flag for aocl_compression_bench and gtest_combined_test
 set(AOCL_DYNAMIC_DISPATCHER ON)
 if (AOCL_DYNAMIC_DISPATCHER)
-    set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
+    set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
     option(ENABLE_STRICT_WARNINGS "Enable compiler flags to treat all warnings as errors (Enabled by default)" ON)
 else()
     set(ENABLE_STRICT_WARNINGS OFF)
 endif()
 
 if (AOCL_ENABLE_THREADS)
-    set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
-endif()
-
-# setup to get source code coverage(GCOV)
-if (CODE_COVERAGE)
-    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${CMAKE_C_COMPILER_ID} STREQUAL "GNU"))
-        # Switch off GCOV: target not supported
-        set(CODE_COVERAGE OFF)
-        message(WARNING "Target not supported. Code coverage is only supported on Linux OS with GCC compiler")
-    endif()
-endif()
-
-# setup to run memory check using AddressSanitizer 
-if (ASAN)
-    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug"))
-        # Switch off ASAN: target not supported
-        set(ASAN OFF)
-        message(WARNING "Target not supported. ASAN is only supported on Linux/Debug build")
-    endif()
-endif()
-
-# setup to run memory check using Valgrind
-if (VALGRIND)
-    if ((NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug")) OR ASAN)
-        set(VALGRIND OFF)
-        message(WARNING "Target not supported. VALGRIND is only supported with Linux/Debug build and incompatible with ASAN=ON")
-    endif()
-endif()
-
-# Enable CTest for any of the cases
-if(VALGRIND OR ASAN OR CODE_COVERAGE)
-    set(AOCL_TEST_COVERAGE ON)
+    set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
 endif()
 
 #setup CTest for GoogleTest and aocl_compression_bench test
-if (AOCL_TEST_COVERAGE)
+if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
     # enabling ctest
     enable_testing()
 
 	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_UNIT_TEST")
+    
+    if (AOCL_TEST_COVERAGE)
+        add_subdirectory(gtest)
+    endif()
 
-    add_subdirectory(gtest)
-    add_subdirectory(test)
+    if (TEST_COVERAGE_THIRD_PARTY)
+        add_subdirectory(test/third_party)
+    endif()
 endif()
 
 #Enabling strict warnings
 if(ENABLE_STRICT_WARNINGS)
     if (WIN32)
         #suppress warnings suggesting to use fopen_s, ... in place of fopen, ...
-        set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-D_CRT_SECURE_NO_WARNINGS")
+        set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-D_CRT_SECURE_NO_WARNINGS")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
         set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DENABLE_STRICT_WARNINGS")
@@ -539,8 +601,20 @@ else ()
     add_library(${lib_name} SHARED ${SRC_FILES})
     message(STATUS "Library type being built is: Shared")
 endif()
+set_target_properties(${lib_name}   PROPERTIES 
+                                    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+                                    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+                                    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
 
-
+add_custom_command(
+        TARGET ${lib_name}
+        POST_BUILD
+        COMMENT "Copy library to ${ROOT_DIR}/lib"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${ROOT_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ROOT_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${lib_name}> ${ROOT_DIR}/lib
+        )
 # add the compiler and linker flags for code coverage
 if (CODE_COVERAGE)
     target_compile_options(${lib_name} PUBLIC --coverage -fprofile-abs-path)
@@ -553,44 +627,59 @@ if (ASAN)
     target_link_options(${lib_name} PUBLIC -fsanitize=address)
 endif()
 
-set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
+set_target_properties(${lib_name} PROPERTIES PUBLIC_HEADER "${INC_FILES}")
 
-if (AOCL_ENABLE_THREADS AND WIN32)
-    if (OPENMP_FOUND)
-        target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
-    endif ()
+target_include_directories(${lib_name}
+                            PRIVATE ${CMAKE_SOURCE_DIR}
+                            PRIVATE ${ALGOS_PATH}/common
+                            PRIVATE api)
+
+if (OPENMP_FOUND)
+    target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
 endif ()
 
-#add executable
-set (exe_name aocl_compression_bench)
-
-if (WIN32)
-message(STATUS "C Compiler flags used for this windows build are: ${CMAKE_C_FLAGS}")
-message(STATUS "C++ Compiler flags used for this windows build are: ${CMAKE_CXX_FLAGS}")
-add_executable(${exe_name} ${TESTBENCH_SRC_FILES})
-else ()
-message(STATUS "C Compiler flags used for this Unix build are: ${CMAKE_C_FLAGS}")
-message(STATUS "C++ Compiler flags used for this Unix build are: ${CMAKE_CXX_FLAGS}")
-list(APPEND TESTBENCH_SRC_FILES ${BENCH_PATH}/ipp_codec_bench.c)
-add_executable(${exe_name} ${TESTBENCH_SRC_FILES})
-endif()
+#add benchmarking application and tests
+add_subdirectory(test)
 
 if (AOCL_ENABLE_LOG_FEATURE)
-	set_property(SOURCE ${SRC_FILES} ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_LOG_FEATURE")
+	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_LOG_FEATURE")
 endif()
 
-target_link_libraries(${exe_name} ${lib_name})
-target_link_libraries(${exe_name} ${CMAKE_DL_LIBS})
-
 #Install into destination path by using -DCMAKE_INSTALL_PREFIX=<path> while configuring cmake
-message(STATUS "AOCL COMPRESSION Library, Interface header files and Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")
-install(TARGETS ${exe_name} DESTINATION ${DEST_BIN_PATH})
-install(TARGETS ${lib_name} DESTINATION ${DEST_LIB_PATH})
-install(FILES ${INC_FILES} DESTINATION ${DEST_INC_PATH})
+message(STATUS "AOCL COMPRESSION Library, Interface header files will be installed at ${CMAKE_INSTALL_PREFIX}")
+install(TARGETS ${lib_name} 
+        DESTINATION ${DEST_LIB_PATH}
+        PUBLIC_HEADER DESTINATION ${DEST_INC_PATH})
 if (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL)
     install(DIRECTORY ${INC_XZ_UTILS_LZMA} DESTINATION ${DEST_INC_PATH} FILES_MATCHING PATTERN "*.h")
 endif()
+
+#Install examples
+set (EXAMPLES_PATH examples)
+if (NOT AOCL_EXCLUDE_BZIP2)
+    install(DIRECTORY ${EXAMPLES_PATH}/bzip2 DESTINATION ${DEST_EXAMPLES_PATH})
+endif()
+if (NOT AOCL_EXCLUDE_ZLIB)
+    install(DIRECTORY ${EXAMPLES_PATH}/zlib DESTINATION ${DEST_EXAMPLES_PATH})
+endif()
+if (NOT AOCL_EXCLUDE_LZ4)
+    install(DIRECTORY ${EXAMPLES_PATH}/lz4 DESTINATION ${DEST_EXAMPLES_PATH})
+endif()
+if (NOT AOCL_EXCLUDE_LZ4HC)
+    install(DIRECTORY ${EXAMPLES_PATH}/lz4hc DESTINATION ${DEST_EXAMPLES_PATH})
+endif()
+if (NOT AOCL_EXCLUDE_SNAPPY)
+    install(DIRECTORY ${EXAMPLES_PATH}/snappy DESTINATION ${DEST_EXAMPLES_PATH})
+endif()
+if (NOT AOCL_EXCLUDE_LZMA)
+    install(DIRECTORY ${EXAMPLES_PATH}/lzma DESTINATION ${DEST_EXAMPLES_PATH})
+endif()
+if (NOT AOCL_EXCLUDE_ZSTD)
+    install(DIRECTORY ${EXAMPLES_PATH}/zstd DESTINATION ${DEST_EXAMPLES_PATH})
+endif()
+install(DIRECTORY ${EXAMPLES_PATH}/api DESTINATION ${DEST_EXAMPLES_PATH})
+install(FILES ${EXAMPLES_PATH}/CMakeLists.txt DESTINATION ${DEST_EXAMPLES_PATH})
+install(FILES ${EXAMPLES_PATH}/README.md DESTINATION ${DEST_EXAMPLES_PATH})
 
 #Create symbolic links from expected library names to aocl library during non-static build
 function(create_sym_link_to_lib sym_name)
@@ -634,15 +723,6 @@ if(NOT BUILD_STATIC_LIBS)
     endif()
 endif()
 
-if((NOT BUILD_STATIC_LIBS) AND WIN32 AND AOCL_TEST_COVERAGE)
-    add_custom_command(
-        TARGET ${lib_name}
-        POST_BUILD
-        COMMENT "Copy DLL to GTest executables path"
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${lib_name}> ${CMAKE_BINARY_DIR}/gtest
-        )
-endif()
-
 #Uninstall the binary. library and header files using custom command
 add_custom_target("uninstall" COMMENT "Uninstalling the installed files from ${install_dir}")
 add_custom_command(
@@ -655,18 +735,10 @@ add_custom_command(
     )
 
 if (BUILD_DOC)
-    find_package(Doxygen 1.9.6)
-    set(W_DIR "${CMAKE_CURRENT_SOURCE_DIR}/docs")
-    if(NOT (DOXYGEN_FOUND))
-        message(STATUS "Doxygen not found please install doxygen and try again.")
-    else()
-        execute_process(COMMAND ${DOXYGEN_EXECUTABLE} Doxyfile
-                WORKING_DIRECTORY ${W_DIR}
-                COMMAND_ECHO STDOUT)
-    endif()
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/docs/html/index.html)
-        message(STATUS "Documentation generated successfully, to view documentation open docs/html/index.html .")
-    else()
-        message(STATUS "Document generation failed.")
-    endif()
+    add_subdirectory(docs)
+endif()
+
+if (BUILD_EXAMPLE)
+    set(ENABLE_EXAMPLE_OUTOFSRCTREE OFF)
+    add_subdirectory(examples)
 endif()

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -168,6 +168,26 @@ static UNUSED_ATTR const S16 OF_defaultNorm[DefaultMaxOff+1] = {
 #define OF_DEFAULTNORMLOG 5  /* for static allocation */
 static UNUSED_ATTR const U32 OF_defaultNormLog = OF_DEFAULTNORMLOG;
 
+
+/*
+* AOCL fast decompress settings (FDS) frame format:
+*
+* | <-- FDS Magic word (8 bytes) --> | <-- Settings (8 bytes) --> |
+*
+* Settings for AOCL ZSTD:
+* ------------------------------
+* Bit numbers       Description
+* ------------------------------
+* 0-1               No rep codes : 00 (all reps), 01 (no rep3), 10 (no rep3,2), 11 (no reps)
+* 2                 No external dictionary : 0 (ext dict might exist), 1 (no ext dict)
+* 3-5               No short offset : 0 (all offsets exist), N (No offsets < 2^N)
+* 6                 No large total bits : 0 (exist), 1 (totalBits < STREAM_ACCUMULATOR_MIN_64-(LLFSELog+MLFSELog+OffFSELog)))
+*
+*/
+#if AOCL_DECOMPRESS_FAST > 1
+// Metadata flags currently supported
+#define FDS_FAST2_NOTB_SO4_NOEXT_REP2 (U64)0x66 // 1 100 1 10, no large total bits, no offsets < 16, no external dictionary, no rep3,2
+#endif
 
 /*-*******************************************
 *  Shared functions to include for inlining

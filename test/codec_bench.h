@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -44,8 +44,9 @@
 #define strtok_r strtok_s
 #define strcasecmp _stricmp
 #endif
+#include <limits.h>
 
-#include "utils/utils.h"
+#include "utils.h"
 
 #define MAX_FILENAME_LEN 256
 
@@ -55,7 +56,7 @@
 //Size of input data to be processed in memory at a time
 //Few compression methods are limited by datatype upper bound (2^31 -1)
 //Output buffer needs extra space to accomodate the additional header bytes
-#define MAX_MEM_SIZE_FOR_FILE_READ 1073741824 //(1024 MBs)
+#define MAX_MEM_SIZE_FOR_FILE_READ 2147483647 //(2 GBs)
 
 //Uninitialized level value
 #define UNINIT_LEVEL 999
@@ -84,6 +85,10 @@ typedef struct
     AOCL_INTP upper_level;
     AOCL_INTP extra_param;
     AOCL_INTP max_block_size_param;
+    AOCL_INTP native_st_support; // single-threaded native APIs supported
+    AOCL_INTP native_mt_support; // multi-threaded native APIs supported
+    AOCL_INTP dict_support; // native APIs with external dictionary supported
+    AOCL_UINTP max_dst_size;
     const AOCL_CHAR* extension;
 } codec_list_t;
 
@@ -91,13 +96,13 @@ typedef struct
 //The list is ordered as per the enum aocl_compression_type
 static const codec_list_t codec_list[AOCL_COMPRESSOR_ALGOS_NUM] =
 {
-    {"LZ4",    0, 0,  0, 0, ".lz4"},
-    {"LZ4HC",  1, 12, 0, 0, ".lz4"},
-    {"LZMA",   0, 9,  0, 0, ".lzma"},
-    {"BZIP2",  1, 9,  0, 0, ".bz2"},
-    {"SNAPPY", 0, 0,  0, 0, ".snappy"},
-    {"ZLIB",   1, 9,  0, 0, ".zlib"},
-    {"ZSTD",   1, 22, 0, 0, ".zst"}
+    {"LZ4",    0, 0,  0, 0, 1, 0, 0, INT_MAX  , ".lz4"},
+    {"LZ4HC",  1, 12, 0, 0, 1, 0, 0, INT_MAX  , ".lz4"},
+    {"LZMA",   0, 9,  0, 0, 1, 0, 0, SIZE_MAX , ".lzma"},
+    {"BZIP2",  1, 9,  0, 0, 1, 0, 0, SIZE_MAX , ".bz2"},
+    {"SNAPPY", 0, 0,  0, 0, 1, 0, 0, SIZE_MAX , ".snappy"},
+    {"ZLIB",   1, 9,  0, 0, 1, 0, 0, ULONG_MAX, ".zlib"},
+    {"ZSTD",   1, 22, 0, 0, 1, 1, 1, SIZE_MAX , ".zst"}
 };
 
 //Main data structure for Test bench functionality
@@ -106,8 +111,10 @@ typedef struct
     AOCL_CHAR *inPtr;            //buffer containing input data
     AOCL_CHAR *outPtr;           //buffer containing output data
     AOCL_CHAR *decompPtr;        //buffer containing decompressed data for validation
+    AOCL_CHAR* dictPtr;          //buffer containing external dictionary data
     AOCL_UINTP inSize;           //input data length
     AOCL_UINTP outSize;          //output data length
+    AOCL_UINTP dictSize;         //dictionary data length
     AOCL_UINTP optVar;           //optional param used by compression method
     AOCL_INTP use_all_codecs;		
     AOCL_UINTP mem_limit;
@@ -121,7 +128,8 @@ typedef struct
     AOCL_INTP useIPP;
     AOCL_CHAR *ippDir;
     AOCL_INTP useNAPI;
-    FILE *fp;
+    FILE *fp;                    //file pointer for input data
+    FILE *fpDict;                //file pointer for dictionary data
     AOCL_CHAR *fName;
     AOCL_UINT64 cSize;           //size of compressed output
     AOCL_UINT64 dSize;           //size of decompressed output
@@ -144,9 +152,7 @@ typedef struct
 static aocl_log_ctx log_ctx = {-1};
 #endif /* AOCL_ENABLE_LOG_FEATURE */
 
-//Function declarations
-AOCL_INTP init(aocl_codec_bench_info *codec_bench_handle,
-          aocl_compression_desc *aocl_codec_handle);
+//Function declarations       
 AOCL_INTP read_user_options (AOCL_INTP argc,
                        AOCL_CHAR **argv,
                        aocl_codec_bench_info *codec_bench_handle);
@@ -158,4 +164,7 @@ AOCL_INTP native_api_bench_run(aocl_compression_desc *aocl_codec_handle,
                     aocl_codec_bench_info *codec_bench_handle);
 AOCL_VOID destroy(aocl_codec_bench_info *codec_bench_handle);
 
+//Log messages to console
+#define LOG_BENCH(logType, ...) \
+        printf(__VA_ARGS__);
 #endif

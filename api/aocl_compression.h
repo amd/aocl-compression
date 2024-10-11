@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -83,7 +83,7 @@ extern "C" {
 #endif
 #endif
 
-#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 4.2.0"
+#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 5.0.0"
 #define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 3.0"
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
@@ -94,7 +94,8 @@ extern "C" {
   */
 typedef enum
 {
-    ERR_INVALID_INPUT = -5,        ///<Invalid input parameter provided
+    ERR_MEMORY_ALLOC = -6,         ///<Memory allocation failure
+    ERR_INVALID_INPUT,             ///<Invalid input parameter provided
     ERR_UNSUPPORTED_METHOD,        ///<Compression method not supported by the library
     ERR_EXCLUDED_METHOD,           ///<Compression method excluded from this library build
     ERR_COMPRESSION_FAILED,        ///<Failure during compression/decompression
@@ -150,6 +151,27 @@ typedef struct
                                4 - AVX512 optimizations                               */
     //size_t chunk_size; //Unused variable
 } aocl_compression_desc;
+
+/**
+ * @brief Interface API to provide the maximum size that compression may output in a "worst case" scenario (input data not compressible).
+ * 
+ * This function is primarily useful for memory allocation purposes (destination buffer size).
+ * 
+ * | Parameters | Direction   | Description |
+ * |:-----------|:-----------:|:------------|
+ * | \b codec_type | in      | Select the algorithm to be used for compression, choose from aocl_compression_type. |
+ * | \b inSize     | in      | The size of input data to be compressed in bytes. |
+ * 
+ * @note inSize cannot exceed maximum supported value for respective codec_type.
+ * 
+ * @return 
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    |Returns an upper bound on the compressed size.      |
+ * | Fail       |`ERR_COMPRESSION_FAILED`                            |
+ */
+EXPORT_SYM_DYN int64_t aocl_llc_compressBound(aocl_compression_type codec_type,
+                                            size_t inSize);
 
 /**
  * @brief Interface API to compress data.
@@ -229,6 +251,30 @@ EXPORT_SYM_DYN void aocl_llc_destroy(aocl_compression_desc *handle,
  */
 
 EXPORT_SYM_DYN const char *aocl_llc_version(void);
+
+/**
+ * @brief Interface API to get the length of the RAP frame in the compressed stream.
+ *
+ * Legacy single threaded decompressors can call this API to know how many bytes of the compressed
+ * stream to skip to get the format compliant compressed stream that they can decompress.
+ * 
+ * @note  Presence of RAP frame is determined by checking for the magic word: 0x434C4C5F4C434F41 
+ *        (ASCII encoding of AOCL_LLC) at the start of the stream.
+ *
+ * | Parameters      | Direction   | Description |
+ * |:----------------|:-----------:|:------------|
+ * | \b src          | in          | Input stream buffer pointer. |
+ * | \b src_size     | in          | Input stream buffer size. |
+ * 
+ * @return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | RAP_frame_length | Length of RAP frame bytes in src |
+ * | 0                | If RAP frame does not exist      |
+ * | Fail             | `ERR_INVALID_INPUT`              |
+ *
+ */
+EXPORT_SYM_DYN int32_t aocl_llc_skip_rap_frame(char* src, int32_t src_size);
 
 /**
  * @}
