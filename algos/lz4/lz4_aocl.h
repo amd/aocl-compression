@@ -220,7 +220,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_COMPRESS_GENERIC_FUNC(
     U32 forwardH;
 
     LOG_FORMATTED(INFO, logCtx, "srcSize=%i, maxOutputSize=%i tableType=%u", inputSize, maxOutputSize, tableType);
-    DEBUGLOG(5, __FUNCTION__": srcSize=%i, tableType=%u", inputSize, tableType);
+    DEBUGLOG(5, "%s: srcSize=%i, tableType=%u", FUNC_NAME, inputSize, tableType);
     assert(ip != NULL);
     /* If init conditions are not met, we don't have to mark stream
      * as having dirty context, since no action was taken yet */
@@ -676,7 +676,7 @@ _last_literals:
     AOCL_LZ4_CGV_SET_RETURN_VALUES
     
     LOG_FORMATTED(INFO, logCtx, "Compressed %i bytes into %i bytes", inputSize, result);
-    DEBUGLOG(5, __FUNCTION__": compressed %i bytes into %i bytes", inputSize, result);
+    DEBUGLOG(5, "%s: compressed %i bytes into %i bytes", FUNC_NAME, inputSize, result);
     return result;
 }
 #endif
@@ -706,7 +706,7 @@ _last_literals:
             LOG_UNFORMATTED(logType, logCtx, str)
 
     #define AOCL_LZ4_DGV_LOG_FORMATTED(logType, logCtx, str, ...)  \
-            LOG_FORMATTED(logType, logCtx, str, ...)
+            LOG_FORMATTED(logType, logCtx, str, __VA_ARGS__)
 
     #define AOCL_LZ4_DGV_LONG_MATCH \
             size_t const addl = read_variable_length(&ip, iend - LASTLITERALS + 1, 0); \
@@ -745,7 +745,7 @@ _last_literals:
             LOG_FORMATTED(logType, logCtx, AOCL_LZ4_DGV_LOG_PREFIX str, omp_get_thread_num())
 
     #define AOCL_LZ4_DGV_LOG_FORMATTED(logType, logCtx, str, ...)  \
-            LOG_FORMATTED(logType, logCtx, AOCL_LZ4_DGV_LOG_PREFIX str, omp_get_thread_num(), ...)
+            LOG_FORMATTED(logType, logCtx, AOCL_LZ4_DGV_LOG_PREFIX str, omp_get_thread_num(), __VA_ARGS__)
 
     #define AOCL_LZ4_DGV_LONG_MATCH \
             if (is_last_thread) { \
@@ -844,7 +844,7 @@ AOCL_LZ4_DECOMPRESS_GENERIC_FUNC(
         size_t length;
 
         AOCL_LZ4_DGV_LOG_FORMATTED(INFO, logCtx, "srcSize:%i, dstSize:%i", srcSize, outputSize);
-        DEBUGLOG(5, __FUNCTION__" (srcSize:%i, dstSize:%i)", srcSize, outputSize);
+        DEBUGLOG(5, "%s: (srcSize:%i, dstSize:%i)", FUNC_NAME, srcSize, outputSize);
 
         /* Special cases */
         assert(lowPrefix <= op);
