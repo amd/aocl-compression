@@ -1563,11 +1563,12 @@ void BZ_API(BZ2_bzReadGetUnused)
 }
 #endif
 
-
+#ifdef AOCL_UNIT_TEST
 int Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq)
 {
    return libsais(T, SA, n, fs, freq);
 }
+#endif /* AOCL_UNIT_TEST */
 
 /*---------------------------------------------------*/
 /*--- Misc convenience stuff                      ---*/

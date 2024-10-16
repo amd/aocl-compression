@@ -668,7 +668,7 @@ public:
         string bwt = "";
         for(int i=0;i<n;i++)
         {
-            bwt += s[(dest[i]-1+n)%n];
+            bwt += (unsigned char)dest[i];
         }
 
         // Buckets of each character are initialized,

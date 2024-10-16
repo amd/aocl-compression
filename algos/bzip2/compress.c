@@ -231,6 +231,125 @@ void generateMTFValues ( EState* s )
    s->nMTF = wr;
 }
 
+#ifdef AOCL_BZIP2_OPT
+static
+void AOCL_generateMTFValues_from_libsais_output ( EState* s )
+{
+   UChar   yy[256];
+   Int32   i, j;
+   Int32   zPend;
+   Int32   wr;
+   Int32   EOB;
+
+   /* 
+      After sorting (eg, here),
+         s->arr1 [ 0 .. s->nblock-1 ] holds sorted order,
+         and
+         ((UChar*)s->arr2) [ 0 .. s->nblock-1 ] 
+         holds the original block data.
+
+      The first thing to do is generate the MTF values,
+      and put them in
+         ((UInt16*)s->arr1) [ 0 .. s->nblock-1 ].
+      Because there are strictly fewer or equal MTF values
+      than block values, ptr values in this area are overwritten
+      with MTF values only when they are no longer needed.
+
+      The final compressed bitstream is generated into the
+      area starting at
+         (UChar*) (&((UChar*)s->arr2)[s->nblock])
+
+      These storage aliases are set up in bzCompressInit(),
+      except for the last one, which is arranged in 
+      compressBlock().
+   */
+   UInt32* ptr   = s->ptr;
+   UInt16* mtfv  = s->mtfv;
+
+   makeMaps_e ( s );
+   EOB = s->nInUse+1;
+
+   for (i = 0; i <= EOB; i++) s->mtfFreq[i] = 0;
+
+   wr = 0;
+   zPend = 0;
+   for (i = 0; i < s->nInUse; i++) yy[i] = (UChar) i;
+
+   for (i = 0; i < s->nblock; i++) {
+      UChar ll_i;
+      AssertD ( wr <= i, "AOCL_generateMTFValues_from_libsais_output(1)" );
+      /*
+         Earlier (in original function)
+            accessing current character: block[ptr[i]-1]
+         After Change to libsais output
+            accessing current character: ptr[i]
+      */
+      ll_i = s->unseqToSeq[ptr[i]];
+      AssertD ( ll_i < s->nInUse, "AOCL_generateMTFValues_from_libsais_output(2a)" );
+
+      if (yy[0] == ll_i) { 
+         zPend++;
+      } else {
+
+         if (zPend > 0) {
+            zPend--;
+            while (True) {
+               if (zPend & 1) {
+                  mtfv[wr] = BZ_RUNB; wr++; 
+                  s->mtfFreq[BZ_RUNB]++; 
+               } else {
+                  mtfv[wr] = BZ_RUNA; wr++; 
+                  s->mtfFreq[BZ_RUNA]++; 
+               }
+               if (zPend < 2) break;
+               zPend = (zPend - 2) / 2;
+            };
+            zPend = 0;
+         }
+         {
+            register UChar  rtmp;
+            register UChar* ryy_j;
+            register UChar  rll_i;
+            rtmp  = yy[1];
+            yy[1] = yy[0];
+            ryy_j = &(yy[1]);
+            rll_i = ll_i;
+            while ( rll_i != rtmp ) {
+               register UChar rtmp2;
+               ryy_j++;
+               rtmp2  = rtmp;
+               rtmp   = *ryy_j;
+               *ryy_j = rtmp2;
+            };
+            yy[0] = rtmp;
+            j = ryy_j - &(yy[0]);
+            mtfv[wr] = j+1; wr++; s->mtfFreq[j+1]++;
+         }
+
+      }
+   }
+
+   if (zPend > 0) {
+      zPend--;
+      while (True) {
+         if (zPend & 1) {
+            mtfv[wr] = BZ_RUNB; wr++; 
+            s->mtfFreq[BZ_RUNB]++; 
+         } else {
+            mtfv[wr] = BZ_RUNA; wr++; 
+            s->mtfFreq[BZ_RUNA]++; 
+         }
+         if (zPend < 2) break;
+         zPend = (zPend - 2) / 2;
+      };
+      zPend = 0;
+   }
+
+   mtfv[wr] = EOB; wr++; s->mtfFreq[EOB]++;
+
+   s->nMTF = wr;
+}
+#endif /* AOCL_BZIP2_OPT */
 
 /*---------------------------------------------------*/
 #define BZ_LESSER_ICOST  0
@@ -613,6 +732,7 @@ void BZ2_compressBlock ( EState* s, Bool is_last_block )
          VPrintf4( "    block %d: crc = 0x%08x, "
                    "combined CRC = 0x%08x, size = %d\n",
                    s->blockNo, s->blockCRC, s->combinedCRC, s->nblock );
+#ifdef AOCL_BZIP2_OPT
       /*
          SA-IS implementation of BWT, atmost additional memory that can be needed is s->block * 6,
          max s->block is 9*10^5,
@@ -621,6 +741,7 @@ void BZ2_compressBlock ( EState* s, Bool is_last_block )
       if(AOCL_use_libsais)
          s->origPtr = libsais(s->block, (Int32 *)s->ptr, s->nblock, 0, NULL);
       else
+#endif /* AOCL_BZIP2_OPT */
          BZ2_blockSort ( s );
    }
 
@@ -656,7 +777,12 @@ void BZ2_compressBlock ( EState* s, Bool is_last_block )
       bsW(s,1,0);
 
       bsW ( s, 24, s->origPtr );
-      generateMTFValues ( s );
+#ifdef AOCL_BZIP2_OPT
+      if(AOCL_use_libsais)
+         AOCL_generateMTFValues_from_libsais_output ( s );
+      else
+#endif /* AOCL_BZIP2_OPT */
+         generateMTFValues ( s );
       sendMTFValues ( s );
    }
 

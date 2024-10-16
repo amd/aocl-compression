@@ -5033,7 +5033,7 @@ static sa_sint_t AOCL_libsais_final_sorting_scan_left_to_right_8u(const uint8_t 
             p--;
             // Whenever the integer is made negative, those will be skipped to consider for sorting
             // SA[i] = p ^ SAINT_MIN; makes the integers positive if they are negative already
-            // Below negative sign will be formed if prev char is S
+            // Below, negative sign will be formed if prev char is S
             SA[induction_bucket[T[p]]++] = p | ((sa_sint_t)(T[p - 1] < T[p]) << (SAINT_BIT - 1));
         }
         else if(p == 1)
@@ -5087,7 +5087,7 @@ static void libsais_final_sorting_scan_left_to_right_32s(const sa_sint_t * RESTR
             p--;
             // Whenever the integer is made negative, those will be skipped to consider for sorting
             // SA[i] = p ^ SAINT_MIN; makes the integers positive if they are negative already
-            // Below negative sign will be formed if prev char is S
+            // Below, negative sign will be formed if prev char is S
             SA[induction_bucket[T[p]]++] = p | ((sa_sint_t)(T[p - 1] < T[p]) << (SAINT_BIT - 1));
         }
         else if(p == 1)
@@ -5719,24 +5719,26 @@ static sa_sint_t AOCL_libsais_final_sorting_scan_right_to_left_8u(const uint8_t 
     for (i = omp_block_start + omp_block_size - 1, j = omp_block_start; i >= j; i -= 1)
     {
         sa_sint_t p = SA[i];
-        SA[i] = p & SAINT_MAX;
+        sa_sint_t temp = p & SAINT_MAX;
+        uint8_t c = T[(temp > 0)?(temp-1):(omp_block_size-1)];
+        SA[i] = c;
         if (p > 1)
         {
             p--;
             // Whenever the integer is made negative, those will be skipped to consider for sorting
             // SA[i] = p ^ SAINT_MIN; makes the integers positive if they are negative already
-            SA[--induction_bucket[T[p]]] = p | ((sa_sint_t)(T[p - (p > 0)] > T[p]) << (SAINT_BIT - 1));
+            SA[--induction_bucket[c]] = p | ((sa_sint_t)(T[p - (p > 0)] > c) << (SAINT_BIT - 1));
         }
         else if(p == 1)
         {
             p--;
-            SA[--induction_bucket[T[p]]] = p | ((sa_sint_t)(T[(omp_block_size + p - 1)%omp_block_size] > T[p]) << (SAINT_BIT - 1));
-            zero_index = induction_bucket[T[p]];
+            SA[--induction_bucket[c]] = p | ((sa_sint_t)(T[(omp_block_size + p - 1)%omp_block_size] > c) << (SAINT_BIT - 1));
+            zero_index = induction_bucket[c];
         }
         else if(p == 0)
         {
             p = omp_block_size-1;
-            SA[--induction_bucket[T[p]]] = p | ((sa_sint_t)(T[(omp_block_size + p - 1)%omp_block_size] > T[p]) << (SAINT_BIT - 1));
+            SA[--induction_bucket[c]] = p | ((sa_sint_t)(T[(omp_block_size + p - 1)%omp_block_size] > c) << (SAINT_BIT - 1));
         }
     }
     return zero_index;
@@ -7709,12 +7711,12 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
     else
     {
         /*
-            If `m` is zero, which means there is no LMS indexes, this case occurs only when all elements are same,
-            in such cases the order of indexes doesn't matter, so initiating each index with certain order according to the order of occurrence.
+            If `m` is zero, which means there is no LMS indexes, this case occurs only when all elements are same.
+            Hence initializing all elements to same character.
         */
         for(int i=0;i<n;i++)
         {
-            SA[i] = i;
+            SA[i] = T[0];
         }
         return 0;
     }
@@ -7846,7 +7848,11 @@ int32_t libsais(const uint8_t * T, int32_t * SA, int32_t n, int32_t fs, int32_t 
     else if (n < 2)
     {
         if (freq != NULL) { memset(freq, 0, ALPHABET_SIZE * sizeof(int32_t)); }
+#ifndef AOCL_BWT
         if (n == 1) { SA[0] = 0; if (freq != NULL) { freq[T[0]]++; } }
+#else
+        if (n == 1) { SA[0] = T[0]; if (freq != NULL) { freq[T[0]]++; } }
+#endif /* AOCL_BWT */
         return 0;
     }
 
