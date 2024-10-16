@@ -1307,7 +1307,7 @@ inline uint32_t ExtractOffset(uint32_t val, size_t tag_type) {
   static constexpr uint32_t kExtractMasks[4] = {0, 0xFF, 0xFFFF, 0};
   return val & kExtractMasks[tag_type];
 #endif
-};
+}
 
 /*
 std::pair<const uint8_t*, ptrdiff_t> DecompressBranchless(
@@ -3898,6 +3898,10 @@ size_t MaxCompressedLength_mt(size_t source_bytes) {
 #ifdef AOCL_SNAPPY_OPT
 
 namespace internal {
+/**
+ * AOCL_CompressFragment_c calls TableEntry_c.
+ * Early loads data at candidate in do-while loop under emit_match.
+*/
 char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
                        uint16_t* table, const int table_size) {
   // "ip" is the input pointer, and "op" is the output pointer.
@@ -4237,7 +4241,10 @@ bool AOCL_SAW_RawUncompress_avx(const char* compressed, size_t compressed_length
 
 namespace internal {
 AOCL_SNAPPY_TARGET_AVX
-//Derived from AOCL_CompressFragment_c. Calls TableEntry_crc32.
+/**
+ * Derived from AOCL_CompressFragment_c. Calls TableEntry_crc32.
+ * Post encoding a match, updates table[Hash(ip, mask)] and then table[Hash(ip-1, mask)].
+*/
 char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op,
                        uint16_t* table, const int table_size) {
   // "ip" is the input pointer, and "op" is the output pointer.
@@ -4408,12 +4415,12 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
         // We are now looking for a 4-byte match again.  We read
         // table[Hash(ip, mask)] for that.  To improve compression,
         // we also update table[Hash(ip - 1, mask)] and table[Hash(ip, mask)].
-        *TableEntry_crc32(table, LittleEndian::Load32(ip - 1), mask) =
-            ip - base_ip - 1;
+        uint32_t prevIpData = LittleEndian::Load32(ip - 1);
         uint16_t* table_entry = TableEntry_crc32(table, data, mask);
         candidate = base_ip + *table_entry;
         candidate_data = LittleEndian::Load32(candidate);
         *table_entry = ip - base_ip;
+        *TableEntry_crc32(table, prevIpData, mask) = ip - base_ip - 1;
         // Measurements on the benchmarks have shown the following probabilities
         // for the loop to exit (ie. avg. number of iterations is reciprocal).
         // BM_Flat/6  txt1    p = 0.3-0.4
