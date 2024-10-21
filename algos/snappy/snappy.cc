@@ -150,6 +150,9 @@ void MemCopy64_c(char* dst, const void* src, size_t size);
 void MemCopy64_c(ptrdiff_t dst, const void* src, size_t size);
 bool Uncompress_c(Source* compressed, Sink* uncompressed);
 bool SAW_RawUncompress_c(const char* compressed, size_t compressed_length, char* uncompressed);
+namespace {
+uint32_t CalculateTableSize(uint32_t input_size);
+}
 
 template <typename T>
 bool InternalGetUncompressedLength(Source* source, uint32_t* result);
@@ -164,6 +167,7 @@ char* CompressFragment_c(const char* input, size_t input_size, char* op,
     uint16_t* table, const int table_size);
 }
 
+uint32_t (*CalculateTableSize_fp)(uint32_t input_size) = CalculateTableSize;
 static bool (*GetUncompressedLengthInternal_fp)(Source* source, uint32_t* result) 
     = InternalGetUncompressedLength<with_avx>;
 static char* (*SNAPPY_compress_fragment_fp)(const char* input,
@@ -230,6 +234,11 @@ bool (*InternalUncompressDirectArray_fp)(Source* r, SnappyArrayWriter* writer,
 size_t MaxCompressedLength_st(size_t source_bytes);
 
 #ifdef AOCL_SNAPPY_OPT
+#ifndef AOCL_SNAPPY_HIGH_COMPRESSION
+namespace {
+uint32_t AOCL_CalculateTableSize(uint32_t input_size);
+}
+#endif /* AOCL_SNAPPY_HIGH_COMPRESSION */
 namespace internal {
 char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
     uint16_t* table, const int table_size);
@@ -911,7 +920,7 @@ uint32_t CalculateTableSize(uint32_t input_size) {
 namespace internal {
 WorkingMemory::WorkingMemory(size_t input_size) {
   const size_t max_fragment_size = std::min(input_size, kBlockSize);
-  const size_t table_size = CalculateTableSize(max_fragment_size);
+  const size_t table_size = CalculateTableSize_fp(max_fragment_size);
   size_ = table_size * sizeof(*table_) + max_fragment_size +
           MaxCompressedLength(max_fragment_size);
   mem_ = std::allocator<char>().allocate(size_);
@@ -926,7 +935,7 @@ WorkingMemory::~WorkingMemory() {
 
 uint16_t* WorkingMemory::GetHashTable(size_t fragment_size,
                                       int* table_size) const {
-  const size_t htsize = CalculateTableSize(fragment_size);
+  const size_t htsize = CalculateTableSize_fp(fragment_size);
   memset(table_, 0, htsize * sizeof(*table_));
   *table_size = htsize;
   return table_;
@@ -2594,6 +2603,7 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
     {
         //C version
         SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress_c;
+        CalculateTableSize_fp          = CalculateTableSize;
 #ifdef AOCL_ENABLE_THREADS
         SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
 #endif
@@ -2628,6 +2638,9 @@ static void aocl_register_snappy_fmv(int optOff, int optLevel) {
     }
     else
     {
+#if defined(AOCL_SNAPPY_OPT) && !defined(AOCL_SNAPPY_HIGH_COMPRESSION)
+        CalculateTableSize_fp              = AOCL_CalculateTableSize;
+#endif /* AOCL_SNAPPY_OPT && !AOCL_SNAPPY_HIGH_COMPRESSION */
         switch (optLevel)
         {
         case 0://C version
@@ -3896,6 +3909,24 @@ size_t MaxCompressedLength_mt(size_t source_bytes) {
 #endif
 
 #ifdef AOCL_SNAPPY_OPT
+#ifndef AOCL_SNAPPY_HIGH_COMPRESSION
+namespace {
+uint32_t AOCL_CalculateTableSize(uint32_t input_size) {
+  static_assert(
+      AOCL_kMaxHashTableSize >= kMinHashTableSize,
+      "AOCL_kMaxHashTableSize should be greater or equal to kMinHashTableSize.");
+  if (input_size > AOCL_kMaxHashTableSize) {
+    return AOCL_kMaxHashTableSize;
+  }
+  if (input_size < kMinHashTableSize) {
+    return kMinHashTableSize;
+  }
+  // This is equivalent to Log2Ceiling(input_size), assuming input_size > 1.
+  // 2 << Log2Floor(x - 1) is equivalent to 1 << (1 + Log2Floor(x - 1)).
+  return 2u << Bits::Log2Floor(input_size - 1);
+}
+}  // namespace
+#endif /* AOCL_SNAPPY_HIGH_COMPRESSION */
 
 namespace internal {
 /**
@@ -4459,6 +4490,7 @@ __attribute__((aligned(32)))
 /* Derived from DecompressAllTags_bmi. 
    + DecompressBranchless loop removed
    + char_table used in place of kLengthMinusOffset
+   + Data access optimizations related to early loading of data (for clang).
 */
 AOCL_SNAPPY_TARGET_AVX2
 void SnappyDecompressor<with_bmi_avx>::DecompressAllTags_bmi<AOCL_SnappyArrayWriter_AVX>(AOCL_SnappyArrayWriter_AVX* writer) {
@@ -4504,6 +4536,9 @@ void SnappyDecompressor<with_bmi_avx>::DecompressAllTags_bmi<AOCL_SnappyArrayWri
       // txt[1-4]        25%        75%
       // pb              24%        76%
       // bin             24%        76%
+#if defined(__clang__)
+      uint32_t ipData = LittleEndian::Load32(ip);
+#endif
       if (SNAPPY_PREDICT_FALSE((c & 0x3) == LITERAL)) {
         size_t literal_length = (c >> 2) + 1u;
         if (writer->TryFastAppend(ip, ip_limit_ - ip, literal_length, &op)) {
@@ -4519,7 +4554,11 @@ void SnappyDecompressor<with_bmi_avx>::DecompressAllTags_bmi<AOCL_SnappyArrayWri
           // Long literal.
           const size_t literal_length_length = literal_length - 60;
           literal_length =
+#if defined(__clang__)
+              ExtractLowBytes_bmi(ipData, literal_length_length) +
+#else
               ExtractLowBytes_bmi(LittleEndian::Load32(ip), literal_length_length) +
+#endif
               1;
           ip += literal_length_length;
         }
@@ -4549,8 +4588,12 @@ void SnappyDecompressor<with_bmi_avx>::DecompressAllTags_bmi<AOCL_SnappyArrayWri
           if (!writer->AppendFromSelf(copy_offset, length, &op)) goto exit;
         } else {
           const uint32_t entry = char_table[c];
+#if defined(__clang__)
+          const uint32_t trailer = ExtractLowBytes_bmi(ipData, c & 3);
+#else
           preload = LittleEndian::Load32(ip);
           const uint32_t trailer = ExtractLowBytes_bmi(preload, c & 3);
+#endif
           const uint32_t length = entry & 0xff;
 
           // copy_offset/256 is encoded in bits 8..10.  By just fetching
@@ -4562,7 +4605,11 @@ void SnappyDecompressor<with_bmi_avx>::DecompressAllTags_bmi<AOCL_SnappyArrayWri
           ip += (c & 3);
           // By using the result of the previous load we reduce the critical
           // dependency chain of ip to 4 cycles.
+#if defined(__clang__)
+          preload = ipData >> ((c & 3) * 8);
+#else
           preload >>= (c & 3) * 8;
+#endif
           if (ip < ip_limit_min_maxtaglen_) continue;
         }
         MAYBE_REFILL();

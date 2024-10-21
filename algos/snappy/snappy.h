@@ -799,6 +799,10 @@ namespace snappy {
 
   static constexpr int kMaxHashTableBits = 15;
   static constexpr size_t kMaxHashTableSize = 1 << kMaxHashTableBits;
+#if defined(AOCL_SNAPPY_OPT) && !defined(AOCL_SNAPPY_HIGH_COMPRESSION)
+  static constexpr int AOCL_kMaxHashTableBits = 14;
+  static constexpr size_t AOCL_kMaxHashTableSize = 1 << AOCL_kMaxHashTableBits;
+#endif
 
     /* AOCL-Compression defined setup function that configures with the right
 *  AMD optimized snappy routines depending upon the detected CPU features. */
