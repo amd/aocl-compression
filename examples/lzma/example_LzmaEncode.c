@@ -98,8 +98,8 @@ int main(int argc, char** argv)
     printf("Compression: done\n");
 
     // 3. decompress
-    outLen = inpSize;
     SizeT srcLen = (LZMA_PROPS_SIZE + outLen) - LZMA_PROPS_SIZE;
+    outLen = inpSize;
     ELzmaStatus status;
     resultDecomp = LzmaDecode(decompPtr, &outLen, compPtr + LZMA_PROPS_SIZE, &srcLen, compPtr,
                               LZMA_PROPS_SIZE, LZMA_FINISH_END, &status, &lzma_alloc);
