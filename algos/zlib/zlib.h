@@ -2355,7 +2355,7 @@ ZEXTERN uLong ZEXPORT adler32(uLong adler, const Bytef *buf, uInt len);
  * @brief AOCL-Compression optimized adler32 checksum for zlib.
  */
 
-ZEXTERN uint32_t ZEXPORT adler32_x86(uint32_t adler, const Bytef *buf, z_size_t len);
+ZEXTERN uInt ZEXPORT adler32_x86(uInt adler, const Bytef *buf, z_size_t len);
 
 /**
   @brief Same as adler32(), but with a size_t length.

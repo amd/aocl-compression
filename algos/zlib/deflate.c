@@ -643,6 +643,9 @@ local int aocl_deflateInit2__opt(z_streamp strm, int level, int method,
 #endif
     s->level = level;
     s->strategy = strategy;
+#ifdef AOCL_ZLIB_OPT 
+    s->block_open = 0;
+#endif
     s->method = (Byte)method;
 
     return deflateReset(strm);
@@ -2427,11 +2430,11 @@ static void aocl_setup_deflate_fmv(int optOff, int optLevel)
     }
 }
 
-void ZLIB_INTERNAL aocl_setup_deflate(int optOff, int optLevel)
+void ZLIB_INTERNAL aocl_setup_deflate(int _optOff, int optLevel)
 {
     AOCL_ENTER_CRITICAL(setup_zlib_deflate)
     if (!setup_ok_zlib_deflate) {
-        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        optOff = _optOff ? 1 : get_disable_opt_flags(0);
         aocl_setup_tree(optOff, optLevel);
         aocl_setup_deflate_fmv(optOff, optLevel);
         setup_ok_zlib_deflate = 1;

@@ -75,6 +75,15 @@ ZEXTERN void ZEXPORT aocl_destroy_zlib (void) {
 #endif /* AOCL_ZLIB_OPT */
 }
 
+#if defined(AOCL_UNIT_TEST)
+ZEXTERN void ZEXPORT test_aocl_zlib_set_enable_dquick(int val) {
+    if (val)
+        set_env_var("AOCL_ZLIB_QUICK_MODE", "1");
+    else
+        unset_env_var("AOCL_ZLIB_QUICK_MODE");
+}
+#endif
+
 #ifdef AOCL_ENABLE_THREADS
 #define ZLIB_MT_WINDOW_LEN (32768 << 1)
 #include <string.h>
