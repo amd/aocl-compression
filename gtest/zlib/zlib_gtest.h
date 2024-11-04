@@ -58,6 +58,7 @@ extern "C" {
 }
 #endif
 #include "algos/zlib/aocl_send_bits.h"
+#include "algos/zlib/crc32_x86.h"
 #include "api/aocl_compression.h"
 #include "gtest/gtest.h"
 

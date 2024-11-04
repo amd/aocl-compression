@@ -261,6 +261,8 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/adler32_x86.c
                     ${ALGOS_PATH}/zlib/compress.c
                     ${ALGOS_PATH}/zlib/crc32.c
+                    ${ALGOS_PATH}/zlib/crc32_x86_pclmul.c
+                    ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
                     ${ALGOS_PATH}/zlib/deflate.c
                     ${ALGOS_PATH}/zlib/deflate_medium.c
                     ${ALGOS_PATH}/zlib/deflate_quick.c
@@ -325,6 +327,8 @@ set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h
 set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.cpp
 						utils/utils.h)
+# Source files utilizing AVX-512 and higher ISA extensions
+set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c)
 
 if (AOCL_ENABLE_THREADS)
     set (THREADS_SRC_FILES threads/code_alignment.c
@@ -433,6 +437,7 @@ if (WIN32)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fp:fast")
     endif()
 	set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_EXPECT=1")
+    set_source_files_properties(${AVX512_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-mpclmul;-mvpclmulqdq;/arch:AVX512")
 if(NOT BUILD_STATIC_LIBS)
     set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DLL_EXPORT=1")
     set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")

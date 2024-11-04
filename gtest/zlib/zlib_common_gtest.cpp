@@ -272,6 +272,15 @@ TEST_P(AOCL_Compression_zlib, uncompress_common)
   EXPECT_TRUE(cmpr(source.data(), (char *)uncompressed, source.size()));
 }
 
+void test_crc32_x86(uLong crc, const Bytef* buf, uInt len) {
+    int highest_supported_level = get_cpu_opt_flags(0);
+    uLong ref = crc32_z_c(crc, buf, len);
+    if (highest_supported_level >= 2) // >= AVX
+        EXPECT_EQ(crc32_z_x86_avx(crc, buf, len), ref);
+    if (highest_supported_level >= 4) // >= AVX512
+        EXPECT_EQ(crc32_z_x86_avx512(crc, buf, len), ref);
+}
+
 // common boundary test case for checksum APIs to minimize memory footprint while running in parallel
 TEST(AOCL_Compression_zlib, checksum_boundary_common)
 {
@@ -297,6 +306,7 @@ TEST(AOCL_Compression_zlib, checksum_boundary_common)
   EXPECT_EQ(crc32_z(7, buf, len), 7);
   EXPECT_EQ(crc32(7, buf, len), 7);
   EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
+  test_crc32_x86(adler, buf, len);
   
   EXPECT_EQ(adler32_combine(adler32(1, buf, 255), adler32(1, buf + 255, 1000), 1000), adler32(1, buf, 1255));
 
@@ -501,6 +511,59 @@ TEST_P(AOCL_Compression_zlib, adler32_x86_common)
   //len = UINT32_MAX;
   //EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
 
+  free(buf);
+  buf = nullptr;
+}
+
+TEST(AOCL_Compression_zlib, crc32_x86_common)
+{
+  size_t len = 5552;
+  Bytef *buf = (Bytef *)malloc(len);
+  for (size_t i = 0; i < len; i++)
+  {
+    buf[len - i - 1] = i % 255;
+  }
+
+  uLong crc = 1 << 16;
+  len = 10;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_1
+
+  crc = 0;
+  len = 10;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_2
+
+  crc = ((uLong)1L << 31) - 1;
+  len = 1;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_3
+
+  len = 10;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_4
+
+  len = 19;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_5
+
+  len = 5552;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_6
+
+  len = 64;
+  crc = 1;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_7
+
+  len = 1;
+  crc = 0xFFFFFFFF;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_8
+
+  len = 60;
+  crc = 0xFFFFFFFF;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_9
+
+  len = 0;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_10
+
+  crc = 1 << 16;
+  len = 10;
+  EXPECT_EQ(crc32_z(crc, NULL, len), 0);  // AOCL_Compression_zlib_crc32_x86_common_11
+  
   free(buf);
   buf = nullptr;
 }
