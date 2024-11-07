@@ -844,7 +844,10 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_7)
         "<andi><btr><ander><ander><ander><andel><",
         "ny></andi></andi></andi></lm></impi></an",
         "sel><sel><String:sel><sel><",
-        "plateString:plate"
+        "plateString:plate",
+        "",
+        "o",
+        "oo"
     };
 
     for(string s: test_input_strings){
@@ -1207,7 +1210,7 @@ class BZIP2_BZ2_bzBuffToBuffCompress : public OPT_LEVEL_TESTS
     void Init()
     {
         sourcePass = vector<char>(sourceLenPassCase, 'a');
-        destPass = vector<char>(destSize, 'a');
+        destPass = vector<char>(destLenPass, 'a');
         // Initilizing `source` with random data
         for(unsigned int i = 0; i < sourceLenPassCase; i++)
         {
@@ -1314,6 +1317,70 @@ TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCo
     EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
 }
 
+TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCompress_pass_common_16)
+{
+    for(int i=1;i<15;i++)
+    {
+        sourceLenPassCase = i;
+        destLenPass = i+600;
+        Init();
+        EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
+        EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+    }
+}
+
+TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCompress_pass_common_17)
+{
+    for(int j=1;j<=8;j++)
+    {
+        sourceLenPassCase = 256*j;
+        destLenPass = sourceLenPassCase+600;
+        Init();
+
+        // Increasing characters pattern
+        for(int i=0;i<sourceLenPassCase;i++)
+        {
+            sourcePass[i] = i%256;
+        }
+        EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
+        EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+
+        int k = 0;
+        // Decreasing characters pattern
+        for(int i=sourceLenPassCase-1;i>=0;i--)
+        {
+            sourcePass[k++] = i%256;
+        }
+        destLenPass = sourceLenPassCase+600;
+        EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
+        EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+    }
+}
+
+TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCompress_pass_common_18)
+{
+    sourceLenPassCase = 256*32;
+    destLenPass = sourceLenPassCase+600;
+    Init();
+
+    // Generate input containing all the characters
+    for(int i=0;i<sourceLenPassCase;i++)
+    {
+        sourcePass[i] = i%256;
+    }
+
+    // Shuffle the pattern generated
+    for(int i = 0;i<sourceLenPassCase;i++)
+    {
+        int a = rand()%sourceLenPassCase;
+        int b = rand()%sourceLenPassCase;
+        swap(sourcePass[a], sourcePass[b]);
+    }
+
+    EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
+    EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+}
+
 INSTANTIATE_TEST_SUITE_P(
     BZIP2,
     BZIP2_BZ2_bzBuffToBuffCompress,
@@ -1356,7 +1423,7 @@ class BZIP2_BZ2_bzBuffToBuffDecompress : public OPT_LEVEL_TESTS
         {
             source[i] = rand() % 255;
         }
-        dest = vector<char>(destSize, 'a');
+        dest = vector<char>(destLen, 'a');
         EXPECT_EQ(BZIP2_API::BuffToBuffCompress(dest.data(), &destLen, source.data(), sourceLen, 1, verbosity, 0), BZ_OK);
     }
 

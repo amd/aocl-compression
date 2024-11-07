@@ -273,19 +273,36 @@ void AOCL_generateMTFValues_from_libsais_output ( EState* s )
 
    wr = 0;
    zPend = 0;
-   for (i = 0; i < s->nInUse; i++) yy[i] = (UChar) i;
+   /*
+      Conversion of each character from bwt output to unique serial wise value using s->unseqToSeq[] is removed.
+      Each unique character is stored lexicographically in yy[] buffer.
+   */
+   j = 0;
+   for (i = 0; i < 256; i++)
+   {
+      if(s->inUse[i])
+      {
+         yy[j++] = (UChar) i;
+      }
+   }
+   
 
    for (i = 0; i < s->nblock; i++) {
       UChar ll_i;
       AssertD ( wr <= i, "AOCL_generateMTFValues_from_libsais_output(1)" );
       /*
-         Earlier (in original function)
-            accessing current character: block[ptr[i]-1]
-         After Change to libsais output
-            accessing current character: ptr[i]
+         Two changes w.r.t original function:
+         1.
+            Earlier (in original function)
+               accessing current character: block[ptr[i]-1]
+            After Change to libsais output
+               accessing current character: ptr[i]
+         2.
+            `mtfv` only needs where the current character is placed in yy[] buffer.
+            Hence intermediate Conversion of each character from bwt output to unique serial wise value
+            using s->unseqToSeq[] is removed.
       */
-      ll_i = s->unseqToSeq[ptr[i]];
-      AssertD ( ll_i < s->nInUse, "AOCL_generateMTFValues_from_libsais_output(2a)" );
+      ll_i = ptr[i];
 
       if (yy[0] == ll_i) { 
          zPend++;
@@ -739,7 +756,11 @@ void BZ2_compressBlock ( EState* s, Bool is_last_block )
          max additional memory is 6*9*10^5, i.e, ~5.4 Mb.
       */
       if(AOCL_use_libsais)
+      {
+         s->block[-1] = s->block[s->nblock - 1];
+         s->block[-2] = s->block[s->nblock - 2];
          s->origPtr = libsais(s->block, (Int32 *)s->ptr, s->nblock, 0, NULL);
+      }
       else
 #endif /* AOCL_BZIP2_OPT */
          BZ2_blockSort ( s );

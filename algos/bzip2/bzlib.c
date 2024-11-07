@@ -324,6 +324,7 @@ int BZ_API(BZ2_bzCompressInit)
                      int        verbosity,
                      int        workFactor )
 {
+   AOCL_SETUP_NATIVE();
    Int32   n;
    EState* s;
 
@@ -349,6 +350,11 @@ int BZ_API(BZ2_bzCompressInit)
 
    n       = 100000 * blockSize100k;
    s->arr1 = BZALLOC( n                  * sizeof(UInt32) );
+#ifdef AOCL_BZIP2_OPT
+   if(AOCL_use_libsais)
+      s->arr2 = BZALLOC( (n+BZ_N_OVERSHOOT) * sizeof(UInt32) + 2);
+   else
+#endif /* AOCL_BZIP2_OPT */
    s->arr2 = BZALLOC( (n+BZ_N_OVERSHOOT) * sizeof(UInt32) );
    s->ftab = BZALLOC( 65537              * sizeof(UInt32) );
 
@@ -373,6 +379,13 @@ int BZ_API(BZ2_bzCompressInit)
    s->mtfv              = (UInt16*)s->arr1;
    s->zbits             = NULL;
    s->ptr               = (UInt32*)s->arr1;
+
+#ifdef AOCL_BZIP2_OPT
+// The last two characters `s->block`, need to be stored before 0th index of `s->block`.
+// Hence making the 0th index of `s->block` start from 2nd index from where it was originally allocated.
+   if(AOCL_use_libsais)
+      s->block += 2;
+#endif /* AOCL_BZIP2_OPT */
 
    strm->state          = s;
    strm->total_in_lo32  = 0;
@@ -1566,7 +1579,25 @@ void BZ_API(BZ2_bzReadGetUnused)
 #ifdef AOCL_UNIT_TEST
 int Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq)
 {
-   return libsais(T, SA, n, fs, freq);
+   if(n < 1)
+      return 0;
+
+   // T size of n UChars, but T[-2, -1] needs to be initialized to T[n-2, n-1]
+   // Hence initializing a temporary buffer of size n+2.
+   unsigned char * T_temp = (unsigned char *)malloc(n+2);
+
+   memcpy(&T_temp[2], T, n);
+   // n == 1 will be handled as a special case in libsais.
+   if(n >= 2)
+   {
+      T_temp[0] = T[n-2];
+      T_temp[1] = T[n-1];
+   }
+
+   int origIndex = libsais((const unsigned char *)&T_temp[2], SA, n, fs, freq);
+   free(T_temp);
+
+   return origIndex;
 }
 #endif /* AOCL_UNIT_TEST */
 
