@@ -79,7 +79,6 @@ typedef size_t                          fast_uint_t;
 #define SUFFIX_GROUP_MARKER             (((sa_sint_t)1) << (SUFFIX_GROUP_BIT - 1))
 
 #define BUCKETS_INDEX2(_c, _s)          (((_c) << 1) + (_s))
-#define BUCKETS_INDEX4(_c, _s)          (((_c) << 2) + (_s))
 
 #define LIBSAIS_LOCAL_BUFFER_SIZE       (1024)
 #define LIBSAIS_PER_THREAD_CACHE_SIZE   (24576)
@@ -750,6 +749,7 @@ static void libsais_count_compacted_lms_suffixes_32s_2k(const sa_sint_t * RESTRI
 
 #endif
 
+#if !defined(AOCL_BWT) || defined(AOCL_UNIT_TEST)
 static sa_sint_t libsais_count_and_gather_lms_suffixes_8u(const uint8_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t * RESTRICT buckets, fast_sint_t omp_block_start, fast_sint_t omp_block_size)
 {
     memset(buckets, 0, (size_t)4 * ALPHABET_SIZE * sizeof(sa_sint_t));
@@ -893,6 +893,12 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_8u_omp(const uint8_t * RE
 
     return m;
 }
+
+int32_t Test_count_and_gather_lms_suffixes(const uint8_t * T, int32_t * SA, int32_t n, int32_t * buckets)
+{
+    return libsais_count_and_gather_lms_suffixes_8u_omp(T, SA, n, buckets, 1, NULL);
+}
+#endif /* !defined(AOCL_BWT) || defined(AOCL_UNIT_TEST) */
 
 static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, fast_sint_t omp_block_start, fast_sint_t omp_block_size)
 {
@@ -7463,6 +7469,7 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
 
     */
 
+#ifndef AOCL_BWT
     /*
         All LMS indexes are stored in SA array, [from n-m to n-1].
         The array buckets[] is modified to store the number of occurrences of a character along with its current type and previous type which is L/S, so there are 4 combinations: LL,LS,SL,SS.
@@ -7485,6 +7492,56 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
                             First character is compared with last character to get its previous type.
     */
     sa_sint_t m = libsais_count_and_gather_lms_suffixes_8u_omp(T, SA, n, buckets, threads, thread_state);
+#else
+    /*
+    Before:
+        if (SA[1] == -1) -> no LMS character index at SA[1], or SA[1] also contains an LMS character index.
+        Note: &SA[1] = &(s->ptr[1])
+
+        |<------------------------------- SA --------------------------------------------->|
+        |<- SA[0] ->|<-------------------------- SA[1....] ------------------------------->|
+              ^     |<---------------------- SA ------------------------------------------>|
+              |     |<- SA[1] ->|<------- LMS characters -------->|<------ buckets ------->|
+        length of         ^         from SA[1] to SA[sa_index-1]      SA[sa_index] to SA[sa_index + 4*1024 - 1]
+        LMS array is      |
+        stored          SA[1] == -1,
+                            -> means no LMS chrctr
+                        SA[1] != -1
+                            -> LMS character is prsnt
+
+    After:
+        All LMS indexes are stored in SA array, [from n-m to n-1].
+        The array buckets[] is modified to store the number of occurrences of a character along with its current type and previous type which is L/S, so there are 4 combinations: LL,LS,SL,SS.
+        Integer "m" is returned, which represents number of LMS indexes.
+
+        SA[]:
+        |<-------------------------- n ints -------------------------------->|
+
+                           |<--------------- initialization ---------------->|
+                           |<--last m elements are updated to LMS indexes -->|
+
+
+        buckets[]:
+        |----------------|----------------|----------------|----------------|----------------|----------------|----------------|----------------|
+        |<------ 0 ----->|<------ 1 ----->|<------ 2 ----->|<------ 3 ----->|<------ 4 ----->|<------ 5 ----->|<------ 6 ----->|<------ 7 ----->|
+
+        |<-------------------------- initialization ----------------------->|
+
+        BWT Modifications:  Last character is compared with first character instead of senital character,
+                            First character is compared with last character to get its previous type.
+    */
+    sa_sint_t m = SA[0];
+    memcpy(buckets, &SA[m+1], sizeof(sa_sint_t)*4*ALPHABET_SIZE);
+    if(SA[1] == -1)
+    {
+        m--;
+        memcpy(&SA[n-m], &SA[2],  sizeof(sa_sint_t)*m);
+    }
+    else
+    {
+        memcpy(&SA[n-m], &SA[1], sizeof(sa_sint_t)*m);
+    }
+#endif /* AOCL_BWT */
     /*
         bucket_start = &buckets[6 * ALPHABET_SIZE];
         bucket_end   = &buckets[7 * ALPHABET_SIZE];

@@ -29,6 +29,8 @@ Please see the file LICENSE for full copyright information.
 #define LIBSAIS_VERSION_PATCH   4
 #define LIBSAIS_VERSION_STRING  "2.8.4"
 
+#define BUCKETS_INDEX4(_c, _s)          (((_c) << 2) + (_s))
+
 #ifdef _WIN32
     #ifdef LIBSAIS_SHARED
         #ifdef LIBSAIS_EXPORTS
@@ -82,6 +84,9 @@ extern "C" {
     * @return 0 if no error occurred, -1 or -2 otherwise.
     */
     LIBSAIS_API int32_t libsais(const uint8_t * T, int32_t * SA, int32_t n, int32_t fs, int32_t * freq);
+
+    // Helper function for testing modified implementation of libsais.
+    LIBSAIS_API int32_t Test_count_and_gather_lms_suffixes(const uint8_t * T, int32_t * SA, int32_t n, int32_t * buckets);
 
     /**
     * Constructs the suffix array of a given integer array.

@@ -456,8 +456,16 @@ void sendMTFValues ( EState* s )
    /*--- 
       Iterate up to BZ_N_ITERS times to improve the tables.
    ---*/
+#ifdef AOCL_BZIP2_OPT
+   Int32 iter_limit = BZ_N_ITERS;
+   if(AOCL_use_libsais)
+   {
+      iter_limit = AOCL_BZIP2_HUFFMAN_ITERATIONS;
+   }
+   for (iter = 0; iter < iter_limit; iter++) {
+#else
    for (iter = 0; iter < BZ_N_ITERS; iter++) {
-
+#endif /* AOCL_BZIP2_OPT */
       for (t = 0; t < nGroups; t++) fave[t] = 0;
 
       for (t = 0; t < nGroups; t++)

@@ -102,6 +102,13 @@ set_property(
     "OFF" "LOW" "HIGH"
 )
 
+set(AOCL_BZIP2_HUFFMAN_ITERATIONS "3" CACHE STRING "In BZIP2, huffman tables are fine-tuned by iterating through each block of data multiple times, AOCL_BZIP2_HUFFMAN_ITERATIONS controls the number of iterations (allowed values are 1, 2, 3 and 4), lower iterations enhance speed but worsen the compression ratio (3 by default).")
+set_property(
+    CACHE AOCL_BZIP2_HUFFMAN_ITERATIONS
+    PROPERTY STRINGS
+    "1" "2" "3" "4"
+)
+
 set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for ZSTD" )
 set_property(
     CACHE AOCL_DECOMPRESS_FAST
@@ -528,6 +535,16 @@ endif()
 if(AOCL_EXCLUDE_DEPRECATED_APIS)
     set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_DEPRECATED_APIS")
     set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_DEPRECATED_APIS")
+endif()
+if (AOCL_BZIP2_HUFFMAN_ITERATIONS)
+    if (AOCL_BZIP2_HUFFMAN_ITERATIONS STREQUAL "1" OR
+        AOCL_BZIP2_HUFFMAN_ITERATIONS STREQUAL "2" OR
+        AOCL_BZIP2_HUFFMAN_ITERATIONS STREQUAL "3" OR
+        AOCL_BZIP2_HUFFMAN_ITERATIONS STREQUAL "4")
+        set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_BZIP2_HUFFMAN_ITERATIONS=${AOCL_BZIP2_HUFFMAN_ITERATIONS}")
+    else()
+        message(FATAL_ERROR "AOCL_BZIP2_HUFFMAN_ITERATIONS can only be '1', '2', '3' or '4', the provided value is:${AOCL_BZIP2_HUFFMAN_ITERATIONS}")
+    endif()
 endif()
 include(CheckCSourceCompiles)
 #

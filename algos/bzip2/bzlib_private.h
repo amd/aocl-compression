@@ -25,6 +25,7 @@
 
 #include <stdlib.h>
 #include "aoclAlgoOpt.h"
+#include <limits.h>
 
 #ifndef BZ_NO_STDIO
 #include <stdio.h>
@@ -191,7 +192,7 @@ extern UInt32 BZ2_crc32Table[256];
 #define BZ_N_SHELL 18
 #define BZ_N_OVERSHOOT (BZ_N_RADIX + BZ_N_QSORT + BZ_N_SHELL + 2)
 
-
+#define ALPHABET_SIZE   (1 << CHAR_BIT)
 
 
 /*-- Structure holding all the compression-side stuff. --*/
@@ -265,6 +266,17 @@ typedef
       /* second dimension: only 3 needed; 4 makes index calculations faster */
       UInt32   len_pack[BZ_MAX_ALPHA_SIZE][4];
 
+      /* these variables are used for fused RLE and LMS count gather computation */
+#ifdef AOCL_BZIP2_OPT
+      UInt32 *SA;       // LMS characters & buckets are stored in this buffer.
+      Int32 c;          // Past character.
+      Int32 repeat;     // Number of times c character has been repeated.
+      Int32 sw;         // Switch statement helper.
+      Int32 lms;        // LMS type, could be: 00, 01, 11, 10 in binaries.
+      Int32 buckets[4 * ALPHABET_SIZE]; // Bucket to store number of times each character has occured in respective lms type.
+      Int32 sa_index;   // Index for SA.
+      Int32 n_block;    // Total characters
+#endif /* AOCL_BZIP2_OPT */
    }
    EState;
 

@@ -3061,6 +3061,13 @@ class BZIP2_BZ2_bzRead : public OPT_LEVEL_TESTS
 
     void SetUp() override
     {
+        // Code path setup
+        {
+            aocl_destroy_bzip2();
+            DynamicDispatch opt = GetParam();
+            aocl_setup_bzip2(opt.optOff, opt.optLevel, 0, 0, 0);
+        }
+
         file_name = get_file_name();
 
         create_test_file();
@@ -3383,7 +3390,7 @@ TEST_F(BZIP2_BZ2_bzReadClose, AOCL_Compression_bzip2_BZ2_bzReadClose_pass_common
 class BZIP2_BZ2_bzReadGetUnused : public BZIP2_BZ2_bzRead
 {};
 
-TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_1) // bzf is NULL
+TEST_P(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_1) // bzf is NULL
 {
     void * unused = NULL;
     int nUnused = 0;
@@ -3395,7 +3402,7 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fai
     EXPECT_EQ(nUnused, 0);
 }
 
-TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_2) // BZ2_bzRead is not called before calling ReadGetUnused
+TEST_P(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_2) // BZ2_bzRead is not called before calling ReadGetUnused
 {
     void * unused = NULL;
     int nUnused = 0;
@@ -3407,7 +3414,7 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fai
     EXPECT_EQ(nUnused, 0);
 }
 
-TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_3) // unused is NULL
+TEST_P(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_3) // unused is NULL
 {
     void * unused = NULL;
     int nUnused = 0;
@@ -3422,7 +3429,7 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fai
     EXPECT_EQ(nUnused, 0);
 }
 
-TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_4) // nUnused is NULL
+TEST_P(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_4) // nUnused is NULL
 {
     void * unused = NULL;
     int nUnused = 0;
@@ -3437,7 +3444,7 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fai
     EXPECT_EQ(nUnused, 0);
 }
 
-TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_pass_common_5) // Extra data added at the end of bzip2 compressed data
+TEST_P(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_pass_common_5) // Extra data added at the end of bzip2 compressed data
 {
     int extra_len = 100;
     vector<char> extra_buffer(extra_len);   // This is the extra buffer of length 100
@@ -3485,6 +3492,12 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_pas
     EXPECT_EQ(nUnused, extra_len);
     EXPECT_EQ(memcmp(unused, extra_buffer.data(), extra_len), 0); // Check if the leftover data is same as the extra data that was added into compressed file
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    BZIP2,
+    BZIP2_BZ2_bzReadGetUnused,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
 
 /*********************************************
  * "End" of BZ2_bzReadGetUnused Tests
