@@ -81,6 +81,7 @@ option (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL "Build with xz utils lzma APIs. Expe
 option (AOCL_ENABLE_LOG_FEATURE "Enable logging support in library, for which log level is determined by environement variable AOCL_ENABLE_LOG (go through README.md) (Disabled by default)" OFF)
 option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression using SMP openMP threads (Disabled by default)" OFF)
 option (TEST_COVERAGE_THIRD_PARTY "Enable third party test bench based CTest suite (Disabled by default)" OFF)
+option (BUILD_UTILITY "Enable third party utility build: zstd (Disabled by default)" OFF)
 option (NATIVE_ENABLE_THREADS "Enable native multi-threaded compression for supported methods (Disabled by default)" OFF)
 option (AOCL_TEST_FUZZER "Enable AOCL Compression fuzzer (only on Linux with Clang compiler)" OFF)
 option (AOCL_TEST_FUZZER_WITH_CORPUS "Run fuzzer tests with corpus (only on Linux with Clang compiler)" OFF)
@@ -446,7 +447,7 @@ if(NOT BUILD_STATIC_LIBS)
     set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_DLL_EXPORT=1")
     set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DBZIP2_DLL_EXPORT=1")
-    if (TEST_COVERAGE_THIRD_PARTY)
+    if (TEST_COVERAGE_THIRD_PARTY OR BUILD_UTILITY)
         set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DFSE_DLL_EXPORT=1")
         set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DXXH_EXPORT=1")
     endif()
@@ -588,9 +589,11 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
     endif()
 
     if (TEST_COVERAGE_THIRD_PARTY)
+        set (BUILD_STATIC_LIBS ON)
         add_subdirectory(test/third_party)
     endif()
 endif()
+
 
 #Enabling strict warnings
 if(ENABLE_STRICT_WARNINGS)
@@ -604,6 +607,14 @@ if(ENABLE_STRICT_WARNINGS)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wpedantic")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wpedantic")
         set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DENABLE_STRICT_WARNINGS")
+    endif()
+endif()
+
+# Add utility tests
+if (BUILD_UTILITY)
+    if (NOT TEST_COVERAGE_THIRD_PARTY)
+	set(BUILD_STATIC_LIBS ON)
+        add_subdirectory(test/third_party)
     endif()
 endif()
 
