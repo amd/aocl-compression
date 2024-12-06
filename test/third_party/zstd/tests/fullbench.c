@@ -69,6 +69,7 @@
 #include "datagen.h"
 #include "benchfn.h"     /* CustomBench */
 #include "benchzstd.h"   /* MB_UNIT */
+#include "aocl_thirdparty_zstd_test.h"
 
 
 /*_************************************
@@ -129,26 +130,6 @@ static size_t BMK_findMaxMem(U64 requiredMem)
 /*_*******************************************************
 *  Benchmark wrappers
 *********************************************************/
-
-#ifdef AOCL_DFS_CORRECTION
-/* Decompress until all input is consumed. Multiple frames may be present. */
-static size_t Test_decompressStreamMultiple(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input) {
-    size_t ret = 0;
-    while (input->pos < input->size) { // as multiple frames are present, exiting on ret == 0 will return on 1st frame. Instead consume all input.
-        ret = ZSTD_decompressStream(zds, output, input);
-        if (ZSTD_isError(ret)) return ret;
-    }
-    return ret;
-}
-
-static size_t Test_ZSTD_compress2(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int cLevel) {
-    ZSTD_CCtx* cctx_fds = ZSTD_createCCtx();
-    ZSTD_CCtx_setParameter(cctx_fds, ZSTD_c_compressionLevel, cLevel);
-    size_t g_cSize = ZSTD_compress2(cctx_fds, dst, dstCapacity, src, srcSize);
-    ZSTD_freeCCtx(cctx_fds);
-    return g_cSize;
-}
-#endif /* AOCL_DFS_CORRECTION */
 
 static ZSTD_CCtx* g_zcc = NULL;
 

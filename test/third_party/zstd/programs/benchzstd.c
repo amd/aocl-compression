@@ -258,6 +258,9 @@ static size_t local_defaultDecompress(
         if (ZSTD_isError(moreToFlush)) {
             return moreToFlush;
         }
+        if(!moreToFlush && out.pos == 0 && in.size != 0) {
+            moreToFlush = 1;
+        }
     }
     return out.pos;
 

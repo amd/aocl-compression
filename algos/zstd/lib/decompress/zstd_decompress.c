@@ -2543,6 +2543,9 @@ size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inB
             if ((MEM_readLE32(zds->headerBuffer) & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START) {  /* skippable frame */
                 zds->expected = MEM_readLE32(zds->headerBuffer + ZSTD_FRAMEIDSIZE);
                 zds->stage = ZSTDds_skipFrame;
+#if AOCL_DECOMPRESS_FAST > 1
+                AOCL_ZSTD_readFdsFrame(zds, (char*)istart + ZSTD_SKIPPABLEHEADERSIZE, (input->size) - ZSTD_SKIPPABLEHEADERSIZE);
+#endif
             } else {
                 FORWARD_IF_ERROR(ZSTD_decodeFrameHeader(zds, zds->headerBuffer, zds->lhSize), "");
                 zds->expected = ZSTD_blockHeaderSize;

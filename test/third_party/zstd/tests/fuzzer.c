@@ -83,6 +83,7 @@
 /* must be included after util.h, due to ERROR macro redefinition issue on Visual Studio */
 #include "zstd_internal.h" /* ZSTD_WORKSPACETOOLARGE_MAXDURATION, ZSTD_WORKSPACETOOLARGE_FACTOR, KB, MB */
 #include "threading.h"    /* ZSTD_pthread_create, ZSTD_pthread_join */
+#include "aocl_thirdparty_zstd_test.h"
 
 
 /*-************************************
@@ -498,19 +499,6 @@ _output_error:
 }
 #endif /* ZSTD_MULTITHREAD */
 
-#ifdef AOCL_DFS_CORRECTION
-/* Skip skippable frames if any until a zstd frame is found. */
-static size_t Test_skipSkippableFrames(const BYTE* src, size_t srcSize) {
-    const BYTE* cur = src;
-    while (ZSTD_isSkippableFrame(cur, srcSize)) {
-        ZSTD_frameHeader zfh;
-        size_t ret = ZSTD_getFrameHeader(&zfh, cur, srcSize);
-        if (ZSTD_isError(ret)) return ret;
-        cur += (zfh.frameContentSize + ZSTD_SKIPPABLEHEADERSIZE);
-    }
-    return (size_t)(cur - src);
-}
-#endif /* AOCL_DFS_CORRECTION */
 
 /*=============================================
 *   Unit tests
@@ -959,11 +947,19 @@ static int basicUnitTests(U32 const seed, double compressibility)
     }
     {   /* ensure frame content size is missing */
         ZSTD_frameHeader zfh;
+#ifdef AOCL_DFS_CORRECTION
+        size_t const ret = ZSTD_getFrameHeader(&zfh, compressedBuffer + ZSTD_FDS_FRAME_SIZE, compressedBufferSize - ZSTD_FDS_FRAME_SIZE);
+#else
         size_t const ret = ZSTD_getFrameHeader(&zfh, compressedBuffer, compressedBufferSize);
+#endif
         if (ret != 0 || zfh.frameContentSize !=  ZSTD_CONTENTSIZE_UNKNOWN) goto _output_error;
     }
     {   /* ensure CNBuffSize <= decompressBound */
+#ifdef AOCL_DFS_CORRECTION
+        unsigned long long const bound = ZSTD_decompressBound(compressedBuffer + ZSTD_FDS_FRAME_SIZE, compressedBufferSize - ZSTD_FDS_FRAME_SIZE);
+#else
         unsigned long long const bound = ZSTD_decompressBound(compressedBuffer, compressedBufferSize);
+#endif
         if (CNBuffSize > bound) goto _output_error;
     }
     DISPLAYLEVEL(3, "OK \n");
@@ -1217,7 +1213,12 @@ static int basicUnitTests(U32 const seed, double compressibility)
         {
             ZSTD_inBuffer in = {compressedBuffer, cSize, 0};
             ZSTD_outBuffer out = {decodedBuffer, CNBuffSize, 0};
+#ifdef AOCL_DFS_CORRECTION
+            in.pos = ZSTD_FDS_FRAME_SIZE; // to avoid checksum failure in decompression
+            size_t const dSize = Test_decompressStreamMultiple(dctx, &out, &in);
+#else
             size_t const dSize = ZSTD_decompressStream(dctx, &out, &in);
+#endif
             CHECK_Z(dSize);
             if (dSize != 0) goto _output_error;
         }
@@ -2212,7 +2213,12 @@ static int basicUnitTests(U32 const seed, double compressibility)
         DISPLAYLEVEL(3, "OK (%u bytes : %.2f%%)\n", (unsigned)cSize, (double)cSize/CNBuffSize*100);
 
         DISPLAYLEVEL(3, "test%3i : decompressed size test : ", testNb++);
-        {   unsigned long long const rSize = ZSTD_getFrameContentSize(compressedBuffer, cSize);
+        {  
+#ifdef AOCL_DFS_CORRECTION
+            unsigned long long const rSize = ZSTD_getFrameContentSize(compressedBuffer + ZSTD_FDS_FRAME_SIZE, cSize - ZSTD_FDS_FRAME_SIZE);
+#else
+            unsigned long long const rSize = ZSTD_getFrameContentSize(compressedBuffer, cSize);
+#endif
             if (rSize != CNBuffSize)  {
                 DISPLAY("ZSTD_getFrameContentSize incorrect : %u != %u \n", (unsigned)rSize, (unsigned)CNBuffSize);
                 goto _output_error;
@@ -2505,7 +2511,11 @@ static int basicUnitTests(U32 const seed, double compressibility)
             CHECK_VAR(cSize, ZSTD_compressEnd(ctxDuplicated, compressedBuffer, ZSTD_compressBound(testSize),
                                           (const char*)CNBuffer + dictSize, testSize) );
             {   ZSTD_frameHeader zfh;
+#ifdef AOCL_DFS_CORRECTION
+                if (ZSTD_getFrameHeader(&zfh, compressedBuffer + ZSTD_FDS_FRAME_SIZE, cSize - ZSTD_FDS_FRAME_SIZE)) goto _output_error;
+#else
                 if (ZSTD_getFrameHeader(&zfh, compressedBuffer, cSize)) goto _output_error;
+#endif
                 if ((zfh.frameContentSize != testSize) && (zfh.frameContentSize != 0)) goto _output_error;
         }   }
         DISPLAYLEVEL(3, "OK \n");

@@ -187,6 +187,7 @@ static UNUSED_ATTR const U32 OF_defaultNormLog = OF_DEFAULTNORMLOG;
 #if AOCL_DECOMPRESS_FAST > 1
 // Metadata flags currently supported
 #define FDS_FAST2_NOTB_SO4_NOEXT_REP2 (U64)0x66 // 1 100 1 10, no large total bits, no offsets < 16, no external dictionary, no rep3,2
+#define FDS_DEFAULT_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP2
 #endif
 
 /*-*******************************************

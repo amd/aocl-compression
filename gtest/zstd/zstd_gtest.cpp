@@ -331,7 +331,7 @@ size_t insert_frame(void* dst, size_t dstCapacity, const void* src, size_t srcSi
     return Test_ZSTD_compress(dst, dstCapacity, src, srcSize, ZSTD_CLEVEL_DEFAULT);
 }
 
-/* Insert a single zstd frame. Calls ZSTD_compress2 that does not have FDS and MT support.
+/* Insert a single zstd frame. Calls ZSTD_compress2 that does not have MT support.
  * Recommended for creation of zstd frame to test things like properties, etc */
 size_t insert_frame_reference(void* dst, size_t dstCapacity, const void* src, size_t srcSize) {
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
@@ -687,6 +687,10 @@ void ZSTD_frame_creator::create_frame_reference()
 {
     src = d->getCompressedBuff();
     srcLen = insert_frame_reference(src, d->getCompressedSize(), original, origLen);  // Compress data from `original` buffer to `src` buffer.
+#if AOCL_DECOMPRESS_FAST > 1
+    src += ZSTD_FDS_FRAME_SIZE; // Skip FDS frame
+    srcLen -= ZSTD_FDS_FRAME_SIZE;
+#endif
 }
 
 void ZSTD_frame_creator::create_frame_overwrite()

@@ -65,6 +65,8 @@
 
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
 
+#define ZSTD_FDS_FRAME_SIZE (FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE)
+
  /* This base class can be used for all fixtures
   * that require dynamic dispatcher setup */
 class AOCL_setup_zstd : public ::testing::Test {
