@@ -3928,6 +3928,88 @@ uint32_t AOCL_CalculateTableSize(uint32_t input_size) {
 }  // namespace
 #endif /* AOCL_SNAPPY_HIGH_COMPRESSION */
 
+/**
+ * AOCL_EmitCopyAtMost64: Same as EmitCopyAtMost64 but explicitly makes use of
+ * conditional move instructions via inline assembly for GCC compiler. This is 
+ * necessary because the compiler does not generate such instructions by default.
+ */
+template <bool len_less_than_12>
+static inline char* AOCL_EmitCopyAtMost64(char* op, size_t offset, size_t len) {
+  assert(len <= 64);
+  assert(len >= 4);
+  assert(offset < 65536);
+  assert(len_less_than_12 == (len < 12));
+
+  if (len_less_than_12) {
+    uint32_t u = (len << 2) + (offset << 8);
+    uint32_t copy1 = COPY_1_BYTE_OFFSET - (4 << 2) + ((offset >> 3) & 0xe0);
+    uint32_t copy2 = COPY_2_BYTE_OFFSET - (1 << 2);
+    // It turns out that offset < 2048 is a difficult to predict branch.
+    // `perf record` shows this is the highest percentage of branch misses in
+    // benchmarks. This code produces branch free code, the data dependency
+    // chain that bottlenecks the throughput is so long that a few extra
+    // instructions are completely free (IPC << 6 because of data deps).
+#if defined(__GNUC__) && defined(__x86_64__)
+    uint32_t temp;
+    __asm__ __volatile__(
+      "cmp $2048, %1\n\t"                    // compare offset with 2048
+      "cmovb %2, %0\n\t"                     // if offset < 2048, copy copy1 to temp
+      "cmovae %3, %0\n\t"                    // if offset >= 2048, copy copy2 to temp
+      : "=&r"(temp)                          // output: temp
+      : "r"(offset), "r"(copy1), "r"(copy2)  // input: u, offset, copy1, copy2
+      : "cc"
+    );
+    
+    u += temp;
+#else
+    u += offset < 2048 ? copy1 : copy2;
+#endif
+    LittleEndian::Store32(op, u);
+    op += offset < 2048 ? 2 : 3;
+  } else {
+    // Write 4 bytes, though we only care about 3 of them.  The output buffer
+    // is required to have some slack, so the extra byte won't overrun it.
+    uint32_t u = COPY_2_BYTE_OFFSET + ((len - 1) << 2) + (offset << 8);
+    LittleEndian::Store32(op, u);
+    op += 3;
+  }
+  return op;
+}
+
+/**
+ * AOCL_EmitCopy: Same as EmitCopy but calls AOCL_EmitCopyAtMost64.
+ */
+template <bool len_less_than_12>
+static inline char* AOCL_EmitCopy(char* op, size_t offset, size_t len) {
+  assert(len_less_than_12 == (len < 12));
+  if (len_less_than_12) {
+    return AOCL_EmitCopyAtMost64</*len_less_than_12=*/true>(op, offset, len);
+  } else {
+    // A special case for len <= 64 might help, but so far measurements suggest
+    // it's in the noise.
+
+    // Emit 64 byte copies but make sure to keep at least four bytes reserved.
+    while (SNAPPY_PREDICT_FALSE(len >= 68)) {
+      op = AOCL_EmitCopyAtMost64</*len_less_than_12=*/false>(op, offset, 64);
+      len -= 64;
+    }
+
+    // One or two copies will now finish the job.
+    if (len > 64) {
+      op = AOCL_EmitCopyAtMost64</*len_less_than_12=*/false>(op, offset, 60);
+      len -= 60;
+    }
+
+    // Emit remainder.
+    if (len < 12) {
+      op = AOCL_EmitCopyAtMost64</*len_less_than_12=*/true>(op, offset, len);
+    } else {
+      op = AOCL_EmitCopyAtMost64</*len_less_than_12=*/false>(op, offset, len);
+    }
+    return op;
+  }
+}
+
 namespace internal {
 /**
  * AOCL_CompressFragment_c calls TableEntry_c.
@@ -4275,6 +4357,7 @@ AOCL_SNAPPY_TARGET_AVX
 /**
  * Derived from AOCL_CompressFragment_c. Calls TableEntry_crc32.
  * Post encoding a match, updates table[Hash(ip, mask)] and then table[Hash(ip-1, mask)].
+ * Calls AOCL_EmitCopy for emitting copies.
 */
 char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op,
                        uint16_t* table, const int table_size) {
@@ -4433,9 +4516,9 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
         size_t offset = base - candidate;
         assert(0 == memcmp(base, candidate, matched));
         if (p.second) {
-          op = EmitCopy</*len_less_than_12=*/true>(op, offset, matched);
+          op = AOCL_EmitCopy</*len_less_than_12=*/true>(op, offset, matched);
         } else {
-          op = EmitCopy</*len_less_than_12=*/false>(op, offset, matched);
+          op = AOCL_EmitCopy</*len_less_than_12=*/false>(op, offset, matched);
         }
         if (SNAPPY_PREDICT_FALSE(ip >= ip_limit)) {
           goto emit_remainder;
