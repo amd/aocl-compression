@@ -1044,7 +1044,7 @@ int zstd_fullbench_main(int argc, char** argv)
     if (filenamesStart==0)   /* no input file */
         result = benchSample(benchNb, sampleSize, compressibility, cLevel, cparams);
     else
-        result = benchFiles(benchNb, argv+filenamesStart, argc-filenamesStart, cLevel, cparams);
+        result = benchFiles(benchNb, (const char**)(argv+filenamesStart), argc-filenamesStart, cLevel, cparams);
 
     if (main_pause) { int unused; printf("press enter...\n"); unused = getchar(); (void)unused; }
 
