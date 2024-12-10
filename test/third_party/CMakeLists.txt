@@ -26,7 +26,7 @@
  
 # @author Ashish Sriram
 
-cmake_minimum_required(VERSION 3.22.0)
+cmake_minimum_required(VERSION 3.26.0)
 
 set (ALGOS_PATH ../../algos)
 
