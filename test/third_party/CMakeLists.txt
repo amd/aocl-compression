@@ -181,10 +181,6 @@ if (BUILD_UTILITY)
 
         # Set the path to the zstd program directory
         file(GLOB ZSTD_PROGRAM_SRCS "${BU_ZSTD_PROGRAMS_DIR}/*.c")
-        if (MSVC)
-  	        list(APPEND ZSTD_PROGRAM_SRCS ${BU_ZSTD_LIBRARY_DIR}/zstd/lib/common/pool.c 
-                                            		${BU_ZSTD_LIBRARY_DIR}/zstd/lib/common/threading.c)
-        endif ()
 
         # Create testbench zstd_utility
         set (zstd_utility zstd_utility) 
