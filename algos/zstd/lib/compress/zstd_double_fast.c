@@ -382,11 +382,11 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
     U32 curr;
 
     /* how many positions to search before increasing step size */
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
-    const size_t kStepIncr = 1 << kSearchStrengthDoubleFast;
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+    const size_t kStepIncr = 1 << aocl_kSearchStrengthDoubleFast;
 #else
     const size_t kStepIncr = 1 << kSearchStrength;
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
 
     const BYTE* nextStep;
     size_t step; /* the current step size */
@@ -434,7 +434,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
 
         /* Inner Loop: one iteration per search / position */
         do {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
             // Alternate between values 1 and 2 for step while searching for a match. In case
             // the value of step exceeds 2 (this happens when the value of step is incremented
             // when ip1 exceeds nextStep), we let step retain its value.
@@ -498,14 +498,14 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
 
 _revert_back_point :
             if (ip1 >= nextStep) {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
                 step += 3;
                 LOG_FORMATTED(DEBUG, logCtx, "step = %zu", step);
 #else
                 PREFETCH_L1(ip1 + 64);
                 PREFETCH_L1(ip1 + 128);
                 step++;
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
                 nextStep += kStepIncr;
             }
             ip = ip1;
@@ -584,7 +584,7 @@ _revert_back_point :
             /* Complementary insertion */
             /* done after iLimit test, as candidates could be > iend-8 */
             {   U32 const indexToInsert = curr + 2;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
             /* More complementary insertions to improve ratio */
             hashLong[ZSTD_hashPtr(base + indexToInsert, hBitsL, 8)] = indexToInsert;
             hashLong[ZSTD_hashPtr(ip - 3, hBitsL, 8)] = (U32)(ip - 3 - base);
@@ -607,7 +607,7 @@ _revert_back_point :
 }
 #else
 /* The following optimizations have been included in the optimized function:
-    - when the AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST flag is enabled,
+    - when the AOCL_ZSTD_SEARCH_SKIP_OPT flag is enabled,
         - the search tolerance is reduced to 2^5 (32) instead of 2^8 (256)
         - for every 32 byte blocks that go without a single match, the step rate is increased by 3 instead of 1
         - unnecessary prefetching is avoided when increasing step size
@@ -643,11 +643,11 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
     U32 curr;
 
     /* how many positions to search before increasing step size */
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
-    const size_t kStepIncr = 1 << kSearchStrengthDoubleFast;
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+    const size_t kStepIncr = 1 << aocl_kSearchStrengthDoubleFast;
 #else
     const size_t kStepIncr = 1 << kSearchStrength;
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
 
     const BYTE* nextStep;
     size_t step; /* the current step size */
@@ -695,7 +695,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
 
         /* Inner Loop: one iteration per search / position */
         do {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
             // Alternate between values 1 and 2 for step while searching for a match. In case
             // the value of step exceeds 2 (this happens when the value of step is incremented
             // when ip1 exceeds nextStep), we let step retain its value.
@@ -745,14 +745,14 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(
             }
 
             if (ip1 >= nextStep) {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
                 step += 3;
                 LOG_FORMATTED(DEBUG, logCtx, "step = %zu", step);
 #else
                 PREFETCH_L1(ip1 + 64);
                 PREFETCH_L1(ip1 + 128);
                 step++;
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
                 nextStep += kStepIncr;
             }
             ip = ip1;
@@ -824,7 +824,7 @@ _match_stored:
             /* Complementary insertion */
             /* done after iLimit test, as candidates could be > iend-8 */
             {   U32 const indexToInsert = curr+2;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
                 /* More complementary insertions to improve ratio */
                 hashLong[ZSTD_hashPtr(base+indexToInsert, hBitsL, 8)] = indexToInsert;
                 hashLong[ZSTD_hashPtr(ip-3, hBitsL, 8)] = (U32)(ip-3-base);
@@ -1336,7 +1336,7 @@ static size_t ZSTD_compressBlock_doubleFast_extDict_generic(
 #ifdef AOCL_ZSTD_OPT
 /* The following optimizations have been included in the optimized function:
     - code refactoring on the lines of AOCL_ZSTD_compressBlock_doubleFast_noDict_generic()
-    - when the AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST flag is enabled,
+    - when the AOCL_ZSTD_SEARCH_SKIP_OPT flag is enabled,
         - the search tolerance is set to 2^5 (32)
         - for every 32 byte blocks that go without a single match, the step rate is increased by 3 instead of 1
     - in search_next_long, the condition is wrapped with an UNLIKELY() to improve branch prediction
@@ -1377,11 +1377,11 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_extDict_generic(
     U32 curr;
 
     /* how many positions to search before increasing step size */
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
-    const size_t kStepIncr = 1 << kSearchStrengthDoubleFast;
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+    const size_t kStepIncr = 1 << aocl_kSearchStrengthDoubleFast;
     const BYTE* nextStep;
     size_t step; /* the current step size */
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
 
     size_t hl0; /* the long hash at ip */
     size_t hl1; /* the long hash at ip1 */
@@ -1405,7 +1405,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_extDict_generic(
 
     /* Outer Loop: one iteration per match found and stored */
     while (1) {  /* < instead of <=, because (ip+1) */
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
         step = 1;
         nextStep = ip + kStepIncr;
         ip1 = ip + step;
@@ -1427,7 +1427,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_extDict_generic(
 
         /* Inner Loop: one iteration per search / position */
         do {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
             // Alternate between values 1 and 2 for step while searching for a match. In case
             // the value of step exceeds 2 (this happens when the value of step is incremented
             // when ip1 exceeds nextStep), we let step retain its value.
@@ -1489,7 +1489,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_extDict_generic(
                 goto _search_next_long;
             }
 
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
             //step factor logic extDict
             if (ip1 >= nextStep) {
                 step += 3;
@@ -1500,7 +1500,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_extDict_generic(
 #else
             ip = ip1;
             ip1 += ((ip1 - anchor) >> kSearchStrength) + 1;
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
 
             hl0 = hl1;
             idxl0 = idxl1;
@@ -1543,7 +1543,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_extDict_generic(
         offset_1 = offset;
         ZSTD_storeSeq(seqStore, (size_t)(ip - anchor), anchor, iend, OFFSET_TO_OFFBASE(offset), mLength);
 
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
         if (step < 4) {
             /* It is unsafe to write this value back to the hashtable when ip1 is
              * greater than or equal to the new ip we will have after we're done
@@ -1565,7 +1565,7 @@ size_t AOCL_ZSTD_compressBlock_doubleFast_extDict_generic(
             /* Complementary insertion */
             /* done after iLimit test, as candidates could be > iend-8 */
             {   U32 const indexToInsert = curr + 2;
-#if defined(AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST)
+#if defined(AOCL_ZSTD_SEARCH_SKIP_OPT)
             /* More complementary insertions to improve ratio */
             hashLong[ZSTD_hashPtr(base + indexToInsert, hBitsL, 8)] = indexToInsert;
             hashLong[ZSTD_hashPtr(ip - 2, hBitsL, 8)] = (U32)(ip - 2 - base);

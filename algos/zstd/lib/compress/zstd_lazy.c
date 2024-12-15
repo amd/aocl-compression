@@ -2345,7 +2345,11 @@ AOCL_ZSTD_compressBlock_lazy_noDict_generic(
         }
 
         if (matchLength < 4) {
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+            size_t const step = ((size_t)(ip - anchor) >> aocl_kSearchStrengthLazy) + 1;   /* jump faster over incompressible sections */;
+#else
             size_t const step = ((size_t)(ip - anchor) >> kSearchStrength) + 1;   /* jump faster over incompressible sections */;
+#endif
             ip += step;
             /* Enter the lazy skipping mode once we are skipping more than 8 bytes at a time.
              * In this mode we stop inserting every position into our tables, and only insert
@@ -2403,8 +2407,11 @@ AOCL_ZSTD_compressBlock_lazy_noDict_generic(
             }
         
         if (OFFBASE_IS_OFFSET(offBase) && OFFBASE_TO_OFFSET(offBase) < WILDCOPY_VECLEN) {
-            //step by step or 1???
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+            size_t const step = ((size_t)(ip - anchor) >> aocl_kSearchStrengthLazy) + 1;   /* jump faster over incompressible sections */;
+#else
             size_t const step = ((size_t)(ip - anchor) >> kSearchStrength) + 1;   /* jump faster over incompressible sections */;
+#endif
             ip += step;
             ms->lazySkipping = step > kLazySkippingStep;
             continue;
@@ -2429,8 +2436,11 @@ AOCL_ZSTD_compressBlock_lazy_noDict_generic(
             U32 offset_t = OFFBASE_IS_OFFSET(offBase) ? (U32)OFFBASE_TO_OFFSET(offBase) : 1;
             if (!is_totalbits_limited_seq_possible(start, anchor, matchLength, offset_t)) {
                 offset_1 = prev_offset_1; //revert
-                //step by step or 1???
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+                size_t const step = ((size_t)(ip - anchor) >> aocl_kSearchStrengthLazy) + 1;   /* jump faster over incompressible sections */;
+#else
                 size_t const step = ((size_t)(ip - anchor) >> kSearchStrength) + 1;   /* jump faster over incompressible sections */;
+#endif
                 ip += step;
                 ms->lazySkipping = step > kLazySkippingStep;
                 continue;
@@ -2564,7 +2574,11 @@ AOCL_ZSTD_compressBlock_lazy_generic(
         }
 
         if (matchLength < 4) {
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+            size_t const step = ((size_t)(ip - anchor) >> aocl_kSearchStrengthLazy) + 1;   /* jump faster over incompressible sections */;
+#else
             size_t const step = ((size_t)(ip - anchor) >> kSearchStrength) + 1;   /* jump faster over incompressible sections */;
+#endif
             ip += step;
             /* Enter the lazy skipping mode once we are skipping more than 8 bytes at a time.
              * In this mode we stop inserting every position into our tables, and only insert

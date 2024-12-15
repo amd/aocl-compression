@@ -460,7 +460,7 @@ AOCL_ZSTD_compressBlock_fast_noDict_generic(
     const ZSTD_compressionParameters* const cParams = &ms->cParams;
     U32* const hashTable = ms->hashTable;
     U32 const hlog = cParams->hashLog;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
     size_t const stepSize = 2;
 #else
     /* support stepSize of 0 */
@@ -500,11 +500,11 @@ AOCL_ZSTD_compressBlock_fast_noDict_generic(
      * between pairs of positions, from ip0 to ip2 or ip1 to ip3. */
     size_t step;
     const BYTE* nextStep;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
-    const size_t kStepIncr = (1 << (kSearchStrengthFast - 1));
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+    const size_t kStepIncr = (1 << (aocl_kSearchStrengthFast - 1));
 #else
     const size_t kStepIncr = (1 << (kSearchStrength - 1));
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
 
     DEBUGLOG(5, "ZSTD_compressBlock_fast_generic");
     ip0 += (ip0 == prefixStart);
@@ -536,7 +536,7 @@ _start: /* Requires: ip0 */
     idx = hashTable[hash0];
 
     do {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
         // Alternate between values 2 and 3 for step while searching for a match. In case
         // the value of step exceeds 3 (this happens when the value of step is incremented
         // when ip2 exceeds nextStep), we let step retain its value.
@@ -692,14 +692,14 @@ _start: /* Requires: ip0 */
 
         /* calculate step */
         if (ip2 >= nextStep) {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
             step += 3;
             LOG_FORMATTED(DEBUG, logCtx, "step = %zu", step);
 #else
             step++;
             PREFETCH_L1(ip1 + 64);
             PREFETCH_L1(ip1 + 128);
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
             nextStep += kStepIncr;
         }
     } while (ip3 < ilimit);
@@ -738,7 +738,7 @@ _match: /* Requires: ip0, match0, offcode */
 }
 #else
 /* The following optimizations have been included in the optimized function:
-    - when the AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST flag is enabled,
+    - when the AOCL_ZSTD_SEARCH_SKIP_OPT flag is enabled,
         - the search tolerance is reduced to 2^6 (64) instead of 2^8 (256)
         - for every 64 byte blocks that goes without a single match, the step rate is increased by 3 instead of 1
         - unnecessary prefetching is avoided when increasing step size
@@ -755,7 +755,7 @@ AOCL_ZSTD_compressBlock_fast_noDict_generic(
     const ZSTD_compressionParameters* const cParams = &ms->cParams;
     U32* const hashTable = ms->hashTable;
     U32 const hlog = cParams->hashLog;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
     size_t const stepSize = 2;
 #else
     /* support stepSize of 0 */
@@ -795,11 +795,11 @@ AOCL_ZSTD_compressBlock_fast_noDict_generic(
      * between pairs of positions, from ip0 to ip2 or ip1 to ip3. */
     size_t step;
     const BYTE* nextStep;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
-    const size_t kStepIncr = (1 << (kSearchStrengthFast - 1));
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+    const size_t kStepIncr = (1 << (aocl_kSearchStrengthFast - 1));
 #else
     const size_t kStepIncr = (1 << (kSearchStrength - 1));
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
 
     DEBUGLOG(5, "ZSTD_compressBlock_fast_generic");
     ip0 += (ip0 == prefixStart);
@@ -832,7 +832,7 @@ _start: /* Requires: ip0 */
     idx = hashTable[hash0];
 
     do {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
         // Alternate between values 2 and 3 for step while searching for a match. In case
         // the value of step exceeds 3 (this happens when the value of step is incremented
         // when ip2 exceeds nextStep), we let step retain its value.
@@ -941,14 +941,14 @@ _start: /* Requires: ip0 */
 
         /* calculate step */
         if (ip2 >= nextStep) {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
             step += 3;
             LOG_FORMATTED(DEBUG, logCtx, "step = %zu", step);
 #else
             step++;
             PREFETCH_L1(ip1 + 64);
             PREFETCH_L1(ip1 + 128);
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST */
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
             nextStep += kStepIncr;
         }
     } while (ip3 < ilimit);

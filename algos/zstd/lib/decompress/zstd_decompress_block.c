@@ -1216,11 +1216,26 @@ size_t AOCL_ZSTD_execSequence(BYTE* op,
     /* Copy 8 bytes and spread the offset to be >= 8. */
     ZSTD_overlapCopy8(&op, &match, sequence.offset);
 
-    /* If the match length is > 8 bytes, then continue with the wildcopy. */
-    if (sequence.matchLength > 8) {
-        assert(op < oMatchEnd);
-        ZSTD_wildcopy(op, match, (ptrdiff_t)sequence.matchLength - 8, ZSTD_overlap_src_before_dst);
+    if (LIKELY(sequence.matchLength < 1024)) {
+        /* If the match length is > 8 bytes, then continue with the wildcopy. */
+        if (sequence.matchLength > 8) {
+            assert(op < oMatchEnd);
+            ZSTD_wildcopy(op, match, (ptrdiff_t)sequence.matchLength - 8, ZSTD_overlap_src_before_dst);
+        }
+    } 
+    /* If the match length is >= 1024 bytes, then copy in increasing block sizes. 
+    * Provides significant gains for large match lengths, as memcpy of large blocks
+    * is more efficient than copying 8 bytes at a time. */
+    else {
+        size_t n = sequence.offset, rem = sequence.matchLength - 8;
+        while (rem >= n) {
+            rem -= n;
+            memcpy(op, match, n); op += n; /* same pattern gets repeated in the second half */
+            n *= 2;
+        }
+        memcpy(op, match, rem);
     }
+
     return sequenceLength;
 }
 #endif
@@ -2285,7 +2300,7 @@ AOCL_ZSTD_decompressSequences_body(ZSTD_DCtx* dctx,
     const BYTE* const prefixStart = (const BYTE*)(dctx->prefixStart);
     const BYTE* const vBase = (const BYTE*)(dctx->virtualStart);
     const BYTE* const dictEnd = (const BYTE*)(dctx->dictEnd);
-    DEBUGLOG(5, "ZSTD_decompressSequences_body: nbSeq = %d", nbSeq);
+    DEBUGLOG(5, "AOCL_ZSTD_decompressSequences_body: nbSeq = %d", nbSeq);
     (void)frame;
 
     /* Regen sequences */
@@ -2344,7 +2359,7 @@ AOCL_ZSTD_decompressSequences_body(ZSTD_DCtx* dctx,
         }
 
         /* check if reached exact end */
-        DEBUGLOG(5, "ZSTD_decompressSequences_body: after decode loop, remaining nbSeq : %i", nbSeq);
+        DEBUGLOG(5, "AOCL_ZSTD_decompressSequences_body: after decode loop, remaining nbSeq : %i", nbSeq);
         RETURN_ERROR_IF(nbSeq, corruption_detected, "");
         RETURN_ERROR_IF(BIT_reloadDStream(&seqState.DStream) < BIT_DStream_completed, corruption_detected, "");
         /* save reps for next block */

@@ -34,9 +34,10 @@ extern "C" {
 /*-*************************************
 *  Constants
 ***************************************/
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST
-    #define kSearchStrengthFast            6
-    #define kSearchStrengthDoubleFast      5
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+    #define aocl_kSearchStrengthFast            6
+    #define aocl_kSearchStrengthDoubleFast      5
+    #define aocl_kSearchStrengthLazy            5
 #endif
 #define kSearchStrength      8
 #define HASH_READ_SIZE       8
