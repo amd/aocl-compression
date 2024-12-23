@@ -107,7 +107,12 @@ __attribute__((__target__(CRC_32_Z_TARGET_ISA)))
 static size_t fold_16_vpclmulqdq(__m128i * xmm_crc0, __m128i * xmm_crc1,
     __m128i * xmm_crc2, __m128i * xmm_crc3, const uint8_t * src, size_t len,
     __m128i init_crc, int32_t first) {
+#if (defined(__clang__) || (defined(__GNUC__) && (__GNUC__ > 11)))
     __m512i zmm_initial = _mm512_zextsi128_si512(init_crc);
+#else
+    __m512i zmm_initial = _mm512_setzero_si512();
+    zmm_initial = _mm512_castsi128_si512(init_crc);
+#endif
     __m512i zmm_t0, zmm_t1, zmm_t2, zmm_t3;
     __m512i zmm_crc0, zmm_crc1, zmm_crc2, zmm_crc3;
     __m512i z0, z1, z2, z3;
