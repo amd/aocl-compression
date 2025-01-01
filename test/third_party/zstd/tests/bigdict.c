@@ -37,7 +37,7 @@
  */
 
 /* AOCL changes:
- *  + renamed main() to zstd_bigdict_main().
+ *  + renamed main() to zstd_bigdict_main(). Cleanup for failed cases.
 */
 
 #include <assert.h>
@@ -94,6 +94,7 @@ compress(ZSTD_CCtx* cctx, ZSTD_DCtx* dctx,
 
 int zstd_bigdict_main(int argc, char** argv)
 {
+    int ret = 0;
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
     ZSTD_DCtx* dctx = ZSTD_createDCtx();
     const size_t dataSize = (size_t)1 << 30;
@@ -105,34 +106,35 @@ int zstd_bigdict_main(int argc, char** argv)
     (void)argc;
     (void)argv;
 
+    while (1) { // to ensure cleanup before exit
     if (!buffer || !out || !roundtrip || !cctx || !dctx) {
         fprintf(stderr, "Allocation failure\n");
-        return 1;
+        ret = 1; break;
     }
 
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_windowLog, 31)))
-        return 1;
+        ret = 1; break;
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, 1)))
-        return 1;
+        ret = 1; break;
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_overlapLog, 9)))
-        return 1;
+        ret = 1; break;
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 1)))
-        return 1;
+        ret = 1; break;
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_strategy, ZSTD_btopt)))
-        return 1;
+        ret = 1; break;
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_targetLength, 7)))
-        return 1;
+        ret = 1; break;
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_minMatch, 7)))
-        return 1;
+        ret = 1; break;
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_searchLog, 1)))
-        return 1;
+        ret = 1; break;
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_hashLog, 10)))
-        return 1;
+        ret = 1; break;
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_chainLog, 10)))
-        return 1;
+        ret = 1; break;
 
     if (ZSTD_isError(ZSTD_DCtx_setParameter(dctx, ZSTD_d_windowLogMax, 31)))
-        return 1;
+        ret = 1; break;
 
     RDG_genBuffer(buffer, bufferSize, 1.0, 0.0, 0xbeefcafe);
 
@@ -142,19 +144,21 @@ int zstd_bigdict_main(int argc, char** argv)
         for (i = 0; i < 10; ++i) {
             fprintf(stderr, "Compressing 1 GB\n");
             if (compress(cctx, dctx, out, outSize, buffer, dataSize, roundtrip, ZSTD_e_continue))
-                return 1;
+                ret = 1; break;
         }
     }
     fprintf(stderr, "Compressing 1 GB\n");
     if (compress(cctx, dctx, out, outSize, buffer, dataSize, roundtrip, ZSTD_e_end))
-        return 1;
+        ret = 1; break;
 
     fprintf(stderr, "Success!\n");
+    break;
+    }
 
     free(roundtrip);
     free(out);
     free(buffer);
     ZSTD_freeDCtx(dctx);
     ZSTD_freeCCtx(cctx);
-    return 0;
+    return ret;
 }
