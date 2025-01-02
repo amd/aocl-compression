@@ -1874,7 +1874,7 @@ void BZ_API(BZ2_bzReadGetUnused)
 #endif
 
 #ifdef AOCL_UNIT_TEST
-#define bucket_size (4 * (1 << CHAR_BIT))
+#define bucket_size (4 * ALPHABET_SIZE)
 
 int Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq)
 {

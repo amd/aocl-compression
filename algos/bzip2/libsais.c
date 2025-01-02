@@ -7535,11 +7535,11 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
     if(SA[1] == -1)
     {
         m--;
-        memcpy(&SA[n-m], &SA[2],  sizeof(sa_sint_t)*m);
+        memmove(&SA[n-m], &SA[2],  sizeof(sa_sint_t)*m);
     }
     else
     {
-        memcpy(&SA[n-m], &SA[1], sizeof(sa_sint_t)*m);
+        memmove(&SA[n-m], &SA[1], sizeof(sa_sint_t)*m);
     }
 #endif /* AOCL_BWT */
     /*
