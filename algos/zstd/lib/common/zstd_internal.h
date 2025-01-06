@@ -358,6 +358,9 @@ typedef struct {
      */
     ZSTD_longLengthType_e longLengthType;
     U32                   longLengthPos;  /* Index of the sequence to apply long length modification to */
+#if AOCL_DECOMPRESS_FAST > 1
+    U64 fds_config; /* AOCL fast decompress settings */
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 } seqStore_t;
 
 typedef struct {

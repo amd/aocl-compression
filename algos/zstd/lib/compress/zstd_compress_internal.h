@@ -803,6 +803,21 @@ MEM_STATIC size_t AOCL_ZSTD_count(const BYTE* pIn, const BYTE* pMatch, const BYT
     if ((pIn<pInLimit) && (*pMatch == *pIn)) pIn++;
     return (size_t)(pIn - pStart);
 }
+// This variant of ZSTD_count_2segments calls optimized AOCL_ZSTD_count.
+MEM_STATIC size_t
+AOCL_ZSTD_count_2segments(const BYTE* ip, const BYTE* match,
+                     const BYTE* iEnd, const BYTE* mEnd, const BYTE* iStart)
+{
+    const BYTE* const vEnd = MIN( ip + (mEnd - match), iEnd);
+    size_t const matchLength = AOCL_ZSTD_count(ip, match, vEnd);
+    if (match + matchLength != mEnd) return matchLength;
+    DEBUGLOG(7, "AOCL_ZSTD_count_2segments: found a 2-parts match (current length==%zu)", matchLength);
+    DEBUGLOG(7, "distance from match beginning to end dictionary = %zi", mEnd - match);
+    DEBUGLOG(7, "distance from current pos to end buffer = %zi", iEnd - ip);
+    DEBUGLOG(7, "next byte : ip==%02X, istart==%02X", ip[matchLength], *iStart);
+    DEBUGLOG(7, "final match length = %zu", matchLength + AOCL_ZSTD_count(ip+matchLength, iStart, iEnd));
+    return matchLength + AOCL_ZSTD_count(ip+matchLength, iStart, iEnd);
+}
 #endif /* AOCL_ZSTD_OPT */
 
 /** ZSTD_count_2segments() :
@@ -1543,6 +1558,14 @@ void AOCL_ZSTD_storeSequences(seqStore_t* seqStore, const BYTE* ip, const BYTE* 
     }
 }
 
+/* Helper function to update FDS config in the FDS frame header
+*/
+FORCE_INLINE_TEMPLATE
+void AOCL_ZSTD_updateFdsConfig(BYTE* dst, ZSTD_CCtx* cctx)
+{
+    MEM_writeLE64(dst + ZSTD_SKIPPABLEHEADERSIZE + FDS_MAGIC_WORD_BYTES, cctx->seqStore.fds_config);
+}
+
 #ifdef AOCL_UNIT_TEST
 ZSTDLIB_API int Test_is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset);
 ZSTDLIB_API int Test_get_lit_bits(size_t len);
@@ -1773,11 +1796,4 @@ size_t ZSTD_compressEnd_public(ZSTD_CCtx* cctx,
 
 size_t ZSTD_compressBlock_deprecated(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 
-/* ===============================================================
- * Internal function used for setting the function pointers to the
- * appropriate functions for compression in double fast mode when
- * the dynamic dispatcher is used.
- * =============================================================== */
-void aocl_register_compressfast_fmv(int optOff, int optLevel);
-void aocl_register_compressdoublefast_fmv(int optOff, int optLevel);
 #endif /* ZSTD_COMPRESS_H */

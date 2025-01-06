@@ -31,6 +31,17 @@ size_t ZSTD_compressBlock_doubleFast_extDict(
         ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize);
 
+#ifdef AOCL_ZSTD_OPT
+
+size_t AOCL_ZSTD_compressBlock_doubleFast(
+        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        void const* src, size_t srcSize);
+#define AOCL_ZSTD_compressBlock_doubleFast_dictMatchState ZSTD_compressBlock_doubleFast_dictMatchState
+size_t AOCL_ZSTD_compressBlock_doubleFast_extDict(
+        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        void const* src, size_t srcSize);
+
+#endif /* AOCL_ZSTD_OPT */
 
 #if defined (__cplusplus)
 }

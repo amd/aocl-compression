@@ -2836,7 +2836,10 @@ size_t AOCL_ZSTD_compressBlock_lazy2_row(
     void const* src, size_t srcSize)
 {
     #if AOCL_DECOMPRESS_FAST == 2
-    return AOCL_ZSTD_compressBlock_lazy_noDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 2);
+    if(seqStore->fds_config == FDS_FAST2_NOTB_SO4_NOEXT_REP2)
+        return AOCL_ZSTD_compressBlock_lazy_noDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 2);
+    else
+        return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 2, ZSTD_noDict);
     #else
     return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 2, ZSTD_noDict);
     #endif
@@ -2847,7 +2850,10 @@ size_t AOCL_ZSTD_compressBlock_lazy_row(
     void const* src, size_t srcSize)
 {
     #if AOCL_DECOMPRESS_FAST == 2
-    return AOCL_ZSTD_compressBlock_lazy_noDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 1);
+    if(seqStore->fds_config == FDS_FAST2_NOTB_SO4_NOEXT_REP2)
+        return AOCL_ZSTD_compressBlock_lazy_noDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 1);
+    else
+        return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 1, ZSTD_noDict);
     #else
     return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 1, ZSTD_noDict);
     #endif
@@ -2858,7 +2864,10 @@ size_t AOCL_ZSTD_compressBlock_greedy_row(
     void const* src, size_t srcSize)
 {
     #if AOCL_DECOMPRESS_FAST == 2
-    return AOCL_ZSTD_compressBlock_lazy_noDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 0);
+    if(seqStore->fds_config == FDS_FAST2_NOTB_SO4_NOEXT_REP2)
+        return AOCL_ZSTD_compressBlock_lazy_noDict_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 0);
+    else
+        return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 0, ZSTD_noDict);
     #else
     return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 0, ZSTD_noDict);
     #endif

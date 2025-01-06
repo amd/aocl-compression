@@ -1558,6 +1558,9 @@ size_t ZSTD_CCtx_reset(ZSTD_CCtx* cctx, ZSTD_ResetDirective reset)
       || (reset == ZSTD_reset_session_and_parameters) ) {
         RETURN_ERROR_IF(cctx->streamStage != zcss_init, stage_wrong,
                         "Reset parameters is only possible during init stage.");
+#if AOCL_DECOMPRESS_FAST > 1
+        cctx->seqStore.fds_config = 0;
+#endif
         ZSTD_clearAllDicts(cctx);
         ZSTD_memset(&cctx->externalMatchCtx, 0, sizeof(cctx->externalMatchCtx));
         return ZSTD_CCtxParams_reset(&cctx->requestedParams);
@@ -3253,6 +3256,50 @@ ZSTD_blockCompressor ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_paramS
           NULL,
           NULL }
     };
+#ifdef AOCL_ZSTD_OPT
+    static const ZSTD_blockCompressor aocl_blockCompressor[4][ZSTD_STRATEGY_MAX+1] = {
+        { AOCL_ZSTD_compressBlock_fast  /* default for 0 */,
+          AOCL_ZSTD_compressBlock_fast,
+          AOCL_ZSTD_compressBlock_doubleFast,
+          ZSTD_compressBlock_greedy,
+          ZSTD_compressBlock_lazy,
+          ZSTD_compressBlock_lazy2,
+          ZSTD_compressBlock_btlazy2,
+          ZSTD_compressBlock_btopt,
+          ZSTD_compressBlock_btultra,
+          ZSTD_compressBlock_btultra2 },
+        { AOCL_ZSTD_compressBlock_fast_extDict  /* default for 0 */,
+          AOCL_ZSTD_compressBlock_fast_extDict,
+          AOCL_ZSTD_compressBlock_doubleFast_extDict,
+          ZSTD_compressBlock_greedy_extDict,
+          ZSTD_compressBlock_lazy_extDict,
+          ZSTD_compressBlock_lazy2_extDict,
+          ZSTD_compressBlock_btlazy2_extDict,
+          ZSTD_compressBlock_btopt_extDict,
+          ZSTD_compressBlock_btultra_extDict,
+          ZSTD_compressBlock_btultra_extDict },
+        { AOCL_ZSTD_compressBlock_fast_dictMatchState  /* default for 0 */,
+          AOCL_ZSTD_compressBlock_fast_dictMatchState,
+          AOCL_ZSTD_compressBlock_doubleFast_dictMatchState,
+          ZSTD_compressBlock_greedy_dictMatchState,
+          ZSTD_compressBlock_lazy_dictMatchState,
+          ZSTD_compressBlock_lazy2_dictMatchState,
+          ZSTD_compressBlock_btlazy2_dictMatchState,
+          ZSTD_compressBlock_btopt_dictMatchState,
+          ZSTD_compressBlock_btultra_dictMatchState,
+          ZSTD_compressBlock_btultra_dictMatchState },
+        { NULL  /* default for 0 */,
+          NULL,
+          NULL,
+          ZSTD_compressBlock_greedy_dedicatedDictSearch,
+          ZSTD_compressBlock_lazy_dedicatedDictSearch,
+          ZSTD_compressBlock_lazy2_dedicatedDictSearch,
+          NULL,
+          NULL,
+          NULL,
+          NULL }
+    };
+#endif /* AOCL_ZSTD_OPT */
     ZSTD_blockCompressor selectedCompressor;
     ZSTD_STATIC_ASSERT((unsigned)ZSTD_fast == 1);
 
@@ -3312,9 +3359,18 @@ ZSTD_blockCompressor ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_paramS
         assert(useRowMatchFinder != ZSTD_ps_auto);
         selectedCompressor = rowBasedBlockCompressors[(int)dictMode][(int)strat - (int)ZSTD_greedy];
         LOG_FORMATTED(INFO, logCtx, "Selecting a row-based matchfinder. Id : [%d][%d]", (int)dictMode, (int)strat - (int)ZSTD_greedy);
-#endif
+#endif /* AOCL_ZSTD_OPT */
     } else {
+#ifdef AOCL_ZSTD_OPT
+        if (LIKELY(aoclOptFlag)) {
+            selectedCompressor = aocl_blockCompressor[(int)dictMode][(int)strat];
+        }
+        else {
+            selectedCompressor = blockCompressor[(int)dictMode][(int)strat];
+        }
+#else
         selectedCompressor = blockCompressor[(int)dictMode][(int)strat];
+#endif /* AOCL_ZSTD_OPT */
         LOG_FORMATTED(INFO, logCtx, "Selecting a block compressor. Id : [%d][%d]", (int)dictMode, (int)strat);
     }
     assert(selectedCompressor != NULL);
@@ -4945,20 +5001,22 @@ static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
     ZSTD_matchState_t* const ms = &cctx->blockState.matchState;
     size_t fhSize = 0;
 #if AOCL_DECOMPRESS_FAST > 1
-    size_t fds = 0;
-    void* orgDst = dst;
+    size_t fds = (U64)0;
+    BYTE* orgDst = (BYTE*)dst;
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 
     DEBUGLOG(5, "AOCL_ZSTD_compressContinue_internal, stage: %u, srcSize: %u",
                 cctx->stage, (unsigned)srcSize);
     RETURN_ERROR_IF(cctx->stage==ZSTDcs_created, stage_wrong,
                     "missing init (ZSTD_compressBegin)");
-
     if (frame && (cctx->stage==ZSTDcs_init)) {
 #if AOCL_DECOMPRESS_FAST > 1
         if(srcSize) { /* generate fds frame only if there is input */
             fds = AOCL_ZSTD_writeFdsFrameIfSupported(cctx, &dst, &dstCapacity, src, srcSize);
             FORWARD_IF_ERROR(fds, "");
+            if(fds) {
+                cctx->seqStore.fds_config = FDS_FAST2_NOTB_SO4_NOEXT_REP2;
+            }
         }
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
         fhSize = ZSTD_writeFrameHeader(dst, dstCapacity, &cctx->appliedParams,
@@ -5005,9 +5063,9 @@ static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
                 (unsigned)cctx->consumedSrcSize);
         }
 #if AOCL_DECOMPRESS_FAST > 1
-        if(frame & fds) {
+        if(frame && fds) {
             // ToDo : Update FDS constraints based on the heuristics
-            *((U64*)(orgDst) + (ZSTD_SKIPPABLEHEADERSIZE + FDS_MAGIC_WORD_BYTES)) = FDS_FAST2_NOTB_SO4_NOEXT_REP2;
+            AOCL_ZSTD_updateFdsConfig(orgDst, cctx);
         }
         return cSize + fhSize + fds;
 #else
@@ -7887,8 +7945,6 @@ char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,
     if (!setup_ok_zstd_encode) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
         aocl_register_zstd_compress_fmv(optOff, optLevel);
-        aocl_register_compressfast_fmv(optOff, optLevel);
-        aocl_register_compressdoublefast_fmv(optOff, optLevel);
         setup_ok_zstd_encode = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zstd_encode)
@@ -7902,8 +7958,6 @@ static void aocl_setup_native(void) {
         int optLevel = get_cpu_opt_flags(0);
         int optOff = get_disable_opt_flags(0);
         aocl_register_zstd_compress_fmv(optOff, optLevel);
-        aocl_register_compressfast_fmv(optOff, optLevel);
-        aocl_register_compressdoublefast_fmv(optOff, optLevel);
         setup_ok_zstd_encode = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zstd_encode)
@@ -8049,6 +8103,66 @@ int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMo
             ZSTD_compressBlock_lazy2_dedicatedDictSearch_row }
     };
 
+#ifdef AOCL_ZSTD_OPT
+    static const ZSTD_blockCompressor expectedAoclCompressor[4][ZSTD_STRATEGY_MAX+1] = { //mimic aocl
+        { AOCL_ZSTD_compressBlock_fast  /* default for 0 */,
+          AOCL_ZSTD_compressBlock_fast,
+          AOCL_ZSTD_compressBlock_doubleFast,
+          ZSTD_compressBlock_greedy,
+          ZSTD_compressBlock_lazy,
+          ZSTD_compressBlock_lazy2,
+          ZSTD_compressBlock_btlazy2,
+          ZSTD_compressBlock_btopt,
+          ZSTD_compressBlock_btultra,
+          ZSTD_compressBlock_btultra2 },
+        { AOCL_ZSTD_compressBlock_fast_extDict  /* default for 0 */,
+          AOCL_ZSTD_compressBlock_fast_extDict,
+          AOCL_ZSTD_compressBlock_doubleFast_extDict,
+          ZSTD_compressBlock_greedy_extDict,
+          ZSTD_compressBlock_lazy_extDict,
+          ZSTD_compressBlock_lazy2_extDict,
+          ZSTD_compressBlock_btlazy2_extDict,
+          ZSTD_compressBlock_btopt_extDict,
+          ZSTD_compressBlock_btultra_extDict,
+          ZSTD_compressBlock_btultra_extDict },
+        { AOCL_ZSTD_compressBlock_fast_dictMatchState  /* default for 0 */,
+          AOCL_ZSTD_compressBlock_fast_dictMatchState,
+          AOCL_ZSTD_compressBlock_doubleFast_dictMatchState,
+          ZSTD_compressBlock_greedy_dictMatchState,
+          ZSTD_compressBlock_lazy_dictMatchState,
+          ZSTD_compressBlock_lazy2_dictMatchState,
+          ZSTD_compressBlock_btlazy2_dictMatchState,
+          ZSTD_compressBlock_btopt_dictMatchState,
+          ZSTD_compressBlock_btultra_dictMatchState,
+          ZSTD_compressBlock_btultra_dictMatchState },
+        { NULL  /* default for 0 */,
+          NULL,
+          NULL,
+          ZSTD_compressBlock_greedy_dedicatedDictSearch,
+          ZSTD_compressBlock_lazy_dedicatedDictSearch,
+          ZSTD_compressBlock_lazy2_dedicatedDictSearch,
+          NULL,
+          NULL,
+          NULL,
+          NULL }
+    };
+
+    static const ZSTD_blockCompressor expectedAoclRowCompressor[4][3] = { //mimic reference
+            { AOCL_ZSTD_compressBlock_greedy_row,
+            AOCL_ZSTD_compressBlock_lazy_row,
+            AOCL_ZSTD_compressBlock_lazy2_row },
+            { ZSTD_compressBlock_greedy_extDict_row,
+            ZSTD_compressBlock_lazy_extDict_row,
+            ZSTD_compressBlock_lazy2_extDict_row },
+            { AOCL_ZSTD_compressBlock_greedy_dictMatchState_row,
+            AOCL_ZSTD_compressBlock_lazy_dictMatchState_row,
+            AOCL_ZSTD_compressBlock_lazy2_dictMatchState_row },
+            { AOCL_ZSTD_compressBlock_greedy_dedicatedDictSearch_row,
+            AOCL_ZSTD_compressBlock_lazy_dedicatedDictSearch_row,
+            AOCL_ZSTD_compressBlock_lazy2_dedicatedDictSearch_row }
+    };
+#endif
+
     aoclOptFlag = _aoclOptFlag;
     assert(strat >= (int)(ZSTD_fast) && strat <= (int)(ZSTD_btultra2));
     ZSTD_strategy strat_e = (ZSTD_strategy)(strat);
@@ -8058,56 +8172,21 @@ int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMo
     ZSTD_blockCompressor bc = ZSTD_selectBlockCompressor(strat_e, useRowMatchFinder_e, dictMode_e);
 
 #ifdef AOCL_ZSTD_OPT
-    if (aoclOptFlag > 0 && useRowMatchFinder) { //optimized compressors expected
-        if      (dictMode_e == ZSTD_noDict              && strat_e == ZSTD_greedy) { if(bc != AOCL_ZSTD_compressBlock_greedy_row) return -1;}
-        else if (dictMode_e == ZSTD_noDict              && strat_e == ZSTD_lazy  ) { if(bc != AOCL_ZSTD_compressBlock_lazy_row) return -1;}
-        else if (dictMode_e == ZSTD_noDict              && strat_e == ZSTD_lazy2 ) { if(bc != AOCL_ZSTD_compressBlock_lazy2_row) return -1;}
-        else if (dictMode_e == ZSTD_dictMatchState      && strat_e == ZSTD_greedy) { if(bc != AOCL_ZSTD_compressBlock_greedy_dictMatchState_row) return -1;}
-        else if (dictMode_e == ZSTD_dictMatchState      && strat_e == ZSTD_lazy  ) { if(bc != AOCL_ZSTD_compressBlock_lazy_dictMatchState_row) return -1;}
-        else if (dictMode_e == ZSTD_dictMatchState      && strat_e == ZSTD_lazy2 ) { if(bc != AOCL_ZSTD_compressBlock_lazy2_dictMatchState_row) return -1;}
-        else if (dictMode_e == ZSTD_dedicatedDictSearch && strat_e == ZSTD_greedy) { if(bc != AOCL_ZSTD_compressBlock_greedy_dedicatedDictSearch_row) return -1;}
-        else if (dictMode_e == ZSTD_dedicatedDictSearch && strat_e == ZSTD_lazy  ) { if(bc != AOCL_ZSTD_compressBlock_lazy_dedicatedDictSearch_row) return -1;}
-        else if (dictMode_e == ZSTD_dedicatedDictSearch && strat_e == ZSTD_lazy2 ) { if(bc != AOCL_ZSTD_compressBlock_lazy2_dedicatedDictSearch_row) return -1; }
-        else { //reference compressors expected                                  )
-            if (useRowMatchFinder) {
-                switch (strat_e) {
-                case ZSTD_greedy:
-                case ZSTD_lazy:
-                case ZSTD_lazy2:
-                    //row match finder
-                    if (bc != expectedRefRowCompressor[(int)dictMode][(int)strat_e - (int)ZSTD_greedy])
-                        return -1;
-                    break;
-                default:
-                    //row match finder not relevant for other levels
-                    if (bc != expectedRefCompressor[(int)dictMode][(int)strat_e])
-                        return -1;
-                    break;
-                }
-            }
-            else {
-                if (bc != expectedRefCompressor[(int)dictMode][(int)strat_e])
-                    return -1;
-            }
+    if (aoclOptFlag > 0) {
+        if(useRowMatchFinder && (strat_e >= ZSTD_greedy && strat_e <= ZSTD_lazy2)) { //optimized compressors expected
+            if (bc != expectedAoclRowCompressor[(int)dictMode][(int)strat_e - (int)ZSTD_greedy])
+                return -1;
+        }
+        else {
+            if (bc != expectedAoclCompressor[(int)dictMode][(int)strat_e])
+                return -1;
         }
     }
-    else { //reference compressors expected
-#endif
-        if (useRowMatchFinder) {
-            switch (strat_e) {
-            case ZSTD_greedy:
-            case ZSTD_lazy:
-            case ZSTD_lazy2:
-                //row match finder
-                if (bc != expectedRefRowCompressor[(int)dictMode][(int)strat_e - (int)ZSTD_greedy])
-                    return -1;
-                break;
-            default:
-                //row match finder not relevant for other levels
-                if (bc != expectedRefCompressor[(int)dictMode][(int)strat_e])
-                    return -1;
-                break;
-            }
+    else {
+#endif /* AOCL_ZSTD_OPT */
+       if(useRowMatchFinder && (strat_e >= ZSTD_greedy && strat_e <= ZSTD_lazy2)) { //optimized compressors expected
+            if (bc != expectedRefRowCompressor[(int)dictMode][(int)strat_e - (int)ZSTD_greedy])
+                return -1;
         }
         else {
             if (bc != expectedRefCompressor[(int)dictMode][(int)strat_e])
