@@ -526,8 +526,7 @@ static void file_uncompress(char *file) {
  *   -1 to -9 : compression level
  */
 
-// AOCL: main() renamed to zlib_minigzip_main()
-int zlib_minigzip_main(int argc, char **argv) {
+int main(int argc, char **argv) {
     int copyout = 0;
     int uncompr = 0;
     gzFile file;

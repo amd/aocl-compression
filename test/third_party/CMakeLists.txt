@@ -36,11 +36,11 @@ if (NOT BUILD_STATIC_LIBS)
     # test bench is built with static linking to the library
     # These test benches are added only when BUILD_STATIC_LIBS=ON
 
-    message(SEND_ERROR "BUILD_STATIC_LIBS must be ON to build zstd utility and third party tests")
+    message(WARNING "BUILD_STATIC_LIBS must be ON to build zstd utility and third party tests")
 endif ()
 
 # Build third party tests
-if (TEST_COVERAGE_THIRD_PARTY)
+if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
     set(THIRD_PARTY_INTERNAL_TEST ON)
     # Add third party tests for each algo
     if (NOT AOCL_EXCLUDE_ZSTD)
@@ -72,7 +72,8 @@ if (TEST_COVERAGE_THIRD_PARTY)
     if (NOT AOCL_EXCLUDE_ZLIB)
         set (ZLIB_TP_PATH zlib)
         file (GLOB ZLIB_TP_SRC_FILES 
-                            ${ZLIB_TP_PATH}/test/*.c)
+                            ${ZLIB_TP_PATH}/test/example.c
+                            ${ZLIB_TP_PATH}/test/infcover.c)
     endif ()
 
     set (TP_SRC_FILES 
@@ -152,54 +153,70 @@ if (TEST_COVERAGE_THIRD_PARTY)
 
     if (NOT AOCL_EXCLUDE_ZLIB)
         add_test(TP_ZLIB_EXAMPLE              ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_EXAMPLE)
-        add_test(TP_ZLIB_INFCOVER             ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_INFCOVER)
-
-        add_test(TP_ZLIB_MINIGZIP_C_L1        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -1 ${CMAKE_BINARY_DIR}/silesia/dickens)
-        add_test(TP_ZLIB_MINIGZIP_D_L1        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -d ${CMAKE_BINARY_DIR}/silesia/dickens.gz)
-        set_tests_properties(TP_ZLIB_MINIGZIP_C_L1 PROPERTIES FIXTURES_SETUP FIXTURE_CL1)
-        set_tests_properties(TP_ZLIB_MINIGZIP_D_L1 PROPERTIES FIXTURES_REQUIRED FIXTURE_CL1)
-
-        add_test(TP_ZLIB_MINIGZIP_C_L6        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -6 ${CMAKE_BINARY_DIR}/silesia/xml)
-        add_test(TP_ZLIB_MINIGZIP_D_L6        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -d ${CMAKE_BINARY_DIR}/silesia/xml.gz)
-        set_tests_properties(TP_ZLIB_MINIGZIP_C_L6 PROPERTIES FIXTURES_SETUP FIXTURE_CL6)
-        set_tests_properties(TP_ZLIB_MINIGZIP_D_L6 PROPERTIES FIXTURES_REQUIRED FIXTURE_CL6)
-
-        add_test(TP_ZLIB_MINIGZIP_C_L9        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -9 ${CMAKE_BINARY_DIR}/silesia/webster)
-        add_test(TP_ZLIB_MINIGZIP_D_L9        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_MINIGZIP -d ${CMAKE_BINARY_DIR}/silesia/webster.gz)
-        set_tests_properties(TP_ZLIB_MINIGZIP_C_L9 PROPERTIES FIXTURES_SETUP FIXTURE_CL9)
-        set_tests_properties(TP_ZLIB_MINIGZIP_D_L9 PROPERTIES FIXTURES_REQUIRED FIXTURE_CL9)
+        add_test(TP_ZLIB_INFCOVER             ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZLIB_INFCOVER)        
     endif ()
 endif()
 
 # Build zstd cli utility
 if (BUILD_UTILITY)
-    set(BU_ZSTD_LIBRARY_DIR ${ALGOS_PATH})
-    # Set the path to the zstd directory
-    set (BU_ZSTD_TP_PATH zstd)
-    set (BU_ZSTD_PROGRAMS_DIR ${BU_ZSTD_TP_PATH}/programs)
+    if(BUILD_STATIC_LIBS)
+      set(BU_ZSTD_LIBRARY_DIR ${ALGOS_PATH})
+      # Set the path to the zstd directory
+      set (BU_ZSTD_TP_PATH zstd)
+      set (BU_ZSTD_PROGRAMS_DIR ${BU_ZSTD_TP_PATH}/programs)    
+  
+      # Check If ZSTD exclude flag is set
+      if (NOT AOCL_EXCLUDE_ZSTD)
+  
+          # Set the path to the zstd program directory
+          file(GLOB ZSTD_PROGRAM_SRCS "${BU_ZSTD_PROGRAMS_DIR}/*.c")
+  
+          # Create testbench zstd_utility
+          set (zstd_utility zstd_utility) 
+          add_executable(${zstd_utility} ${ZSTD_PROGRAM_SRCS}) 
+          set_target_properties(${zstd_utility} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+          target_include_directories(${zstd_utility} PRIVATE ${CMAKE_SOURCE_DIR} 
+  							${CMAKE_SOURCE_DIR}/api 
+                                              		${CMAKE_SOURCE_DIR}/utils 
+  							${BU_ZSTD_LIBRARY_DIR}/common)
+          target_include_directories(${zstd_utility} PRIVATE ${BU_ZSTD_LIBRARY_DIR}/zstd/lib 
+  							${BU_ZSTD_LIBRARY_DIR}/zstd/lib/common 
+                                              		${BU_ZSTD_LIBRARY_DIR}/zstd/lib/compress 
+  							${BU_ZSTD_LIBRARY_DIR}/zstd/lib/decompress 
+                                              		${LIBRARY_DIR}/zstd/lib/dictBuilder)
+         
+          target_link_libraries(${zstd_utility} ${lib_name})
+          target_link_libraries(${zstd_utility} ${CMAKE_DL_LIBS})
+      endif()
+    endif()
+    # Build minigzip utility
+    # Set the path to the zlib directory
+    set (BU_ZLIB_TP_PATH zlib)
+    set (BU_ZLIB_GZIP_DIR ${BU_ZLIB_TP_PATH}/test)
+    if (NOT AOCL_EXCLUDE_ZLIB)
+        set(ZLIB_MINIGZIP_SRCS "${BU_ZLIB_GZIP_DIR}/minigzip.c")
+        set (minigzip minigzip) 
+        add_executable(${minigzip} ${ZLIB_MINIGZIP_SRCS})
+        set_target_properties(${minigzip} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+        target_include_directories (${minigzip} PRIVATE ${ALGOS_PATH}/zlib
+                                                        ${ALGOS_PATH}/common)
+        target_link_libraries(${minigzip} ${lib_name})
+        target_link_libraries(${minigzip} ${CMAKE_DL_LIBS})
+        add_test(TP_ZLIB_MINIGZIP_C_L1        ${CMAKE_BINARY_DIR}/minigzip -1 ${CMAKE_BINARY_DIR}/silesia/dickens)
+        add_test(TP_ZLIB_MINIGZIP_D_L1        ${CMAKE_BINARY_DIR}/minigzip -d ${CMAKE_BINARY_DIR}/silesia/dickens.gz)
+        set_tests_properties(TP_ZLIB_MINIGZIP_C_L1 PROPERTIES FIXTURES_SETUP FIXTURE_CL1)
+        set_tests_properties(TP_ZLIB_MINIGZIP_D_L1 PROPERTIES FIXTURES_REQUIRED FIXTURE_CL1)
 
-    # Check If ZSTD exclude flag is set
-    if (NOT AOCL_EXCLUDE_ZSTD)
+        add_test(TP_ZLIB_MINIGZIP_C_L6        ${CMAKE_BINARY_DIR}/minigzip -6 ${CMAKE_BINARY_DIR}/silesia/xml)
+        add_test(TP_ZLIB_MINIGZIP_D_L6        ${CMAKE_BINARY_DIR}/minigzip -d ${CMAKE_BINARY_DIR}/silesia/xml.gz)
+        set_tests_properties(TP_ZLIB_MINIGZIP_C_L6 PROPERTIES FIXTURES_SETUP FIXTURE_CL6)
+        set_tests_properties(TP_ZLIB_MINIGZIP_D_L6 PROPERTIES FIXTURES_REQUIRED FIXTURE_CL6)
 
-        # Set the path to the zstd program directory
-        file(GLOB ZSTD_PROGRAM_SRCS "${BU_ZSTD_PROGRAMS_DIR}/*.c")
-
-        # Create testbench zstd_utility
-        set (zstd_utility zstd_utility) 
-        add_executable(${zstd_utility} ${ZSTD_PROGRAM_SRCS}) 
-        set_target_properties(${zstd_utility} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
-        target_include_directories(${zstd_utility} PRIVATE ${CMAKE_SOURCE_DIR} 
-							${CMAKE_SOURCE_DIR}/api 
-                                            		${CMAKE_SOURCE_DIR}/utils 
-							${BU_ZSTD_LIBRARY_DIR}/common)
-        target_include_directories(${zstd_utility} PRIVATE ${BU_ZSTD_LIBRARY_DIR}/zstd/lib 
-							${BU_ZSTD_LIBRARY_DIR}/zstd/lib/common 
-                                            		${BU_ZSTD_LIBRARY_DIR}/zstd/lib/compress 
-							${BU_ZSTD_LIBRARY_DIR}/zstd/lib/decompress 
-                                            		${LIBRARY_DIR}/zstd/lib/dictBuilder)
-       
-        target_link_libraries(${zstd_utility} ${lib_name})
-        target_link_libraries(${zstd_utility} ${CMAKE_DL_LIBS})   
+        add_test(TP_ZLIB_MINIGZIP_C_L9        ${CMAKE_BINARY_DIR}/minigzip -9 ${CMAKE_BINARY_DIR}/silesia/webster)
+        add_test(TP_ZLIB_MINIGZIP_D_L9        ${CMAKE_BINARY_DIR}/minigzip -d ${CMAKE_BINARY_DIR}/silesia/webster.gz)
+        set_tests_properties(TP_ZLIB_MINIGZIP_C_L9 PROPERTIES FIXTURES_SETUP FIXTURE_CL9)
+        set_tests_properties(TP_ZLIB_MINIGZIP_D_L9 PROPERTIES FIXTURES_REQUIRED FIXTURE_CL9)  
     endif()
 endif ()
+
 

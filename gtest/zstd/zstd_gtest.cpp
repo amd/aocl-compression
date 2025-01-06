@@ -2618,8 +2618,8 @@ void ZSTD_decompressStream_fuzz(std::vector<char> source, int dest_len)
     std::vector<char> output(dest_len);
     buffOut.dst = output.data();
     buffIn.src = source.data();
-    buffOut.size = 0;
-    buffIn.size = 0;
+    buffOut.size = output.size();
+    buffIn.size = source.size();
     ZSTD_decompressStream(zds, &buffOut, &buffIn);
     if(zds) ZSTD_freeDStream(zds);
 }
