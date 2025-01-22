@@ -1558,13 +1558,19 @@ void AOCL_ZSTD_storeSequences(seqStore_t* seqStore, const BYTE* ip, const BYTE* 
     }
 }
 
-/* Helper function to update FDS config in the FDS frame header
-*/
+#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
+/* Helper function to update FDS config in the FDS frame header.
+ * Update only if skippable FDS frame is present at dst */
 FORCE_INLINE_TEMPLATE
 void AOCL_ZSTD_updateFdsConfig(BYTE* dst, ZSTD_CCtx* cctx)
 {
-    MEM_writeLE64(dst + ZSTD_SKIPPABLEHEADERSIZE + FDS_MAGIC_WORD_BYTES, cctx->seqStore.fds_config);
+    if ((MEM_readLE32(dst) & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START /* skippable frame */ &&
+        MEM_read64(dst + ZSTD_SKIPPABLEHEADERSIZE) == FDS_MAGIC_WORD /* FDS frame */) {
+        U64 writeState = cctx->seqStore.fds_config.state == FDS_FAST2_ANALYZE ? FDS_FAST2_NOTB_SO4_NOEXT_REP2 : cctx->seqStore.fds_config.state;
+        MEM_writeLE64(dst + ZSTD_SKIPPABLEHEADERSIZE + FDS_MAGIC_WORD_BYTES, writeState);
+    }
 }
+#endif /* AOCL_DECOMPRESS_FAST > 2 */
 
 #ifdef AOCL_UNIT_TEST
 ZSTDLIB_API int Test_is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset);

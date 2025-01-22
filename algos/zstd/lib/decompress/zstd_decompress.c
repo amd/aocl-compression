@@ -9,7 +9,7 @@
  */
 
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -1043,11 +1043,7 @@ void AOCL_ZSTD_readFdsFrame(ZSTD_DCtx* dctx, void const* src, size_t srcSize) {
     src = (char*)src + FDS_MAGIC_WORD_BYTES;
 
     U64 metadata = MEM_read64(src);
-    if (metadata == FDS_FAST2_NOTB_SO4_NOEXT_REP2) { 
-        dctx->fds = FDS_FAST2_NOTB_SO4_NOEXT_REP2;
-    } else {  // if fds setting is not supported, reset flag.
-        dctx->fds = 0;
-    }
+    dctx->fds = metadata;
 }
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 

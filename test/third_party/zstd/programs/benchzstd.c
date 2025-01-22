@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -239,6 +239,8 @@ static size_t local_defaultCompress(
 }
 
 /* `addArgs` is the context */
+/* AOCL: Modified to process zstd frame that follows a skippable frame 
+ * TODO: Modify to process multiple frames if present in srcBuffer. */
 static size_t local_defaultDecompress(
                     const void* srcBuffer, size_t srcSize,
                     void* dstBuffer, size_t dstCapacity,

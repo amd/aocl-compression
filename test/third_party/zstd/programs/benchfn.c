@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2025, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -105,6 +106,12 @@ static BMK_runOutcome_t BMK_setValid_runTime(BMK_runTime_t runTime)
 /* can report result of benchFn for each block into blockResult. */
 /* blockResult is optional, provide NULL if this information is not required */
 /* note : time per loop can be reported as zero if run time < timer resolution */
+/* AOCL: In some AOCL_DECOMPRESS_FAST modes, when stream based APIs are used for 
+ * compression, previously analyzed blocks influence compression of current
+ * block. In such cases, iterating over the same input multiple times can
+ * yield different results each time. As compressed size is stored in p.blockResults[]
+ * and is used to allocate buffers for decompression, they need to be updated
+ * across loops. Hence, updates are performed for loopNb > 0 as well. */
 BMK_runOutcome_t BMK_benchFunction(BMK_benchParams_t p,
                                    unsigned nbLoops)
 {
@@ -119,22 +126,35 @@ BMK_runOutcome_t BMK_benchFunction(BMK_benchParams_t p,
 
     /* benchmark */
     {   UTIL_time_t const clockStart = UTIL_getTime();
-        unsigned loopNb, blockNb;
+        unsigned loopNb;
         if (p.initFn != NULL) p.initFn(p.initPayload);
+        
+        if (p.blockResults != NULL) {
+            for (unsigned blockNb = 0; blockNb < p.blockCount; blockNb++)
+                p.blockResults[blockNb] = 0;
+        }
+
         for (loopNb = 0; loopNb < nbLoops; loopNb++) {
-            for (blockNb = 0; blockNb < p.blockCount; blockNb++) {
+            size_t dstLoopSize = 0;
+            for (unsigned blockNb = 0; blockNb < p.blockCount; blockNb++) {
                 size_t const res = p.benchFn(p.srcBuffers[blockNb], p.srcSizes[blockNb],
                                    p.dstBuffers[blockNb], p.dstCapacities[blockNb],
                                    p.benchPayload);
-                if (loopNb == 0) {
-                    if (p.blockResults != NULL) p.blockResults[blockNb] = res;
+                //if (loopNb == 0) 
+                {
+                    if (p.blockResults != NULL) {
+                        // store largest compressed size obtained among iterations
+                        p.blockResults[blockNb] = (res > p.blockResults[blockNb]) ? res : p.blockResults[blockNb];
+                    }
                     if ((p.errorFn != NULL) && (p.errorFn(res))) {
                         RETURN_QUIET_ERROR(BMK_runOutcome_error(res),
                             "Function benchmark failed on block %u (of size %u) with error %i",
                             blockNb, (unsigned)p.srcSizes[blockNb], (int)res);
                     }
-                    dstSize += res;
-            }   }
+                    dstLoopSize += res;
+                }   
+            }
+            dstSize = (dstLoopSize > dstSize) ? dstLoopSize : dstSize;
         }  /* for (loopNb = 0; loopNb < nbLoops; loopNb++) */
 
         {   PTime const totalTime = UTIL_clockSpanNano(clockStart);

@@ -9,7 +9,7 @@
  */
 
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -610,7 +610,7 @@ size_t ZSTD_compressBlock_doubleFast(
 #define PREFETCH_MATCH_L(ip) PREFETCH_MATCH(ip, hBitsL, 8, hashLong) // prefetch match candidate stored in hashLong 
 #define PREFETCH_MATCH_S(ip) PREFETCH_MATCH(ip, hBitsS, mls, hashSmall) // prefetch match candidate stored in hashSmall 
 
-#if AOCL_DECOMPRESS_FAST == 2
+#if AOCL_DECOMPRESS_FAST > 1
 /*
 * Derived from AOCL_ZSTD_compressBlock_doubleFast_noDict_generic, but enforces :
 *   totalBits < (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)
@@ -869,7 +869,9 @@ _revert_back_point :
         }
     }
 }
-#endif /* AOCL_DECOMPRESS_FAST == 2 */
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
+
+#if AOCL_DECOMPRESS_FAST != 2
 /* The following optimizations have been included in the optimized function:
     - when the AOCL_ZSTD_SEARCH_SKIP_OPT flag is enabled,
         - the search tolerance is reduced to 2^5 (32) instead of 2^8 (256)
@@ -1124,29 +1126,38 @@ _match_stored:
         }
     }
 }
+#endif /* AOCL_DECOMPRESS_FAST != 2 */
 
-#if AOCL_DECOMPRESS_FAST > 1
+#if AOCL_DECOMPRESS_FAST == 2 /* FDS */
 #define AOCL_ZSTD_GEN_DFAST_NODICT_FN(mls)                                                                      \
     static size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_##mls(                                              \
         ZSTD_matchState_t *ms, seqStore_t *seqStore, U32 rep[ZSTD_REP_NUM],                                     \
         void const *src, size_t srcSize)                                                                        \
     {                                                                                                           \
-        switch(seqStore->fds_config)                                                                            \
+        return AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds(ms, seqStore, rep, src, srcSize, mls);     \
+    }
+#elif AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
+#define AOCL_ZSTD_GEN_DFAST_NODICT_FN(mls)                                                                      \
+    static size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_##mls(                                              \
+        ZSTD_matchState_t *ms, seqStore_t *seqStore, U32 rep[ZSTD_REP_NUM],                                     \
+        void const *src, size_t srcSize)                                                                        \
+    {                                                                                                           \
+        switch(seqStore->fds_config.state)                                                                      \
         {                                                                                                       \
+        case FDS_FAST2_ANALYZE:                                                                                 \
         case FDS_FAST2_NOTB_SO4_NOEXT_REP2:                                                                     \
             return AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds(ms, seqStore, rep, src, srcSize, mls); \
-        break;                                                                                                  \
         default:                                                                                                \
             return AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(ms, seqStore, rep, src, srcSize, mls);     \
         }                                                                                                       \
     }
-#else
-#define AOCL_ZSTD_GEN_DFAST_NODICT_FN(mls)                                                              \
-    static size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_##mls(                                      \
-        ZSTD_matchState_t *ms, seqStore_t *seqStore, U32 rep[ZSTD_REP_NUM],                             \
-        void const *src, size_t srcSize)                                                                \
-    {                                                                                                   \
-        return AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(ms, seqStore, rep, src, srcSize, mls); \
+#else  /* no FDS */
+#define AOCL_ZSTD_GEN_DFAST_NODICT_FN(mls)                                                                      \
+    static size_t AOCL_ZSTD_compressBlock_doubleFast_noDict_##mls(                                              \
+        ZSTD_matchState_t *ms, seqStore_t *seqStore, U32 rep[ZSTD_REP_NUM],                                     \
+        void const *src, size_t srcSize)                                                                        \
+    {                                                                                                           \
+        return AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(ms, seqStore, rep, src, srcSize, mls);         \
     }
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 

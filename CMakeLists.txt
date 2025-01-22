@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -110,17 +110,20 @@ set_property(
     "1" "2" "3" "4"
 )
 
-set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for Snappy and ZSTD" )
+# Faster decompress settings for supported methods
+set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values: [1,3] ZSTD, [1,2] Snappy, [1] LZ4." )
 set_property(
     CACHE AOCL_DECOMPRESS_FAST
     PROPERTY STRINGS
-    "OFF" "1" "2" # higher generally leads to faster decompression with larger compromise on compression speed/ratio
+    "OFF" "1" "2" "3" # Higher values generally leads to faster decompression with larger compromise on compression speed/ratio
 )
-# Faster decompress settings for supported methods
+if (NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF" AND AOCL_ENABLE_THREADS)
+    message(WARNING "Fast decompression mode excluded as it is supported in single threaded mode only")
+    set(AOCL_DECOMPRESS_FAST "OFF") # Fast decompression modes supported in single threaded mode only
+endif()
 if(NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF")
     # ZSTD
     set(AOCL_ZSTD_WILDCOPY_LONG "ON") # >= 1 
-    # AOCL_DECOMPRESS_FAST = 2 is supported when compression is performed using ZSTD_compress, ZSTD_compressCCtx, ZSTD_compress_advanced or aocl_llc_compress APIs.
     # LZ4
     set(AOCL_LZ4_DECOMPRESS_FAST "ON")
 endif()
@@ -209,6 +212,7 @@ set (API_SRC_FILES  api/code_alignment.cpp
                     api/types.h)
 
 set (ALGOS_PATH algos)
+set (CMAKE_CONFIG_PATH cmake)
 if (NOT AOCL_EXCLUDE_BZIP2)
 set (BZIP2_SRC_FILES    ${ALGOS_PATH}/bzip2/code_alignment.c
                         ${ALGOS_PATH}/bzip2/blocksort.c
@@ -301,6 +305,7 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()
 if (NOT AOCL_EXCLUDE_ZSTD)
+include(${CMAKE_CONFIG_PATH}/algos/zstd/zstd_config.cmake)
 set (ZSTD_SRC_FILES ${ALGOS_PATH}/zstd/lib/common/code_alignment.c
                     ${ALGOS_PATH}/zstd/lib/common/zstd_common.c
                     ${ALGOS_PATH}/zstd/lib/common/fse_decompress.c
@@ -683,6 +688,7 @@ set_target_properties(${lib_name} PROPERTIES PUBLIC_HEADER "${INC_FILES}")
 
 target_include_directories(${lib_name}
                             PRIVATE ${CMAKE_SOURCE_DIR}
+                            PRIVATE ${PROJECT_BINARY_DIR} # required for files generated from .in templates
                             PRIVATE ${ALGOS_PATH}/common
                             PRIVATE api)
 
