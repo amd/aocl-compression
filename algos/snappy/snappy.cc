@@ -4371,7 +4371,15 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
 
   const size_t kInputMarginBytes = 15;
   if (SNAPPY_PREDICT_TRUE(input_size >= kInputMarginBytes)) {
+#if AOCL_DECOMPRESS_FAST > 0
+/**
+ * In fast decompression mode, 8 bytes are read instead of the usual 4 bytes,
+ * hence the input size until limit is reduced by 4 bytes.
+ */
+    const char* ip_limit = input + input_size - kInputMarginBytes - 4;
+#else
     const char* ip_limit = input + input_size - kInputMarginBytes;
+#endif
     
     LOG_FORMATTED(DEBUG, logCtx, "Input size = %zu, Input size until limit = %zu",
      input_size, (size_t)(ip_limit - ip));
@@ -4469,8 +4477,43 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
         assert(candidate < ip);
 
         *table_entry = ip - base_ip;
+
+#if AOCL_DECOMPRESS_FAST == 1
+        if (candidate > base_ip) {
+          uint64_t ip64 = LittleEndian::Load64(ip-1);
+          uint64_t ca64 = LittleEndian::Load64(candidate-1);
+
+          // Matching 5 bytes starting at ip-1 and candidate-1
+          if ((ip64 & 0xFFFFFFFFFF) == (ca64 & 0xFFFFFFFFFF)) {
+            ip-=1; candidate-=1;
+#ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
+            bbhl_prev = bytes_between_hash_lookups > AOCL_SNAPPY_MATCH_SKIPPING_THRESHOLD ? (bytes_between_hash_lookups >> 1) : 0;
+#endif /* AOCL_SNAPPY_MATCH_SKIP_OPT */
+            break;
+          }
+
+          // Matching 5 bytes starting at ip and candidate
+          if ((ip64 & 0xFFFFFFFFFF00) == (ca64 & 0xFFFFFFFFFF00)) {
+#ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
+            bbhl_prev = bytes_between_hash_lookups > AOCL_SNAPPY_MATCH_SKIPPING_THRESHOLD ? (bytes_between_hash_lookups >> 1) : 0;
+#endif /* AOCL_SNAPPY_MATCH_SKIP_OPT */
+            break;
+          }
+        }
+
+#elif AOCL_DECOMPRESS_FAST == 2
+        // Matching 5 bytes starting at ip and candidate
+        if (SNAPPY_PREDICT_FALSE((LittleEndian::Load64(ip) & 0xFFFFFFFFFF)==(LittleEndian::Load64(candidate) & 0xFFFFFFFFFF))) {
+#ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
+          bbhl_prev = bytes_between_hash_lookups > AOCL_SNAPPY_MATCH_SKIPPING_THRESHOLD ? (bytes_between_hash_lookups >> 1) : 0;
+#endif /* AOCL_SNAPPY_MATCH_SKIP_OPT */
+          break;
+        }
+
+#else /* !AOCL_DECOMPRESS_FAST */
         if (SNAPPY_PREDICT_FALSE(static_cast<uint32_t>(data) ==
                                 LittleEndian::Load32(candidate))) {
+
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
             //set offset to 0 or 1/2 of current value depending on how large 
             //bytes_between_hash_lookups(bbhl) is.
@@ -4485,6 +4528,7 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
 #endif
           break;
         }
+#endif /* AOCL_DECOMPRESS_FAST */
         data = LittleEndian::Load32(next_ip);
         ip = next_ip;
       }
@@ -4493,7 +4537,15 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
       // than 4 bytes match.  But, prior to the match, input
       // bytes [next_emit, ip) are unmatched.  Emit them as "literal bytes."
       assert(next_emit + 16 <= ip_end);
+
+#if AOCL_DECOMPRESS_FAST == 1
+      // EmitLiteral if there is literal data to emit.
+      if(SNAPPY_PREDICT_FALSE(ip > next_emit)) {
+        op = EmitLiteral</*allow_fast_path=*/true>(op, next_emit, ip - next_emit);
+      }
+#else
       op = EmitLiteral</*allow_fast_path=*/true>(op, next_emit, ip - next_emit);
+#endif
 
       // Step 3: Call EmitCopy, and then see if another EmitCopy could
       // be our next move.  Repeat until we find no match for the

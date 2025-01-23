@@ -110,7 +110,7 @@ set_property(
     "1" "2" "3" "4"
 )
 
-set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for ZSTD" )
+set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for Snappy and ZSTD" )
 set_property(
     CACHE AOCL_DECOMPRESS_FAST
     PROPERTY STRINGS
@@ -529,6 +529,7 @@ if (AOCL_ZSTD_SEARCH_SKIP_OPT)
 endif()
 if (AOCL_DECOMPRESS_FAST)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
+    set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
 endif()
 if (AOCL_ZSTD_WILDCOPY_LONG)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_WILDCOPY_LONG")
