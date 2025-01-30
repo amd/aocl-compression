@@ -125,6 +125,12 @@ if(NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF")
     set(AOCL_LZ4_DECOMPRESS_FAST "ON")
 endif()
 
+# Avoid enabling AOCL and native multi-threaded implementations simultaneously as it might lead to sub-optimal performance
+if (AOCL_ENABLE_THREADS AND NATIVE_ENABLE_THREADS)
+    message(WARNING "Both AOCL_ENABLE_THREADS and NATIVE_ENABLE_THREADS are enabled. NATIVE_ENABLE_THREADS will be disabled.")
+    set(NATIVE_ENABLE_THREADS OFF)
+endif()
+
 if (AOCL_EXCLUDE_LZ4 AND NOT AOCL_EXCLUDE_LZ4HC)
     # as lz4hc depends on lz4, it should be excluded along with lz4
     message(WARNING "lz4hc is excluded as it depends on lz4")
