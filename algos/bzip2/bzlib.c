@@ -10,7 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
-   Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -41,11 +41,11 @@
  * as well as cpu instruction set supported by the runtime machine. */
 static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE() aocl_setup_native()
+int AOCL_use_libsais = 0;
 #else
 #define AOCL_SETUP_NATIVE()
 #endif
 
-int AOCL_use_libsais = 0;
 static int setup_ok_bzip2 = 0; // flag to indicate status of dynamic dispatcher setup
 
 /*---------------------------------------------------*/
@@ -212,10 +212,15 @@ void aocl_register_copy_fmv(int optOff, int optLevel)
    }
 }
 
+#ifdef AOCL_BZIP2_OPT
 void aocl_register_bwt(int optOff)
 {
    AOCL_use_libsais = !optOff;
 }
+#define AOCL_REGISTER_BWT aocl_register_bwt(optOff);
+#else
+#define AOCL_REGISTER_BWT
+#endif
 
 BZ_EXTERN char * BZ_API(aocl_setup_bzip2) 
                      ( int optOff,
@@ -227,7 +232,7 @@ BZ_EXTERN char * BZ_API(aocl_setup_bzip2)
     AOCL_ENTER_CRITICAL(setup_bzip2)
     if (!setup_ok_bzip2) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_bwt(optOff);
+        AOCL_REGISTER_BWT
         aocl_register_decompress_fmv(optOff, optLevel);
         aocl_register_copy_fmv(optOff, optLevel);
         aocl_register_mainSimpleSort_fmv(optOff, optLevel);
@@ -243,7 +248,7 @@ static void aocl_setup_native(void) {
     if (!setup_ok_bzip2) {
         int optLevel = get_cpu_opt_flags(0);
         int optOff = get_disable_opt_flags(0);
-        aocl_register_bwt(optOff);
+        AOCL_REGISTER_BWT
         aocl_register_decompress_fmv(optOff, optLevel);
         aocl_register_copy_fmv(optOff, optLevel);
         aocl_register_mainSimpleSort_fmv(optOff, optLevel);
@@ -532,12 +537,11 @@ Bool copy_input_until_stop ( EState* s )
 #ifdef AOCL_BZIP2_OPT
 
 /*
-   This macro serves the same purpose as `libsais_count_and_gather_lms_suffixes_8u` where the input for both are RLE output,
-   except: 
-   1. The function processes the full input from end to beginning in a go, where each time it works on 4 bytes,
-      the macro processes each byte from beginning to end.
-   2. In macro repeated characters are updated in buckets only once,
-      in function it is done each time a character is encountered regardless of the character is repetitive or not.   
+This macro serves the same purpose as libsais_count_and_gather_lms_suffixes_8u, as both take RLE output as input. However, there are key differences:
+   1. The function processes the input in reverse (end to beginning), handling 4 bytes at a time in each iteration,
+      whereas the macro processes the input in forward order (beginning to end), handling one byte at a time.
+   2. In the macro, repeated characters are updated in buckets only once, whereas in the function,
+      updates occur every time a character is encountered, regardless of whether it is repetitive.  
 */
 #define AOCL_INSERT_CHAR_LEFTOVER_INDEXES(chh, n_block, next, c, repeat, lms, buckets, SA, sa_index) \
    next = chh;                                                                                       \
@@ -587,51 +591,55 @@ Bool copy_input_until_stop ( EState* s )
       }                                                                                               \
    }
 
-#define AOCL_END_RLE_LMS                                          \
-   if (c == s->block[0])                                          \
-   {                                                              \
-      int j = 0;                                                  \
-      while (j + 1 < s->nblock && s->block[j] == s->block[j + 1]) \
-      {                                                           \
-         j++;                                                     \
-      }                                                           \
-      next = s->block[j + 1];                                     \
-   }                                                              \
-   else                                                           \
-      next = s->block[0];                                         \
-   lms = (lms >> 1) + ((c > next) << 1);                          \
-   buckets[BUCKETS_INDEX4(c, lms)]++;                             \
-   SA[sa_index] = s->nblock - repeat;                             \
-   sa_index += lms == 1;                                          \
-   if (repeat > 1)                                                \
-   {                                                              \
-      lms = (lms >> 1) + ((c > next) << 1);                       \
-      buckets[BUCKETS_INDEX4(c, lms)] += repeat - 1;              \
-   }                                                              \
-   repeat = 1;                                                    \
-   int nblock = 1;                                                \
-   c = s->block[0];                                               \
-   while (nblock < s->nblock)                                     \
-   {                                                              \
-      next = s->block[nblock++];                                  \
-      if (c == next)                                              \
-      {                                                           \
-         repeat++;                                                \
-      }                                                           \
-      else                                                        \
-      {                                                           \
-         lms = (lms >> 1) + ((c > next) << 1);                    \
-         buckets[BUCKETS_INDEX4(c, lms)]++;                       \
-         SA[0] = lms == 1 ? nblock - repeat - 1 : -1;             \
-         if (repeat > 1)                                          \
-         {                                                        \
-            lms = (lms >> 1) + ((c > next) << 1);                 \
-            buckets[BUCKETS_INDEX4(c, lms)] += repeat - 1;        \
-         }                                                        \
-         break;                                                   \
-      }                                                           \
-   }                                                              \
-   s->ptr[0] = sa_index;                                          \
+#define AOCL_END_RLE_LMS                                             \
+   if (s->nblock > 0)                                                \
+   {                                                                 \
+      if (c == s->block[0])                                          \
+      {                                                              \
+         int j = 0;                                                  \
+         while (j + 1 < s->nblock && s->block[j] == s->block[j + 1]) \
+         {                                                           \
+            j++;                                                     \
+         }                                                           \
+         if (j + 1 < s->nblock)                                      \
+            next = s->block[j + 1];                                  \
+      }                                                              \
+      else                                                           \
+         next = s->block[0];                                         \
+   }                                                                 \
+   lms = (lms >> 1) + ((c > next) << 1);                             \
+   buckets[BUCKETS_INDEX4(c, lms)]++;                                \
+   SA[sa_index] = s->nblock - repeat;                                \
+   sa_index += lms == 1;                                             \
+   if (repeat > 1)                                                   \
+   {                                                                 \
+      lms = (lms >> 1) + ((c > next) << 1);                          \
+      buckets[BUCKETS_INDEX4(c, lms)] += repeat - 1;                 \
+   }                                                                 \
+   repeat = 1;                                                       \
+   int nblock = 1;                                                   \
+   c = s->block[0];                                                  \
+   while (nblock < s->nblock)                                        \
+   {                                                                 \
+      next = s->block[nblock++];                                     \
+      if (c == next)                                                 \
+      {                                                              \
+         repeat++;                                                   \
+      }                                                              \
+      else                                                           \
+      {                                                              \
+         lms = (lms >> 1) + ((c > next) << 1);                       \
+         buckets[BUCKETS_INDEX4(c, lms)]++;                          \
+         SA[0] = lms == 1 ? nblock - repeat - 1 : -1;                \
+         if (repeat > 1)                                             \
+         {                                                           \
+            lms = (lms >> 1) + ((c > next) << 1);                    \
+            buckets[BUCKETS_INDEX4(c, lms)] += repeat - 1;           \
+         }                                                           \
+         break;                                                      \
+      }                                                              \
+   }                                                                 \
+   s->ptr[0] = sa_index;                                             \
    memcpy(&(s->ptr[sa_index + 1]), buckets, sizeof(int) * 4 * ALPHABET_SIZE);
 
 // This is a placeholder macro; it performs no operation.
@@ -984,9 +992,6 @@ Bool handle_compress ( bz_stream* strm )
       if (s->state == BZ_S_INPUT) {
 #ifdef AOCL_BZIP2_OPT
          progress_in |= AOCL_copy_input_until_stop_fp ( s );
-#else
-         progress_in |= copy_input_until_stop ( s );
-#endif /* AOCL_BZIP2_OPT */
          if(AOCL_use_libsais)
          {
             if (s->mode != BZ_M_RUNNING && s->avail_in_expect == 0) {
@@ -1002,6 +1007,9 @@ Bool handle_compress ( bz_stream* strm )
             }
          }
          else
+#else
+         progress_in |= copy_input_until_stop ( s );
+#endif /* AOCL_BZIP2_OPT */
          {  
             if (s->mode != BZ_M_RUNNING && s->avail_in_expect == 0) {
                flush_RL ( s );

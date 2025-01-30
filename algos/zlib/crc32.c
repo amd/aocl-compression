@@ -1,5 +1,6 @@
 /* crc32.c -- compute the CRC-32 of a data stream
  * Copyright (C) 1995-2022 Mark Adler
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  *
  * This interleaved implementation of a CRC makes use of pipelined multiple
@@ -148,10 +149,10 @@ local z_word_t byte_swap(z_word_t word) {
 /* CRC polynomial. */
 #define POLY 0xedb88320         /* p(x) reflected, with x^32 implied */
 
+#include "crc32_x86.h"
 #ifdef AOCL_ZLIB_OPT
 #include "utils/utils.h"
 #include "aocl_zlib_setup.h"
-#include "crc32_x86.h"
 
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
@@ -160,9 +161,11 @@ local z_word_t byte_swap(z_word_t word) {
  * as well as cpu instruction set supported by the runtime machine. */
 static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE() aocl_setup_native()
-#endif /* AOCL_ZLIB_OPT */
 
-static int setup_ok_zlib_crc = 0; // flag to indicate status of dynamic dispatcher setup
+
+/* flag to indicate status of dynamic dispatcher setup */
+static int setup_ok_zlib_crc = 0;
+#endif /* AOCL_ZLIB_OPT */
 
 /*
   Return a(x) multiplied by b(x) modulo p(x), where p(x) is the CRC polynomial,
@@ -1023,10 +1026,12 @@ local unsigned long crc32_z_impl(unsigned long crc, const unsigned char FAR *buf
     return crc ^ 0xffffffff;
 }
 
+#ifdef AOCL_ZLIB_OPT
 /* Function pointer holding the optimized variant as per the detected CPU
  * features */
 static unsigned long (*crc32_z_fp)(unsigned long crc, const unsigned char FAR* buf,
     z_size_t len) = crc32_z_impl;
+#endif /* AOCL_ZLIB_OPT */
 
 unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR* buf,
     z_size_t len) {

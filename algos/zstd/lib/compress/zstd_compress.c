@@ -9,7 +9,7 @@
  */
 
 /**
- * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -5002,6 +5002,7 @@ MEM_STATIC size_t AOCL_ZSTD_writeFdsFrameIfSupported(ZSTD_CCtx* cctx,
     return fds;
 }
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
+#ifdef AOCL_ZSTD_OPT
 /*
 * Derived from ZSTD_compressContinue_internal. It writes FDS frame
 * if supported and frame parameter is not 0. During FDS frame generation,
@@ -5104,6 +5105,7 @@ static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
         return cSize + fhSize;
     }
 }
+#endif /* AOCL_ZSTD_OPT */
 
 static size_t ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
                               void* dst, size_t dstCapacity,
@@ -7960,7 +7962,7 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
 #else
                 aoclOptFlag = 0;
                 AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
-                ZSTD_compressContinue_internal_fp = ZSTD_compress_advanced_internal;
+                ZSTD_compressContinue_internal_fp = ZSTD_compressContinue_internal;
 #endif /* AOCL_ZSTD_OPT */
                 break;
         }

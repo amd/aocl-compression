@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,4 +33,7 @@
 
 #define CRC_32_Z_VARIANT CRC_32_Z_X86_PCLMUL
 #include "crc32_x86.h"
+#else
+// A dummy declaration to avoid "error: ISO C forbids an empty translation unit [-Werror=pedantic]"
+void dummy_function_crc32_x86_pclmul(void) {}
 #endif /* AOCL_ZLIB_AVX_OPT */

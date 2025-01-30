@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -275,10 +275,14 @@ TEST_P(AOCL_Compression_zlib, uncompress_common)
 void test_crc32_x86(uLong crc, const Bytef* buf, uInt len) {
     int highest_supported_level = get_cpu_opt_flags(0);
     uLong ref = crc32_z_c(crc, buf, len);
+#ifdef AOCL_ZLIB_AVX_OPT
     if (highest_supported_level >= 2) // >= AVX
         EXPECT_EQ(crc32_z_x86_avx(crc, buf, len), ref);
+#endif /* AOCL_ZLIB_AVX_OPT */
+#ifdef AOCL_ZLIB_AVX512_OPT
     if (highest_supported_level >= 4) // >= AVX512
         EXPECT_EQ(crc32_z_x86_avx512(crc, buf, len), ref);
+#endif /* AOCL_ZLIB_AVX512_OPT */
 }
 
 // common boundary test case for checksum APIs to minimize memory footprint while running in parallel
