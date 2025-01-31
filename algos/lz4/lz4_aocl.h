@@ -449,13 +449,23 @@ LZ4_FORCE_INLINE int AOCL_LZ4_COMPRESS_GENERIC_FUNC(
         {   unsigned const litLength = (unsigned)(ip - anchor);
             token = op++;
             if ((outputDirective == limitedOutput) &&  /* Check output buffer overflow */
-                (unlikely(op + litLength + (2 + 1 + LASTLITERALS) + (litLength/255) > olimit)) ) {
-                return 0;   /* cannot compress within `dst` budget. Stored indexes in hash table are nonetheless fine */
+                (unlikely(op + litLength + (2 + 1 + LASTLITERALS) + (litLength/255) + AOCL_EXTRA_WILDCOPYLENGTH /* To catch cases where `AOCL_LZ4_wildCopy16` fails */ > olimit)) ) {
+                if(op + litLength + (2 + 1 + LASTLITERALS) + (litLength/255)> olimit)
+                    return 0;
+                if (litLength >= RUN_MASK) {
+                    int len = (int)(litLength - RUN_MASK);
+                    *token = (RUN_MASK<<ML_BITS);
+                    for(; len >= 255 ; len-=255) *op++ = 255;
+                    *op++ = (BYTE)len;
+                }
+                else *token = (BYTE)(litLength<<ML_BITS);
+                LZ4_wildCopy8(op, anchor, op+litLength);
+                goto _skip_16_bytes_copy;
             }
             if ((outputDirective == fillOutput) &&
                 (unlikely(op + (litLength+240)/255 /* litlen */ + litLength /* literals */ + 2 /* offset */ + 1 /* token */ + MFLIMIT - MINMATCH /* min last literals so last match is <= end - MFLIMIT */ > olimit))) {
-                op--;
-                goto _last_literals;
+                    op--;
+                    goto _last_literals;
             }
             if (litLength >= RUN_MASK) {
                 int len = (int)(litLength - RUN_MASK);
@@ -467,6 +477,7 @@ LZ4_FORCE_INLINE int AOCL_LZ4_COMPRESS_GENERIC_FUNC(
 
             /* Copy Literals */
             AOCL_LZ4_wildCopy16(op, anchor, op+litLength);
+_skip_16_bytes_copy:
             op+=litLength;
             LOG_FORMATTED(DEBUG, logCtx, "seq.start:%i, literals=%u, match.start:%i",
                         (int)(anchor-(const BYTE*)source), litLength, (int)(ip-(const BYTE*)source));

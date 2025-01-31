@@ -258,9 +258,45 @@ TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail
 
 }
 
+TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail_common_9) // Edge case for using `AOCL_LZ4_wildCopy16` instead of `LZ4_wildCopy8`.
+{
+    vector<char> source = {(char)(9), (char)(62), (char)(165), (char)(148), (char)(148), (char)(148), (char)(13), (char)(0), (char)(161), (char)(44), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(147), (char)(147), (char)(147), (char)(147), (char)(147), (char)(188), (char)(210), (char)(133), (char)(210), (char)(242), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210), (char)(169), (char)(218), (char)(210), (char)(210), (char)(210), (char)(210), (char)(210)};
+    bool atLeastOneSuccess = false;
+    for(int destLen = 1; destLen <= LZ4_compressBound(source.size()); destLen++)
+    {
+        int srcLen = source.size();
+        vector<char> dest(destLen, 0);
+        int compressedLength = LZ4_compress_default((const char *)source.data(), dest.data(), srcLen, destLen);
+        if(compressedLength > 0)
+        {
+            atLeastOneSuccess = true;
+            EXPECT_TRUE(check_uncompressed_equal_to_original(source.data(), srcLen, dest.data(), compressedLength));
+        }
+    }
+    EXPECT_TRUE(atLeastOneSuccess);
+}
+
+TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail_common_10) // Edge case for using `AOCL_LZ4_wildCopy16` instead of `LZ4_wildCopy8`.
+{
+    vector<char> source = {'\254', '\240', 'T', 'R', 'Y', '\335', 'R', 'D', '\311', '\311', '\311', '\311', '\311', '\311', '\311', '\311', 'R', '\311', 'x', '\311', '\311', '\311', '\206', '\311', '\311', '\311', '\311', '_', '\232', '\253', '\232', '\232', '\242', '\242', '\242', '\232', '\232', '\232', '\232', '\275', '\275', '\275', '\232', '\232', '\232', '\232', '\232', '\244', '\244', '\244', '\244', '\244', '\244', '\244', '\244', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\021', '\244', 'T', 'I', 'G', '_', '\005', 'S', 'E', 'S', 'S', 'N'};
+    bool atLeastOneSuccess = false;
+    for(int destLen = 1; destLen <= LZ4_compressBound(source.size()); destLen++)
+    {
+        int srcLen = source.size();
+        vector<char> dest(destLen, 0);
+        int compressedLength = LZ4_compress_default((const char *)source.data(), dest.data(), srcLen, destLen);
+        if(compressedLength > 0)
+        {
+            atLeastOneSuccess = true;
+            EXPECT_TRUE(check_uncompressed_equal_to_original(source.data(), srcLen, dest.data(), compressedLength));
+        }
+    }
+    EXPECT_TRUE(atLeastOneSuccess);
+}
+
 #ifdef AOCL_ENABLE_THREADS
 
-TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_pass_common_9) // pass_case_mt
+TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_pass_common_11) // pass_case_mt
 {
     TestLoad d(8*64 KB);
 
@@ -269,7 +305,7 @@ TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_pass
     EXPECT_TRUE(check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
 }
 
-TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail_common_10) // dstCapacity_inadequate_mt
+TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail_common_12) // dstCapacity_inadequate_mt
 {
     int srcLen = 16*64 KB;
     TestLoad d(srcLen, srcLen/2 /* dst_size */);
@@ -278,7 +314,7 @@ TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail
     EXPECT_EQ(outLen, 0);
 }
 
-TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_pass_common_11) // mt_compression_st_decompression
+TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_pass_common_13) // mt_compression_st_decompression
 {
     TestLoad d(8*64 KB);
 
@@ -963,6 +999,17 @@ INSTANTIATE_TEST_SUITE_P(
  * "Begin" of LZ4_compress_destSize
  *********************************************/
 class LZ4_compress_destSize_test : public AOCL_setup_lz4 {
+public:
+    vector<char> genRandAlphabets(int i)
+    {
+        vector<char> buff;
+        while(i)
+        {
+            buff.push_back(96+rand()%26);
+            i--;
+        }
+        return buff;
+    }
 };
 
 TEST_P(LZ4_compress_destSize_test, AOCL_Compression_lz4_LZ4_compress_destSize_fail_common_1) // src_NULL
@@ -1076,6 +1123,30 @@ TEST_P(LZ4_compress_destSize_test, AOCL_Compression_lz4_LZ4_compress_destSize_fa
     EXPECT_EQ(LZ4_compress_destSize(d.getOrigData(), d.getCompressedBuff(), NULL /* srcSizePtr */, d.getCompressedSize()), 0);
     // src is NULL and srcSizePtr is NULL.
     EXPECT_EQ(LZ4_compress_destSize(NULL /* src */, d.getCompressedBuff(), NULL /* srcSizePtr */, d.getCompressedSize()), 0);
+}
+
+TEST_P(LZ4_compress_destSize_test, AOCL_Compression_lz4_LZ4_compress_destSize_fail_common_12) // edge cases when "outputDirective == fillOutput" && when destination buffer is about to get filled to its max capacity.
+{
+    int sourceLength = 40;
+    bool atLeastOneSuccess = false;
+    for (int targetDestSize = 1; targetDestSize <= LZ4_compressBound(sourceLength); targetDestSize++)
+    {
+        int srcLen = sourceLength;
+        vector<char> src = genRandAlphabets(srcLen);
+        char *srcBuff = src.data();
+
+        // Repeated values to find a match
+        memset(srcBuff + 10, 'a', 10);
+        memset(srcBuff + 30, 'a', 5);
+
+        vector<char> dest(targetDestSize);
+        char *compressedBuffer = dest.data();
+        int compressedLen = LZ4_compress_destSize(srcBuff, compressedBuffer, &srcLen, targetDestSize);
+        if(compressedLen > 0)
+            atLeastOneSuccess = true;
+        EXPECT_TRUE(check_uncompressed_equal_to_original(srcBuff, srcLen, compressedBuffer, compressedLen));
+    }
+    EXPECT_TRUE(atLeastOneSuccess);
 }
 
 INSTANTIATE_TEST_SUITE_P(
