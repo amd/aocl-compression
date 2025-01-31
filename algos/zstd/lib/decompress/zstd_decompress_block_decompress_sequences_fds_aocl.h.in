@@ -72,7 +72,7 @@ DONT_VECTORIZE
     const BYTE* const prefixStart = (const BYTE*)(dctx->prefixStart);
     const BYTE* const vBase = (const BYTE*)(dctx->virtualStart);
     const BYTE* const dictEnd = (const BYTE*)(dctx->dictEnd);
-    DEBUGLOG(5, "AOCL_ZSTD_decompressSequences_body: nbSeq = %d", nbSeq);
+    DEBUGLOG(5, "@AOCL_ZSTD_DSB_FUNC@: nbSeq = %d", nbSeq);
     (void)frame;
 
     /* Regen sequences */
@@ -114,7 +114,7 @@ DONT_VECTORIZE
         }
 
         /* check if reached exact end */
-        DEBUGLOG(5, "AOCL_ZSTD_decompressSequences_body: after decode loop, remaining nbSeq : %i", nbSeq);
+        DEBUGLOG(5, "@AOCL_ZSTD_DSB_FUNC@: after decode loop, remaining nbSeq : %i", nbSeq);
         RETURN_ERROR_IF(nbSeq, corruption_detected, "");
         RETURN_ERROR_IF(BIT_reloadDStream(&seqState.DStream) < BIT_DStream_completed, corruption_detected, "");
 

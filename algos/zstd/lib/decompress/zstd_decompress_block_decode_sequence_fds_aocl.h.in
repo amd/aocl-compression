@@ -44,9 +44,9 @@ FORCE_INLINE_TEMPLATE seq_t
 @AOCL_ZSTD_DSF2_FUNC@(aocl_fast2_seqState_t* seqState, const ZSTD_longOffset_e longOffsets)
 {
     seq_t seq;
-    const ZSTD_seqSymbol* const llDInfo = seqState->stateLL.table + seqState->stateLL.state;
-    const ZSTD_seqSymbol* const mlDInfo = seqState->stateML.table + seqState->stateML.state;
-    const ZSTD_seqSymbol* const ofDInfo = seqState->stateOffb.table + seqState->stateOffb.state;
+    const ZSTD_seqSymbol* const llDInfo = seqState->stateLL.state_ptr;
+    const ZSTD_seqSymbol* const mlDInfo = seqState->stateML.state_ptr;
+    const ZSTD_seqSymbol* const ofDInfo = seqState->stateOffb.state_ptr;
 
     seq.matchLength = mlDInfo->baseValue;
     seq.litLength = llDInfo->baseValue;

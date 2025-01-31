@@ -134,6 +134,13 @@ if (AOCL_ENABLE_THREADS AND NATIVE_ENABLE_THREADS)
     set(NATIVE_ENABLE_THREADS OFF)
 endif()
 
+# Force static build when BUILD_UTILITY is enabled as some utilities cannot link to shared library
+# Note: minigzip utility can be built by linking to shared library as well. If that is desired, disable this section.
+if (BUILD_UTILITY AND NOT BUILD_STATIC_LIBS)
+    message(WARNING "Building static library to allow all utilities to be built.")
+    set(BUILD_STATIC_LIBS ON)
+endif()
+
 if (AOCL_EXCLUDE_LZ4 AND NOT AOCL_EXCLUDE_LZ4HC)
     # as lz4hc depends on lz4, it should be excluded along with lz4
     message(WARNING "lz4hc is excluded as it depends on lz4")
@@ -305,7 +312,8 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()
 if (NOT AOCL_EXCLUDE_ZSTD)
-include(${CMAKE_CONFIG_PATH}/algos/zstd/zstd_config.cmake)
+include(${CMAKE_CONFIG_PATH}/algos/zstd/zstd_compress_config.cmake)
+include(${CMAKE_CONFIG_PATH}/algos/zstd/zstd_decompress_config.cmake)
 set (ZSTD_SRC_FILES ${ALGOS_PATH}/zstd/lib/common/code_alignment.c
                     ${ALGOS_PATH}/zstd/lib/common/zstd_common.c
                     ${ALGOS_PATH}/zstd/lib/common/fse_decompress.c

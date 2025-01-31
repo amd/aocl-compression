@@ -1,19 +1,33 @@
-# Function template instantiation for zstd_lazy_aocl.h.in - start
-set(AOCL_ZSTD_CLNF_FUNC "AOCL_ZSTD_compressBlock_lazy_fds2_base")
-set(AOCL_ZSTD_CLNF_MIN_OFFSET "WILDCOPY_VECLEN")
-configure_file(
-    ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
-    ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_base.h
-)
-
-set(AOCL_ZSTD_CLNF_FUNC "AOCL_ZSTD_compressBlock_lazy_fds2_offset8")
-set(AOCL_ZSTD_CLNF_MIN_OFFSET "(WILDCOPY_VECLEN/2)")
-configure_file(
-    ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
-    ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_offset8.h
-)
-# Function template instantiation for zstd_lazy_aocl.h.in - end
-
+# Copyright (C) 2025, Advanced Micro Devices. All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+ 
+# @file zstd_compress_config.cmake
+# 
+# @brief Function templates for aocl optimized zstd compress functions
+ 
 # Function template instantiation for zstd_decompress_block_decode_sequence_aocl.h.in - start
 set(AOCL_ZSTD_DS_FUNC "AOCL_ZSTD_decodeSequence")
 set(AOCL_ZSTD_DS_INIT [[
@@ -76,9 +90,9 @@ set(AOCL_ZSTD_DSF2_INIT [[
     U32 const ofnbBits = ofDInfo->nbBits;
 ]])
 set(AOCL_ZSTD_DSF2_UPDATE_FSE_STATE [[
-    ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llNext, llnbBits);    /* <=  9 bits */
-    ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlNext, mlnbBits);    /* <=  9 bits */
-    ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofNext, ofnbBits);  /* <=  8 bits */
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llNext, llnbBits);    /* <=  9 bits */
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlNext, mlnbBits);    /* <=  9 bits */
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofNext, ofnbBits);  /* <=  8 bits */
 ]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block_decode_sequence_fds_aocl.h.in
@@ -88,9 +102,9 @@ configure_file(
 set(AOCL_ZSTD_DSF2_FUNC "AOCL_ZSTD_decodeSequence_mem64_gcc_fast2")
 set(AOCL_ZSTD_DSF2_INIT "")
 set(AOCL_ZSTD_DSF2_UPDATE_FSE_STATE [[
-    ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llDInfo->nextState, llDInfo->nbBits);    /* <=  9 bits */
-    ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlDInfo->nextState, mlDInfo->nbBits);    /* <=  9 bits */
-    ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofDInfo->nextState, ofDInfo->nbBits);  /* <=  8 bits */
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llDInfo->nextState, llDInfo->nbBits);    /* <=  9 bits */
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlDInfo->nextState, mlDInfo->nbBits);    /* <=  9 bits */
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofDInfo->nextState, ofDInfo->nbBits);  /* <=  8 bits */
 ]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block_decode_sequence_fds_aocl.h.in
@@ -171,6 +185,9 @@ set(AOCL_ZSTD_DSB_INIT_SEQS_STATE [[
     ZSTD_initFseState(&seqState.stateOffb, &seqState.DStream, dctx->OFTptr);
     ZSTD_initFseState(&seqState.stateML, &seqState.DStream, dctx->MLTptr);
     assert(dst != NULL);
+    (&seqState)->stateLL.state_ptr = (&seqState)->stateLL.table + (&seqState)->stateLL.state;
+    (&seqState)->stateML.state_ptr = (&seqState)->stateML.table + (&seqState)->stateML.state;
+    (&seqState)->stateOffb.state_ptr = (&seqState)->stateOffb.table + (&seqState)->stateOffb.state;
 ]])
 set(AOCL_ZSTD_DSB_DECODE_SEQUENCE "AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS")
 set(AOCL_ZSTD_DSB_EXEC_SEQUENCE "AOCL_ZSTD_execSequence_mem64_fast2")
