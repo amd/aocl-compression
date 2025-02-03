@@ -47,6 +47,11 @@
  * or in pipe mode.
  */
 
+#ifdef _MSC_VER
+#define _CRT_NONSTDC_NO_DEPRECATE
+#define _CRT_SECURE_NO_DEPRECATE
+#endif
+
 #include "zlib.h"
 #include <stdio.h>
 
