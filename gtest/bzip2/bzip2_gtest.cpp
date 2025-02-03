@@ -735,9 +735,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_1)
     */
     string s = "idzdzargib";
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -756,9 +756,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_2)
     */
     string s = "or/bookmarks/bookmarksOv";
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -769,9 +769,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_3)
     // In second level LMS indexes generated is only 1
     string s = "duprwuvuvn";
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -788,9 +788,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_4)
     string s = " 0  0  0  0  0  0  0  0 ";
 
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -804,9 +804,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_5)
     string s = "1111111111111111111111";
 
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -820,9 +820,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_6)
     string s = "mkkldmkkld";
 
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -834,6 +834,8 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_7)
         Inputs that caused failures while modifying libsais to BWT compatible code.
     */
     vector<string> test_input_strings = {
+        "g.lag.lag.lag",
+        "cadbcadbcadbc",
         "mmiissiissiippii",
         "nwlrbbmqbhcdarzowkkyhiddqscdxrjmowfrxsjybldbefsarcbynecdyggxxpklorellnmpapqfwkhopkmcoqhnwnkuewhsqmgb",
         "zvfrkmlnozjkpqpxrjxkitzyxacbhhkicqc",
@@ -853,12 +855,87 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_7)
     for(string s: test_input_strings){
 
         int n = s.size();
-        vector<int> dest = vector<int>(n);
+        vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-        int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+        int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
         string unbwt = unBWT(dest, s, origIndex);
         EXPECT_EQ(unbwt, s);
+    }
+}
+
+// Test cases 8, 9, and 10 use a large input to verify whether 2 bytes of padding are provided per recursion level.
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_8)
+{
+    string s = "g.la";
+    for (int i = 0; i < 18; i++)
+        s += s;
+    s = s + 'g';
+    int n = s.size();
+    vector<int> dest = vector<int>(n + AOCL_LIBSAIS_FS);
+
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
+
+    string unbwt = unBWT(dest, s, origIndex);
+    EXPECT_EQ(unbwt, s);
+}
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_9) // Large inputs to generate, m = n/2, where n%2==0, throughout the recursive calls (except last few calls).
+{
+    vector<char> arr_input[2] = {{2, 1, 3, 0, 2, 1, 3, 0}, {2, 0, 3, 1, 2, 0, 3, 1}};
+    for (int i = 0; i < 2; i++)
+    {
+        string s = "";
+        for (auto c : arr_input[i])
+            s += c;
+        int j = 4;
+        while (s.size() <= 1 << 20)
+        {
+            int n = s.size();
+            vector<int> dest = vector<int>(n + AOCL_LIBSAIS_FS);
+
+            int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
+
+            string unbwt = unBWT(dest, s, origIndex);
+            EXPECT_EQ(unbwt, s);
+
+            string ss = s;
+            s = "";
+            for (auto c : ss)
+            {
+                s += j;
+                s += c;
+            }
+            j++;
+        }
+    }
+}
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_10) // Large inputs to generate, m = n/2, where n%2==1, throughout the recursive calls (except first call).
+{
+    vector<char> test_input_string = {0};
+    string s = "";
+    for (auto c : test_input_string)
+        s += c;
+    int j = 1;
+    while (s.size() <= 1 << 20)
+    {
+        int n = s.size();
+        vector<int> dest = vector<int>(n + AOCL_LIBSAIS_FS);
+
+        int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
+
+        string unbwt = unBWT(dest, s, origIndex);
+        EXPECT_EQ(unbwt, s);
+
+        string ss = s;
+        s = "";
+        for (auto c : ss)
+        {
+            s += j;
+            s += c;
+        }
+        j++;
     }
 }
 

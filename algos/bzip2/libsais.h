@@ -31,6 +31,9 @@ Please see the file LICENSE for full copyright information.
 
 #define BUCKETS_INDEX4(_c, _s)          (((_c) << 2) + (_s))
 
+// Extra elements to store T[-1] & T[-2], in buffer SA.
+#define AOCL_LIBSAIS_MOD_ELEMENTS 2
+
 #ifdef _WIN32
     #ifdef LIBSAIS_SHARED
         #ifdef LIBSAIS_EXPORTS

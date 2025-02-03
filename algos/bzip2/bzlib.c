@@ -368,13 +368,18 @@ int BZ_API(BZ2_bzCompressInit)
    s->ftab = NULL;
 
    n       = 100000 * blockSize100k;
-   s->arr1 = BZALLOC( n                  * sizeof(UInt32) );
 #ifdef AOCL_BZIP2_OPT
    if(AOCL_use_libsais)
+   {
+      s->arr1 = BZALLOC( (n+AOCL_LIBSAIS_FS)                  * sizeof(UInt32) );
       s->arr2 = BZALLOC( (n+BZ_N_OVERSHOOT) * sizeof(UInt32) + 2);
+   }
    else
 #endif /* AOCL_BZIP2_OPT */
-   s->arr2 = BZALLOC( (n+BZ_N_OVERSHOOT) * sizeof(UInt32) );
+   {
+      s->arr1 = BZALLOC( n                  * sizeof(UInt32) );
+      s->arr2 = BZALLOC( (n+BZ_N_OVERSHOOT) * sizeof(UInt32) );
+   }
    s->ftab = BZALLOC( 65537              * sizeof(UInt32) );
 
    if (s->arr1 == NULL || s->arr2 == NULL || s->ftab == NULL) {
@@ -1901,7 +1906,7 @@ int Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq)
       T_temp[1] = T[n-1];
    }
 
-   Int32 * SA_temp = malloc(sizeof(Int32) * (n + 1 + bucket_size));
+   Int32 * SA_temp = malloc(sizeof(Int32) * (n + 1 + bucket_size + fs));
    Int32 buckets[bucket_size] = {0};
 
    Int32 m = Test_count_and_gather_lms_suffixes(&T_temp[2], SA_temp, n, buckets);

@@ -767,7 +767,7 @@ void BZ2_compressBlock ( EState* s, Bool is_last_block )
       {
          s->block[-1] = s->block[s->nblock - 1];
          s->block[-2] = s->block[s->nblock - 2];
-         s->origPtr = libsais(s->block, (Int32 *)s->ptr, s->nblock, 0, NULL);
+         s->origPtr = libsais(s->block, (Int32 *)s->ptr, s->nblock, AOCL_LIBSAIS_FS, NULL);
       }
       else
 #endif /* AOCL_BZIP2_OPT */

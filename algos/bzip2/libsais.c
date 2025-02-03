@@ -7211,7 +7211,7 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
                 sa_sint_t t2 = T_next[-2];
                 T_next[-1] = T_next[n_next-1];
                 T_next[-2] = T_next[n_next-2];
-                if (libsais_main_32s_recursion(T_next, SA, n_next, names - f, fs + n - 2 * m + f, threads, thread_state, local_buffer) != 0)
+                if (libsais_main_32s_recursion(T_next, SA, n_next, names - f, fs + n - 2 * m + f - AOCL_LIBSAIS_MOD_ELEMENTS, threads, thread_state, local_buffer) != 0)
                 {
                     return -2;
                 }
@@ -7713,7 +7713,7 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
             sa_sint_t * T_next = SA + n + fs - m;
             T_next[-1] = T_next[m-1];
             T_next[-2] = T_next[m-2];
-            if (libsais_main_32s_entry(T_next, SA, m, names, fs + n - 2 * m, threads, thread_state) != 0)
+            if (libsais_main_32s_entry(T_next, SA, m, names, fs + n - 2 * m - AOCL_LIBSAIS_MOD_ELEMENTS, threads, thread_state) != 0)
             {
                 #ifdef AOCL_BWT
                     libsais_free_aligned(temp_SA);

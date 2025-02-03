@@ -522,6 +522,16 @@ BZ2_hbCreateDecodeTables ( Int32*, Int32*, Int32*, UChar*,
 #ifdef AOCL_BZIP2_OPT
 extern Int32 AOCL_BZ2_decompress ( DState* );
 extern int AOCL_use_libsais;
+/*
+   Input is processed in blocks, each a multiple of 100K. The "level" (1-9) determines block size, size of a block is: 100k * level.
+   Each block has a 19-byte header, leaving 100K * level - 19 for block-sort.
+   For optimized code path we do block-sort with libsais. So max input to libsais is: 900K - 19 < 2^20.
+   In libsais function if "n" is input data the number of LMS characters generated at max is n/2
+   so max depth(m_d) of recursion function would be log2(100000 * 9 - 19) < 20. So "m_d=20"
+   At each depth, in buffer the number of elements(temp_n) required in buffer before the start of input buffer T, to avoid MOD function is 2. "temp_n=2"
+   So total extra elements required is "m_d*temp_n=20*2"
+*/
+#define AOCL_LIBSAIS_FS 20*2
 #endif
 extern void aocl_register_mainSimpleSort_fmv (int optOff, int optLevel);
 
