@@ -2025,6 +2025,9 @@ local block_state deflate_fast(deflate_state *s, int flush) {
 
 #ifdef AOCL_ZLIB_OPT
 
+#if defined(__clang__) 
+__asm__(".p2align 6");
+#endif
 local block_state aocl_deflate_fast_opt(deflate_state *s, int flush)
 {
     IPos hash_head;       /* head of the hash chain */

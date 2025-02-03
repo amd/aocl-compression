@@ -877,6 +877,9 @@ AOCL_LZ4_DECOMPRESS_GENERIC_FUNC(
             goto safe_decode;
         }
 
+#if defined(__GNUC__) && !defined(__clang__) 
+        __asm__(".p2align 6"); // minimizes performance variation due to code-alignment changes
+#endif
         /* Fast loop : decode sequences as long as output < oend-FASTLOOP_SAFE_DISTANCE */
         while (1) {
             /* Main fastloop assertion: We can always wildcopy FASTLOOP_SAFE_DISTANCE */
