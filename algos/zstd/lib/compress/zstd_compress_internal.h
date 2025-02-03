@@ -1450,10 +1450,6 @@ void ZSTD_storeSeq_withAssert(seqStore_t* seqStorePtr,
     int llbits = assert_get_lit_bits(litLength);
     int mlbits = assert_get_mat_bits(matchLength);
     size_t offset = OFFBASE_IS_OFFSET(offBase) ? OFFBASE_TO_OFFSET(offBase) : 1;
-#ifndef UNIT_TEST
-    if (OFFBASE_IS_OFFSET(offBase))
-        assert(offset >= WILDCOPY_VECLEN);
-#endif
     int ofbits = assert_get_off_bits(offset);
     int totalbits = llbits + mlbits + ofbits;
     assert(totalbits < MAX_TOTAL_BITS);

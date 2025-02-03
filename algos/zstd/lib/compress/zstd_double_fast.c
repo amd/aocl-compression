@@ -612,11 +612,11 @@ size_t ZSTD_compressBlock_doubleFast(
 
 #if AOCL_DECOMPRESS_FAST > 2
 #include "algos/zstd/lib/compress/aocl_zstd_compressBlock_doubleFast_noDict_generic_fds2_analyze.h"
-#elif AOCL_DECOMPRESS_FAST > 1
+#elif AOCL_DECOMPRESS_FAST == 2
 #include "algos/zstd/lib/compress/aocl_zstd_compressBlock_doubleFast_noDict_generic_fds2_base.h"
 #endif
 
-#if AOCL_DECOMPRESS_FAST != 2
+#if AOCL_DECOMPRESS_FAST != 2  /* FDS 2 calls only *_fds2_base functions */
 /* The following optimizations have been included in the optimized function:
     - when the AOCL_ZSTD_SEARCH_SKIP_OPT flag is enabled,
         - the search tolerance is reduced to 2^5 (32) instead of 2^8 (256)

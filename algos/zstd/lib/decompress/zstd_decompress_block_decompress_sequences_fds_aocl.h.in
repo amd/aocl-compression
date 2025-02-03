@@ -99,6 +99,10 @@ DONT_VECTORIZE
 #endif
         for (; ; ) {
             seq_t const sequence = @AOCL_ZSTD_DSB_DECODE_SEQUENCE@(&seqState, isLongOffset);
+#ifdef AOCL_UNIT_TEST
+            RETURN_ERROR_IF(UNLIKELY(sequence.litLength == 0 && sequence.matchLength == 0 &&
+            sequence.offset == 0), corruption_detected, ""); /* not FDS compliant */
+#endif
             size_t const oneSeqSize = @AOCL_ZSTD_DSB_EXEC_SEQUENCE@(op, oend, sequence, &litPtr, litEnd, prefixStart, vBase, dictEnd);
 #if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) && defined(FUZZING_ASSERT_VALID_SEQUENCE)
             assert(!ZSTD_isError(oneSeqSize));

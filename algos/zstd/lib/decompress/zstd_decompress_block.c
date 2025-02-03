@@ -1874,9 +1874,19 @@ ZSTD_decompressSequences_body(ZSTD_DCtx* dctx,
     *   no Repeated_Offset2 and Repeated_Offset3
     *   no offsets go into extDict (no offset beyond prefix)
     *   offset >= WILDCOPY_VECLEN
+    * 
+    * Note: In AOCL_DECOMPRESS_FAST mode, constraints indicated in the FDS frame are
+    * expected to be guaranteed by the compressor. If these are not ensured or if
+    * compressed stream is corrupted resulting in constraints not being met, then
+    * decompressor might fail. Guard rails against these are not provided in the 
+    * decompressor as they significantly impact decompressor speed and negate the
+    * benefits from imposing these constraints during compression in the first place.
+    * 
+    * During unit testing we purposefully corrupt compressed streams in some test cases.
+    * Checks are added/retained under #ifdef AOCL_UNIT_TEST flags to handle cases 
+    * where FDS frame is added but FDS constraints are not respected during testing only!
     */
     #include "algos/zstd/lib/decompress/aocl_zstd_decompressSequences_body_mem64_fast2.h"
-
     #include "algos/zstd/lib/decompress/aocl_zstd_decompressSequences_body_mem64_fast2_NOTB_NOEXT_REP2.h"
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 #endif /* AOCL_ZSTD_OPT */

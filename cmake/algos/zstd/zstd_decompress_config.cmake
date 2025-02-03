@@ -115,7 +115,11 @@ configure_file(
 # Function template instantiation for zstd_decompress_block_exec_sequence_fds_aocl.h.in - start
 set(AOCL_ZSTD_ESM_FUNC "AOCL_ZSTD_execSequence_mem64_fast2")
 set(AOCL_ZSTD_ESM_COPY_MATCH [[
+#ifdef AOCL_UNIT_TEST
+    RETURN_ERROR_IF(UNLIKELY(sequence.offset < WILDCOPY_VECLEN), corruption_detected, ""); /* not FDS compliant */
+#else
     assert(sequence.offset >= WILDCOPY_VECLEN);
+#endif
     /* We bet on a full wildcopy for matches, since we expect matches to be
     * longer than literals (in general). */
     AOCL_ZSTD_WILDCOPY_LONG_IMPL(op, match, (ptrdiff_t)sequence.matchLength, ZSTD_no_overlap);

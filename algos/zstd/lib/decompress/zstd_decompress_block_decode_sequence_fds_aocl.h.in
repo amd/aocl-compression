@@ -61,9 +61,14 @@ FORCE_INLINE_TEMPLATE seq_t
         assert(mlBits <= MaxMLBits);
         assert(ofBits <= MaxOff);
 
-#if (DEBUGLEVEL>=1)
-        BYTE const totalBits = llBits + mlBits + ofBits;
-        assert(totalBits < (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)));
+#ifdef AOCL_UNIT_TEST
+        if (UNLIKELY((llBits + mlBits + ofBits) /* totalBits */ >= STREAM_ACCUMULATOR_MIN_64 - (LLFSELog+MLFSELog+OffFSELog)))
+        {
+            seq.litLength = 0; seq.matchLength = 0; seq.offset = 0;
+            return seq; /* not FDS compliant */
+        }
+#else
+        assert((llBits + mlBits + ofBits) /* totalBits */ < (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)));
 #endif
 
         /* sequence */
@@ -79,7 +84,15 @@ FORCE_INLINE_TEMPLATE seq_t
                 seqState->prevOffset = offset;
             }
             else {
+#ifdef AOCL_UNIT_TEST
+                if (UNLIKELY(ofBits != 0))
+                {
+                    seq.litLength = 0; seq.matchLength = 0; seq.offset = 0;
+                    return seq; /* not FDS compliant */
+                }
+#else
                 assert(ofBits == 0); // Repeated_Offset1
+#endif
                 offset = seqState->prevOffset;
             }
             seq.offset = offset;

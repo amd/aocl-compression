@@ -9,7 +9,7 @@
  */
 
 /**
- * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -497,303 +497,13 @@ size_t ZSTD_compressBlock_fast(
     PREFETCH_L1(base + idxn); \
 }
 
-#if AOCL_DECOMPRESS_FAST > 1
-/*
-* Derived from AOCL_ZSTD_compressBlock_fast_noDict_generic, but enforces :
-*   totalBits < (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)
-*   no Repeated_Offset2 and Repeated_Offset3
-*   no offsets go into extDict (no offset beyond prefix)
-*   offset >= WILDCOPY_VECLEN
-* Calls AOCL_ZSTD_storeSequences to store sequences
-*/
-FORCE_INLINE_TEMPLATE size_t
-AOCL_ZSTD_compressBlock_fast_noDict_generic_fds(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
-        void const* src, size_t srcSize,
-        U32 const mls, U32 const hasStep)
-{
-    const ZSTD_compressionParameters* const cParams = &ms->cParams;
-    U32* const hashTable = ms->hashTable;
-    U32 const hlog = cParams->hashLog;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-    size_t const stepSize = 2;
-#else
-    /* support stepSize of 0 */
-    size_t const stepSize = hasStep ? (cParams->targetLength + !(cParams->targetLength) + 1) : 2;
+#if AOCL_DECOMPRESS_FAST > 2
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds2_analyze.h"
+#elif AOCL_DECOMPRESS_FAST == 2
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds2_base.h"
 #endif
-    const BYTE* const base = ms->window.base;
-    const BYTE* const istart = (const BYTE*)src;
-    const U32   endIndex = (U32)((size_t)(istart - base) + srcSize);
-    const U32   prefixStartIndex = ZSTD_getLowestPrefixIndex(ms, endIndex, cParams->windowLog);
-    const BYTE* const prefixStart = base + prefixStartIndex;
-    const BYTE* const iend = istart + srcSize;
-    const BYTE* const ilimit = iend - HASH_READ_SIZE - PREFETCH_SAFETY;
 
-    const BYTE* anchor = istart;
-    const BYTE* ip0 = istart;
-    const BYTE* ip1;
-    const BYTE* ip2;
-    const BYTE* ip3;
-    U32 current0;
-
-    U32 rep_offset1 = rep[0];
-    U32 prev_rep_offset1;
-    U32 offsetSaved1 = 0;
-
-    size_t hash0; /* hash for ip0 */
-    size_t hash1; /* hash for ip1 */
-    U32 idx; /* match idx for ip0 */
-    U32 mval; /* src value at match idx */
-
-    U32 offcode;
-    const BYTE* match0;
-    size_t mLength;
-
-    /* ip0 and ip1 are always adjacent. The targetLength skipping and
-     * uncompressibility acceleration is applied to every other position,
-     * matching the behavior of #1562. step therefore represents the gap
-     * between pairs of positions, from ip0 to ip2 or ip1 to ip3. */
-    size_t step;
-    const BYTE* nextStep;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-    const size_t kStepIncr = (1 << (aocl_kSearchStrengthFast - 1));
-#else
-    const size_t kStepIncr = (1 << (kSearchStrength - 1));
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
-
-    DEBUGLOG(5, "ZSTD_compressBlock_fast_generic_fds");
-    ip0 += (ip0 == prefixStart);
-    {   U32 const curr = (U32)(ip0 - base);
-        U32 const windowLow = ZSTD_getLowestPrefixIndex(ms, curr, cParams->windowLog);
-        U32 const maxRep = curr - windowLow;
-        if (rep_offset1 > maxRep) offsetSaved1 = rep_offset1, rep_offset1 = 0;
-    }
-
-    /* start each op */
-_start: /* Requires: ip0 */
-    step = stepSize;
-    nextStep = ip0 + kStepIncr;
-
-    /* calculate positions, ip0 - anchor == 0, so we skip step calc */
-    ip1 = ip0 + 1;
-    ip2 = ip0 + step;
-    ip3 = ip2 + 1;
-
-    if (ip3 >= ilimit) {
-        goto _cleanup;
-    }
-
-    hash0 = ZSTD_hashPtr(ip0, hlog, mls);
-    PREFETCH_MATCH(ip0);
-    hash1 = ZSTD_hashPtr(ip1, hlog, mls);
-    PREFETCH_MATCH(ip1);
-
-    idx = hashTable[hash0];
-
-    do {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-        // Alternate between values 2 and 3 for step while searching for a match. In case
-        // the value of step exceeds 3 (this happens when the value of step is incremented
-        // when ip2 exceeds nextStep), we let step retain its value.
-        step = (step > 3) ? step : step ^ 1;
-#endif
-        /* load repcode match for ip[2]*/
-        const U32 rval = MEM_read32(ip2 - rep_offset1);
-
-        /* write back hash table entry */
-        current0 = (U32)(ip0 - base);
-        hashTable[hash0] = current0;
-
-        /* check repcode at ip[2] 
-         * (rep_offset1 > 0) changed to (rep_offset1 >= WILDCOPY_VECLEN) as initial rep codes 
-         * can be < WILDCOPY_VECLEN and offsets < WILDCOPY_VECLEN should not be included in the sequences
-        */
-        if ((MEM_read32(ip2) == rval) & (rep_offset1 >= WILDCOPY_VECLEN)) {
-            ip0 = ip2;
-            match0 = ip0 - rep_offset1;
-            mLength = ip0[-1] == match0[-1];
-            ip0 -= mLength;
-            match0 -= mLength;
-            offcode = REPCODE1_TO_OFFBASE;
-            mLength += 4;
-
-            if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, 1 /* Repeated_Offset1 */)) {
-                /* First write next hash table entry; we've already calculated it.
-                 * This write is known to be safe because the ip1 is before the
-                 * repcode (ip2). */
-                hashTable[hash1] = (U32)(ip1 - base);
-
-                goto _match;
-            }
-        }
-
-        /* load match for ip[0] */
-        if (idx >= prefixStartIndex) {
-            mval = MEM_read32(base + idx);
-        } else {
-            mval = MEM_read32(ip0) ^ 1; /* guaranteed to not match. */
-        }
-
-        /* check match at ip[0] */
-        if (MEM_read32(ip0) == mval) {
-            /* found a match! */
-            PREFETCH_MATCH(ip0 + 4);
-
-            prev_rep_offset1 = rep_offset1;
-            /* _offset : */
-            /* Requires: ip0, idx */
-            /* Compute the offset code. */
-            match0 = base + idx;
-            rep_offset1 = (U32)(ip0 - match0);
-            offcode = OFFSET_TO_OFFBASE(rep_offset1);
-            mLength = 4;
-
-            /* Count the backwards match length. */
-            while (((ip0 > anchor) & (match0 > prefixStart)) && (ip0[-1] == match0[-1])) {
-                ip0--;
-                match0--;
-                mLength++;
-            }
-
-            if ((rep_offset1 >= WILDCOPY_VECLEN) && is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) {
-                /* First write next hash table entry; we've already calculated it.
-                 * This write is known to be safe because the ip1 == ip0 + 1, so
-                 * we know we will resume searching after ip1 */
-                hashTable[hash1] = (U32)(ip1 - base);
-                goto _match;
-            }
-            else {
-                rep_offset1 = prev_rep_offset1; //revert
-            }
-        }
-
-        /* lookup ip[1] */
-        idx = hashTable[hash1];
-
-        /* hash ip[2] */
-        hash0 = hash1;
-        hash1 = ZSTD_hashPtr(ip2, hlog, mls);
-
-        /* advance to next positions */
-        ip0 = ip1;
-        ip1 = ip2;
-        ip2 = ip3;
-
-        /* write back hash table entry */
-        current0 = (U32)(ip0 - base);
-        hashTable[hash0] = current0;
-
-        /* load match for ip[0] */
-        if (idx >= prefixStartIndex) {
-            mval = MEM_read32(base + idx);
-        } else {
-            mval = MEM_read32(ip0) ^ 1; /* guaranteed to not match. */
-        }
-
-        /* check match at ip[0] */
-        if (MEM_read32(ip0) == mval) {
-            /* found a match! */
-            PREFETCH_MATCH(ip0 + 4);
-
-            prev_rep_offset1 = rep_offset1;
-            /* _offset : */
-            /* Requires: ip0, idx */
-            /* Compute the offset code. */
-            match0 = base + idx;
-            rep_offset1 = (U32)(ip0 - match0);
-            offcode = OFFSET_TO_OFFBASE(rep_offset1);
-            mLength = 4;
-
-            /* Count the backwards match length. */
-            while (((ip0 > anchor) & (match0 > prefixStart)) && (ip0[-1] == match0[-1])) {
-                ip0--;
-                match0--;
-                mLength++;
-            }
-
-            if ((rep_offset1 >= WILDCOPY_VECLEN) && is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) {
-                /* first write next hash table entry; we've already calculated it */
-                if (step <= 4) {
-                    /* We need to avoid writing an index into the hash table >= the
-                     * position at which we will pick up our searching after we've
-                     * taken this match.
-                     *
-                     * The minimum possible match has length 4, so the earliest ip0
-                     * can be after we take this match will be the current ip0 + 4.
-                     * ip1 is ip0 + step - 1. If ip1 is >= ip0 + 4, we can't safely
-                     * write this position.
-                     */
-                    hashTable[hash1] = (U32)(ip1 - base);
-                }
-                goto _match;
-            }
-            else {
-                rep_offset1 = prev_rep_offset1; //revert
-            }
-        }
-
-        /* lookup ip[1] */
-        idx = hashTable[hash1];
-
-        /* hash ip[2] */
-        hash0 = hash1;
-        hash1 = ZSTD_hashPtr(ip2, hlog, mls);
-
-        /* advance to next positions */
-        ip0 = ip1;
-        ip1 = ip2;
-        ip2 = ip0 + step;
-        ip3 = ip1 + step;
-
-        /* calculate step */
-        if (ip2 >= nextStep) {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-            step += 3;
-            LOG_FORMATTED(DEBUG, logCtx, "step = %zu", step);
-#else
-            step++;
-            PREFETCH_L1(ip1 + 64);
-            PREFETCH_L1(ip1 + 128);
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
-            nextStep += kStepIncr;
-        }
-    } while (ip3 < ilimit);
-
-_cleanup:
-    /* Note that there are probably still a couple positions we could search.
-     * However, it seems to be a meaningful performance hit to try to search
-     * them. So let's not. */
-
-    /* save reps for next block */
-    rep[0] = rep_offset1 ? rep_offset1 : offsetSaved1;
-
-    /* Return the last literals size */
-    return (size_t)(iend - anchor);
-
-_match: /* Requires: ip0, match0, offcode */
-
-    /* Count the forward length. */
-    mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend);
-
-    //ZSTD_storeSeq(seqStore, (size_t)(ip0 - anchor), anchor, iend, offcode, mLength);
-    AOCL_ZSTD_storeSequences(seqStore, ip0, anchor, iend, offcode, mLength);
-
-    ip0 += mLength;
-    anchor = ip0;
-
-    /* Fill table and check for immediate repcode. */
-    if (ip0 <= ilimit) {
-        /* Fill Table */
-        assert(base+current0+2 > istart);  /* check base overflow */
-        hashTable[ZSTD_hashPtr(base+current0+2, hlog, mls)] = current0+2;  /* here because current+2 could be > iend-8 */
-        hashTable[ZSTD_hashPtr(ip0 - 2, hlog, mls)] = (U32)(ip0 - 2 - base);
-    }
-
-    goto _start;
-}
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
-
-#if AOCL_DECOMPRESS_FAST != 2
+#if AOCL_DECOMPRESS_FAST != 2 /* FDS 2 calls only *_fds2_base functions */
 /* The following optimizations have been included in the optimized function:
     - when the AOCL_ZSTD_SEARCH_SKIP_OPT flag is enabled,
         - the search tolerance is reduced to 2^6 (64) instead of 2^8 (256)
@@ -1092,7 +802,7 @@ _match: /* Requires: ip0, match0, offcode */
             ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                                 \
             void const* src, size_t srcSize)                                                                    \
     {                                                                                                           \
-        return AOCL_ZSTD_compressBlock_fast_noDict_generic_fds(ms, seqStore, rep, src, srcSize, mls, step);     \
+        return AOCL_ZSTD_compressBlock_fast_noDict_generic_fds2_base(ms, seqStore, rep, src, srcSize, mls, step);     \
     }
 #elif AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
 #define AOCL_ZSTD_GEN_FAST_NODICT_FN(mls, step)                                                                 \
@@ -1103,8 +813,7 @@ _match: /* Requires: ip0, match0, offcode */
         switch(seqStore->fds_config.state)                                                                      \
         {                                                                                                       \
         case FDS_FAST2_ANALYZE:                                                                                 \
-        case FDS_FAST2_NOTB_SO4_NOEXT_REP2:                                                                     \
-            return AOCL_ZSTD_compressBlock_fast_noDict_generic_fds(ms, seqStore, rep, src, srcSize, mls, step); \
+            return AOCL_ZSTD_compressBlock_fast_noDict_generic_fds2_analyze(ms, seqStore, rep, src, srcSize, mls, step); \
         default:                                                                                                \
             return AOCL_ZSTD_compressBlock_fast_noDict_generic(ms, seqStore, rep, src, srcSize, mls, step);     \
         }                                                                                                       \

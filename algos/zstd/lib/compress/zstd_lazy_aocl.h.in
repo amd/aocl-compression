@@ -221,13 +221,9 @@ FORCE_INLINE_TEMPLATE size_t
 
         /* store sequence */
     _storeSequence:
-        {   //size_t const litLength = (size_t)(start - anchor);
-        //ZSTD_storeSeq(seqStore, litLength, anchor, iend, (U32)offBase, matchLength);
-        AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength);
-        
-
+        @AOCL_ZSTD_CLNF_STORE_SEQ@
         anchor = ip = start + matchLength;
-        }
+
         if (ms->lazySkipping) {
             /* We've found a match, disable lazy skipping mode, and refill the hash cache. */
             if (searchMethod == search_rowHash) {
@@ -239,6 +235,7 @@ FORCE_INLINE_TEMPLATE size_t
 
     /* save reps for next block */
     rep[0] = offset_1 ? offset_1 : offsetSaved1;
+    for (int i=1; i<ZSTD_REP_NUM; ++i) rep[i] = 0; /* reset as these have not been maintained */
 
     /* Return the last literals size */
     return (size_t)(iend - anchor);

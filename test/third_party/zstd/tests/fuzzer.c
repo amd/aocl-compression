@@ -2552,7 +2552,7 @@ static int basicUnitTests(U32 const seed, double compressibility)
                                                        2765, 2760, 2755, 2754, 2753,
                                                        2753, 2753, 2753 };*/
 
-            size_t target_nodict_cSize[22+1] = { 4150, 4150, 4150, 4150, 4150,
+            size_t target_nodict_cSize[22+1] = { 4450, 4450, 4450, 4150, 4150,
                                                  3800, 3800, 3800, 3800, 3750,
                                                  3742, 3675, 3674, 3665, 3664,
                                                  3663, 3662, 3661, 3660, 3660,

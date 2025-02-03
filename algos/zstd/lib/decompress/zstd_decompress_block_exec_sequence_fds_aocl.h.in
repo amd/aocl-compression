@@ -88,13 +88,6 @@ size_t @AOCL_ZSTD_ESM_FUNC@(BYTE* op,
     /* Copy Match */
 #ifdef AOCL_UNIT_TEST
     /* 
-    * Note: In AOCL_DECOMPRESS_FAST mode, constraints indicated in the FDS frame are
-    * expected to be guarenteed by the compressor. If these are not ensured or if
-    * compressed stream is corrupted resulting in constraints not being met, then
-    * decompressor might fail. Guard rails against these are not provided in the 
-    * decompressor as they significantly impact decompressor speed and negate the
-    * benefits from imposing these constraints during compression in the first place.
-    * 
     * Checking for offsets in external dictionary is skipped in AOCL_DECOMPRESS_FAST for
     * noDict cases if FDS frame is present in the compressed stream with metadata
     * that indicates no external dictionary is used. We expect this guarentee is provided
@@ -102,9 +95,9 @@ size_t @AOCL_ZSTD_ESM_FUNC@(BYTE* op,
     * As virtualStart < prefixStart this check is skipped as well.
     * 
     * During unit testing we purposefully corrupt compressed streams in some test cases.
-    * Check is retained here to handle such cases while testing only!
+    * Check is retained here to handle such cases during testing only!
     */
-    RETURN_ERROR_IF(UNLIKELY(sequence.offset > (size_t)(oLitEnd - virtualStart)), corruption_detected, "");
+    RETURN_ERROR_IF(UNLIKELY(sequence.offset > (size_t)(oLitEnd - virtualStart)), corruption_detected, "");  /* not FDS compliant */
 #else
     assert(sequence.offset <= (size_t)(oLitEnd - prefixStart));
 #endif
