@@ -414,7 +414,8 @@ TEST_P(AOCL_Compression_zlib, deflateBound_common)
   int is_quick_mode = 0;
   int sourceLen = 1 << 6;
 
-  if(getenv("AOCL_ZLIB_QUICK_MODE") != NULL)
+  const char* AOCL_enable_quick = getenv("AOCL_ZLIB_QUICK_MODE");
+  if (AOCL_enable_quick != NULL && (strcmp(AOCL_enable_quick, "ON") == 0))
     is_quick_mode = 1;
   
   if(is_quick_mode)

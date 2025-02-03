@@ -1,6 +1,6 @@
 /* deflate.c -- compress data using the deflation algorithm
  * Copyright (C) 1995-2023 Jean-loup Gailly and Mark Adler
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -2393,7 +2393,8 @@ static void aocl_setup_deflate_fmv(int optOff, int optLevel)
     aocl_register_longest_match(optOff, optLevel);
     
     if (!setup_ok_zlib_deflate) {
-        if(getenv("AOCL_ZLIB_QUICK_MODE") != NULL)
+        const char* AOCL_enable_quick = getenv("AOCL_ZLIB_QUICK_MODE");
+        if (AOCL_enable_quick != NULL && (strcmp(AOCL_enable_quick, "ON") == 0))
             aocl_zlib_set_enable_dquick(1);
         else
             aocl_zlib_set_enable_dquick(0);
