@@ -1,7 +1,7 @@
 /*
    LZ4 - Fast LZ compression algorithm
    Copyright (C) 2011-2020, Yann Collet.
-   Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -1677,12 +1677,7 @@ _last_literals:
 
 #ifdef AOCL_LZ4_OPT
 /* AOCL_LZ4_compress_generic_validated variants - start */
-#define AOCL_LZ4_COMPRESS_GENERIC_VALIDATED_BASE 1
-#define AOCL_LZ4_COMPRESS_GENERIC_VALIDATED_FDS_NODICT 2
-#define AOCL_LZ4_COMPRESS_GENERIC_VALIDATED_MT 3
-
-#define AOCL_LZ4_COMPRESS_GENERIC_VARIANT AOCL_LZ4_COMPRESS_GENERIC_VALIDATED_BASE
-#include "lz4_aocl.h"
+#include "algos/lz4/AOCL_LZ4_compress_generic_validated.h"
 
 #ifdef AOCL_LZ4_DECOMPRESS_FAST
 /**
@@ -1708,19 +1703,11 @@ _last_literals:
             }\
         }
 
-/** AOCL_LZ4_compress_generic_validated_FDS_noDict() :
- *  Derived from AOCL_LZ4_compress_generic_validated()
- *  with additional FDS optimization. */
-#define AOCL_LZ4_COMPRESS_GENERIC_VARIANT AOCL_LZ4_COMPRESS_GENERIC_VALIDATED_FDS_NODICT
-#include "lz4_aocl.h"
-
+#include "algos/lz4/AOCL_LZ4_compress_generic_validated_FDS_noDict.h"
 #endif /* AOCL_LZ4_DECOMPRESS_FAST */
 
 #ifdef AOCL_ENABLE_THREADS_LZ4
- /* Same as AOCL_LZ4_compress_generic_validated, but with state information
-  * for Multi - threaded support */
-#define AOCL_LZ4_COMPRESS_GENERIC_VARIANT AOCL_LZ4_COMPRESS_GENERIC_VALIDATED_MT
-#include "lz4_aocl.h"
+#include "algos/lz4/AOCL_LZ4_compress_generic_validated_mt.h"
 
 #endif /* AOCL_ENABLE_THREADS_LZ4 */
   /* AOCL_LZ4_compress_generic_validated variants - end */
@@ -2948,16 +2935,12 @@ read_variable_length(const BYTE** ip, const BYTE* ilimit,
 
 #ifdef AOCL_LZ4_AVX_OPT
 /* AOCL_LZ4_decompress_generic variants - start */
-#define AOCL_LZ4_DECOMPRESS_GENERIC_BASE 1
-#define AOCL_LZ4_DECOMPRESS_GENERIC_MT 2
 
-#define AOCL_LZ4_DECOMPRESS_GENERIC_VARIANT AOCL_LZ4_DECOMPRESS_GENERIC_BASE
-#include "lz4_aocl.h"
+#include "algos/lz4/AOCL_LZ4_decompress_generic.h"
 
 #ifdef AOCL_ENABLE_THREADS_LZ4
 /* Same as AOCL_LZ4_decompress_generic, but with multi-threaded support */
-#define AOCL_LZ4_DECOMPRESS_GENERIC_VARIANT AOCL_LZ4_DECOMPRESS_GENERIC_MT
-#include "lz4_aocl.h"
+#include "algos/lz4/AOCL_LZ4_decompress_generic_mt.h"
 #endif /* AOCL_ENABLE_THREADS_LZ4 */
 /* AOCL_LZ4_decompress_generic variants - end */
 #endif /* AOCL_LZ4_AVX_OPT */

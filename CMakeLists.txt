@@ -236,6 +236,8 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
+include(${CMAKE_CONFIG_PATH}/algos/lz4/lz4_compress_config.cmake)
+include(${CMAKE_CONFIG_PATH}/algos/lz4/lz4_decompress_config.cmake)
 set (LZ4_SRC_FILES  ${ALGOS_PATH}/lz4/code_alignment_lz4.c
                     ${ALGOS_PATH}/lz4/lz4.c
                     ${ALGOS_PATH}/lz4/lz4.h
