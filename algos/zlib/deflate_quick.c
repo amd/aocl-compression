@@ -6,7 +6,7 @@
  * 
  * Portions are Copyright (C) 2016 12Sided Technology, LLC.
  * 
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * 
  * For conditions of distribution and use, see copyright notice in zlib.h
  */

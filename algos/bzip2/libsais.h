@@ -4,6 +4,7 @@ This file is a part of libsais, a library for linear time suffix array,
 longest common prefix array and burrows wheeler transform construction.
 
    Copyright (c) 2021-2024 Ilya Grebnov <ilya.grebnov@gmail.com>
+   Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -82,7 +83,7 @@ extern "C" {
     * @param T [0..n-1] The input string.
     * @param SA [0..n-1+fs] The output array of suffixes.
     * @param n The length of the given string.
-    * @param fs The extra space available at the end of SA array (0 should be enough for most cases).
+    * @param fs The extra space that needs to be allocated at the end of SA array, the minimum space required is 2*max_recursion_depth, i.e, 2*⌈log2(n)⌉.
     * @param freq [0..255] The output symbol frequency table (can be NULL).
     * @return 0 if no error occurred, -1 or -2 otherwise.
     */

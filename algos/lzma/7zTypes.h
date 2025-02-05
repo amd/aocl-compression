@@ -2,7 +2,7 @@
 2022-04-01 : Igor Pavlov : Public domain */
 
 /**
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  */
 
 #ifndef __7Z_TYPES_H

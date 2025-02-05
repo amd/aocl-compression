@@ -1,6 +1,6 @@
 /* infback.c -- inflate using a call-back interface
  * Copyright (C) 1995-2022 Mark Adler
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 

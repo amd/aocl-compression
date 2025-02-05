@@ -6,7 +6,7 @@
  * Copyright (C) 2016 Marian Beermann (support for initial value)
  * Copyright Wangyang Guo (wangyang.guo@intel.com)
  * 
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
  *
  * For conditions of distribution and use, see copyright notice in zlib.h
  */

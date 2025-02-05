@@ -2,7 +2,7 @@
   version 1.3, August 18th, 2023
 
   Copyright (C) 1995-2023 Jean-loup Gailly and Mark Adler
-  Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+  Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages

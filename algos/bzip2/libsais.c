@@ -22,7 +22,7 @@ Please see the file LICENSE for full copyright information.
 --*/
 
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -85,8 +85,6 @@ typedef size_t                          fast_uint_t;
 
 #define AOCL_BWT
 #ifdef AOCL_BWT
-// TODO:  For future optimizations, one way to avoid having to do this is to
-//        add a sentinel node at the start of the list which contains the same value as T[n-1].
 #define MOD(i, n) ((i+n)%n)
 #endif
 
