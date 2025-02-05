@@ -39,14 +39,12 @@
 #ifdef AOCL_ZSTD_OPT
 #if defined(__GNUC__) && defined(__x86_64__) && !defined(__clang__)
     #define AOCL_ZSTD_DECODESEQUENCE_MEM64 AOCL_ZSTD_decodeSequence_gcc
+    #define AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS2 AOCL_ZSTD_decodeSequence_mem64_gcc_fast2
+    #define AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS3 AOCL_ZSTD_decodeSequence_mem64_gcc_fast3
 #else
     #define AOCL_ZSTD_DECODESEQUENCE_MEM64 AOCL_ZSTD_decodeSequence
-#endif
-
-#if defined(__GNUC__) && defined(__x86_64__) && !defined(__clang__)
-    #define AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS AOCL_ZSTD_decodeSequence_mem64_gcc_fast2
-#else
-    #define AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS AOCL_ZSTD_decodeSequence_mem64_fast2
+    #define AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS2 AOCL_ZSTD_decodeSequence_mem64_fast2
+    #define AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS3 AOCL_ZSTD_decodeSequence_mem64_fast3
 #endif
 
 /*

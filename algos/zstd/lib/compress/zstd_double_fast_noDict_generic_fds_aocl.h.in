@@ -55,7 +55,7 @@ const BYTE* ip, const BYTE* match, const BYTE* const iend)
     }
     return 0;
 }
-#endif
+#endif /* AOCL_DECOMPRESS_FAST > 2 */
 
 #if AOCL_DECOMPRESS_FAST > 1
 @AOCL_ZSTD_CDNGF_COMMENT@
@@ -191,8 +191,7 @@ _revert_back_point :
 
     _cleanup:
         /* save reps for next block */
-        rep[0] = offset_1 ? offset_1 : offsetSaved1;
-        for (int i=1; i<ZSTD_REP_NUM; ++i) rep[i] = 0; /* reset as these have not been maintained */
+        @AOCL_ZSTD_CDNGF_SAVE_REP@
 
         /* Return the last literals size */
         return (size_t)(iend - anchor);

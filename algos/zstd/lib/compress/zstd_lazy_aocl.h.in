@@ -99,15 +99,7 @@ FORCE_INLINE_TEMPLATE size_t
         const BYTE* start = ip + 1;
         DEBUGLOG(7, "search baseline (depth 0)");
 
-        /* check repCode 
-         * (offset_1 > 0) changed to (offset_1 >= @AOCL_ZSTD_CLNF_MIN_OFFSET@) as initial rep codes 
-         * can be < @AOCL_ZSTD_CLNF_MIN_OFFSET@ and offsets < @AOCL_ZSTD_CLNF_MIN_OFFSET@ should not be included in the sequences
-        */
-        if ((offset_1 >= @AOCL_ZSTD_CLNF_MIN_OFFSET@) & (MEM_read32(ip + 1 - offset_1) == MEM_read32(ip + 1))) {
-            matchLength = ZSTD_count(ip + 1 + 4, ip + 1 + 4 - offset_1, iend) + 4;
-            if ((depth == 0) && is_totalbits_limited_seq_possible(ip, anchor, matchLength, 1 /* Repeated_Offset1 */))
-                goto _storeSequence;
-        }
+        @AOCL_ZSTD_CLNF_REP_MATCH_D0@
 
         /* first search (depth 0) */
         {   size_t offbaseFound = 999999999;
@@ -139,13 +131,7 @@ FORCE_INLINE_TEMPLATE size_t
             while (ip < ilimit) {
                 DEBUGLOG(7, "search depth 1");
                 ip++;
-                if ((offBase) && ((offset_1 >= @AOCL_ZSTD_CLNF_MIN_OFFSET@) & (MEM_read32(ip) == MEM_read32(ip - offset_1)))) {
-                    size_t const mlRep = ZSTD_count(ip + 4, ip + 4 - offset_1, iend) + 4;
-                    int const gain2 = (int)(mlRep * 3);
-                    int const gain1 = (int)(matchLength * 3 - ZSTD_highbit32((U32)offBase) + 1);
-                    if ((mlRep >= 4) && (gain2 > gain1))
-                        matchLength = mlRep, offBase = REPCODE1_TO_OFFBASE, start = ip;
-                }
+                @AOCL_ZSTD_CLNF_REP_MATCH_D1@
                 {   size_t ofbCandidate = 999999999;
                 size_t const ml2 = AOCL_ZSTD_searchMax(ms, ip, iend, &ofbCandidate, mls, rowLog, searchMethod, ZSTD_noDict);
                 int const gain2 = (int)(ml2 * 4 - ZSTD_highbit32((U32)ofbCandidate));   /* raw approx */
@@ -159,13 +145,7 @@ FORCE_INLINE_TEMPLATE size_t
                 if ((depth == 2) && (ip < ilimit)) {
                     DEBUGLOG(7, "search depth 2");
                     ip++;
-                    if ((offBase) && ((offset_1 >= @AOCL_ZSTD_CLNF_MIN_OFFSET@) & (MEM_read32(ip) == MEM_read32(ip - offset_1)))) {
-                        size_t const mlRep = ZSTD_count(ip + 4, ip + 4 - offset_1, iend) + 4;
-                        int const gain2 = (int)(mlRep * 4);
-                        int const gain1 = (int)(matchLength * 4 - ZSTD_highbit32((U32)offBase) + 1);
-                        if ((mlRep >= 4) && (gain2 > gain1))
-                            matchLength = mlRep, offBase = REPCODE1_TO_OFFBASE, start = ip;
-                    }
+                    @AOCL_ZSTD_CLNF_REP_MATCH_D2@
                     {   size_t ofbCandidate = 999999999;
                     size_t const ml2 = AOCL_ZSTD_searchMax(ms, ip, iend, &ofbCandidate, mls, rowLog, searchMethod, ZSTD_noDict);
                     int const gain2 = (int)(ml2 * 4 - ZSTD_highbit32((U32)ofbCandidate));   /* raw approx */
@@ -178,7 +158,10 @@ FORCE_INLINE_TEMPLATE size_t
                 break;  /* nothing found : store previous solution */
             }
         
-        if (OFFBASE_IS_OFFSET(offBase) && OFFBASE_TO_OFFSET(offBase) < @AOCL_ZSTD_CLNF_MIN_OFFSET@) {
+        if (OFFBASE_IS_OFFSET(offBase) && OFFBASE_TO_OFFSET(offBase) < @AOCL_ZSTD_CLNF_MIN_OFFSET@) 
+        {
+            @AOCL_ZSTD_CLNF_LONG_MATCH@
+            {
 #ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
             size_t const step = ((size_t)(ip - anchor) >> aocl_kSearchStrengthLazy) + 1;   /* jump faster over incompressible sections */;
 #else
@@ -187,6 +170,7 @@ FORCE_INLINE_TEMPLATE size_t
             ip += step;
             ms->lazySkipping = step > kLazySkippingStep;
             continue;
+            }
         }
 
         /* NOTE:
@@ -220,8 +204,7 @@ FORCE_INLINE_TEMPLATE size_t
         }
 
         /* store sequence */
-    _storeSequence:
-        @AOCL_ZSTD_CLNF_STORE_SEQ@
+@AOCL_ZSTD_CLNF_STORE_SEQ@
         anchor = ip = start + matchLength;
 
         if (ms->lazySkipping) {
@@ -234,8 +217,7 @@ FORCE_INLINE_TEMPLATE size_t
     }
 
     /* save reps for next block */
-    rep[0] = offset_1 ? offset_1 : offsetSaved1;
-    for (int i=1; i<ZSTD_REP_NUM; ++i) rep[i] = 0; /* reset as these have not been maintained */
+    @AOCL_ZSTD_CLNF_SAVE_REP@
 
     /* Return the last literals size */
     return (size_t)(iend - anchor);

@@ -2271,6 +2271,16 @@ _storeSequence:
 /* AOCL_ZSTD_compressBlock_lazy_fds2 variants - start */
 #include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_base.h"
 #include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_offset8.h"
+
+#if AOCL_DECOMPRESS_FAST > 2
+/* Skipping long matches when enforcing constraints can significantly impact 
+ * compression ratio and decompression speed. If such matches are encountered
+ * while imposing constraints, stop enforcing constraints. */
+#define AOCL_LONG_MATCH_LIMIT_LAZY (16 * 1024)
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_analyze.h"
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds3_base.h"
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds3_offset8.h"
+#endif /* AOCL_DECOMPRESS_FAST > 2 */
 /* AOCL_ZSTD_compressBlock_lazy_fds2 variants - end */
 
 /* Change wrt ZSTD_compressBlock_lazy_generic :
@@ -2642,7 +2652,7 @@ size_t ZSTD_compressBlock_greedy_dedicatedDictSearch(
 switch(seqStore->fds_config.state) { \
     case FDS_FAST2_ANALYZE: /* Apply maximum constraints */ \
         { \
-            size_t ret = AOCL_ZSTD_compressBlock_lazy_fds2_base(ms, seqStore, rep, src, srcSize, search_rowHash, depth); \
+            size_t ret = AOCL_ZSTD_compressBlock_lazy_fds2_analyze(ms, seqStore, rep, src, srcSize, search_rowHash, depth); \
             if (!ZSTD_isError(ret) && seqStore->fds_config.count >= AOCL_STABILIZE_COUNT) { /* collect stats */ \
                 size_t litSize = (size_t)(seqStore->lit - seqStore->litStart); \
                 size_t processedSize = (size_t)(srcSize - ret); \
@@ -2655,7 +2665,7 @@ switch(seqStore->fds_config.state) { \
                         else if (seqStore->fds_config.ratio < AOCL_RATIO_MID) \
                             seqStore->fds_config.state = FDS_FAST2_NOTB_SO3_NOEXT_REP2; \
                         else \
-                            seqStore->fds_config.state = FDS_FAST2_NOTB_SO4_NOEXT_REP2; \
+                            seqStore->fds_config.state = FDS_FAST2_NOTB_SO4_NOEXT_REP3; \
                         LOG_FORMATTED(DEBUG, logCtx, "FDS = %zu, Block ratio = %zu", seqStore->fds_config.state, seqStore->fds_config.ratio); \
                         DEBUGLOG(4, "FDS = %zu, Block ratio = %zu", seqStore->fds_config.state, seqStore->fds_config.ratio); \
                         /* Reset for future frames */ \
@@ -2670,8 +2680,8 @@ switch(seqStore->fds_config.state) { \
             } \
             return ret; \
         } \
-    case FDS_FAST2_NOTB_SO4_NOEXT_REP2: \
-        return AOCL_ZSTD_compressBlock_lazy_fds2_base(ms, seqStore, rep, src, srcSize, search_rowHash, depth); \
+    case FDS_FAST2_NOTB_SO4_NOEXT_REP3: \
+        return AOCL_ZSTD_compressBlock_lazy_fds3_base(ms, seqStore, rep, src, srcSize, search_rowHash, depth); \
     case FDS_FAST2_NOTB_SO3_NOEXT_REP2: \
         return AOCL_ZSTD_compressBlock_lazy_fds2_offset8(ms, seqStore, rep, src, srcSize, search_rowHash, depth); \
     default: \

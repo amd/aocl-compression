@@ -181,9 +181,6 @@ _start: /* Requires: ip0 */
         // when ip2 exceeds nextStep), we let step retain its value.
         step = (step > 3) ? step : step ^ 1;
 #endif
-        /* load repcode match for ip[2]*/
-        const U32 rval = MEM_read32(ip2 - rep_offset1);
-
         /* write back hash table entry */
         current0 = (U32)(ip0 - base);
         hashTable[hash0] = current0;
@@ -266,8 +263,7 @@ _cleanup:
      * them. So let's not. */
 
     /* save reps for next block */
-    rep[0] = rep_offset1 ? rep_offset1 : offsetSaved1;
-    for (int i=1; i<ZSTD_REP_NUM; ++i) rep[i] = 0; /* reset as these have not been maintained */
+    @AOCL_ZSTD_CFNGF_SAVE_REP@
 
     /* Return the last literals size */
     return (size_t)(iend - anchor);

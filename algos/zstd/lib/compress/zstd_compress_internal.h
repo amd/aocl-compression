@@ -1562,7 +1562,7 @@ void AOCL_ZSTD_updateFdsConfig(BYTE* dst, ZSTD_CCtx* cctx)
 {
     if ((MEM_readLE32(dst) & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START /* skippable frame */ &&
         MEM_read64(dst + ZSTD_SKIPPABLEHEADERSIZE) == FDS_MAGIC_WORD /* FDS frame */) {
-        U64 writeState = cctx->seqStore.fds_config.state == FDS_FAST2_ANALYZE ? FDS_FAST2_NOTB_SO4_NOEXT_REP2 : cctx->seqStore.fds_config.state;
+        U64 writeState = cctx->seqStore.fds_config.state == FDS_FAST2_ANALYZE ? FDS_FAST2_NOTB_SO4_NOEXT_REP3 : cctx->seqStore.fds_config.state;
         MEM_writeLE64(dst + ZSTD_SKIPPABLEHEADERSIZE + FDS_MAGIC_WORD_BYTES, writeState);
     }
 }

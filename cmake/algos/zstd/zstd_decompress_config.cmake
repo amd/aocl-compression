@@ -24,9 +24,30 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
  
-# @file zstd_compress_config.cmake
+# @file zstd_decompress_config.cmake
 # 
-# @brief Function templates for aocl optimized zstd compress functions
+# @brief Function templates for aocl optimized zstd decompress functions
+
+# Call stack for AOCL decompress block based on FDS metadata received:
+# + FDS_FAST2_NOTB_SO4_NOEXT_REP3:
+#     AOCL_ZSTD_decompressSequences_body_mem64_fast3
+#         AOCL_ZSTD_decodeSequence_mem64_gcc_fast3 / AOCL_ZSTD_decodeSequence_mem64_fast3
+#         AOCL_ZSTD_execSequence_mem64_fast2
+# 
+# + FDS_FAST2_NOTB_SO4_NOEXT_REP2:
+#     AOCL_ZSTD_decompressSequences_body_mem64_fast2
+#         AOCL_ZSTD_decodeSequence_mem64_gcc_fast2 / AOCL_ZSTD_decodeSequence_mem64_fast2
+#         AOCL_ZSTD_execSequence_mem64_fast2
+# 
+# + FDS_FAST2_NOTB_SO3_NOEXT_REP2:
+#     AOCL_ZSTD_decompressSequences_body_mem64_fast2_NOTB_NOEXT_REP2
+#         AOCL_ZSTD_decodeSequence_mem64_gcc_fast2 / AOCL_ZSTD_decodeSequence_mem64_fast2
+#         AOCL_ZSTD_execSequence_mem64_noDict
+# 
+# + FDS_NONE
+#     AOCL_ZSTD_decompressSequences_body
+#         AOCL_ZSTD_decodeSequence_gcc / AOCL_ZSTD_decodeSequence
+#         AOCL_ZSTD_execSequence
  
 # Function template instantiation for zstd_decompress_block_decode_sequence_aocl.h.in - start
 set(AOCL_ZSTD_DS_FUNC "AOCL_ZSTD_decodeSequence")
@@ -89,6 +110,21 @@ set(AOCL_ZSTD_DSF2_INIT [[
     U32 const mlnbBits = mlDInfo->nbBits;
     U32 const ofnbBits = ofDInfo->nbBits;
 ]])
+set(AOCL_ZSTD_DSF2_OFFSET [[
+    if (ofBits > 1) {
+        ZSTD_STATIC_ASSERT(ZSTD_lo_isLongOffset == 1);
+        ZSTD_STATIC_ASSERT(LONG_OFFSETS_MAX_EXTRA_BITS_32 == 5);
+        ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 > LONG_OFFSETS_MAX_EXTRA_BITS_32);
+        ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 - LONG_OFFSETS_MAX_EXTRA_BITS_32 >= MaxMLBits);
+
+        offset = ofDInfo->baseValue + BIT_readBitsFast(&seqState->DStream, ofBits/*>0*/);   /* <=  (ZSTD_WINDOWLOG_MAX-1) bits */
+        seqState->prevOffset = offset;
+    }
+    else {
+        assert(ofBits == 0); /* Repeated_Offset1 */
+        offset = seqState->prevOffset;
+    }
+]])
 set(AOCL_ZSTD_DSF2_UPDATE_FSE_STATE [[
     AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llNext, llnbBits);    /* <=  9 bits */
     AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlNext, mlnbBits);    /* <=  9 bits */
@@ -106,9 +142,51 @@ set(AOCL_ZSTD_DSF2_UPDATE_FSE_STATE [[
     AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlDInfo->nextState, mlDInfo->nbBits);    /* <=  9 bits */
     AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofDInfo->nextState, ofDInfo->nbBits);  /* <=  8 bits */
 ]])
+#set(AOCL_ZSTD_DSF2_OFFSET) same as above
 configure_file(
     ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block_decode_sequence_fds_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/decompress/aocl_zstd_decodeSequence_mem64_gcc_fast2.h
+)
+
+set(AOCL_ZSTD_DSF2_FUNC "AOCL_ZSTD_decodeSequence_mem64_fast3")
+set(AOCL_ZSTD_DSF2_INIT [[
+    U16 const llNext = llDInfo->nextState;
+    U16 const mlNext = mlDInfo->nextState;
+    U16 const ofNext = ofDInfo->nextState;
+    U32 const llnbBits = llDInfo->nbBits;
+    U32 const mlnbBits = mlDInfo->nbBits;
+    U32 const ofnbBits = ofDInfo->nbBits;
+]])
+set(AOCL_ZSTD_DSF2_OFFSET [[
+    ZSTD_STATIC_ASSERT(ZSTD_lo_isLongOffset == 1);
+    ZSTD_STATIC_ASSERT(LONG_OFFSETS_MAX_EXTRA_BITS_32 == 5);
+    ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 > LONG_OFFSETS_MAX_EXTRA_BITS_32);
+    ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 - LONG_OFFSETS_MAX_EXTRA_BITS_32 >= MaxMLBits);
+
+    offset = ofDInfo->baseValue + BIT_readBitsFast(&seqState->DStream, ofBits/*>0*/);   /* <=  (ZSTD_WINDOWLOG_MAX-1) bits */
+    seqState->prevOffset = offset;
+]])
+set(AOCL_ZSTD_DSF2_UPDATE_FSE_STATE [[
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llNext, llnbBits);    /* <=  9 bits */
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlNext, mlnbBits);    /* <=  9 bits */
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofNext, ofnbBits);  /* <=  8 bits */
+]])
+configure_file(
+    ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block_decode_sequence_fds_aocl.h.in
+    ${ALGOS_PATH}/zstd/lib/decompress/aocl_zstd_decodeSequence_mem64_fast3.h
+)
+
+set(AOCL_ZSTD_DSF2_FUNC "AOCL_ZSTD_decodeSequence_mem64_gcc_fast3")
+set(AOCL_ZSTD_DSF2_INIT "")
+#set(AOCL_ZSTD_DSF2_OFFSET) same as above
+set(AOCL_ZSTD_DSF2_UPDATE_FSE_STATE [[
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llDInfo->nextState, llDInfo->nbBits);    /* <=  9 bits */
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlDInfo->nextState, mlDInfo->nbBits);    /* <=  9 bits */
+    AOCL_ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofDInfo->nextState, ofDInfo->nbBits);  /* <=  8 bits */
+]])
+configure_file(
+    ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block_decode_sequence_fds_aocl.h.in
+    ${ALGOS_PATH}/zstd/lib/decompress/aocl_zstd_decodeSequence_mem64_gcc_fast3.h
 )
 # Function template instantiation for zstd_decompress_block_decode_sequence_fds_aocl.h.in - end
 
@@ -193,7 +271,7 @@ set(AOCL_ZSTD_DSB_INIT_SEQS_STATE [[
     (&seqState)->stateML.state_ptr = (&seqState)->stateML.table + (&seqState)->stateML.state;
     (&seqState)->stateOffb.state_ptr = (&seqState)->stateOffb.table + (&seqState)->stateOffb.state;
 ]])
-set(AOCL_ZSTD_DSB_DECODE_SEQUENCE "AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS")
+set(AOCL_ZSTD_DSB_DECODE_SEQUENCE "AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS2")
 set(AOCL_ZSTD_DSB_EXEC_SEQUENCE "AOCL_ZSTD_execSequence_mem64_fast2")
 set(AOCL_ZSTD_DSB_UPDATE_SEQS_STATE [[
     dctx->entropy.rep[0] = (U32)(seqState.prevOffset);
@@ -203,25 +281,21 @@ configure_file(
     ${ALGOS_PATH}/zstd/lib/decompress/aocl_zstd_decompressSequences_body_mem64_fast2.h
 )
 
+set(AOCL_ZSTD_DSB_FUNC "AOCL_ZSTD_decompressSequences_body_mem64_fast3")
+#set(AOCL_ZSTD_DSB_INIT_SEQS_STATE) same as above
+set(AOCL_ZSTD_DSB_DECODE_SEQUENCE "AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS3")
+set(AOCL_ZSTD_DSB_EXEC_SEQUENCE "AOCL_ZSTD_execSequence_mem64_fast2")
+#set(AOCL_ZSTD_DSB_UPDATE_SEQS_STATE) same as above
+configure_file(
+    ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block_decompress_sequences_fds_aocl.h.in
+    ${ALGOS_PATH}/zstd/lib/decompress/aocl_zstd_decompressSequences_body_mem64_fast3.h
+)
+
 set(AOCL_ZSTD_DSB_FUNC "AOCL_ZSTD_decompressSequences_body_mem64_fast2_NOTB_NOEXT_REP2")
-set(AOCL_ZSTD_DSB_INIT_SEQS_STATE [[
-    aocl_fast2_seqState_t seqState;
-    dctx->fseEntropy = 1;
-    seqState.prevOffset = dctx->entropy.rep[0];
-    RETURN_ERROR_IF(ERR_isError(BIT_initDStream(&seqState.DStream, ip, iend - ip)), corruption_detected, "");
-    ZSTD_initFseState(&seqState.stateLL, &seqState.DStream, dctx->LLTptr);
-    ZSTD_initFseState(&seqState.stateOffb, &seqState.DStream, dctx->OFTptr);
-    ZSTD_initFseState(&seqState.stateML, &seqState.DStream, dctx->MLTptr);
-    assert(dst != NULL);
-    (&seqState)->stateLL.state_ptr = (&seqState)->stateLL.table + (&seqState)->stateLL.state;
-    (&seqState)->stateML.state_ptr = (&seqState)->stateML.table + (&seqState)->stateML.state;
-    (&seqState)->stateOffb.state_ptr = (&seqState)->stateOffb.table + (&seqState)->stateOffb.state;
-]])
-set(AOCL_ZSTD_DSB_DECODE_SEQUENCE "AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS")
+#set(AOCL_ZSTD_DSB_INIT_SEQS_STATE) same as above
+set(AOCL_ZSTD_DSB_DECODE_SEQUENCE "AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS2")
 set(AOCL_ZSTD_DSB_EXEC_SEQUENCE "AOCL_ZSTD_execSequence_mem64_noDict")
-set(AOCL_ZSTD_DSB_UPDATE_SEQS_STATE [[
-    dctx->entropy.rep[0] = (U32)(seqState.prevOffset);
-]])
+#set(AOCL_ZSTD_DSB_UPDATE_SEQS_STATE) same as above
 configure_file(
     ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block_decompress_sequences_fds_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/decompress/aocl_zstd_decompressSequences_body_mem64_fast2_NOTB_NOEXT_REP2.h

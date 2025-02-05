@@ -1501,8 +1501,10 @@ size_t AOCL_ZSTD_execSequence(BYTE* op,
 
 #if AOCL_DECOMPRESS_FAST > 1
 #include "algos/zstd/lib/decompress/aocl_zstd_decodeSequence_mem64_fast2.h"
+#include "algos/zstd/lib/decompress/aocl_zstd_decodeSequence_mem64_fast3.h"
 #if defined(__GNUC__) && defined(__x86_64__) && !defined(__clang__)
     #include "algos/zstd/lib/decompress/aocl_zstd_decodeSequence_mem64_gcc_fast2.h"
+    #include "algos/zstd/lib/decompress/aocl_zstd_decodeSequence_mem64_gcc_fast3.h"
 #endif
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 
@@ -1888,6 +1890,7 @@ ZSTD_decompressSequences_body(ZSTD_DCtx* dctx,
     */
     #include "algos/zstd/lib/decompress/aocl_zstd_decompressSequences_body_mem64_fast2.h"
     #include "algos/zstd/lib/decompress/aocl_zstd_decompressSequences_body_mem64_fast2_NOTB_NOEXT_REP2.h"
+    #include "algos/zstd/lib/decompress/aocl_zstd_decompressSequences_body_mem64_fast3.h"
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 #endif /* AOCL_ZSTD_OPT */
 
@@ -1905,6 +1908,8 @@ ZSTD_decompressSequences_default(ZSTD_DCtx* dctx,
 #define AOCL_ZSTD_DECOMPRESSSEQUENCES_BODY_FDS \
     if (MEM_64bits()) { \
         switch (dctx->fds) { \
+        case FDS_FAST2_NOTB_SO4_NOEXT_REP3: \
+            return AOCL_ZSTD_decompressSequences_body_mem64_fast3(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame); \
         case FDS_FAST2_NOTB_SO4_NOEXT_REP2: \
             return AOCL_ZSTD_decompressSequences_body_mem64_fast2(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame); \
         case FDS_FAST2_NOTB_SO3_NOEXT_REP2: \

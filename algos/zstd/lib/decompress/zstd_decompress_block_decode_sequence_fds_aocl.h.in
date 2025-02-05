@@ -74,27 +74,7 @@ FORCE_INLINE_TEMPLATE seq_t
         /* sequence */
         {
             size_t offset;
-            if (ofBits > 1) {
-                ZSTD_STATIC_ASSERT(ZSTD_lo_isLongOffset == 1);
-                ZSTD_STATIC_ASSERT(LONG_OFFSETS_MAX_EXTRA_BITS_32 == 5);
-                ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 > LONG_OFFSETS_MAX_EXTRA_BITS_32);
-                ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 - LONG_OFFSETS_MAX_EXTRA_BITS_32 >= MaxMLBits);
-
-                offset = ofDInfo->baseValue + BIT_readBitsFast(&seqState->DStream, ofBits/*>0*/);   /* <=  (ZSTD_WINDOWLOG_MAX-1) bits */
-                seqState->prevOffset = offset;
-            }
-            else {
-#ifdef AOCL_UNIT_TEST
-                if (UNLIKELY(ofBits != 0))
-                {
-                    seq.litLength = 0; seq.matchLength = 0; seq.offset = 0;
-                    return seq; /* not FDS compliant */
-                }
-#else
-                assert(ofBits == 0); // Repeated_Offset1
-#endif
-                offset = seqState->prevOffset;
-            }
+            @AOCL_ZSTD_DSF2_OFFSET@
             seq.offset = offset;
         }
 
