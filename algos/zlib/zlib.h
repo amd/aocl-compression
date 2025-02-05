@@ -2,7 +2,7 @@
   version 1.3, August 18th, 2023
 
   Copyright (C) 1995-2023 Jean-loup Gailly and Mark Adler
-  Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+  Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -1611,6 +1611,66 @@ ZEXTERN int ZEXPORT compress2(Bytef *dest,   uLongf *destLen,
                               int level);
 
 /**
+  @brief This function compresses the source buffer into the destination buffer in gzip format.
+
+  The level parameter has the same meaning as in deflateInit.  sourceLen is the byte
+  length of the source buffer.  Upon entry, destLen is the total size of the
+  destination buffer, which must be at least the value returned by
+  compressBound_gzip(sourceLen).  Upon exit, destLen is the actual size of the
+  compressed data. Only Supported in multithreaded mode.
+  
+  |Parameters|Direction|Description|
+  |:---------|:-------:|:----------|
+  | \b dest  | in,out |The compressed data is stored in this buffer.|
+  | \b destLen |in | Upon entry, destLen is the total size of the destination buffer, which must be at least the value returned by compressBound_gzip(sourceLen).  Upon exit, destLen is the actual size of the compressed data.|
+  | \b source |out | It is the buffer where the data we want to compress resides.|
+  |  \b sourceLen| in |Length of source buffer to be compressed.|
+  | \b level | out |The compression level must be Z_DEFAULT_COMPRESSION, or between 0 and 9: 1 gives best speed, 9 gives best compression, 0 gives no compression at all (the input data is simply copied a block at a time). Z_DEFAULT_COMPRESSION requests a default compromise between speed and compression (currently equivalent to level 6).|
+  
+
+  @return
+  |Result         | Description |
+  |:--------------|:------------|
+  |Z_OK           | If success. |
+  |Z_MEM_ERROR    | If there was not enough memory. |
+  |Z_BUF_ERROR    | If there was not enough room in the output buffer. |
+  |Z_STREAM_ERROR | If the level parameter is invalid. |
+*/
+ZEXTERN int ZEXPORT compress2_gzip(Bytef *dest,   uLongf *destLen,
+                              const Bytef *source, uLong sourceLen,
+                              int level);
+
+/**
+  @brief This function compresses the source buffer into the destination buffer in raw deflate format.
+
+  The level parameter has the same meaning as in deflateInit.  sourceLen is the byte
+  length of the source buffer.  Upon entry, destLen is the total size of the
+  destination buffer, which must be at least the value returned by
+  compressBound(sourceLen).  Upon exit, destLen is the actual size of the
+  compressed data. Only Supported in multithreaded mode.
+  
+  |Parameters|Direction|Description|
+  |:---------|:-------:|:----------|
+  | \b dest  | in,out |The compressed data is stored in this buffer.|
+  | \b destLen |in | Upon entry, destLen is the total size of the destination buffer, which must be at least the value returned by compressBound(sourceLen).  Upon exit, destLen is the actual size of the compressed data.|
+  | \b source |out | It is the buffer where the data we want to compress resides.|
+  |  \b sourceLen| in |Length of source buffer to be compressed.|
+  | \b level | out |The compression level must be Z_DEFAULT_COMPRESSION, or between 0 and 9: 1 gives best speed, 9 gives best compression, 0 gives no compression at all (the input data is simply copied a block at a time). Z_DEFAULT_COMPRESSION requests a default compromise between speed and compression (currently equivalent to level 6).|
+  
+
+  @return
+  |Result         | Description |
+  |:--------------|:------------|
+  |Z_OK           | If success. |
+  |Z_MEM_ERROR    | If there was not enough memory. |
+  |Z_BUF_ERROR    | If there was not enough room in the output buffer. |
+  |Z_STREAM_ERROR | If the level parameter is invalid. |
+*/
+ZEXTERN int ZEXPORT compress2_raw(Bytef *dest,   uLongf *destLen,
+                              const Bytef *source, uLong sourceLen,
+                              int level);
+
+/**
   @brief It returns an upper bound on the compressed size after
   compress() or compress2() on sourceLen bytes.  It would be used before a
   compress() or compress2() call to allocate the destination buffer.
@@ -1627,6 +1687,24 @@ ZEXTERN int ZEXPORT compress2(Bytef *dest,   uLongf *destLen,
 
 */
 ZEXTERN uLong ZEXPORT compressBound(uLong sourceLen);
+
+/**
+  @brief It returns an upper bound on the compressed size after
+  compress2_gzip() on sourceLen bytes.  It would be used before a
+  compress2_gzip() call to allocate the destination buffer. Only work in Multithreaded mode.
+ 
+  |Parameters    |Direction|Description|
+  |:-------------|:-------:|:----------|
+  | \b sourceLen |    in   | Length of source buffer to be compressed.|
+
+
+  @return
+  |Result | Description |
+  |:------|:------------|
+  |Success| Returns an upper bound on the compressed size after compress2_gzip() on sourceLen bytes. |
+
+*/
+ZEXTERN uLong ZEXPORT compressBound_gzip(uLong sourceLen);
 
 /**
   @brief This function decompresses the source buffer into the destination buffer.  
@@ -1680,6 +1758,56 @@ ZEXTERN int ZEXPORT uncompress(Bytef *dest,   uLongf *destLen,
   |Z_DATA_ERROR | If the input data was corrupted or incomplete. In the case where there is not enough room, uncompress() will fill the output buffer with the uncompressed data up to that point. |
 */
 ZEXTERN int ZEXPORT uncompress2(Bytef *dest,   uLongf *destLen,
+                                const Bytef *source, uLong *sourceLen);
+
+/**
+  @brief This function decompresses the gzip format source buffer into the destination buffer.
+
+  On return, *sourceLen is the number of
+  source bytes consumed. Only supported in multithreaded mode.
+
+  |Parameters    |Direction|Description|
+  |:-------------|:-------:|:----------|
+  | \b dest      |  in,out | The decompressed data is stored in this buffer.|
+  | \b destLen   |  in     | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the compressed data.|
+  | \b source    |  out    | This buffer contains the compressed data which will be decompressed into dest buffer.|
+  | \b sourceLen |  in     | Upon entry *sourceLen is the byte length of the source buffer.On return *sourceLen is the number of source bytes consumed.|
+
+
+  @return
+  |Result       | Description   |
+  |:------------|:--------------|
+  |Z_OK         | If success.   |
+  |Z_MEM_ERROR  | If there was not enough memory. |
+  |Z_BUF_ERROR  | If there was not enough room in the output buffer |
+  |Z_DATA_ERROR | If the input data was corrupted or incomplete. In the case where there is not enough room, uncompress2_gzip() will fill the output buffer with the uncompressed data up to that point. |
+*/
+ZEXTERN int ZEXPORT uncompress2_gzip(Bytef *dest,   uLongf *destLen,
+                                const Bytef *source, uLong *sourceLen);
+
+/**
+  @brief This function decompresses the raw deflate format source buffer into the destination buffer.
+
+  On return, *sourceLen is the number of
+  source bytes consumed. Only supported in multithreaded mode.
+
+  |Parameters    |Direction|Description|
+  |:-------------|:-------:|:----------|
+  | \b dest      |  in,out | The decompressed data is stored in this buffer.|
+  | \b destLen   |  in     | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the compressed data.|
+  | \b source    |  out    | This buffer contains the compressed data which will be decompressed into dest buffer.|
+  | \b sourceLen |  in     | Upon entry *sourceLen is the byte length of the source buffer.On return *sourceLen is the number of source bytes consumed.|
+
+
+  @return
+  |Result       | Description   |
+  |:------------|:--------------|
+  |Z_OK         | If success.   |
+  |Z_MEM_ERROR  | If there was not enough memory. |
+  |Z_BUF_ERROR  | If there was not enough room in the output buffer |
+  |Z_DATA_ERROR | If the input data was corrupted or incomplete. In the case where there is not enough room, uncompress2_raw() will fill the output buffer with the uncompressed data up to that point. |
+*/
+ZEXTERN int ZEXPORT uncompress2_raw(Bytef *dest,   uLongf *destLen,
                                 const Bytef *source, uLong *sourceLen);
 
 /**

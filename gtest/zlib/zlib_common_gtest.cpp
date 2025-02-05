@@ -205,15 +205,15 @@ TEST_P(AOCL_Compression_zlib, uncompress2_negative)
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_2
   compressed[3] = t;
   uncompressLen = 3; // insufficient output buffer size
+  #ifdef AOCL_ENABLE_THREADS
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR); // AOCL_Compression_zlib_uncompress2_common_3
+  #else
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_3
+  #endif
   EXPECT_EQ(uncompress2(NULL, &uncompressLen, compressed, &compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_4
   EXPECT_EQ(uncompress2(uncompressed,NULL,compressed,&compressedLen),Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_5
-#ifdef AOCL_ENABLE_THREADS
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, NULL, &compressedLen), Z_BUF_ERROR);  // AOCL_Compression_zlib_uncompress2_common_6
-#else
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, NULL, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_6
-#endif
-  EXPECT_EQ(uncompress2(uncompressed,&uncompressLen,compressed,NULL),Z_BUF_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
+  EXPECT_EQ(uncompress2(uncompressed,&uncompressLen,compressed, NULL), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
 }
 
 TEST_P(AOCL_Compression_zlib, uncompress2_common)
@@ -251,7 +251,7 @@ TEST_P(AOCL_Compression_zlib, uncompress_negative)
   EXPECT_EQ(uncompress(NULL, &uncompressLen, compressed, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_4
   EXPECT_EQ(uncompress(uncompressed, NULL, compressed, compressedLen),Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress_common_5
 #ifdef AOCL_ENABLE_THREADS
-    EXPECT_EQ(uncompress(uncompressed, &uncompressLen, NULL, compressedLen), Z_BUF_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
+    EXPECT_EQ(uncompress(uncompressed, &uncompressLen, NULL, compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
 #else
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, NULL, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
 #endif
@@ -982,6 +982,118 @@ FUZZ_TEST(AOCL_Compression_zlib, uncompress_fuzz)
 })
 #endif
 ;
+
+#ifdef AOCL_ENABLE_THREADS
+void compress2_gzip_fuzz(vector<Bytef> source, size_t dest_sz,
+                    int level, int optOff, int optLevel)
+{
+  aocl_setup_zlib(optOff, optLevel, 0, 0, 0);
+
+  uLong destLen = dest_sz > ULONG_MAX ? ULONG_MAX : dest_sz;
+  uLong srcLen = source.size();
+  vector<Bytef> dest(destLen, 0);
+
+  compress2_gzip(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  aocl_destroy_zlib();
+}
+FUZZ_TEST(AOCL_Compression_zlib, compress2_gzip_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+            fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+            fuzztest::InRange<int>(-1, 9),
+            fuzztest::InRange<int>(0, 1),
+            fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_cpr_seed_t<Bytef> {
+  auto seed_files = READ_FUZZ_CPR_SEED();
+  return get_fuzz_cpr_seeds<Bytef>([](size_t src_sz) -> size_t {
+    size_t dst_sz = (size_t)compressBound_gzip((uLong)src_sz);
+    return limit_fuzz_size_max(dst_sz);
+  }, -1, 9, seed_files);
+})
+#endif
+;
+
+void uncompress2_gzip_fuzz(vector<Bytef> source, size_t dest_sz,
+                    int optOff, int optLevel)
+{
+  aocl_setup_zlib(optOff, optLevel, 0, 0, 0);
+
+  uLong destLen = dest_sz;
+  uLong srcLen = source.size();
+  vector<Bytef> dest(destLen, 0);
+
+  uncompress2_gzip(dest.data(), &destLen, source.data(), &srcLen);
+
+  aocl_destroy_zlib();
+}
+FUZZ_TEST(AOCL_Compression_zlib, uncompress2_gzip_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<Bytef> {
+  auto seed_files = READ_FUZZ_DPR_SEED();
+  return get_fuzz_dpr_seeds<Bytef>(seed_files);
+})
+#endif
+;
+
+void compress2_raw_fuzz(vector<Bytef> source, size_t dest_sz,
+                    int level, int optOff, int optLevel)
+{
+  aocl_setup_zlib(optOff, optLevel, 0, 0, 0);
+
+  uLong destLen = dest_sz > ULONG_MAX ? ULONG_MAX : dest_sz;
+  uLong srcLen = source.size();
+  vector<Bytef> dest(destLen, 0);
+
+  compress2_raw(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  aocl_destroy_zlib();
+}
+FUZZ_TEST(AOCL_Compression_zlib, compress2_raw_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+            fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+            fuzztest::InRange<int>(-1, 9),
+            fuzztest::InRange<int>(0, 1),
+            fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_cpr_seed_t<Bytef> {
+  auto seed_files = READ_FUZZ_CPR_SEED();
+  return get_fuzz_cpr_seeds<Bytef>([](size_t src_sz) -> size_t {
+    size_t dst_sz = (size_t)compressBound((uLong)src_sz);
+    return limit_fuzz_size_max(dst_sz);
+  }, -1, 9, seed_files);
+})
+#endif
+;
+
+void uncompress2_raw_fuzz(vector<Bytef> source, size_t dest_sz,
+                    int optOff, int optLevel)
+{
+  aocl_setup_zlib(optOff, optLevel, 0, 0, 0);
+
+  uLong destLen = dest_sz;
+  uLong srcLen = source.size();
+  vector<Bytef> dest(destLen, 0);
+
+  uncompress2_raw(dest.data(), &destLen, source.data(), &srcLen);
+
+  aocl_destroy_zlib();
+}
+FUZZ_TEST(AOCL_Compression_zlib, uncompress2_raw_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<Bytef> {
+  auto seed_files = READ_FUZZ_DPR_SEED();
+  return get_fuzz_dpr_seeds<Bytef>(seed_files);
+})
+#endif
+;
+#endif /* AOCL_ENABLE_THREADS */
 #endif /* AOCL_TEST_FUZZER */
 /*********************************************
  * End fuzz tests for zlib

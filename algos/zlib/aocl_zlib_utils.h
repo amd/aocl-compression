@@ -39,4 +39,9 @@
 extern void aocl_zlib_set_enable_dquick(int val);
 extern int aocl_zlib_get_enable_dquick(void);
 
+#ifdef AOCL_ENABLE_THREADS
+extern int insert_Header_generic(Bytef *dest, int level, const int wrap);
+extern int insert_Trailer_generic(Bytef *dest, const Bytef *source, uLong sourceLen, const int wrap);
+#endif /* AOCL_ENABLE_THREADS */
+
 #endif /* AOCL_ZLIB_UTILS_H */

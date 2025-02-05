@@ -1,6 +1,6 @@
 /* compress.c -- compress a memory buffer
  * Copyright (C) 1995-2005, 2014, 2016 Jean-loup Gailly, Mark Adler
- * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -102,7 +102,7 @@ ZEXTERN void ZEXPORT test_aocl_zlib_set_enable_dquick(int val) {
 */
 
 #ifdef AOCL_ENABLE_THREADS
-static inline int compress2_ST(aocl_thread_info_t *cThread, int level, int finalFlush) {
+static inline int compress2_ST_raw(aocl_thread_info_t *cThread, int level, int finalFlush) {
     Bytef *dest = (Bytef*)cThread->dst_trap;
     uLongf *destLen = (uLongf*)&(cThread->dst_trap_size);
     Bytef *source = (Bytef*)cThread->partition_src;
@@ -125,7 +125,9 @@ static inline int compress2_ST(aocl_thread_info_t *cThread, int level, int final
     stream.zfree = (free_func)0;
     stream.opaque = (voidpf)0;
 
-    err = deflateInit(&stream, level);
+    err = deflateInit2(&stream, level, Z_DEFLATED,
+                         -1 * MAX_WBITS, 8, Z_DEFAULT_STRATEGY);
+
     if (err != Z_OK) return err;
 
     stream.next_out = dest;
@@ -147,16 +149,14 @@ static inline int compress2_ST(aocl_thread_info_t *cThread, int level, int final
             break;
     } while (err == Z_OK);
 
-    cThread->last_bytes_len = stream.adler;
-
     *destLen = stream.total_out;
     deflateEnd(&stream);
     return err == Z_STREAM_END ? Z_OK : err;
 }
 
-uLong ZEXPORT compressBound_ST(uLong sourceLen) {
-    /* Worst case: each byte -> 9 bits (fixed Huffman deflate). 13 bytes for zlib wrapper + safety. */
-    uLong fixed_size = FIXED_HUFFFMAN_COMPRESSED_SIZE(sourceLen) + 13;
+static uLong compressBound_ST_raw(uLong sourceLen) {
+    /* Worst case: each byte -> 9 bits (fixed Huffman deflate). */
+    uLong fixed_size = FIXED_HUFFFMAN_COMPRESSED_SIZE(sourceLen);
 
     /* stored_size: size with stored deflate (no compression). Adds 5 bytes/block (worst case as per deflate specification).
        Assumes default memLevel/windowbits. */
@@ -167,15 +167,218 @@ uLong ZEXPORT compressBound_ST(uLong sourceLen) {
     return stored_size;
 }
 
-uLong ZEXPORT compressBound_MT(uLong sourceLen) {
+static uLong compressBound_MT_generic(uLong sourceLen, const int wrap) {
 
-    uLong sz1 = compressBound_ST(sourceLen);
+    uLong sz1 = compressBound_ST_raw(sourceLen);
     uLong sz2 = 0;
-    COMPRESS_BOUND_MT(sourceLen, compressBound_ST, ZLIB_MT_WINDOW_LEN, WINDOW_FACTOR, sz1, sz2, 0)
+    uInt wrapper_size = 0;
+    COMPRESS_BOUND_MT(sourceLen, compressBound_ST_raw, ZLIB_MT_WINDOW_LEN, WINDOW_FACTOR, sz1, sz2, 0)
 
-   return sz2;
+    if(wrap == 1)
+    {
+        wrapper_size = 13; // zlib
+    }
+#ifdef GZIP
+    else if(wrap == 2)
+    {
+        wrapper_size = 18; // gzip
+    }
+#endif
+    
+    return sz2 + wrapper_size;
+}
+
+
+static inline int compress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef *source,
+                      uLong sourceLen, int level, const int wrap) {
+
+    if ((*destLen) < compressBound_MT_generic(sourceLen, wrap))
+        RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(Z_BUF_ERROR)
+
+    int result = Z_OK;
+    aocl_thread_group_t thread_group_handle;
+    aocl_thread_info_t cur_thread_info;
+    AOCL_INT32 rap_metadata_len = -1;
+    AOCL_UINT32 thread_cnt = 0;
+
+    rap_metadata_len = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)source,
+                                                 (char *)dest, sourceLen, *destLen,
+                                                 ZLIB_MT_WINDOW_LEN, WINDOW_FACTOR);
+    if (rap_metadata_len < 0)
+        return Z_MEM_ERROR;
+
+    if (thread_group_handle.num_threads == 1)
+    {
+        int header_size = insert_Header_generic(dest, level, wrap);
+        cur_thread_info.partition_src = (char *)source;
+        cur_thread_info.dst_trap = (char *)dest + header_size;
+        cur_thread_info.dst_trap_size = (*destLen) - header_size;
+        cur_thread_info.partition_src_size = sourceLen;
+        result = compress2_ST_raw(&cur_thread_info, level, Z_FINISH);
+        int trailer_size = insert_Trailer_generic(dest + header_size + cur_thread_info.dst_trap_size,
+                        source, sourceLen, wrap);
+        *destLen = cur_thread_info.dst_trap_size + header_size + trailer_size;
+        return result;
+    }
+    else
+    {
+        *destLen = rap_metadata_len;
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
+#endif
+
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+        {
+#ifdef AOCL_THREADS_LOG
+            printf("Compress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
+#endif
+            AOCL_UINT32 thread_id = omp_get_thread_num();
+            AOCL_UINT32 cmpr_bound_pad;
+            AOCL_UINT32 is_error = Z_OK;
+            if (thread_id != (thread_group_handle.num_threads - 1))
+                cmpr_bound_pad = compressBound_ST_raw(thread_group_handle.common_part_src_size);
+            else
+                cmpr_bound_pad = compressBound_ST_raw(thread_group_handle.common_part_src_size + 
+                                        thread_group_handle.leftover_part_src_bytes);
+            if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
+            {
+                if (thread_id != (thread_group_handle.num_threads - 1))
+                    is_error = compress2_ST_raw(&cur_thread_info, level, Z_SYNC_FLUSH);
+                else
+                    is_error = compress2_ST_raw(&cur_thread_info, level, Z_FINISH);
+            } //aocl_do_partition_compress_mt
+#ifdef AOCL_THREADS_LOG
+            printf("Compress Thread [id: %d] : Return value %d\n", omp_get_thread_num(), is_error);
+#endif
+            thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+            thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+            thread_group_handle.threads_info_list[thread_id].additional_state_info = NULL;
+            thread_group_handle.threads_info_list[thread_id].dst_trap_size = cur_thread_info.dst_trap_size;
+            thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+            thread_group_handle.threads_info_list[thread_id].last_bytes_len = 0;
+            thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+            thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+        } //#pragma omp parallel
+#ifdef AOCL_THREADS_LOG
+        printf("Compress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
+#endif
+        //Post processing in single-threaded mode: Prepares RAP frame and joins the last sequences of the neighboring threads
+
+        // <-- RAP Header -->
+        //Add at the start of the stream : Although it can be at the end or at any other point in the stream, but it is more easier for parsing at the start
+        AOCL_CHAR* dst_org = thread_group_handle.dst;
+        AOCL_CHAR* dst_ptr = dst_org;
+        AOCL_UINT32 decomp_len;
+        thread_group_handle.dst += rap_metadata_len;
+        dst_ptr += RAP_START_OF_PARTITIONS;
+        // <-- RAP Header -->
+
+        int header_size = insert_Header_generic((Bytef*)thread_group_handle.dst, level, wrap);
+        thread_group_handle.dst += header_size;
+        *destLen += header_size;
+
+        // <-- RAP Metadata payload -->
+        for (thread_cnt = 0 ; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+        {
+            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+            //In case of any thread partitioning or alloc errors, exit the compression process with error
+            if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
+            {
+                result = cur_thread_info.is_error;
+                aocl_destroy_parallel_compress_mt(&thread_group_handle);
+    #ifdef AOCL_THREADS_LOG
+                printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
+    #endif
+                return result;
+            }
+
+            *(AOCL_UINT32*)dst_ptr = *destLen; //For storing this thread's RAP offset
+            dst_ptr += RAP_OFFSET_BYTES;
+            *(AOCL_INT32*)dst_ptr = cur_thread_info.dst_trap_size; //For storing this thread's RAP length
+            dst_ptr += RAP_LEN_BYTES;
+            //For storing this thread's decompressed (src) length
+            decomp_len = cur_thread_info.partition_src_size;
+
+            *(AOCL_INT32*)dst_ptr = decomp_len;
+            dst_ptr += DECOMP_LEN_BYTES;
+            *destLen += (cur_thread_info.dst_trap_size);
+
+            /* compute cumulative dst_trap_size and save in unsued member partition_src_size
+            * This is used as offset to indicate starting points of compressed data blocks in dst */
+            if(thread_cnt != 0)
+                thread_group_handle.threads_info_list[thread_cnt].partition_src_size =
+                    thread_group_handle.threads_info_list[thread_cnt - 1].partition_src_size +
+                    thread_group_handle.threads_info_list[thread_cnt - 1].dst_trap_size;
+            else
+                thread_group_handle.threads_info_list[thread_cnt].partition_src_size = 0;
+
+        }
+
+        /* copy compressed data from threads to dst multi-threaded */
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+        {
+            AOCL_UINT32 thread_cnt = omp_get_thread_num();
+            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+            memcpy(thread_group_handle.dst + cur_thread_info.partition_src_size, //cur_thread_info.partition_src_size contains cur_offset
+                cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+        }
+        thread_group_handle.dst += *destLen - rap_metadata_len - header_size;
+        int trailer_size = insert_Trailer_generic((Bytef*)thread_group_handle.dst, source, sourceLen, wrap);
+        *destLen += trailer_size;
+        thread_group_handle.dst += trailer_size;
+
+        aocl_destroy_parallel_compress_mt(&thread_group_handle);
+
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return result;
+    }
 }
 #endif /* AOCL_ENABLE_THREADS */
+
+uLong ZEXPORT compressBound_gzip(uLong sourceLen) {
+#ifdef AOCL_ENABLE_THREADS
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    AOCL_SETUP_NATIVE();
+    return compressBound_MT_generic(sourceLen, 2);
+#else
+    LOG_UNFORMATTED(ERR, logCtx, "Only supported with multithread library.");
+    return Z_VERSION_ERROR;
+#endif
+}
+
+int ZEXPORT compress2_gzip(Bytef *dest, uLongf *destLen, const Bytef *source,
+                      uLong sourceLen, int level) {
+#ifdef AOCL_ENABLE_THREADS
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    AOCL_SETUP_NATIVE();
+    if(destLen == NULL)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return Z_BUF_ERROR;
+    }
+    return compress2_MT_generic(dest, destLen, source, sourceLen, level, 2);
+#else
+    LOG_UNFORMATTED(ERR, logCtx, "Only supported with multithread library.");
+    return Z_VERSION_ERROR;
+#endif
+}
+
+int ZEXPORT compress2_raw(Bytef *dest, uLongf *destLen, const Bytef *source,
+                      uLong sourceLen, int level) {
+#ifdef AOCL_ENABLE_THREADS
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    AOCL_SETUP_NATIVE();
+    if(destLen == NULL)
+    {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return Z_BUF_ERROR;
+    }
+    return compress2_MT_generic(dest, destLen, source, sourceLen, level, 0);
+#else
+    LOG_UNFORMATTED(ERR, logCtx, "Only supported with multithread library.");
+    return Z_VERSION_ERROR;
+#endif
+}
 
 int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
                       uLong sourceLen, int level) {
@@ -229,174 +432,7 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
     
     return err == Z_STREAM_END ? Z_OK : err;
 #else //Threaded
-
-    if ((*destLen) < compressBound_MT(sourceLen))
-        RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(Z_BUF_ERROR)
-
-    int result = Z_OK;
-    aocl_thread_group_t thread_group_handle;
-    aocl_thread_info_t cur_thread_info;
-    AOCL_INT32 rap_metadata_len = -1;
-    AOCL_UINT32 thread_cnt = 0;
-
-    rap_metadata_len = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)source,
-                                                 (char *)dest, sourceLen, *destLen,
-                                                 ZLIB_MT_WINDOW_LEN, WINDOW_FACTOR);
-    if (rap_metadata_len < 0)
-        return Z_MEM_ERROR;
-
-    if (thread_group_handle.num_threads == 1)
-    {
-        cur_thread_info.partition_src = (char *)source;
-        cur_thread_info.dst_trap = (char *)dest;
-        cur_thread_info.dst_trap_size = *destLen;
-        cur_thread_info.partition_src_size = sourceLen;
-        result = compress2_ST(&cur_thread_info, level, Z_FINISH);
-        *destLen = cur_thread_info.dst_trap_size;
-        return result;
-    }
-    else
-    {
-        *destLen = rap_metadata_len;
-#ifdef AOCL_THREADS_LOG
-        printf("Compress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
-#endif
-
-#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
-        {
-#ifdef AOCL_THREADS_LOG
-            printf("Compress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
-#endif
-            AOCL_UINT32 thread_id = omp_get_thread_num();
-            AOCL_UINT32 cmpr_bound_pad;
-            AOCL_UINT32 is_error = Z_OK;
-            if (thread_id != (thread_group_handle.num_threads - 1))
-                cmpr_bound_pad = compressBound_ST(thread_group_handle.common_part_src_size);
-            else
-                cmpr_bound_pad = compressBound_ST(thread_group_handle.common_part_src_size + 
-                                        thread_group_handle.leftover_part_src_bytes);
-            if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
-            {
-                if (thread_id != (thread_group_handle.num_threads - 1))
-                    is_error = compress2_ST(&cur_thread_info, level, Z_SYNC_FLUSH);
-                else
-                    is_error = compress2_ST(&cur_thread_info, level, Z_FINISH);
-            } //aocl_do_partition_compress_mt
-#ifdef AOCL_THREADS_LOG
-            printf("Compress Thread [id: %d] : Return value %d\n", omp_get_thread_num(), is_error);
-#endif
-            thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
-            thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
-            thread_group_handle.threads_info_list[thread_id].additional_state_info = NULL;
-            thread_group_handle.threads_info_list[thread_id].dst_trap_size = cur_thread_info.dst_trap_size;
-            thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
-            thread_group_handle.threads_info_list[thread_id].last_bytes_len = cur_thread_info.last_bytes_len;
-            thread_group_handle.threads_info_list[thread_id].is_error = is_error;
-            thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
-        } //#pragma omp parallel
-#ifdef AOCL_THREADS_LOG
-        printf("Compress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
-#endif
-        //Post processing in single-threaded mode: Prepares RAP frame and joins the last sequences of the neighboring threads
-
-        // <-- RAP Header -->
-        //Add at the start of the stream : Although it can be at the end or at any other point in the stream, but it is more easier for parsing at the start
-        AOCL_CHAR* dst_org = thread_group_handle.dst;
-        AOCL_CHAR* dst_ptr = dst_org;
-        AOCL_UINT32 decomp_len;
-        thread_group_handle.dst += rap_metadata_len;
-        dst_ptr += RAP_START_OF_PARTITIONS;
-        // <-- RAP Header -->
-
-        // <-- RAP Metadata payload -->
-        AOCL_UINT32 offset = 0, adler = 1;
-        
-        // For the first thread:
-        cur_thread_info = thread_group_handle.threads_info_list[0];
-        // In case of any thread partitioning or alloc errors, exit the compression process with error
-        if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
-        {
-            result = cur_thread_info.is_error;
-            aocl_destroy_parallel_compress_mt(&thread_group_handle);
-    #ifdef AOCL_THREADS_LOG
-            printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
-    #endif
-            return result;
-        }
-
-        *(AOCL_UINT32*)dst_ptr = *destLen;
-        dst_ptr += RAP_OFFSET_BYTES;
-        *(AOCL_INT32*)dst_ptr = cur_thread_info.dst_trap_size - offset;
-        dst_ptr += RAP_LEN_BYTES;
-        *(AOCL_INT32*)dst_ptr = cur_thread_info.partition_src_size;
-        dst_ptr += DECOMP_LEN_BYTES;
-
-        *destLen += (cur_thread_info.dst_trap_size - offset);
-        // combining partition checksum value stored in last_bytes_len of thread info
-        adler = adler32_combine(adler, cur_thread_info.last_bytes_len, cur_thread_info.partition_src_size);
-        /* save the offset (zlib header bytes) in last_bytes_len */
-        thread_group_handle.threads_info_list[0].last_bytes_len = offset;
-
-        /* compute cumulative dst_trap_size and save in unsued member partition_src_size */
-        thread_group_handle.threads_info_list[0].partition_src_size = 0;
-        offset = 2; // skip 2 bytes zlib header
-
-        for (thread_cnt = 1 ; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
-        {
-            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
-            //In case of any thread partitioning or alloc errors, exit the compression process with error
-            if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
-            {
-                result = cur_thread_info.is_error;
-                aocl_destroy_parallel_compress_mt(&thread_group_handle);
-    #ifdef AOCL_THREADS_LOG
-                printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt);
-    #endif
-                return result;
-            }
-
-            *(AOCL_UINT32*)dst_ptr = *destLen; //For storing this thread's RAP offset
-            dst_ptr += RAP_OFFSET_BYTES;
-            *(AOCL_INT32*)dst_ptr = cur_thread_info.dst_trap_size - offset; //For storing this thread's RAP length
-            dst_ptr += RAP_LEN_BYTES;
-            //For storing this thread's decompressed (src) length
-            decomp_len = cur_thread_info.partition_src_size;
-
-            *(AOCL_INT32*)dst_ptr = decomp_len;
-            dst_ptr += DECOMP_LEN_BYTES;
-            *destLen += (cur_thread_info.dst_trap_size - offset);
-            // combining partition checksum value stored in last_bytes_len of thread info
-            adler = adler32_combine(adler, cur_thread_info.last_bytes_len, cur_thread_info.partition_src_size);
-            thread_group_handle.threads_info_list[thread_cnt].last_bytes_len = offset; /* save the offset (zlib header bytes) in last_bytes_len */
-
-            /* compute cumulative dst_trap_size and save in unsued member partition_src_size
-            * This is used as offset to indicate starting points of compressed data blocks in dst */
-            thread_group_handle.threads_info_list[thread_cnt].partition_src_size =
-                    thread_group_handle.threads_info_list[thread_cnt - 1].partition_src_size +
-                    thread_group_handle.threads_info_list[thread_cnt - 1].dst_trap_size - 
-                    thread_group_handle.threads_info_list[thread_cnt - 1].last_bytes_len; //cur_offset i.e. cumulative dst_trap_size
-
-            offset = 2; // skip 2 bytes zlib header
-        }
-
-        /* copy compressed data from threads to dst multi-threaded */
-#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
-        {
-            AOCL_UINT32 thread_cnt = omp_get_thread_num();
-            cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
-            memcpy(thread_group_handle.dst + cur_thread_info.partition_src_size, //cur_thread_info.partition_src_size contains cur_offset
-                cur_thread_info.dst_trap + cur_thread_info.last_bytes_len, cur_thread_info.dst_trap_size - cur_thread_info.last_bytes_len);
-        }
-        thread_group_handle.dst += *destLen - rap_metadata_len;
-        //Update checksum
-        adler = ((((adler) >> 24) & 0xff) + (((adler) >> 8) & 0xff00) + (((adler) & 0xff00) << 8) + (((adler) & 0xff) << 24));
-        memcpy((thread_group_handle.dst - 4), &adler, 4);
-
-        aocl_destroy_parallel_compress_mt(&thread_group_handle);
-
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
-        return result;
-    }
+    return compress2_MT_generic(dest, destLen, source, sourceLen, level, 1);  
 #endif /* !AOCL_ENABLE_THREADS */
 }
 
@@ -415,7 +451,7 @@ int ZEXPORT compress(Bytef *dest, uLongf *destLen, const Bytef *source,
 uLong ZEXPORT compressBound(uLong sourceLen) {
     AOCL_SETUP_NATIVE();
 #ifdef AOCL_ENABLE_THREADS
-    return compressBound_MT(sourceLen);
+    return compressBound_MT_generic(sourceLen, 1);
 #elif defined(AOCL_ZLIB_OPT)
     /* Worst case: each byte -> 9 bits (fixed Huffman deflate). 13 bytes for zlib wrapper + safety. */
     uLong fixed_size = FIXED_HUFFFMAN_COMPRESSED_SIZE(sourceLen) + 13;
