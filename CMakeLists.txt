@@ -453,7 +453,14 @@ endif()
 message(STATUS "C Compiler used: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ Compiler used: ${CMAKE_CXX_COMPILER}")
 set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
-find_package(OpenMP REQUIRED) # openmp required for all configurations
+
+if(WIN32 OR NOT OpenMP_libomp_LIBRARY)
+    find_package(OpenMP REQUIRED)
+else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+endif()
+
 if (WIN32)
 	if (CMAKE_BUILD_TYPE STREQUAL "Release")
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
@@ -702,8 +709,10 @@ target_include_directories(${lib_name}
                             PRIVATE ${ALGOS_PATH}/common
                             PRIVATE api)
 
-if (OPENMP_FOUND)
+if (OPENMP_FOUND AND (WIN32 OR NOT OpenMP_libomp_LIBRARY))
     target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+else()
+    target_link_libraries(${lib_name} PUBLIC ${OpenMP_libomp_LIBRARY})
 endif ()
 
 #add benchmarking application and tests
