@@ -217,7 +217,8 @@ FORCE_INLINE_TEMPLATE size_t
     }
 
     /* save reps for next block */
-    @AOCL_ZSTD_CLNF_SAVE_REP@
+    rep[0] = offset_1 ? offset_1 : offsetSaved1;
+    for (int i=1; i<ZSTD_REP_NUM; ++i) rep[i] = rep[0]; /* set to rep[0] as rest have not been maintained */
 
     /* Return the last literals size */
     return (size_t)(iend - anchor);

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -3309,6 +3309,41 @@ public:
         return outLen;
     }
 
+    bool zstd_check_uncompressed_equal_to_original_stream(const char* src, size_t srcSize, 
+        const char* compressed, size_t compressedLen) {
+        char* uncompressed = (char*)calloc(srcSize, sizeof(char));
+        ZSTD_DCtx* const dctx = ZSTD_createDCtx();
+        bool ret = false;
+        size_t totalCSize = 0;
+        size_t totalGenSize = 0;
+        while (totalCSize < compressedLen) { /* Loop over multiple frames */
+            ZSTD_resetDStream(dctx); /* Context reset to start a new decompression */
+            if (Test_ZSTD_isError(ZSTD_decompressBegin(dctx))) 
+                goto _cleanup;
+            while (totalCSize < compressedLen) {
+                size_t const inSize = ZSTD_nextSrcSizeToDecompress(dctx);
+
+                if (inSize == 0) break; /* Frame completed. No more data to provide as src to ZSTD_decompressContinue(). */
+
+                size_t const genSize = ZSTD_decompressContinue(dctx, uncompressed + totalGenSize, srcSize - totalGenSize, compressed + totalCSize, inSize);
+                if (Test_ZSTD_isError(genSize))
+                    goto _cleanup;
+                totalGenSize += genSize;
+                totalCSize += inSize;
+            }
+        }
+
+        if (!(srcSize == totalGenSize))
+            goto _cleanup;
+
+        ret = (memcmp(src, uncompressed, srcSize) == 0);
+
+_cleanup:
+        free(uncompressed);
+        ZSTD_freeDCtx(dctx);
+        return ret;
+    }
+
 private:
     ZSTD_CCtx* g_zcc = NULL;
 };
@@ -3330,8 +3365,8 @@ TEST_F(ZSTD_ZSTD_compress_extDict, AOCL_Compression_zstd_ZSTD_compressStream_com
             size_t outLen = multi_block_compress(p, dst, dstCapacity, src, srcSize);
 
             //validate
-            EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(),
-                d.getCompressedBuff(), outLen, ZSTD_decompressDCtx));
+            EXPECT_TRUE(zstd_check_uncompressed_equal_to_original_stream(
+                d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
         }
     }
 }

@@ -85,10 +85,6 @@ _storeSequence:
     assert((OFFBASE_IS_OFFSET(offBase) && (OFFBASE_TO_OFFSET(offBase) >= WILDCOPY_VECLEN)) || (!OFFBASE_IS_OFFSET(offBase)));
     AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength);
 ]])
-set(AOCL_ZSTD_CLNF_SAVE_REP [[
-    rep[0] = offset_1 ? offset_1 : offsetSaved1;
-    for (int i=1; i<ZSTD_REP_NUM; ++i) rep[i] = 0; /* reset as these have not been maintained */
-]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_base.h
@@ -105,7 +101,6 @@ _storeSequence:
     assert((OFFBASE_IS_OFFSET(offBase) && (OFFBASE_TO_OFFSET(offBase) >= (WILDCOPY_VECLEN/2))) || (!OFFBASE_IS_OFFSET(offBase)));
     AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength);
 ]])
-#set(AOCL_ZSTD_CLNF_SAVE_REP same as above)
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_offset8.h
@@ -123,6 +118,7 @@ set(AOCL_ZSTD_CLNF_LONG_MATCH [[
     if (UNLIKELY(matchLength > AOCL_LONG_MATCH_LIMIT_LAZY && offset_offBase > 0 && offset_offBase < WILDCOPY_VECLEN))
     {
         seqStore->fds_config.state = FDS_NONE; // stop imposing constraints from next block
+        offset_1 = offset_offBase;
         goto _storeSequence;
     }
     else
@@ -137,10 +133,6 @@ _storeSequence:
     {
         AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, (U32)offBase, matchLength);
     }
-]])
-set(AOCL_ZSTD_CLNF_SAVE_REP [[
-    (void)offsetSaved1;
-    for (int i=0; i<ZSTD_REP_NUM; ++i) rep[i] = 0; /* reset as these have not been maintained */
 ]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
@@ -157,7 +149,6 @@ set(AOCL_ZSTD_CLNF_STORE_SEQ [[
     assert((OFFBASE_IS_OFFSET(offBase) && (OFFBASE_TO_OFFSET(offBase) >= WILDCOPY_VECLEN)) || (!OFFBASE_IS_OFFSET(offBase)));
     AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength);
 ]])
-#set(AOCL_ZSTD_CLNF_SAVE_REP same as above)
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds3_base.h
@@ -173,7 +164,6 @@ set(AOCL_ZSTD_CLNF_STORE_SEQ [[
     assert((OFFBASE_IS_OFFSET(offBase) && (OFFBASE_TO_OFFSET(offBase) >= (WILDCOPY_VECLEN/2))) || (!OFFBASE_IS_OFFSET(offBase)));
     AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength);
 ]])
-#set(AOCL_ZSTD_CLNF_SAVE_REP same as above)
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds3_offset8.h
@@ -245,10 +235,6 @@ set(AOCL_ZSTD_CDNGF_STORE_SEQ [[
     assert((OFFBASE_IS_OFFSET(OFFSET_TO_OFFBASE(offset)) && (offset >= WILDCOPY_VECLEN)) || (!OFFBASE_IS_OFFSET(OFFSET_TO_OFFBASE(offset))));
     AOCL_ZSTD_storeSequences(seqStore, ip, anchor, iend, OFFSET_TO_OFFBASE(offset), mLength);
 ]])
-set(AOCL_ZSTD_CDNGF_SAVE_REP [[
-    rep[0] = offset_1 ? offset_1 : offsetSaved1;
-    for (int i=1; i<ZSTD_REP_NUM; ++i) rep[i] = 0; /* reset as these have not been maintained */
-]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_double_fast_noDict_generic_fds_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_doubleFast_noDict_generic_fds2_base.h
@@ -301,6 +287,7 @@ set(AOCL_ZSTD_CDNGF_LONG_MATCH [[
             if (step < 4)
                 hashLong[hl1] = (U32)(ip1 - base);
             ZSTD_storeSeq(seqStore, (size_t)(ip - anchor), anchor, iend, OFFSET_TO_OFFBASE(offset), mLength);
+            offset_1 = offset;
             goto _match_stored;
         }
     }
@@ -327,15 +314,12 @@ set(AOCL_ZSTD_CDNGF_SHORT_MATCH [[
             if (step < 4)
                 hashLong[hl1] = (U32)(ip1 - base);
             ZSTD_storeSeq(seqStore, (size_t)(ip - anchor), anchor, iend, OFFSET_TO_OFFBASE(offset), mLength);
+            offset_1 = offset;
             goto _match_stored;
         }
     }
 ]])
 #set(AOCL_ZSTD_CDNGF_STORE_SEQ same as above)
-set(AOCL_ZSTD_CDNGF_SAVE_REP [[
-    (void)offsetSaved1;
-    for (int i=0; i<ZSTD_REP_NUM; ++i) rep[i] = 0; /* reset as these have not been maintained */
-]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_double_fast_noDict_generic_fds_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_doubleFast_noDict_generic_fds2_analyze.h
@@ -413,10 +397,6 @@ set(AOCL_ZSTD_CFNGF_STORE_SEQ [[
     assert((OFFBASE_IS_OFFSET(offcode) && (OFFBASE_TO_OFFSET(offcode) >= WILDCOPY_VECLEN)) || (!OFFBASE_IS_OFFSET(offcode)));
     AOCL_ZSTD_storeSequences(seqStore, ip0, anchor, iend, offcode, mLength);
 ]])
-set(AOCL_ZSTD_CFNGF_SAVE_REP [[
-    rep[0] = rep_offset1 ? rep_offset1 : offsetSaved1;
-    for (int i=1; i<ZSTD_REP_NUM; ++i) rep[i] = 0; /* reset as these have not been maintained */
-]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_fast_noDict_generic_fds_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds2_base.h
@@ -452,6 +432,8 @@ set(AOCL_ZSTD_CFNGF_MATCH [[
         mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend); \
         if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) \
             goto _store_sequences; \
+        else \
+            rep_offset1 = prev_rep_offset1; /* revert */ \
     } \
     else if (rep_offset1 > 0) /* rep_offset1 < WILDCOPY_VECLEN */ \
     { \
@@ -474,12 +456,12 @@ set(AOCL_ZSTD_CFNGF_MATCH [[
             ZSTD_storeSeq(seqStore, (size_t)(ip0 - anchor), anchor, iend, offcode, mLength); \
             goto _match_stored; \
         } \
-    } \]])
+        else \
+            rep_offset1 = prev_rep_offset1; /* revert */ \
+    } \
+    else \
+        rep_offset1 = prev_rep_offset1; /* revert */ \]])
 #set(AOCL_ZSTD_CFNGF_STORE_SEQ same as above)
-set(AOCL_ZSTD_CFNGF_SAVE_REP [[
-    (void)offsetSaved1; (void)prev_rep_offset1;
-    for (int i=0; i<ZSTD_REP_NUM; ++i) rep[i] = 0; /* reset as these have not been maintained */
-]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_fast_noDict_generic_fds_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds2_analyze.h

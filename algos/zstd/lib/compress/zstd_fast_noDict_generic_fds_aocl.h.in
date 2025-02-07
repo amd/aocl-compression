@@ -263,7 +263,8 @@ _cleanup:
      * them. So let's not. */
 
     /* save reps for next block */
-    @AOCL_ZSTD_CFNGF_SAVE_REP@
+    rep[0] = rep_offset1 ? rep_offset1 : offsetSaved1;
+    for (int i=1; i<ZSTD_REP_NUM; ++i) rep[i] = rep[0]; /* set to rep[0] as rest have not been maintained */
 
     /* Return the last literals size */
     return (size_t)(iend - anchor);

@@ -487,7 +487,7 @@ size_t ZSTD_compressBlock_fast(
 
 #ifdef AOCL_ZSTD_OPT
 #define PREFETCH_OFFSET 8
-#define PREFETCH_SAFETY PREFETCH_OFFSET // value at ip + PREFETCH_SAFETY can be read to prefetch match candidates.
+#define PREFETCH_SAFETY (PREFETCH_OFFSET + 4) // value at ip + PREFETCH_SAFETY can be read to prefetch match candidates. +4 as endmost prefetching happens with ip0 + 4.
 /* Compute hash for search key at PREFETCH_OFFSET from ip
 *  Prefetch match candidate stored at hashTable[hashIndex]
 *  If hashTable[hashIndex] is empty, (base + 0) is still a valid address and can be accessed. No check added for this to avoid branching. */
