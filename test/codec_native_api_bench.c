@@ -497,7 +497,7 @@ AOCL_UINTP native_compression_bound(AOCL_UINTP inSize)
 
 /* Return 1 if inSize is too large.
 *  Return 0 and set outSize to compress_bound otherwise. */
-int native_compression_bound_with_overflow(AOCL_UINTP inSize, AOCL_UINTP* outSize, AOCL_INTP codec_method)
+int native_compression_bound_with_overflow(AOCL_UINTP inSize, AOCL_UINTP* outSize)
 {
     AOCL_UINTP oSize = native_compression_bound(inSize);
     if (oSize < inSize) { //overflow
@@ -519,13 +519,13 @@ int native_compression_bound_with_overflow(AOCL_UINTP inSize, AOCL_UINTP* outSiz
 */
 AOCL_UINTP native_mem_limit_bound(AOCL_UINTP mem_limit, AOCL_INTP codec_method) {
     AOCL_UINTP dst_limit = 0;
-    int overflow = native_compression_bound_with_overflow(mem_limit, &dst_limit, codec_method);
+    int overflow = native_compression_bound_with_overflow(mem_limit, &dst_limit);
     if (overflow || dst_limit > codec_list[codec_method].max_dst_size) {
         /* determine largest input [0, max_dst_size], whose compress bound fits. */
         AOCL_UINTP min_dst_size = 0, max_dst_size = codec_list[codec_method].max_dst_size;
         while (min_dst_size <= max_dst_size) { // binary search
             AOCL_UINTP limit = min_dst_size + ((max_dst_size - min_dst_size) / 2);
-            int overflow = native_compression_bound_with_overflow(limit, &dst_limit, codec_method);
+            int overflow = native_compression_bound_with_overflow(limit, &dst_limit);
             if (!overflow && dst_limit == codec_list[codec_method].max_dst_size) {
                 return limit; // largest input whose compress bound fits
             }
@@ -677,6 +677,7 @@ AOCL_INTP native_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
     codec_bench_handle->dSize = 0;
     codec_bench_handle->cBestTime = UINT64_MAX;
     codec_bench_handle->dBestTime = UINT64_MAX;
+    codec_bench_handle->codec_method = codec;
     aocl_codec_handle->level = level;
 
     // Allocating memory for outBuf

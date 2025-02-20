@@ -520,6 +520,9 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
         if (ret < 0)
             break;
     }
+    if(codec_bench_handle->use_all_codecs) {
+        codec_bench_handle->codec_method = -1;
+    }
 
     LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return ret;
