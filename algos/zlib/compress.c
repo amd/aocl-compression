@@ -215,8 +215,9 @@ static inline int compress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef
         cur_thread_info.dst_trap_size = (*destLen) - header_size;
         cur_thread_info.partition_src_size = sourceLen;
         result = compress2_ST_raw(&cur_thread_info, level, Z_FINISH);
+        AOCL_UINT32 chcksm = CALCULATE_CHECKSUM(source, sourceLen, wrap);
         int trailer_size = insert_Trailer_generic(dest + header_size + cur_thread_info.dst_trap_size,
-                        source, sourceLen, wrap);
+                        chcksm, sourceLen, wrap);
         *destLen = cur_thread_info.dst_trap_size + header_size + trailer_size;
         return result;
     }
@@ -246,6 +247,7 @@ static inline int compress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef
                     is_error = compress2_ST_raw(&cur_thread_info, level, Z_SYNC_FLUSH);
                 else
                     is_error = compress2_ST_raw(&cur_thread_info, level, Z_FINISH);
+                cur_thread_info.last_bytes_len = CALCULATE_CHECKSUM(cur_thread_info.partition_src, cur_thread_info.partition_src_size, wrap);
             } //aocl_do_partition_compress_mt
 #ifdef AOCL_THREADS_LOG
             printf("Compress Thread [id: %d] : Return value %d\n", omp_get_thread_num(), is_error);
@@ -255,7 +257,7 @@ static inline int compress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef
             thread_group_handle.threads_info_list[thread_id].additional_state_info = NULL;
             thread_group_handle.threads_info_list[thread_id].dst_trap_size = cur_thread_info.dst_trap_size;
             thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
-            thread_group_handle.threads_info_list[thread_id].last_bytes_len = 0;
+            thread_group_handle.threads_info_list[thread_id].last_bytes_len = cur_thread_info.last_bytes_len; // save checksum
             thread_group_handle.threads_info_list[thread_id].is_error = is_error;
             thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
         } //#pragma omp parallel
@@ -277,6 +279,8 @@ static inline int compress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef
         thread_group_handle.dst += header_size;
         *destLen += header_size;
 
+        AOCL_UINT32 checksum = (wrap == 1 ? 1 : 0);
+
         // <-- RAP Metadata payload -->
         for (thread_cnt = 0 ; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
         {
@@ -291,6 +295,8 @@ static inline int compress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef
     #endif
                 return result;
             }
+
+            checksum = (AOCL_UINT32) UPDATE_CHECKSUM(checksum, cur_thread_info.last_bytes_len, cur_thread_info.partition_src_size, wrap);
 
             *(AOCL_UINT32*)dst_ptr = *destLen; //For storing this thread's RAP offset
             dst_ptr += RAP_OFFSET_BYTES;
@@ -323,7 +329,7 @@ static inline int compress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef
                 cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
         }
         thread_group_handle.dst += *destLen - rap_metadata_len - header_size;
-        int trailer_size = insert_Trailer_generic((Bytef*)thread_group_handle.dst, source, sourceLen, wrap);
+        int trailer_size = insert_Trailer_generic((Bytef*)thread_group_handle.dst, checksum, sourceLen, wrap);
         *destLen += trailer_size;
         thread_group_handle.dst += trailer_size;
 

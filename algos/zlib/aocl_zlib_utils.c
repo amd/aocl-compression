@@ -91,21 +91,18 @@ int insert_Header_generic(Bytef *dest, int level, const int wrap) {
     return header_size;
 }
 
-int insert_Trailer_generic(Bytef *dest, const Bytef *source, uLong sourceLen, const int wrap) {
+int insert_Trailer_generic(Bytef *dest, AOCL_UINT32 checksum, uLong sourceLen, const int wrap) {
     int trailer_size = 0; // no trailer
     if(wrap == 1) {
         // zlib
-        uInt adler = adler32_x86(1L, source, sourceLen);
-        adler = ((((adler) >> 24) & 0xff) + (((adler) >> 8) & 0xff00) + (((adler) & 0xff00) << 8) + (((adler) & 0xff) << 24));
-        memcpy(dest, &adler, 4);
+        checksum = ((((checksum) >> 24) & 0xff) + (((checksum) >> 8) & 0xff00) + (((checksum) & 0xff00) << 8) + (((checksum) & 0xff) << 24));
+        memcpy(dest, &checksum, 4);
         trailer_size = 4;
     }
 #ifdef GZIP
     else if (wrap == 2) {
         // gzip
-        unsigned long crc = crc32(0L, Z_NULL, 0); // initialize crc
-        crc = crc32(crc, source, sourceLen);
-        memcpy(dest, &crc, 4); // CRC32
+        memcpy(dest, &checksum, 4); // CRC32
         sourceLen = sourceLen % 4294967296L;
         memcpy(dest + 4, &((AOCL_UINT32)sourceLen), 4); // ISIZE
         trailer_size = 8;

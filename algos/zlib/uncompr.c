@@ -15,6 +15,7 @@
 #include <string.h>
 #include "threads/threads.h"
 #include "algos/common/aoclThreadUtils.h"
+#include "aocl_zlib_utils.h"
 #define MAX_WBITS 15
 #endif
 /* ===========================================================================
@@ -90,23 +91,21 @@ static inline int uncompress2_ST_raw(Bytef *dest, uLongf *destLen, const Bytef *
            err == Z_BUF_ERROR && left + stream.avail_out ? Z_DATA_ERROR :
            err;
 }
-static inline int validate_Checksum(Bytef *dest, uLongf *destLen, const Bytef *source,
+static inline int validate_Checksum(AOCL_UINT32 checksum, const Bytef *source,
                         uLong *sourceLen, const int wrap) {
     int isValid = 1; 
     if(wrap == 1)
     {   // zlib
-        AOCL_UINT32 adler = adler32_x86(1L, dest, *destLen);
         AOCL_UINT32 adler2 = *((AOCL_UINT32 *)(source + *sourceLen - 4));
         adler2 = ((((adler2) >> 24) & 0xff) + (((adler2) >> 8) & 0xff00) + (((adler2) & 0xff00) << 8) + (((adler2) & 0xff) << 24));
-        if(adler != adler2)
+        if(checksum != adler2)
             isValid = 0;
     }
 #ifdef GZIP
     else if(wrap == 2) 
     {   // gzip
-        AOCL_UINT32 crc = crc32(0L, dest, *destLen);
         AOCL_UINT32 crc2 = *((AOCL_UINT32 *)(source + *sourceLen - 8));
-        if(crc != crc2)
+        if(checksum != crc2)
             isValid = 0;
     }
 #endif
@@ -165,8 +164,12 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
         *sourceLen -= (rap_metadata_len + header_size + trailer_size);
         org_sourceLen -= (rap_metadata_len + header_size);
         result = uncompress2_ST_raw(dest, destLen, source, sourceLen, -1 * MAX_WBITS);
-        if(result == Z_OK && !validate_Checksum(dest, destLen, source, &org_sourceLen, wrap))
-            result = Z_DATA_ERROR;
+        if(result == Z_OK)
+        {
+            AOCL_UINT32 chksm = CALCULATE_CHECKSUM(dest, *destLen, wrap);
+            if(!validate_Checksum(chksm, source, &org_sourceLen, wrap))
+                result = Z_DATA_ERROR;
+        }
         return result;
 
     }
@@ -194,6 +197,7 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
             {
                 is_error = uncompress2_ST_raw((Bytef *)cur_thread_info.dst_trap, (uLong *)&(cur_thread_info.dst_trap_size),
                                             (Bytef *)cur_thread_info.partition_src, (uLong *)&(cur_thread_info.partition_src_size), -1 * MAX_WBITS);
+                cur_thread_info.last_bytes_len = CALCULATE_CHECKSUM(cur_thread_info.dst_trap, cur_thread_info.dst_trap_size, wrap);
             }//aocl_do_partition_decompress_mt
             else if (thread_parallel_res == 1)
             {
@@ -206,6 +210,7 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
             ti_cur->dst_trap = cur_thread_info.dst_trap;
             ti_cur->dst_trap_size = cur_thread_info.dst_trap_size;
             ti_cur->partition_src_size = cur_thread_info.partition_src_size;
+            ti_cur->last_bytes_len = cur_thread_info.last_bytes_len; // storing checksum value
             ti_cur->is_error = is_error;
             ti_cur->num_child_threads = 0;
             AOCL_MT_PROCESS_PARTITION_END(ti_cur)
@@ -219,6 +224,7 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
         * This is used as offset to indicate starting points of decompressed data blocks in dst */
         AOCL_UINT32 dst_offset = 0;
         aocl_thread_info_t* ti_prev = NULL;
+        AOCL_UINT32 checksum = (wrap == 1 ? 1 : 0);
         /* compute cumulative dst_trap_size and save in unsued member partition_src_size */
         for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
         {
@@ -242,7 +248,8 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
                 dst_offset = ti_prev->partition_src_size + ti_prev->dst_trap_size; // cumulative dst_trap_size
             }
             ti_cur->partition_src_size = dst_offset;
-
+            
+            checksum = UPDATE_CHECKSUM(checksum, ti_cur->last_bytes_len, ti_cur->dst_trap_size, wrap);
             ti_prev = ti_cur;
             AOCL_MT_PROCESS_PARTITION_END(ti_cur)
         }
@@ -260,7 +267,7 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
         AOCL_MT_PROCESS_PARTITION_END(ti_cur)
     }
         // verify uncompressed data integrity
-        if(result == Z_OK && !validate_Checksum(dest, &total_uncompressed_len, source, &org_sourceLen, wrap))
+        if(result == Z_OK && !validate_Checksum(checksum, source, &org_sourceLen, wrap))
             result = Z_DATA_ERROR;
 
         aocl_destroy_parallel_decompress_mt(&thread_group_handle);
