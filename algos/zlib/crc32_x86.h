@@ -6,7 +6,7 @@
  * Copyright (C) 2016 Marian Beermann (support for initial value)
  * Copyright Wangyang Guo (wangyang.guo@intel.com)
  * 
- * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  *
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
@@ -31,13 +31,13 @@ extern "C" {
 /* SIMD optimized variants of crc32_z */
 #ifdef AOCL_ZLIB_AVX_OPT
 ZEXTERN_UNIT_TEST unsigned long ZEXPORT_UNIT_TEST
-crc32_z_x86_avx(unsigned long crc, const unsigned char FAR* buf,
+crc32_z_impl_x86_avx(unsigned long crc, const unsigned char FAR* buf,
     z_size_t len); // pclmul
 #endif
 
 #ifdef AOCL_ZLIB_AVX512_OPT
 ZEXTERN_UNIT_TEST unsigned long ZEXPORT_UNIT_TEST
-crc32_z_x86_avx512(unsigned long crc, const unsigned char FAR* buf,
+crc32_z_impl_x86_avx512(unsigned long crc, const unsigned char FAR* buf,
     z_size_t len); // vpclmulqdq
 #endif
 
@@ -79,7 +79,7 @@ static inline uint32_t CRC_32_Z_X86(uint32_t crc32, const uint8_t* buf, size_t l
 
 #define CRC_32_Z_TARGET_ISA "avx,pclmul"
 ZEXTERN_UNIT_TEST unsigned long ZEXPORT_UNIT_TEST
-crc32_z_x86_avx(unsigned long crc, const unsigned char FAR* buf,
+crc32_z_impl_x86_avx(unsigned long crc, const unsigned char FAR* buf,
     z_size_t len) {
     return CRC_32_Z_X86(crc, buf, len);
 }
@@ -88,7 +88,7 @@ crc32_z_x86_avx(unsigned long crc, const unsigned char FAR* buf,
 
 #define CRC_32_Z_TARGET_ISA "avx,pclmul,avx512f,vpclmulqdq"
 ZEXTERN_UNIT_TEST unsigned long ZEXPORT_UNIT_TEST
-crc32_z_x86_avx512(unsigned long crc, const unsigned char FAR* buf,
+crc32_z_impl_x86_avx512(unsigned long crc, const unsigned char FAR* buf,
     z_size_t len) {
     return CRC_32_Z_X86(crc, buf, len);
 }

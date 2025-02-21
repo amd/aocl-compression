@@ -277,11 +277,11 @@ void test_crc32_x86(uLong crc, const Bytef* buf, uInt len) {
     uLong ref = crc32_z_c(crc, buf, len);
 #ifdef AOCL_ZLIB_AVX_OPT
     if (highest_supported_level >= 2) // >= AVX
-        EXPECT_EQ(crc32_z_x86_avx(crc, buf, len), ref);
+        EXPECT_EQ(crc32_z_impl_x86_avx(crc, buf, len), ref);
 #endif /* AOCL_ZLIB_AVX_OPT */
 #ifdef AOCL_ZLIB_AVX512_OPT
     if (highest_supported_level >= 4) // >= AVX512
-        EXPECT_EQ(crc32_z_x86_avx512(crc, buf, len), ref);
+        EXPECT_EQ(crc32_z_impl_x86_avx512(crc, buf, len), ref);
 #endif /* AOCL_ZLIB_AVX512_OPT */
 }
 

@@ -1029,7 +1029,7 @@ local unsigned long crc32_z_impl(unsigned long crc, const unsigned char FAR *buf
 #ifdef AOCL_ZLIB_OPT
 /* Function pointer holding the optimized variant as per the detected CPU
  * features */
-static unsigned long (*crc32_z_fp)(unsigned long crc, const unsigned char FAR* buf,
+static unsigned long (*crc32_z_impl_fp)(unsigned long crc, const unsigned char FAR* buf,
     z_size_t len) = crc32_z_impl;
 #endif /* AOCL_ZLIB_OPT */
 
@@ -1040,7 +1040,7 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR* buf,
 
 #ifdef AOCL_ZLIB_OPT
     AOCL_SETUP_NATIVE();
-    return crc32_z_fp(crc, buf, len);
+    return crc32_z_impl_fp(crc, buf, len);
 #else
     return crc32_z_impl(crc, buf, len);
 #endif
@@ -1090,7 +1090,7 @@ static inline void aocl_setup_crc32_fmv(int optOff, int optLevel)
 {
     if (UNLIKELY(optOff == 1))
     {
-        crc32_z_fp = crc32_z;
+        crc32_z_impl_fp = crc32_z_impl;
     }
     else
     {
@@ -1098,24 +1098,24 @@ static inline void aocl_setup_crc32_fmv(int optOff, int optLevel)
         {
         case 0://C version
         case 1://SSE version
-            crc32_z_fp = crc32_z;
+            crc32_z_impl_fp = crc32_z_impl;
             break;
         case 2://AVX version
         case 3://AVX2 version
 #ifdef AOCL_ZLIB_AVX_OPT
-            crc32_z_fp = crc32_z_x86_avx;
+            crc32_z_impl_fp = crc32_z_impl_x86_avx;
 #else
-            crc32_z_fp = crc32_z;
+            crc32_z_impl_fp = crc32_z_impl;
 #endif
             break;
         case -1: // undecided. use defaults based on compiler flags
         default://AVX512 and other versions
 #ifdef AOCL_ZLIB_AVX512_OPT
-            crc32_z_fp = crc32_z_x86_avx512;
+            crc32_z_impl_fp = crc32_z_impl_x86_avx512;
 #elif defined(AOCL_ZLIB_AVX_OPT)
-            crc32_z_fp = crc32_z_x86_avx;
+            crc32_z_impl_fp = crc32_z_impl_x86_avx;
 #else
-            crc32_z_fp = crc32_z;
+            crc32_z_impl_fp = crc32_z_impl;
 #endif
             break;
         }
