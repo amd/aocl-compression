@@ -1,0 +1,7 @@
+disabled: false
+scmId: gh-onprem-csse-csg
+jenkinsUrl: https://palamidajenkinsvm.amd.com/job/palamida/job/pci/job/ScanInitiatorGitHub
+branchesToScan:
+  - amd-main
+projectType: closedSource
+binaryOrSource: source
