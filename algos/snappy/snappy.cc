@@ -4824,7 +4824,7 @@ void SnappyDecompressor<with_bmi_avx>::DecompressAllTags_bmi<AOCL_SnappyArrayWri
 #if defined(__GNUC__) && !defined(__clang__) 
     __asm__(".p2align 6");
     __asm__("nop");
-    __asm__(".p2align 3");
+    __asm__(".p2align 5");
 #endif
     for ( ;; ) {
 #ifdef AOCL_SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS

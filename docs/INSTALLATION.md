@@ -92,6 +92,7 @@ AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |  Enable LZ4 optimizations related to backw
 SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Enabled by default)
 SNAPPY_HIGH_COMPRESSION             |  Enable Snappy high compression to get better ratio by compromising on speed (Disabled by default)
 SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS |  Enable Snappy branchless decompression optimization (Disabled by default for GCC and enabled for all other compilers)
+LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
 AOCL_ZSTD_SEARCH_SKIP_OPT           |  Enable ZSTD match skipping optimization that steps more aggresively when matches are not found (Enabled by default)
 AOCL_DECOMPRESS_FAST                |  Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values: [1,3] ZSTD, [1,2] Snappy, [1] LZ4. (Disabled by default)
