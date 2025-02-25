@@ -124,8 +124,11 @@ LZ4_FORCE_INLINE int
             goto safe_decode;
         }
 
-#if defined(__GNUC__) && !defined(__clang__) 
-        __asm__(".p2align 6"); // minimizes performance variation due to code-alignment changes
+        // minimizes performance variation due to code-alignment changes
+        __asm__(".p2align 6");
+#if defined(__clang__)
+        __asm__("nop");
+        __asm__(".p2align 4");
 #endif
         /* Fast loop : decode sequences as long as output < oend-FASTLOOP_SAFE_DISTANCE */
         while (1) {
