@@ -35,6 +35,7 @@ set(AOCL_LZ4_DGV_ADDITIONAL_PARAMS "/* none */")
 set(AOCL_LZ4_DGV_LONG_MATCH [[size_t const addl = read_variable_length(&ip, iend - LASTLITERALS + 1, 0);
                 if (addl == rvl_error) {
                     LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional match length.");
+                    DEBUGLOG(5, "error reading long match length");
                     goto _output_error;
                 }
                 length += addl;
@@ -67,6 +68,7 @@ set(AOCL_LZ4_DGV_LONG_MATCH [[if (is_last_thread) {
                     size_t const addl = read_variable_length(&ip, iend - LASTLITERALS + 1, 0);
                     if (addl == rvl_error) { 
                         LOG_FORMATTED(ERR, logCtx, AOCL_LZ4_DGV_LOG_PREFIX"Encountered variable_length_error while decoding additional match length.", omp_get_thread_num());
+                        DEBUGLOG(5, "error reading long match length");
                         goto _output_error; 
                     }
                     length += addl;
@@ -74,6 +76,7 @@ set(AOCL_LZ4_DGV_LONG_MATCH [[if (is_last_thread) {
                     size_t const addl = read_variable_length(&ip, iend + 1, 0);
                     if (addl == rvl_error) {
                         LOG_FORMATTED(ERR, logCtx, AOCL_LZ4_DGV_LOG_PREFIX"Encountered variable_length_error while decoding additional match length.", omp_get_thread_num());
+                        DEBUGLOG(5, "error reading long match length");
                         goto _output_error; 
                     }
                     length += addl;
