@@ -31,8 +31,8 @@
  *  @brief Example for AOCL-Compression unified API in multithreaded (MT) mode.
  *
  *  The following test program shows the sample usage and calling sequence of 
- *  AOCL - compression APIs to get ST compatible compressed stream from a stream 
- *  produced by AOCL MT compressor
+ *  AOCL - compression APIs to extract format compliant compressed stream from a stream 
+ *  produced by AOCL multi-threaded compressor
  * 
  *  Library must be built with AOCL_ENABLE_THREADS=ON to run this example.
  * 

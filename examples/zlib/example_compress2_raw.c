@@ -28,10 +28,12 @@
 
  /** @file example_compress2_raw.c
  *
- *  @brief Example for AOCL-Compression zlib native API.
+ *  @brief Example for AOCL-Compression inflate/deflate API in multithreaded (MT) mode.
  *
- *  The following test program shows the sample usage and calling sequence of zlib
- *  native API within AOCL - compression to compress and decompress a test input
+ *  The following test program shows the sample usage and calling sequence of 
+ *  new deflate/inflate APIs introduced in AOCL-Compression. They can be used to compress 
+ *  and decompress a test input in raw deflate/inflate format. These APIs are usable in
+ *  multithreaded (MT) mode only as processing is done on multiple threads.
  *
  *  @note To run the program:
  *  example_compress2_raw <input_file_to_be_compressed>

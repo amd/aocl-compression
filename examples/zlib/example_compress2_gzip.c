@@ -28,11 +28,13 @@
 
  /** @file example_compress2_gzip.c
  *
- *  @brief Example for AOCL-Compression zlib native API.
+ *  @brief Example for AOCL-Compression gzip APIs in multithreaded (MT) mode.
  *
- *  The following test program shows the sample usage and calling sequence of zlib
- *  native API within AOCL - compression to compress and decompress a test input
- *
+ *  The following test program shows the sample usage and calling sequence of 
+ *  new gzip APIs introduced in AOCL-Compression. They can be used to compress 
+ *  and decompress a test input in gzip format. These APIs are usable in
+ *  multithreaded (MT) mode only as processing is done on multiple threads.
+ * 
  *  @note To run the program:
  *  example_compress2_gzip <input_file_to_be_compressed>
  * 
