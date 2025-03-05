@@ -1613,6 +1613,11 @@ ZEXTERN int ZEXPORT compress2(Bytef *dest,   uLongf *destLen,
 /**
   @brief This function compresses the source buffer into the destination buffer in gzip format.
 
+  compress2_gzip, compressBound_gzip and uncompress2_gzip are new APIs introduced in 
+  AOCL-Compression to support multi-threaded processing. Their usage is similar to
+  compress2, compressBound and uncompress2 respectively unlike gz* APIs which operate on files
+  and might process data in chunks.
+  
   The level parameter has the same meaning as in deflateInit.  sourceLen is the byte
   length of the source buffer.  Upon entry, destLen is the total size of the
   destination buffer, which must be at least the value returned by
@@ -1642,6 +1647,11 @@ ZEXTERN int ZEXPORT compress2_gzip(Bytef *dest,   uLongf *destLen,
 
 /**
   @brief This function compresses the source buffer into the destination buffer in raw deflate format.
+
+  compress2_raw and uncompress2_raw are new APIs introduced in 
+  AOCL-Compression to support multi-threaded processing. Their usage is similar to
+  compress2 and uncompress2 respectively unlike deflate()/inflate() APIs 
+  which operate on a stream and can process data in chunks until flushed.
 
   The level parameter has the same meaning as in deflateInit.  sourceLen is the byte
   length of the source buffer.  Upon entry, destLen is the total size of the

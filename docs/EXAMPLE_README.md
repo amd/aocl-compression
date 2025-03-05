@@ -1,11 +1,11 @@
 Example Test Programs
 =====================
 
-| Example            | Description |
-| ------------------ | ----------- |
-| @subpage ETP       | Sample usage and calling sequence of aocl - compression APIs to compress and decompress a test input. |
-| @subpage MT_ETP    | Sample usage and calling sequence of aocl - compression APIs to get ST compatible compressed stream from a stream produced by AOCL MT compressor. |
-
+| Example              | Description |
+| -------------------- | ----------- |
+| @subpage ETP         | Sample usage and calling sequence of aocl - compression APIs to compress and decompress a test input. |
+| @subpage MT_ETP      | Sample usage and calling sequence of aocl - compression APIs to extract format compliant compressed stream from a stream produced by AOCL multi-threaded compressor. |
+| @subpage MT_GZIP_ETP | Sample usage and calling sequence of aocl - compression APIs for multi-threaded gzip compression. |
 
 
 @page ETP Example 1
@@ -102,6 +102,8 @@ error_exit:
         free(compPtr);
     if (decompPtr)
         free(decompPtr);
+    if (inFp)
+        fclose(inFp);
     return 0;
 }
 
@@ -110,11 +112,13 @@ error_exit:
 To build this example test program on a Linux system using GCC or AOCC, you must specify
 path to aocl_compression.h header file and link with libaocl_compression.so file as follows:
 
-`gcc test.c -I <aocl_compression.h file path> -L <libaocl_compression.so file path> -laocl_compression`
+`gcc test.c -I <aocl_compression.h file path> -L <libaocl_compression.so directory path> -laocl_compression -Wl,-rpath=<libaocl_compression.so directory path>`
+
+Before running the example program, ensure it points to the right library dependencies for openMP, etc.
 
 @page MT_ETP Example 2
 
-The following test program shows the sample usage and calling sequence of aocl - compression APIs to get ST compatible compressed stream from a stream produced by AOCL MT compressor :
+The following test program shows the sample usage and calling sequence of aocl - compression APIs to extract format compliant compressed stream from a stream produced by AOCL multi-threaded compressor :
 
 Build AOCL-Compression library with `AOCL_ENABLE_THREADS`.
 
@@ -212,6 +216,8 @@ error_exit:
         free(compPtr);
     if (decompPtr)
         free(decompPtr);
+    if (inFp)
+        fclose(inFp);
     return 0;
 }
 
@@ -220,4 +226,88 @@ error_exit:
 To build this example test program on a Linux system using GCC or AOCC, you must specify
 path to aocl_compression.h header file and link with libaocl_compression.so file as follows:
 
-`gcc test.c -I <aocl_compression.h file path> -L <libaocl_compression.so file path> -laocl_compression`
+`gcc test.c -I <aocl_compression.h file path> -L <libaocl_compression.so directory path> -laocl_compression -Wl,-rpath=<libaocl_compression.so directory path>`
+
+Before running the example program, ensure it points to the right library dependencies for openMP, etc.
+
+@page MT_GZIP_ETP Example 3
+
+The following test program shows the sample usage and calling sequence of aocl - compression APIs for multi-threaded gzip compression :
+
+Build AOCL-Compression library with `AOCL_ENABLE_THREADS`.
+
+```C
+#include <stdio.h>
+#include <stdlib.h>
+#include "zlib.h"
+
+int main(int argc, char** argv)
+{
+    FILE* inFp = NULL;
+    uLong inpSize = 0;
+    Bytef* inPtr = NULL, * compPtr = NULL, * decompPtr = NULL;
+    uLong outSize = 0;
+    int resultComp, resultDecomp;
+    int level = 6;
+
+    if (argc < 2)
+    {
+        printf("Provide input test file path\n");
+        return -1;
+    }
+    inFp = fopen(argv[1], "rb");
+    fseek(inFp, 0L, SEEK_END);
+    inpSize = ftell(inFp);
+    rewind(inFp);
+
+    // 1. allocate buffers
+    outSize = compressBound_gzip(inpSize);
+    if (outSize == 0)
+    {
+        printf("CompressBound_gzip: failed\n");
+        goto error_exit;
+    }
+    inPtr     = (Bytef*)calloc(1, inpSize);
+    compPtr   = (Bytef*)calloc(1, outSize);
+    decompPtr = (Bytef*)calloc(1, inpSize);
+    inpSize = fread(inPtr, 1, inpSize, inFp);
+
+    // 2. compress
+    resultComp = compress2_gzip(compPtr, &outSize, inPtr, inpSize, level);
+    if (resultComp != Z_OK)
+    {
+        printf("Compression: failed\n");
+        goto error_exit;
+    }
+    printf("Compression: done\n");
+
+    // 3. decompress
+    resultDecomp = uncompress2_gzip(decompPtr, &inpSize, compPtr, &outSize);
+    if (resultDecomp != Z_OK)
+    {
+        printf("Decompression Failure\n");
+        goto error_exit;
+    }
+    printf("Decompression: done\n");
+
+    // 4. cleanup
+error_exit:
+    if (inPtr)
+        free(inPtr);
+    if (compPtr)
+        free(compPtr);
+    if (decompPtr)
+        free(decompPtr);
+    if (inFp)
+        fclose(inFp);
+    return 0;
+}
+
+```
+
+To build this example test program on a Linux system using GCC or AOCC, you must specify
+path to aocl_compression.h header file and link with libaocl_compression.so file as follows:
+
+`gcc test.c -I <aocl_compression.h file path> -L <libaocl_compression.so directory path> -laocl_compression -Wl,-rpath=<libaocl_compression.so directory path>`
+
+Before running the example program, ensure it points to the right library dependencies for openMP, etc.

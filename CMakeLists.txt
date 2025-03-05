@@ -115,7 +115,7 @@ set_property(
 )
 
 # Faster decompress settings for supported methods
-set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values: [1,3] ZSTD, [1,2] Snappy, [1] LZ4." )
+set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values: {1,2,3} ZSTD, {1,2} Snappy, {1} LZ4." )
 set_property(
     CACHE AOCL_DECOMPRESS_FAST
     PROPERTY STRINGS
