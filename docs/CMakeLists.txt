@@ -34,7 +34,7 @@ cmake_minimum_required(VERSION 3.26.0)
 
 project(aoclcompression-doc)
 
-find_package(Doxygen 1.9.6)
+find_package(Doxygen 1.9.1)
 set(W_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Build Doxygen documentation
@@ -46,35 +46,6 @@ else()
             COMMAND_ECHO STDOUT)
 endif()
 
-function(check_rocm_docs_version)
-
-    execute_process(COMMAND pip3 list
-        RESULT_VARIABLE     PIP3_EXIT_CODE
-        OUTPUT_VARIABLE     PIP3_LIST
-        ERROR_VARIABLE      PIP3_ERROR)
-
-    if(PIP3_EXIT_CODE)
-        if(WIN32)
-            find_program(PIP3_EXECUTABLE pip3)
-            if(NOT PIP3_EXECUTABLE)
-                message(FATAL_ERROR "pip3 not found")
-            endif()
-        endif()
-        message(FATAL_ERROR "${PIP3_ERROR}")
-    endif()
-    # Filter rocm-docs-core among list of python3 libraries
-    string(REGEX MATCH "rocm-docs-core[ \t\r]*[0-9]+[\.]?[0-9]*[\.]?[0-9]*" ROCM_DOCS_CORE_FILTERED "${PIP3_LIST}")
-    # Extract version of rocm-docs-core and save it in ROCM_DOCS_VERSION
-    string(REGEX REPLACE "rocm-docs-core[ \t\r]*" "" ROCM_DOCS_VERSION "${ROCM_DOCS_CORE_FILTERED}")
-
-    if(${ROCM_DOCS_VERSION} VERSION_GREATER "0.32.0")
-        message(FATAL_ERROR "Current version of rocm-docs-core is: (${ROCM_DOCS_VERSION}) which is greater than 0.32.0,\
-                  please use rocm-docs-core version between 0.19.0 to 0.32.0")  
-    elseif(${ROCM_DOCS_VERSION} VERSION_LESS "0.19.0")
-        message(FATAL_ERROR "Current version of rocm-docs-core is: (${ROCM_DOCS_VERSION}) which is less than 0.19.0,\
-                  please use rocm-docs-core version between 0.19.0 to 0.32.0")
-    endif()
-endfunction()
 
 # Check if Doxygen documentation generated successfully, if yes continue building sphinx documentation
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/html/index.html)
@@ -108,8 +79,6 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/html/index.html)
       )
     endif()
 
-    # checks rocm-docs-core version is in between 0.19.0 & 0.32.0
-    check_rocm_docs_version()
 
     execute_process(
       COMMAND ${Python3_EXECUTABLE} -c "import breathe"
@@ -158,7 +127,6 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/html/index.html)
       )
     else()
       message(STATUS "Sphinx generated successfully at ${W_DIR}/sphinx/html")
-      file(REMOVE_RECURSE ${W_DIR}/xml)
       file(REMOVE_RECURSE ${W_DIR}/sphinx/doctrees)
     endif()
 else() # !(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/docs/html/index.html)

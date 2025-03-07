@@ -30,4 +30,5 @@ LZ4HC
 -----
 
 .. doxygengroup:: LZ4HC_API
+   :project: compression
    :members:

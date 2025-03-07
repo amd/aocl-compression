@@ -30,4 +30,5 @@ Standardized/Unified API
 ------------------------
 
 .. doxygengroup:: API
+   :project: compression
    :members:

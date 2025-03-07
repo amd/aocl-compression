@@ -30,4 +30,5 @@ ZLIB
 ----
 
 .. doxygengroup:: ZLIB_API
+   :project: compression
    :members:

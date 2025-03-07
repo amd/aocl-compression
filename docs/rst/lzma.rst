@@ -30,4 +30,5 @@ LZMA
 ----
 
 .. doxygengroup:: LZMA_API
+   :project: compression
    :members:

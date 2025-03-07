@@ -30,11 +30,13 @@ LZ4
 ---
 
 .. doxygengroup:: LZ4_API
+   :project: compression
    :members:
 
 LZ4 Frame Format APIs
 =====================
 
 .. doxygengroup:: LZ4FRAME_API
+   :project: compression
    :members:
 
