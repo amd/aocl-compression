@@ -75,7 +75,7 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/html/index.html)
     if(NOT ${EXIT_CODE} EQUAL 0)
       message(
         FATAL_ERROR
-          "Python3 package rocm_docs is required to build the documentation\n   Use: ${Python3_EXECUTABLE} -m pip3 install rocm-docs-core==0.32.0"
+          "Python3 package rocm_docs is required to build the documentation\n   Use: ${Python3_EXECUTABLE} -m pip3 install rocm-docs-core"
       )
     endif()
 

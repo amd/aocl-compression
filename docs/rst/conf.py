@@ -41,8 +41,7 @@ extensions = ['breathe', 'myst_parser']
 pwd = os.path.dirname(os.path.abspath(__file__))
 pwd = os.path.join(pwd, '..')
 pwd = os.path.join(pwd,'xml')
-breathe_projects = {"aocl-compression": pwd}
-breathe_default_project = "aocl-compression"
+breathe_projects = {"compression": pwd}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_template']
