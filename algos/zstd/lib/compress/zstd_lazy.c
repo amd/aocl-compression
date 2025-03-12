@@ -2666,8 +2666,8 @@ switch(seqStore->fds_config.state) { \
                             seqStore->fds_config.state = FDS_FAST2_NOTB_SO3_NOEXT_REP2; \
                         else \
                             seqStore->fds_config.state = FDS_FAST2_NOTB_SO4_NOEXT_REP3; \
-                        LOG_FORMATTED(DEBUG, logCtx, "FDS = %zu, Block ratio = %zu", seqStore->fds_config.state, seqStore->fds_config.ratio); \
-                        DEBUGLOG(4, "FDS = %zu, Block ratio = %zu", seqStore->fds_config.state, seqStore->fds_config.ratio); \
+                        LOG_FORMATTED(DEBUG, logCtx, "FDS = %zu, Block ratio = %u", seqStore->fds_config.state, seqStore->fds_config.ratio); \
+                        DEBUGLOG(4, "FDS = %zu, Block ratio = %u", seqStore->fds_config.state, seqStore->fds_config.ratio); \
                         /* Reset for future frames */ \
                         seqStore->fds_config.count = 0; \
                         seqStore->fds_config.ratio = 0; \

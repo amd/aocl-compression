@@ -90,7 +90,7 @@ size_t @AOCL_ZSTD_ESM_FUNC@(BYTE* op,
     /* 
     * Checking for offsets in external dictionary is skipped in AOCL_DECOMPRESS_FAST for
     * noDict cases if FDS frame is present in the compressed stream with metadata
-    * that indicates no external dictionary is used. We expect this guarentee is provided
+    * that indicates no external dictionary is used. We expect this guarantee is provided
     * by the compressor.
     * As virtualStart < prefixStart this check is skipped as well.
     * 

@@ -144,7 +144,7 @@ BUILD_UTILITY                       |  Enable third party utility build: zstd (D
 
 * NOTE: <br>
    1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by <br>
-   setting environment variable AOCL_ZLIB_QUICK_MODE. It also improves performance for levels 2, 3 and 5 <br>
+   setting environment variable AOCL_ZLIB_QUICK_MODE=ON. It also improves performance for levels 2, 3 and 5 <br>
    while trading off compression ratio. <br>
 
 Running AOCL-Compression Test Bench On Linux
