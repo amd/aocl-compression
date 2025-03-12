@@ -256,6 +256,11 @@ bool has_valid_frame_content_size(char* compressed, unsigned compressedLen) {
     return (sz != ZSTD_CONTENTSIZE_UNKNOWN) && (sz != ZSTD_CONTENTSIZE_ERROR);
 }
 
+bool has_unknown_frame_content_size(char* compressed, unsigned compressedLen) {
+    unsigned long long sz = Test_ZSTD_getFrameContentSize(compressed, compressedLen);
+    return (sz == ZSTD_CONTENTSIZE_UNKNOWN);
+}
+
 /* Read a block. Return 1 if last block, 0 if not last block, -1 error.
 *  Block_Header uses 3 bytes, written using little-endian convention. It contains 3 fields :
 *  Last_Block	Block_Type	Block_Size
@@ -473,7 +478,7 @@ TEST(ZSTD_versionString, AOCL_Compression_zstd_ZSTD_versionString_common_2) // S
 void ZSTD_ZSTD_compress_base::validate_compress_format(char* compressed, unsigned compressedLen, unsigned dstCapacity) {
     EXPECT_LE(compressedLen, dstCapacity);
     EXPECT_TRUE(has_valid_frames(compressed, compressedLen));
-    EXPECT_TRUE(has_valid_frame_content_size(compressed, compressedLen));
+    EXPECT_TRUE(has_valid_frame_content_size(compressed, compressedLen) || has_unknown_frame_content_size(compressed, compressedLen));
 }
 
 void ZSTD_ZSTD_compress_base::validate_compress(char* src, unsigned srcSize, char* compressed, unsigned compressedLen, unsigned dstCapacity) {

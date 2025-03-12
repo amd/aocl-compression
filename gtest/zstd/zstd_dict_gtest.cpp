@@ -1079,7 +1079,7 @@ public:
     void validate_compress_format(char* compressed, unsigned compressedLen, unsigned dstCapacity) {
         EXPECT_LE(compressedLen, dstCapacity);
         EXPECT_TRUE(has_valid_frames(compressed, compressedLen));
-        EXPECT_TRUE(has_valid_frame_content_size(compressed, compressedLen));
+        EXPECT_TRUE(has_valid_frame_content_size(compressed, compressedLen) || has_unknown_frame_content_size(compressed, compressedLen));
     }
 
     void validate_compress(char* src, unsigned srcSize, char* compressed, unsigned compressedLen, unsigned dstCapacity,

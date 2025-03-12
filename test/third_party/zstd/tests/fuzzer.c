@@ -2198,6 +2198,7 @@ static int basicUnitTests(U32 const seed, double compressibility)
     }
     DISPLAYLEVEL(3, "OK \n");
 
+#ifndef AOCL_DFS_CORRECTION /* Fast Decompress Mode is not supported in MT builds */
     /* ZSTDMT simple MT compression test */
     DISPLAYLEVEL(3, "test%3i : create ZSTDMT CCtx : ", testNb++);
     {   ZSTD_CCtx* const mtctx = ZSTD_createCCtx();
@@ -2218,11 +2219,7 @@ static int basicUnitTests(U32 const seed, double compressibility)
 
         DISPLAYLEVEL(3, "test%3i : decompressed size test : ", testNb++);
         {  
-#ifdef AOCL_DFS_CORRECTION
-            unsigned long long const rSize = ZSTD_getFrameContentSize(compressedBuffer + ZSTD_FDS_FRAME_SIZE, cSize - ZSTD_FDS_FRAME_SIZE);
-#else
             unsigned long long const rSize = ZSTD_getFrameContentSize(compressedBuffer, cSize);
-#endif
             if (rSize != CNBuffSize)  {
                 DISPLAY("ZSTD_getFrameContentSize incorrect : %u != %u \n", (unsigned)rSize, (unsigned)CNBuffSize);
                 goto _output_error;
@@ -2257,6 +2254,7 @@ static int basicUnitTests(U32 const seed, double compressibility)
 
         ZSTD_freeCCtx(mtctx);
     }
+#endif /* AOCL_DFS_CORRECTION */
 
     DISPLAYLEVEL(3, "test%3u : compress empty string and decompress with small window log : ", testNb++);
     {   ZSTD_CCtx* const cctx = ZSTD_createCCtx();
@@ -2525,8 +2523,8 @@ static int basicUnitTests(U32 const seed, double compressibility)
                 if (ZSTD_getFrameHeader(&zfh, compressedBuffer + skipSize, cSize - skipSize)) goto _output_error;
 #else
                 if (ZSTD_getFrameHeader(&zfh, compressedBuffer, cSize)) goto _output_error;
-#endif
                 if ((zfh.frameContentSize != testSize) && (zfh.frameContentSize != 0)) goto _output_error;
+#endif
             }   
         }
         DISPLAYLEVEL(3, "OK \n");

@@ -318,6 +318,7 @@ size_t insert_frame_overwrite(char* dst, size_t dstCapacity, char* src, size_t s
 size_t insert_N_frames(char* dst, size_t dstCapacity, char* src, size_t srcSize, size_t N, size_t& srcWritten);
 size_t insert_frame_via_stream(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 bool has_valid_frame_content_size(char* compressed, unsigned compressedLen);
+bool has_unknown_frame_content_size(char* compressed, unsigned compressedLen);
 int get_cparam_below_lower(ZSTD_cParameter param);
 int get_cparam_above_upper(ZSTD_cParameter param);
 int get_cparam_within_bounds(ZSTD_cParameter param);
