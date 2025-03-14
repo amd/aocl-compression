@@ -1,5 +1,5 @@
-Brief Overview of algos
-=======================
+Methods supported
+-----------------
 
 LZ4 - Introduction
 ------------------

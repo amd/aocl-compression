@@ -1,5 +1,4 @@
-Installation
-------------
+#### Installation
 
 1. Download the latest stable release from the Github repository:<br>
 [https://github.com/amd/aocl-compression](https://github.com/amd/aocl-compression)

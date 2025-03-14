@@ -1,4 +1,4 @@
-..  Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+..  Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
 
 ..  Redistribution and use in source and binary forms, with or without
 ..  modification, are permitted provided that the following conditions are met:
@@ -41,15 +41,12 @@ easily integrate and use them. For AOCL Compression framework APIs, refer to :re
 Methods Supported
 ..................
 
-AOCL Compression supports compression and decompression methods of the following libraries along with their native APIs.
+AOCL Compression supports compression and decompression methods of the following libraries.
 
-#. :ref:`ref-lz4`
-#. :ref:`ref-zlib`
-#. :ref:`ref-lzma`
-#. :ref:`ref-zstd`
-#. :ref:`ref-bzip2`
-#. :ref:`ref-snappy`
-#. :ref:`ref-lz4hc`
+.. toctree::
+   :maxdepth: 1
+
+   INTRODUCTION
 
 It supports the dynamic dispatcher feature that executes the most optimal
 function variant implemented using Function Multi-versioning thereby offering
@@ -62,18 +59,46 @@ The library build framework offers CTest-based testing of the test cases
 implemented using GTest and the library test suite. Starting from AOCL-Compression 4.2,
 the library offers openMP based multi-threaded compression for a few methods.
 
+Installation
+````````````
+This section details step-by-step instructions for setting up the library on Linux and Windows using CMake, including prerequisites, build options, and testing commands.
+It also covers performance benchmarking, and advanced optimization configurations for tailored builds.
+
 .. toctree::
-   :maxdepth: 1
-   :caption: Table of Contents
+   :maxdepth: 2
 
    INSTALLATION
+
+
+Unified APIs
+````````````
+Unified API abstracts individual compression and decompression routines into a single, standardized interface that uses a common handle and shared data structures, simplifying integration and maintenance compared to managing separate APIs for each method.
+
+.. toctree::
+   :maxdepth: 2
+
    unified_api
-   INTRODUCTION
+
+Native APIs
+````````````
+In-depth overview of native APIs provided by compression methods included in AOCL-Compression are described here.
+
+.. toctree::
+   :maxdepth: 1
+
    algos
+
+Examples
+``````````
+Example programs illustrating how to use AOCL-Compression APIs are presented here.
+
+.. toctree::
+   :maxdepth: 2
+
    EXAMPLE_README
 
 Contacts
-........
+^^^^^^^^
 
 AOCL Compression is developed and maintained by AMD.
 For support, send an email to toolchainsupport@amd.com.
