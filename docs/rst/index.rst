@@ -86,7 +86,13 @@ In-depth overview of native APIs provided by compression methods included in AOC
 .. toctree::
    :maxdepth: 1
 
-   algos
+   lz4
+   zlib
+   lzma
+   zstd
+   bzip2
+   snappy
+   lz4hc
 
 Examples
 ``````````
