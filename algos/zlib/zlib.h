@@ -1,7 +1,7 @@
 /* zlib.h -- interface of the 'zlib' general purpose compression library
-  version 1.3, August 18th, 2023
+  version 1.3.1, January 22nd, 2024
 
-  Copyright (C) 1995-2023 Jean-loup Gailly and Mark Adler
+  Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler
   Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
 
   This software is provided 'as-is', without any express or implied
@@ -38,12 +38,12 @@
 extern "C" {
 #endif
 
-#define ZLIB_VERSION "1.3.f-AOCL-ZLIB"
-#define ZLIB_VERNUM 0x130f
+#define ZLIB_VERSION "1.3.1.f-AOCL-ZLIB"
+#define ZLIB_VERNUM 0x131f
 #define ZLIB_VER_MAJOR 1
 #define ZLIB_VER_MINOR 3
-#define ZLIB_VER_REVISION 0
-#define ZLIB_VER_SUBREVISION 0
+#define ZLIB_VER_REVISION 1
+#define ZLIB_VER_SUBREVISION 'f'
 /**
  * \addtogroup ZLIB_API
  * @brief
@@ -1155,8 +1155,8 @@ ZEXTERN int ZEXPORT inflateGetDictionary(z_streamp strm,
   pattern are full flush points.
 
   @note
-  - In the success case, the application may save the current current value of
-  total_in which indicates where valid compressed data was found.
+  - In the success case, the application may save the current value of total_in
+  which indicates where valid compressed data was found.
   - In the error case, the application may repeatedly call inflateSync, providing more
   input each time, until success or end of the input data.
   - No output is provided.
@@ -2588,13 +2588,13 @@ ZEXTERN uLong ZEXPORT crc32_combine(uLong crc1, uLong crc2, z_off_t len2);
    seq1 and seq2 with lengths len1 and len2, CRC-32 check values were
    calculated for each, crc1 and crc2.  crc32_combine() returns the CRC-32
    check value of seq1 and seq2 concatenated, requiring only crc1, crc2, and
-   len2.
+   len2. len2 must be non-negative.
 */
 /*
 ZEXTERN uLong ZEXPORT crc32_combine_gen(z_off_t len2);
 
      Return the operator corresponding to length len2, to be used with
-   crc32_combine_op().
+   crc32_combine_op(). len2 must be non-negative.
 */
 
 /**
