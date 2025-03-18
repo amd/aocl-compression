@@ -50,7 +50,7 @@
  * | <--------------------------------------------------------------------- RAP Frame -------------------------------------------------------------------> |    *
  * | <----------------------------- RAP Header -----------------------------> | <----------------------------- RAP Metadata -----------------------------> |    *
  * | <-- RAP Magic word (8 bytes) --> | <-- RAP Metadata length (4 bytes) --> |                                                                                 *
- *                                                                              | <--- Num Main Threads (2 bytes) --> | <-- Num Child Threads (2 bytes) ---> |  *
+ *                                                                            | <--- Num Main Threads (2 bytes) --> | <-- Num Child Threads (2 bytes) ---> |    *
  *                                                                                                                                                              *
  * | <----------------------------------------------------------- RAP Metadata cont'd -------------------------------------------------------------------> |    *
  * | <-- Main Thread-1 (RAP Offset(4 bytes), RAP Length(4 bytes), Opt Decompressed Length(4 bytes)) --> | ................................................      *
@@ -296,7 +296,7 @@ EXPORT_SYM_THREADS void aocl_destroy_parallel_compress_mt(aocl_thread_group_t* t
  * | \b dst                 | in          | Output stream buffer pointer. |
  * | \b in_size             | in          | Input stream buffer size. |
  * | \b out_size            | in          | Output stream buffer pointer. |
- * | \b use_ST_decompressor| in          | If set to 1, just returns the RAP frame length without setting up the thread group for multi-threaded execution. |
+ * | \b use_ST_decompressor | in          | If set to 1, just returns the RAP frame length without setting up the thread group for multi-threaded execution. |
  *
  * return
  * | Result     | Description |

@@ -662,11 +662,24 @@ void sendMTFValues ( EState* s )
    /*--- Now the selectors. ---*/
    nBytes = s->numZ;
    bsW ( s, 3, nGroups );
+#ifdef AOCL_ENABLE_THREADS
+   UInt32 padding_bits = 0;
+   if(s->mt_head_node)
+      padding_bits = s->mt_head_node->padding_bits;
+   bsW ( s, 15, nSelectors + padding_bits );
+#else
    bsW ( s, 15, nSelectors );
+#endif /* AOCL_ENABLE_THREADS */
    for (i = 0; i < nSelectors; i++) { 
       for (j = 0; j < s->selectorMtf[i]; j++) bsW(s,1,1);
       bsW(s,1,0);
    }
+#ifdef AOCL_ENABLE_THREADS
+   for (int i = 0; i < padding_bits; i++)
+   {
+      bsW(s, 1, 0);
+   }
+#endif /* AOCL_ENABLE_THREADS */
    if (s->verbosity >= 3)
       VPrintf1( "selectors %d, ", s->numZ-nBytes );
 
@@ -749,6 +762,27 @@ void BZ2_compressBlock ( EState* s, Bool is_last_block )
    if (s->nblock > 0) {
 
       BZ_FINALISE_CRC ( s->blockCRC );
+#ifdef AOCL_ENABLE_THREADS
+      mt_data_list* mt_head_node = s->mt_head_node;
+      if(mt_head_node)
+      {
+         // Creating a checksum node and assigning a checksum value.
+         mt_checksum_node * current = (mt_checksum_node *)malloc(sizeof(mt_checksum_node));
+         current->checksum = s->blockCRC;
+         current->next = NULL;
+         // Head of the list would be stored in mt_head_node.
+         if(mt_head_node->head == NULL)
+         {
+            mt_head_node->current = current;
+            mt_head_node->head = current;
+         }
+         else
+         {
+            mt_head_node->current->next = current;
+            mt_head_node->current = current;
+         }
+      }
+#endif /* AOCL_ENABLE_THREADS */
       s->combinedCRC = (s->combinedCRC << 1) | (s->combinedCRC >> 31);
       s->combinedCRC ^= s->blockCRC;
       if (s->blockNo > 1) s->numZ = 0;

@@ -194,6 +194,22 @@ extern UInt32 BZ2_crc32Table[256];
 
 #define ALPHABET_SIZE   (1 << CHAR_BIT)
 
+#ifdef AOCL_ENABLE_THREADS
+
+#include <omp.h>
+
+typedef struct mt_checksum_node {
+   UInt32 checksum;
+   struct mt_checksum_node * next;
+} mt_checksum_node;
+
+typedef struct mt_data_list {
+   UInt32 padding_bits;
+   mt_checksum_node * head;
+   mt_checksum_node * current;
+} mt_data_list;
+
+#endif /* AOCL_ENABLE_THREADS */
 
 /*-- Structure holding all the compression-side stuff. --*/
 
@@ -277,8 +293,11 @@ typedef
       Int32 sa_index;   // Index for SA.
       Int32 n_block;    // Total characters
 #endif /* AOCL_BZIP2_OPT */
-   }
-   EState;
+#ifdef AOCL_ENABLE_THREADS
+      mt_data_list* mt_head_node;
+#endif /* AOCL_ENABLE_THREADS */
+}
+EState;
 
 
 

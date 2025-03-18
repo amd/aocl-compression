@@ -368,6 +368,10 @@ if (AOCL_ENABLE_THREADS)
     set (THREADS_SRC_FILES threads/code_alignment.c
                            threads/threads.c
                            threads/threads.h)
+    if (NOT AOCL_EXCLUDE_BZIP2)
+        set(BZIP2_SRC_FILES ${BZIP2_SRC_FILES}  ${ALGOS_PATH}/bzip2/aocl_multithreaded_utility.c 
+                                                ${ALGOS_PATH}/bzip2/aocl_multithreaded_utility.h)
+    endif ()
 endif ()
 
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})

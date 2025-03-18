@@ -88,8 +88,7 @@ AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp,
         AOCL_UINTP leftover_size = thread_grp->src_size % chunk_size;
         
         //Sufficiently large leftover bytes adds another thread for processing
-        if (leftover_size >= 
-            ((window_factor > 1) ? (chunk_size >> 1) : (window_len >> 1)))
+        if (leftover_size >= chunk_size >> 2)
             num_parallel_partitions++;
 
         //Find number of threads to process the number of parallel partitions

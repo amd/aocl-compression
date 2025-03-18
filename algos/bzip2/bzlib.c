@@ -102,11 +102,19 @@ void BZ2_bz__AssertH__fail ( int errcode )
 }
 #endif
 
-//Minimum compressed buffer size
-#define MIN_PAD_SIZE (16*1024)
+// Define the size of the temporary buffer used for compressing 1 byte of data.
+#define SMALLER_CHUNK_DEST_SIZE 40
+/*
+   This function estimates the upper bound of the compressed output size.
+   The calculation includes safety margins based on empirical testing:
+   - Random data (worst case) requires ~5.1% additional space, for 100k block size (level 1).
+   - Added 12.5% extra padding for safety margin.
+   - Minimum padding of 1024 bytes, for small inputs.
+*/
+#define MIN_PAD_SIZE (1024)
 unsigned int BZ2_bzCompressBound(unsigned int insize)
 {
-   unsigned int outSize = (insize + (insize / 6) + MIN_PAD_SIZE);
+   unsigned int outSize = (insize + (insize / 8) + MIN_PAD_SIZE);
    return outSize;
 }
 
@@ -410,6 +418,9 @@ int BZ_API(BZ2_bzCompressInit)
    if(AOCL_use_libsais)
       s->block += 2;
 #endif /* AOCL_BZIP2_OPT */
+#ifdef AOCL_ENABLE_THREADS
+   s->mt_head_node = NULL;
+#endif /* AOCL_ENABLE_THREADS */
 
    strm->state          = s;
    strm->total_in_lo32  = 0;
@@ -1931,6 +1942,7 @@ int Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq)
 /*---------------------------------------------------*/
 
 /*---------------------------------------------------*/
+#ifndef AOCL_ENABLE_THREADS
 int BZ_API(BZ2_bzBuffToBuffCompress) 
                          ( char*         dest, 
                            unsigned int* destLen,
@@ -1941,19 +1953,31 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
                            int           workFactor )
 {
    AOCL_SETUP_NATIVE();
+
+   if (dest == NULL || destLen == NULL || 
+      source == NULL ||
+      blockSize100k < 1 || blockSize100k > 9 ||
+      verbosity < 0 || verbosity > 4 ||
+      workFactor < 0 || workFactor > 250)
+  {
+     LOG_UNFORMATTED(INFO, logCtx, "Exit");
+     return BZ_PARAM_ERROR;
+  }
+#else
+int BZ2_bzBuffToBuffCompress_internal
+(  char*         dest, 
+   unsigned int* destLen,
+   char*         source, 
+   unsigned int  sourceLen,
+   int           blockSize100k, 
+   int           verbosity, 
+   int           workFactor,
+   mt_data_list* mt_head_node )
+{
+#endif /* AOCL_ENABLE_THREADS */
    bz_stream strm;
    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
    int ret;
-
-   if (dest == NULL || destLen == NULL || 
-       source == NULL ||
-       blockSize100k < 1 || blockSize100k > 9 ||
-       verbosity < 0 || verbosity > 4 ||
-       workFactor < 0 || workFactor > 250)
-   {
-      LOG_UNFORMATTED(INFO, logCtx, "Exit");
-      return BZ_PARAM_ERROR;
-   }
 
    if (workFactor == 0) workFactor = 30;
    strm.bzalloc = NULL;
@@ -1971,6 +1995,9 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
    strm.next_out = dest;
    strm.avail_in = sourceLen;
    strm.avail_out = *destLen;
+#ifdef AOCL_ENABLE_THREADS
+   ((EState *)strm.state)->mt_head_node = mt_head_node;
+#endif /* AOCL_ENABLE_THREADS */
 
    ret = BZ2_bzCompress ( &strm, BZ_FINISH );
    if (ret == BZ_FINISH_OK) goto output_overflow;
@@ -1993,6 +2020,167 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
    return ret;
 }
 
+#ifdef AOCL_ENABLE_THREADS
+#include "aocl_multithreaded_utility.h"
+int BZ_API(BZ2_bzBuffToBuffCompress) 
+                         ( char*         dest, 
+                           unsigned int* destLen,
+                           char*         source, 
+                           unsigned int  sourceLen,
+                           int           blockSize100k, 
+                           int           verbosity, 
+                           int           workFactor )
+{
+   AOCL_SETUP_NATIVE();
+   if (dest == NULL || destLen == NULL || 
+      source == NULL ||
+      blockSize100k < 1 || blockSize100k > 9 ||
+      verbosity < 0 || verbosity > 4 ||
+      workFactor < 0 || workFactor > 250)
+  {
+     LOG_UNFORMATTED(INFO, logCtx, "Exit");
+     return BZ_PARAM_ERROR;
+  }
+
+   aocl_thread_group_t thread_group_handle;
+   aocl_thread_info_t cur_thread_info;
+   AOCL_INT32 rap_frame_length;
+   mt_data_list* mt_head_table = NULL;
+ 
+   rap_frame_length = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)source, dest,
+                                               (AOCL_UINTP)sourceLen,
+                                               (AOCL_UINTP)(*destLen),
+                                               (AOCL_UINTP)(INPUT_BLOCK_SIZE-19), blockSize100k);
+
+   if(rap_frame_length < 0)
+      return rap_frame_length;
+
+   if(thread_group_handle.num_threads < 2)
+      return BZ2_bzBuffToBuffCompress_internal(dest, 
+         destLen,
+         source, 
+         sourceLen,
+         blockSize100k, 
+         verbosity, 
+         workFactor,
+         NULL);
+
+
+   // memory allocation for multithreaded checksum table.
+   mt_head_table = (mt_data_list *)malloc(sizeof(mt_data_list) * thread_group_handle.num_threads);
+   memset(mt_head_table, 0, sizeof(mt_data_list) * thread_group_handle.num_threads);
+
+   // Multi-threaded copmression.
+   #pragma omp parallel private(cur_thread_info) shared(thread_group_handle, mt_head_table) num_threads(thread_group_handle.num_threads)
+   {
+      UInt32 maxSrcSize = thread_group_handle.common_part_src_size + thread_group_handle.leftover_part_src_bytes;
+      UInt32 cmpr_bound_pad = BZ2_bzCompressBound(maxSrcSize) - maxSrcSize;
+      UInt32 is_error = 1;
+      UInt32 thread_id = omp_get_thread_num();
+      int ret = 0;
+      mt_data_list * mt_head_node = &mt_head_table[thread_id];
+
+      // Temperory buffer to store 1 byte compressed data, whatever may be the byte, the compressed output would always be 37 bytes.
+      char smaller_chunk_dest[SMALLER_CHUNK_DEST_SIZE];
+      unsigned int smaller_chunk_len = SMALLER_CHUNK_DEST_SIZE;
+
+      bit_stream state;
+      /*
+         The input data is divided into two chunks for compression:
+         1. A "bigger chunk" that contains input data, excluding the last byte.
+         2. A "smaller chunk" that consists of only the last byte of the input.
+
+         This division is necessary because the compressed output from `BZ2_bzBuffToBuffCompress_internal`
+         is not guaranteed to be byte-aligned. To merge the outputs produced by multiple threads into a single destination buffer,
+         the outputs from each thread would typically need to be bit-shifted to align properly. However, bit-shifting is computationally
+         expensive and inefficient.
+
+         To address this, the "bigger chunk" is compressed without any padding, and the number of empty bits at the end of its output
+         is measured. Using this information, padding bits are added to the "smaller chunk" during compression. This ensures that when
+         the compressed output of the "smaller chunk" is appended to the "bigger chunk," the combined output becomes fully byte-aligned.
+      */
+      if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
+      {
+         mt_head_node->padding_bits = 0;
+         ret |= BZ2_bzBuffToBuffCompress_internal(cur_thread_info.dst_trap,
+            (unsigned int *)&cur_thread_info.dst_trap_size,
+            cur_thread_info.partition_src, 
+            cur_thread_info.partition_src_size - 1 /* last byte excluded */,
+            blockSize100k, verbosity, workFactor, mt_head_node);
+
+         char * output_ptr = cur_thread_info.dst_trap + cur_thread_info.dst_trap_size;
+         int bigger_chunk_empty_bits = get_empty_bits((unsigned char *)output_ptr);
+
+         int smaller_chunk_padding_bits = (bigger_chunk_empty_bits + 5 /* 1 byte compression always produces 5 empty bits */)%8;
+
+         mt_head_node->padding_bits = smaller_chunk_padding_bits;
+         ret |= BZ2_bzBuffToBuffCompress_internal(smaller_chunk_dest, &smaller_chunk_len,
+                  cur_thread_info.partition_src+cur_thread_info.partition_src_size-1 /* last byte */, 
+                  1/* input length */, blockSize100k, verbosity, workFactor, mt_head_node);
+
+         // Ignore BZIP2 end of sequence (EOS magic number "6 bytes", combined checksum "4 bytes")
+         output_ptr -= BZIP2_EOS_BYTES+1;
+
+         // Remove emtpy bits and store the useful bits in "state" variable, which would be later appended with "1 byte input compressed data".
+         state.buff = (*(output_ptr)) >> bigger_chunk_empty_bits;
+         state.bits = 8 - bigger_chunk_empty_bits;
+         state.buff <<= 32 - state.bits;
+
+         // Ignore header bytes and append all the useful bits of "one byte input compressed data" into bigger compressed data.
+         smaller_chunk_len -= BZIP2_HEADER_BYTES + BZIP2_EOS_BYTES;
+         if(thread_id == thread_group_handle.num_threads - 1)
+         {
+            smaller_chunk_len += BZIP2_EOS_MAGIC_NUMBER_BYTES; // for last thread, retain EOS magic number
+         }
+         for (int k = 0; k < smaller_chunk_len; k++)
+         {
+            append(&output_ptr, smaller_chunk_dest[k+BZIP2_HEADER_BYTES], 8, &state);
+         }
+         finish_append(&output_ptr, &state);
+
+         // Only when `bigger_chunk_empty_bits` is not zero, we need an extra byte to store the padding bits.
+         if(bigger_chunk_empty_bits)
+            output_ptr--;
+
+         cur_thread_info.dst_trap_size = output_ptr - cur_thread_info.dst_trap;
+
+         if(ret)
+            is_error = -1 * ret;
+         else
+            is_error = 0;
+      } // aocl_do_partition_compress_mt
+
+      thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+      thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+      thread_group_handle.threads_info_list[thread_id].dst_trap_size = cur_thread_info.dst_trap_size;
+      thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+      thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+      thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+   }
+
+   *destLen = aocl_bzip2_mt_post_processing(dest, &thread_group_handle, mt_head_table);
+
+   int ret = 0;
+   // check for errors.
+   if(*destLen == 0)
+   {
+      for (Int32 thread_id = 0; thread_id < thread_group_handle.num_threads; thread_id++)
+      {
+         if(thread_group_handle.threads_info_list[thread_id].is_error)
+         {
+            ret = -1 * thread_group_handle.threads_info_list[thread_id].is_error;
+            break;
+         }
+      }
+   }
+
+   aocl_bzip2_mt_destroy(&thread_group_handle, mt_head_table);
+   free(mt_head_table);
+   mt_head_table = NULL;
+
+   return ret;
+}
+#endif /* AOCL_ENABLE_THREADS */
 
 /*---------------------------------------------------*/
 int BZ_API(BZ2_bzBuffToBuffDecompress) 
