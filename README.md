@@ -36,11 +36,11 @@ Building on Linux
 
 1. To create a build directory and configure the build system in it, run the following:
    ```
-    cmake -B <build directory> <CMakeList.txt filepath>
+    cmake -B <build directory> <directory containing CMakeList.txt>
    ```
    Additional options that can be specified for build configuration are:
    ```
-   cmake -B <build directory> <CMakeList.txt filepath> 
+   cmake -B <build directory> <directory containing CMakeList.txt> 
       -DCMAKE_INSTALL_PREFIX=<install path> 
       -DCMAKE_BUILD_TYPE=<Debug or Release> 
       -DBUILD_STATIC_LIBS=ON
@@ -354,7 +354,7 @@ Running source code coverage using GCOV
 To measure source code coverage, use CODE_COVERAGE option while configuring the CMake build. Run CMake with the custom target option 'code-coverage' to execute tests and generate code coverage data. The code coverage reports are generated in the build directory under subdirectory called 'coverage/html_report'. Open the HTML files in browser to view the coverage information.
 
 Following is the sample command usage to run code coverage:
-`cmake -B <build directory> <CMakeList.txt filepath> 
+`cmake -B <build directory> <directory containing CMakeList.txt> 
       -DCMAKE_INSTALL_PREFIX=<install path> 
       -DCMAKE_BUILD_TYPE=Debug 
       -DBUILD_STATIC_LIBS=ON

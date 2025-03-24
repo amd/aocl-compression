@@ -119,20 +119,24 @@ const char* print_bool(AOCL_INTP val) {
 
 AOCL_VOID print_supported_compressors (AOCL_VOID)
 {
-   printf("\nSupported compression/decompression methods along with their supported levels are:\n");
-   printf("===========================================================================================\n");
-   printf("Method Name\tLower Level\tUpper Level\tNative API ST\tNative API MT\tNative dict ST\n");
-   printf("===========================================================================================\n");
+   printf("\nSupport matrix for compression/decompression methods:\n");
+   printf("===============================================================================================================================\n");
+   printf("Method Name\tLower Level\tUpper Level\tAOCL ST\t\tAOCL MT\t\tNative ST\tNative MT\tNative dict ST\n");
+   printf("===============================================================================================================================\n");
    for (int i = 0; i < AOCL_COMPRESSOR_ALGOS_NUM; ++i) {
        printf("%s\t\t", codec_list[i].codec_name);
        if (codec_list[i].lower_level == codec_list[i].upper_level)
            printf("NA\t\tNA\t\t");
        else
            printf("%td\t\t%td\t\t", codec_list[i].lower_level, codec_list[i].upper_level);
-       printf("%s\t\t%s\t\t%s\n", print_bool(codec_list[i].native_st_support),
+       printf("%s\t\t%s\t\t%s\t\t%s\t\t%s\n", print_bool(codec_list[i].aocl_st_support),
+       print_bool(codec_list[i].aocl_mt_support),
+        print_bool(codec_list[i].native_st_support),
                                   print_bool(codec_list[i].native_mt_support), 
                                   print_bool(codec_list[i].dict_support));
    }
+   printf("===============================================================================================================================\n");
+   printf("Note: Library needs to be built with AOCL_ENABLE_THREADS for AOCL MT support and NATIVE_ENABLE_THREADS for Native MT support respectively for supported methods.\n");
 }
 
 AOCL_VOID *allocMem(AOCL_UINTP size, AOCL_INTP zeroInit)
