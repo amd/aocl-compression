@@ -40,6 +40,41 @@
 extern "C" {
 #endif
 
+ /*!
+ * \addtogroup ZSTD_API
+ * @brief
+ * ZSTD, short for Zstandard, is a fast lossless compression algorithm, targeting
+ * real-time compression scenarios at zlib-level and better compression ratios.
+ * The zstd compression library provides in-memory compression and decompression
+ * functions.
+ *
+ * The library supports regular compression levels from 1 up to ZSTD_maxCLevel(),
+ * which is currently 22. Levels >= 20, labeled `--ultra`, should be used with
+ * caution, as they require more memory. The library also offers negative
+ * compression levels, which extend the range of speed vs. ratio preferences.
+ * The lower the level, the faster the speed (at the cost of compression).
+ *
+ * Compression can be done in:
+ *   - a single step (described as Simple API)
+ *   - a single step, reusing a context (described as Explicit context)
+ *   - unbounded multiple steps (described as Streaming compression)
+ *
+ * The compression ratio achievable on small data can be highly improved using
+ * a dictionary. Dictionary compression can be performed in:
+ *   - a single step (described as Simple dictionary API)
+ *   - a single step, reusing a dictionary (described as Bulk-processing
+ *     dictionary API)
+ *
+ * Advanced experimental functions can be accessed using
+ * `#define ZSTD_STATIC_LINKING_ONLY` before including zstd.h.
+ *
+ * Advanced experimental APIs should never be used with a dynamically-linked
+ * library. They are not "stable"; their definitions or signatures may change in
+ * the future. Only static linking is allowed.
+ *
+ * @{
+*/
+
 #ifndef ZSTD_H_235446
 #define ZSTD_H_235446
 
@@ -78,41 +113,7 @@ extern "C" {
 #  define ZSTDLIB_API ZSTDLIB_VISIBLE
 #endif
 
- 
- /*!
- * \addtogroup ZSTD_API
- * @brief
- * zstd, short for Zstandard, is a fast lossless compression algorithm, targeting
- * real-time compression scenarios at zlib-level and better compression ratios.
- * The zstd compression library provides in-memory compression and decompression
- * functions.
- *
- * The library supports regular compression levels from 1 up to ZSTD_maxCLevel(),
- * which is currently 22. Levels >= 20, labeled `--ultra`, should be used with
- * caution, as they require more memory. The library also offers negative
- * compression levels, which extend the range of speed vs. ratio preferences.
- * The lower the level, the faster the speed (at the cost of compression).
- *
- * Compression can be done in:
- *   - a single step (described as Simple API)
- *   - a single step, reusing a context (described as Explicit context)
- *   - unbounded multiple steps (described as Streaming compression)
- *
- * The compression ratio achievable on small data can be highly improved using
- * a dictionary. Dictionary compression can be performed in:
- *   - a single step (described as Simple dictionary API)
- *   - a single step, reusing a dictionary (described as Bulk-processing
- *     dictionary API)
- *
- * Advanced experimental functions can be accessed using
- * `#define ZSTD_STATIC_LINKING_ONLY` before including zstd.h.
- *
- * Advanced experimental APIs should never be used with a dynamically-linked
- * library. They are not "stable"; their definitions or signatures may change in
- * the future. Only static linking is allowed.
- *
- * @{
-*/
+
 /* Deprecation warnings :
  * Should these warnings be a problem, it is generally possible to disable them,
  * typically with -Wno-deprecated-declarations for gcc or _CRT_SECURE_NO_WARNINGS in Visual.
@@ -281,6 +282,11 @@ ZSTDLIB_API size_t ZSTD_compress( void* dst, size_t dstCapacity,
  *  @return : the number of bytes decompressed into `dst` (<= `dstCapacity`),
  *            or an errorCode if it fails (which can be tested using ZSTD_isError()). */
  /*!
+  *
+  * @rst 
+  * .. _ZSTD_decompress:
+  * @endrst
+  * 
   * @brief Decompresses the compressed data that is pointed by `src` into `dst`.
   *
   * | Parameters | Direction   | Description |
@@ -609,6 +615,10 @@ ZSTDLIB_API size_t     ZSTD_freeDCtx(ZSTD_DCtx* dctx);  /**< @brief Releases dec
  *  Compatible with sticky parameters.
  */
  /*!
+  *  @rst 
+  *  .. _ZSTD_decompressDCtx:
+  *  @endrst
+  * 
   *  @brief Same as ZSTD_decompress(),
   *  requires an allocated ZSTD_DCtx.
   *  Compatible with sticky parameters.
@@ -1083,8 +1093,12 @@ ZSTDLIB_API size_t ZSTD_CCtx_reset(ZSTD_CCtx* cctx, ZSTD_ResetDirective reset);
  *           or an error code if it fails (which can be tested using ZSTD_isError()).
  */
  /*!
+  *  @rst 
+  *  .. _ZSTD_compress2:
+  *  @endrst
+  *
   *  @brief Behave the same as ZSTD_compressCCtx(), but compression parameters are set using the advanced API.
-
+  *
   *  | Parameters | Direction   | Description |
   *  |:-----------|:-----------:|:------------|
   *  | \b cctx        | in,out  | Explicit ZSTD compression context. When compressing many times, it is recommended to allocate the context just once, and re-use it for each successive compression operation. |
@@ -1400,6 +1414,11 @@ typedef enum {
   */
 
   /*!
+   *
+   * @rst 
+   * .. _ZSTD_compressStream2:
+   * @endrst
+   * 
    * @brief Behaves about the same as ZSTD_compressStream, with additional control on end directive.
    *
    * | Parameters | Direction   | Description |
@@ -1545,15 +1564,78 @@ ZSTDLIB_API size_t ZSTD_initCStream(ZSTD_CStream* zcs, int compressionLevel);
  * returns the minimum nb of bytes left to flush (if non-zero and not an error).
  */
  /*!
-  * @brief Alternative for ZSTD_compressStream2(zcs, output, input, ZSTD_e_continue).
+  * @rst 
+  * .. _ZSTD_compressStream:
+  * @endrst
+  * 
+  * Alternative for ZSTD_compressStream2(zcs, output, input, ZSTD_e_continue).
+  * 
+  * | Parameters | Direction   | Description |
+  * |:-----------|:-----------:|:------------|
+  * | \b  zcs    | in, out     | object required to track streaming operation, it can be reused multiple times on consecutive compression operations. |
+  * | \b  output | out         | Output buffer of type `ZSTD_outBuffer` where the members |
+  * | ^          | ^           | `dst` indicates the start of the output buffer, |
+  * | ^          | ^           | `size` indicates the size of the output buffer and |
+  * | ^          | ^           | `pos` indicates  position where reading is stopped. Will be updated. Necessarily `0 <= pos <= size`. |
+  * | \b input   | in          |Input buffer of type `ZSTD_inBuffer` where the members |
+  * |  ^         |  ^          | `src` indicates the start of the input buffer, |
+  * |  ^         |  ^          | `size` indicates the size of the input buffer and |
+  * |  ^         |  ^          | `pos` indicates  position where reading is stopped. Will be updated. Necessarily `0 <= pos <= size`. |
+  * 
   * @note The return value is different.
   * @note `ZSTD_compressStream()` returns a hint for the next read size (if non-zero and not an error).
   * @note `ZSTD_compressStream2()` returns the minimum nb of bytes left to flush (if non-zero and not an error).
+  *
+  * @return
+  * | Result     | Description |
+  * |:-----------|:------------|
+  * | Success    | amount of data remaining to flush. |
+  * | Fail       | An error code (which can be tested using ZSTD_isError()). |
   */
 ZSTDLIB_API size_t ZSTD_compressStream(ZSTD_CStream* zcs, ZSTD_outBuffer* output, ZSTD_inBuffer* input);
-/*! @brief Equivalent to ZSTD_compressStream2(zcs, output, &emptyInput, ZSTD_e_flush). */
+/*! 
+ * @rst 
+ * .. _ZSTD_flushStream:
+ * @endrst
+ *
+ * Equivalent to ZSTD_compressStream2(zcs, output, &emptyInput, ZSTD_e_flush).
+ *
+ * | Parameters | Direction   | Description |
+ * |:-----------|:-----------:|:------------|
+ * | \b  zcs    | in, out     | object required to track streaming operation, it can be reused multiple times on consecutive compression operations. |
+ * | \b  output | out         | Output buffer of type `ZSTD_outBuffer` where the members |
+ * | ^          | ^           | `dst` indicates the start of the output buffer, |
+ * | ^          | ^           | `size` indicates the size of the output buffer and |
+ * | ^          | ^           | `pos` indicates  position where reading is stopped. Will be updated. Necessarily `0 <= pos <= size`. |
+ * 
+ * @return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    | amount of data remaining to flush. |
+ * | Fail       | An error code (which can be tested using ZSTD_isError()). |
+ */
 ZSTDLIB_API size_t ZSTD_flushStream(ZSTD_CStream* zcs, ZSTD_outBuffer* output);
-/*! @brief Equivalent to ZSTD_compressStream2(zcs, output, &emptyInput, ZSTD_e_end). */
+/*!
+ * @rst 
+ * .. _ZSTD_endStream:
+ * @endrst
+ *
+ * Equivalent to ZSTD_compressStream2(zcs, output, &emptyInput, ZSTD_e_end).
+ * 
+ * | Parameters | Direction   | Description |
+ * |:-----------|:-----------:|:------------|
+ * | \b  zcs    | in, out     | object required to track streaming operation, it can be reused multiple times on consecutive compression operations. |
+ * | \b  output | out         | Output buffer of type `ZSTD_outBuffer` where the members |
+ * | ^          | ^           | `dst` indicates the start of the output buffer, |
+ * | ^          | ^           | `size` indicates the size of the output buffer and |
+ * | ^          | ^           | `pos` indicates  position where reading is stopped. Will be updated. Necessarily `0 <= pos <= size`. |
+ * 
+ * @return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    | amount of data remaining to flush. |
+ * | Fail       | An error code (which can be tested using ZSTD_isError()). |
+ */
 ZSTDLIB_API size_t ZSTD_endStream(ZSTD_CStream* zcs, ZSTD_outBuffer* output);
 
 /**
@@ -2362,6 +2444,8 @@ ZSTDLIB_API size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 
 #endif  /* ZSTD_H_235446 */
 
+
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 
 /* **************************************************************************************
  *   ADVANCED AND EXPERIMENTAL FUNCTIONS
@@ -3248,10 +3332,42 @@ ZSTDLIB_STATIC_API size_t ZSTD_CCtx_setFParams(ZSTD_CCtx* cctx, ZSTD_frameParame
  */
 ZSTDLIB_STATIC_API size_t ZSTD_CCtx_setParams(ZSTD_CCtx* cctx, ZSTD_parameters params);
 
-/*! ZSTD_compress_advanced() :
- *  Note : this function is now DEPRECATED.
- *         It can be replaced by ZSTD_compress2(), in combination with ZSTD_CCtx_setParameter() and other parameter setters.
- *  This prototype will generate compilation warnings. */
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
+
+/*!
+ * @name Deprecated functions.
+ *
+ * @{
+ */
+/*! 
+ * @rst 
+ * .. _ZSTD_compress_advanced:
+ * @endrst
+ * 
+ *  @brief
+ *  This function compresses data using custom compression parameters specified in a `ZSTD_parameters` structure.
+ *  It supports both single-threaded and multi-threaded compression.
+ * 
+ *  | Parameters | Direction   | Description |
+ *  |:-----------|:-----------:|:------------|
+ *  | \b cctx        | in,out  | Explicit ZSTD compression context. When compressing many times, it is recommended to allocate the context just once, and re-use it for each successive compression operation. |
+ *  | \b dst         | out     | Destination buffer, compressed data is kept here, memory should be allocated already. |
+ *  | \b dstCapacity | in      | Size of buffer `dst` (which must be already allocated). |
+ *  | \b src         | in      | Source buffer, the data which you want to compress is copied/or pointed here. |
+ *  | \b srcSize     | in      | Size of buffer `src`. |
+ *  | \b dict        | in      | Dictionary buffer. |
+ *  | \b dictSize    | in      | Size of the dictionary buffer. |
+ *  | \b params      | in      | Compression parameters controlling compression level, window size, and strategy. These parameters must be initialized before calling the function. |
+ *
+ *  @note : this function is now DEPRECATED. It can be replaced by ZSTD_compress2(), in combination with ZSTD_CCtx_setParameter() and other parameter setters.
+ *  This prototype will generate compilation warnings.
+ *
+ *  @return
+ *  | Result     | Description |
+ *  |:-----------|:------------|
+ *  | Success    |The number of bytes written into `dst` (necessarily <= dstCapacity). |
+ *  | Fail       |Error code. |
+ */
 ZSTD_DEPRECATED("use ZSTD_compress2")
 ZSTDLIB_STATIC_API
 size_t ZSTD_compress_advanced(ZSTD_CCtx* cctx,
@@ -3260,6 +3376,7 @@ size_t ZSTD_compress_advanced(ZSTD_CCtx* cctx,
                         const void* dict,size_t dictSize,
                               ZSTD_parameters params);
 
+/// @cond DOXYGEN_SHOULD_SKIP_THIS
 /*! ZSTD_compress_usingCDict_advanced() :
  *  Note : this function is now DEPRECATED.
  *         It can be replaced by ZSTD_compress2(), in combination with ZSTD_CCtx_loadDictionary() and other parameter setters.
@@ -4407,6 +4524,8 @@ ZSTDLIB_STATIC_API size_t ZSTD_insertBlock    (ZSTD_DCtx* dctx, const void* bloc
 
 #endif   /* ZSTD_H_ZSTD_STATIC_LINKING_ONLY */
 
+
+/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 /** 
  * @} 
  */

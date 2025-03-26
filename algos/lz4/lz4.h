@@ -224,6 +224,11 @@ LZ4LIB_API const char* LZ4_versionString (void);
  */
 
 /*!
+ *
+ *  @rst 
+ *  .. _LZ4_compress_default:
+ *  @endrst
+ * 
  *  @brief Compresses 'srcSize' bytes from buffer 'src'
  *  into allocated 'dst' buffer of size 'dstCapacity'.
  *  
@@ -252,6 +257,11 @@ LZ4LIB_API const char* LZ4_versionString (void);
 LZ4LIB_API int LZ4_compress_default(const char* src, char* dst, int srcSize, int dstCapacity);
 
 /*!
+ *
+ *  @rst 
+ *  .. _LZ4_decompress_safe:
+ *  @endrst
+ * 
  * @brief Decompresses the compressed data pointed by src into dst and returns the number of bytes decompressed
  * into the destination buffer.
  * 
@@ -335,8 +345,14 @@ LZ4LIB_API void Test_AOCL_LZ4_wildCopy64_AVX(void*dstPtr, const void* srcPtr, vo
 */
 LZ4LIB_API int LZ4_compressBound(int inputSize);
 
-/*! @brief Same as LZ4_compress_default(), but allows the selection of "acceleration" factor.
-
+/*!
+ *
+ *  @rst 
+ *  .. _LZ4_compress_fast:
+ *  @endrst
+ *
+ *  @brief Same as LZ4_compress_default(), but allows the selection of "acceleration" factor.
+ *
  *  |Parameters      |Direction |Description                                                                                                         |
  *  |:---------------|:--------:|:-------------------------------------------------------------------------------------------------------------------|
  *  | \b src         |  in      | Source buffer, the data you want to compress is copied/or pointed here.                                            |

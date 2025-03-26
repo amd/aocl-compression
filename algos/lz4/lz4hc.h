@@ -79,7 +79,11 @@ extern "C" {
  * @name Block Compression Functions
  * @{
 */
-/*! 
+/*!
+ *  @rst 
+ *  .. _LZ4_compress_HC:
+ *  @endrst
+ * 
  *  @brief Compress data from `src` into `dst`, using the powerful but slower "HC" algorithm.
  *
  * | Parameters | Direction   | Description |

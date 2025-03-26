@@ -1,16 +1,16 @@
-AOCL COMPRESSION
+AOCL-Compression
 ================
 @mainpage
 
 #### Introduction
-AOCL Compression is a software framework of various lossless compression and
+AOCL-Compression is a software framework of various lossless compression and
 decompression methods tuned and optimized for AMD Zen™ based CPUs.
 This framework offers a single set of unified APIs for all the supported
 compression and decompression methods which facilitate the applications to
-easily integrate and use them. For AOCL Compression framework APIs, refer to @ref API.
+easily integrate and use them. For AOCL-Compression framework APIs, refer to @ref API.
 
 #### Methods Supported
-AOCL Compression supports compression and decompression methods of the following libraries along with their native APIs.
+AOCL-Compression supports compression and decompression methods of the following libraries along with their native APIs.
 1. @ref LZ4_API "lz4"
 2. @ref ZLIB_API "zlib/deflate"
 3. @ref LZMA_API "lzma"
@@ -22,7 +22,7 @@ AOCL Compression supports compression and decompression methods of the following
 It supports the dynamic dispatcher feature that executes the most optimal
 function variant implemented using Function Multi-versioning thereby offering
 a single optimized library portable across different x86 CPU architectures.
-AOCL Compression framework is developed in C for UNIX® and Windows® based systems.
+AOCL-Compression framework is developed in C for UNIX® and Windows® based systems.
 A test suite is provided for the validation and performance benchmarking
 of the supported compression and decompression methods. This suite also
 supports the benchmarking of IPP compression methods, such as, lz4, lz4hc, zlib and bzip2.
@@ -32,5 +32,5 @@ the library offers openMP based multi-threaded compression for a few methods.
 
 #### Contacts
 
-AOCL Compression is developed and maintained by AMD.<br>
+AOCL-Compression is developed and maintained by AMD.<br>
 For support, send an email to toolchainsupport@amd.com.
