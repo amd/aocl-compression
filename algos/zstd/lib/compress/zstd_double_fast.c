@@ -612,6 +612,7 @@ size_t ZSTD_compressBlock_doubleFast(
 
 #if AOCL_DECOMPRESS_FAST > 2
 #include "algos/zstd/lib/compress/aocl_zstd_compressBlock_doubleFast_noDict_generic_fds2_analyze.h"
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_doubleFast_noDict_generic_fds3_base.h"
 #elif AOCL_DECOMPRESS_FAST == 2
 #include "algos/zstd/lib/compress/aocl_zstd_compressBlock_doubleFast_noDict_generic_fds2_base.h"
 #endif
@@ -891,6 +892,8 @@ _match_stored:
         {                                                                                                       \
         case FDS_FAST2_ANALYZE:                                                                                 \
             return AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds2_analyze(ms, seqStore, rep, src, srcSize, mls); \
+        case FDS_ALL_CONF: \
+            return AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds3_base(ms, seqStore, rep, src, srcSize, mls); \
         default:                                                                                                \
             return AOCL_ZSTD_compressBlock_doubleFast_noDict_generic(ms, seqStore, rep, src, srcSize, mls);     \
         }                                                                                                       \

@@ -1906,7 +1906,7 @@ ZSTD_decompressSequences_default(ZSTD_DCtx* dctx,
 
 #ifdef AOCL_ZSTD_OPT
 #define AOCL_ZSTD_DECOMPRESSSEQUENCES_BODY_FDS \
-    if (MEM_64bits()) { \
+    if (dctx->dictEnd == NULL /* All currently supported FDS modes expect noDict compression */ && MEM_64bits()) { \
         switch (dctx->fds) { \
         case FDS_FAST2_NOTB_SO4_NOEXT_REP3: \
             return AOCL_ZSTD_decompressSequences_body_mem64_fast3(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame); \

@@ -37,27 +37,7 @@
  */
 
 #ifdef AOCL_ZSTD_OPT
-#if AOCL_DECOMPRESS_FAST > 2
-/* Skipping long matches when enforcing constraints can significantly impact 
- * compression ratio and decompression speed. If such matches are encountered
- * while imposing constraints, stop enforcing constraints. */
-#define AOCL_LONG_MATCH_LIMIT_FAST (16 * 1024)
-FORCE_INLINE_TEMPLATE
-size_t AOCL_ZSTD_isLongMatch(seqStore_t* seqStore, 
-    const BYTE* ip, const BYTE* match, const BYTE* const iend)
-{
-    if (MEM_read64(match) == MEM_read64(ip)) 
-    {
-        size_t mLength = AOCL_ZSTD_count(ip + 8, match + 8, iend) + 8;
-        if (mLength > AOCL_LONG_MATCH_LIMIT_FAST) 
-        {
-            seqStore->fds_config.state = FDS_NONE; // stop imposing constraints from next block
-            return mLength;
-        }
-    }
-    return 0;
-}
-#endif
+@AOCL_ZSTD_CFNGF_IS_LONG_MATCH@
 
 #if AOCL_DECOMPRESS_FAST > 1
 #define AOCL_ZSTD_FIND_MATCH_FDS2(safe) \
@@ -275,9 +255,7 @@ _cleanup:
 _store_sequences:
     @AOCL_ZSTD_CFNGF_STORE_SEQ@
 
-#if AOCL_DECOMPRESS_FAST > 2
-_match_stored:
-#endif
+@AOCL_ZSTD_CFNGF_MATCH_STORED@
     ip0 += mLength;
     anchor = ip0;
 
@@ -292,5 +270,6 @@ _match_stored:
 
     goto _start;
 }
+#undef AOCL_ZSTD_FIND_MATCH_FDS2
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 #endif /* AOCL_ZSTD_OPT */

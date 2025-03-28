@@ -5122,10 +5122,10 @@ static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
     }
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 #if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
-    else if (cctx->seqStore.fds_config.state == FDS_FAST2_ANALYZE && 
-        !AOCL_ZSTD_FdsUpdatePossible(fdsDst, cctx)) {
-        /* FDS state changes are possible in FDS_FAST2_ANALYZE state. 
-         * This needs to be disabled if FDS frame update is not possible to mark the change in FDS metadata */
+    else if (cctx->seqStore.fds_config.state == FDS_FAST2_ANALYZE) {
+        /* FDS state changes are possible in FDS_FAST2_ANALYZE state.
+         * This needs to be disabled as FDS frame update is not possible in subsequent !single_pass calls 
+         * as dst buffer where FDS frame was written is not available. */
         cctx->seqStore.fds_config.state = FDS_ALL_CONF; // change to fixed constraint state
     }
 #endif /* AOCL_DECOMPRESS_FAST > 2 */
