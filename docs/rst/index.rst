@@ -59,16 +59,6 @@ The library build framework offers CTest-based testing of the test cases
 implemented using GTest and the library test suite. Starting from AOCL-Compression 4.2,
 the library offers openMP based multi-threaded compression for a few methods.
 
-Installation
-````````````
-This section details step-by-step instructions for setting up the library on Linux and Windows using CMake, including prerequisites, build options, and testing commands.
-It also covers performance benchmarking, and advanced optimization configurations for tailored builds.
-
-.. toctree::
-   :maxdepth: 2
-
-   INSTALLATION
-
 
 Unified APIs
 ````````````
@@ -163,8 +153,7 @@ Example programs illustrating how to use AOCL-Compression APIs are presented her
 
    EXAMPLE_README
 
-Contacts
-^^^^^^^^
+**Contacts**
 
 AOCL-Compression is developed and maintained by AMD.
 For support, send an email to toolchainsupport@amd.com.

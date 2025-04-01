@@ -8,7 +8,7 @@ Example Test Programs
 | [Example 3](#example-3)   | Sample usage and calling sequence of aocl - compression APIs for multi-threaded gzip compression. |
 
 
-### Example 1
+## Example 1
 
 The following test program shows the sample usage and calling sequence of aocl - compression APIs to compress and decompress a test input :
 
@@ -114,7 +114,7 @@ path to aocl_compression.h header file and link with libaocl_compression.so file
 
 Before running the example program, ensure it points to the right library dependencies for openMP, etc.
 
-### Example 2
+## Example 2
 
 The following test program shows the sample usage and calling sequence of aocl - compression APIs to extract format compliant compressed stream from a stream produced by AOCL multi-threaded compressor :
 
@@ -227,7 +227,7 @@ path to aocl_compression.h header file and link with libaocl_compression.so file
 
 Before running the example program, ensure it points to the right library dependencies for openMP, etc.
 
-### Example 3
+## Example 3
 
 The following test program shows the sample usage and calling sequence of aocl - compression APIs for multi-threaded gzip compression :
 

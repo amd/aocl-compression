@@ -459,13 +459,13 @@ namespace snappy {
    * @attention REQUIRES: "compressed" must point to an area of memory that is at
    * least "MaxCompressedLength(input_length)" bytes in length.
    * 
-   * @note - Example:\n\n
+   * @note \b Example:
    *  \code{.cpp}
-   *            char  output = new char[snappy::MaxCompressedLength(input_length)];\n
-   *            size_t output_length;\n
-   *            RawCompress(input, input_length, output, &output_length);\n
-   *            ... Process(output, output_length) ...\n
-   *            delete [] output;\n
+   *            char  output = new char[snappy::MaxCompressedLength(input_length)];
+   *            size_t output_length;
+   *            RawCompress(input, input_length, output, &output_length);
+   *            ... Process(output, output_length) ...
+   *            delete [] output;
    * \endcode
    * @return \b  void
    */

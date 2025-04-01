@@ -2445,8 +2445,6 @@ ZSTDLIB_API size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 #endif  /* ZSTD_H_235446 */
 
 
-/// @cond DOXYGEN_SHOULD_SKIP_THIS
-
 /* **************************************************************************************
  *   ADVANCED AND EXPERIMENTAL FUNCTIONS
  ****************************************************************************************
@@ -3332,42 +3330,10 @@ ZSTDLIB_STATIC_API size_t ZSTD_CCtx_setFParams(ZSTD_CCtx* cctx, ZSTD_frameParame
  */
 ZSTDLIB_STATIC_API size_t ZSTD_CCtx_setParams(ZSTD_CCtx* cctx, ZSTD_parameters params);
 
-/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
-
-/*!
- * @name Deprecated functions.
- *
- * @{
- */
-/*! 
- * @rst 
- * .. _ZSTD_compress_advanced:
- * @endrst
- * 
- *  @brief
- *  This function compresses data using custom compression parameters specified in a `ZSTD_parameters` structure.
- *  It supports both single-threaded and multi-threaded compression.
- * 
- *  | Parameters | Direction   | Description |
- *  |:-----------|:-----------:|:------------|
- *  | \b cctx        | in,out  | Explicit ZSTD compression context. When compressing many times, it is recommended to allocate the context just once, and re-use it for each successive compression operation. |
- *  | \b dst         | out     | Destination buffer, compressed data is kept here, memory should be allocated already. |
- *  | \b dstCapacity | in      | Size of buffer `dst` (which must be already allocated). |
- *  | \b src         | in      | Source buffer, the data which you want to compress is copied/or pointed here. |
- *  | \b srcSize     | in      | Size of buffer `src`. |
- *  | \b dict        | in      | Dictionary buffer. |
- *  | \b dictSize    | in      | Size of the dictionary buffer. |
- *  | \b params      | in      | Compression parameters controlling compression level, window size, and strategy. These parameters must be initialized before calling the function. |
- *
- *  @note : this function is now DEPRECATED. It can be replaced by ZSTD_compress2(), in combination with ZSTD_CCtx_setParameter() and other parameter setters.
- *  This prototype will generate compilation warnings.
- *
- *  @return
- *  | Result     | Description |
- *  |:-----------|:------------|
- *  | Success    |The number of bytes written into `dst` (necessarily <= dstCapacity). |
- *  | Fail       |Error code. |
- */
+/*! ZSTD_compress_advanced() :
+ *  Note : this function is now DEPRECATED.
+ *         It can be replaced by ZSTD_compress2(), in combination with ZSTD_CCtx_setParameter() and other parameter setters.
+ *  This prototype will generate compilation warnings. */
 ZSTD_DEPRECATED("use ZSTD_compress2")
 ZSTDLIB_STATIC_API
 size_t ZSTD_compress_advanced(ZSTD_CCtx* cctx,
@@ -3376,7 +3342,6 @@ size_t ZSTD_compress_advanced(ZSTD_CCtx* cctx,
                         const void* dict,size_t dictSize,
                               ZSTD_parameters params);
 
-/// @cond DOXYGEN_SHOULD_SKIP_THIS
 /*! ZSTD_compress_usingCDict_advanced() :
  *  Note : this function is now DEPRECATED.
  *         It can be replaced by ZSTD_compress2(), in combination with ZSTD_CCtx_loadDictionary() and other parameter setters.
@@ -4524,8 +4489,6 @@ ZSTDLIB_STATIC_API size_t ZSTD_insertBlock    (ZSTD_DCtx* dctx, const void* bloc
 
 #endif   /* ZSTD_H_ZSTD_STATIC_LINKING_ONLY */
 
-
-/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 /** 
  * @} 
  */
