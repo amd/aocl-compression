@@ -2277,3 +2277,175 @@ TEST_F(ZSTD_ZSTD_CCtx_setPledgedSrcSize, AOCL_Compression_zstd_ZSTD_CCtx_setPled
 /*********************************************
  * End of ZSTD_ZSTD_CCtx_setPledgedSrcSize
  *********************************************/
+
+/*********************************************
+ * Start of ZSTD_ZSTD_decompressMixed
+ *********************************************/
+class ZSTD_ZSTD_decompressMixed : public ::testing::TestWithParam<tuple<size_t, gtest_data_gen_type, int>> {
+public:
+    using decompress_mixed_params = std::tuple<size_t, gtest_data_gen_type, int>;
+
+    ZSTD_ZSTD_decompressMixed() {
+        if (g_cstream == NULL) g_cstream = Test_ZSTD_createCStream();
+        if (g_dstream == NULL) g_dstream = Test_ZSTD_createDStream();
+    }
+
+    virtual ~ZSTD_ZSTD_decompressMixed()
+    {
+        Test_ZSTD_freeCStream(g_cstream); g_cstream = NULL;
+        Test_ZSTD_freeDStream(g_dstream); g_dstream = NULL;
+    }
+
+    void SetUp() override {
+        srand(0);
+        size_t sz = get<0>(::testing::TestWithParam<decompress_mixed_params>::GetParam());
+        gtest_data_gen_type type = get<1>(::testing::TestWithParam<decompress_mixed_params>::GetParam());
+        cLevel = get<2>(::testing::TestWithParam<decompress_mixed_params>::GetParam());
+        d = new TestLoad_2(sz, type);
+
+        /* decompress should not overwrite dst buffer beyond d->getOrigSize().
+        * Lossless compression should produce the exact bytes as original.
+        * Hence, exact same size allocated for output buffer */
+        outLen = d->getOrigSize();
+        output = (char*)malloc(outLen);
+    }
+
+    void TearDown() override {
+        if (output)
+            free(output);
+        if (d)
+            delete d;
+    }
+
+    void compress_decompress(ZSTD_Compress_API apic, ZSTD_Decompress_API apid) {
+        size_t flushedc = 0;
+        size_t ret = run_compress(apic, d->getCompressedBuff(), d->getCompressedSize(),
+                                  d->getOrigData(), d->getOrigSize(), cLevel, &flushedc);
+        CHECK_PASS_ZSTD(ret);
+        size_t flushedd = 0;
+        ret = run_decompress(apid, output, outLen, d->getCompressedBuff(), flushedc, &flushedd);
+        validate_decompress(d->getOrigData(), d->getOrigSize(), output, flushedd, ret);
+    }
+
+protected:
+    size_t run_compress(ZSTD_Compress_API api, void* dst, size_t dstCapacity, const void* src,
+                        size_t srcSize, int level, size_t* flushed) {
+        switch (api) {
+        case ZSTD_Compress_API::compress_stream2_flush: /* streaming api */
+        {
+            //setup buffers
+            buffOut.dst = dst;
+            buffOut.size = dstCapacity;
+            buffOut.pos = 0;
+            buffIn.src = src;
+            buffIn.size = srcSize;
+            buffIn.pos = 0;
+
+            Test_ZSTD_CCtx_setParameter(g_cstream, ZSTD_c_compressionLevel, level);
+            size_t ret = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_continue);
+            *flushed = buffOut.pos;
+            if (Test_ZSTD_isError(ret)) return ret;
+            ret = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_end);
+            *flushed = buffOut.pos;
+            return ret;
+        }
+        case ZSTD_Compress_API::compress: /* file api */
+        {
+            size_t ret = Test_ZSTD_compress(dst, dstCapacity, src, srcSize, level);
+            *flushed = ret;
+            return Test_ZSTD_isError(ret);
+        }
+        default:
+        {
+            return ERROR(GENERIC);
+        }
+        }
+    }
+
+    size_t run_decompress(ZSTD_Decompress_API api, void* dst, size_t dstCapacity,
+        const void* src, size_t srcSize, size_t* flushed) {
+        switch (api) {
+        case ZSTD_Decompress_API::decompress_stream:  /* streaming api */
+        {
+            //setup buffers
+            buffOut.dst = dst;
+            buffOut.size = dstCapacity;
+            buffOut.pos = 0;
+            buffIn.src = src;
+            buffIn.size = srcSize;
+            buffIn.pos = 0;
+
+            size_t ret = 0;
+            while (buffIn.pos < buffIn.size) { // as multiple frames are present, exiting on ret == 0 will return on 1st frame. Instead consume all input.
+                ret = Test_ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
+                *flushed = buffOut.pos;
+                if (Test_ZSTD_isError(ret)) break;
+            }
+            return ret;
+        }
+        case ZSTD_Decompress_API::decompress_dctx: /* file api */
+        {
+            size_t ret = Test_ZSTD_decompressDCtx(g_dstream, dst, dstCapacity, src, srcSize);
+            *flushed = ret;
+            return Test_ZSTD_isError(ret);
+        }
+        default:
+            return ERROR(GENERIC);
+        }
+    }
+
+
+    void validate_decompress(const char* orig, size_t origLen, const char* result, size_t resultLen, size_t rem) {
+        EXPECT_EQ(rem, 0); // all bytes consumed
+        EXPECT_EQ(origLen, resultLen);
+        EXPECT_EQ(0, memcmp(result, orig, origLen));
+    }
+
+    ZSTD_outBuffer buffOut;
+    ZSTD_inBuffer buffIn;
+
+private:
+    char* output = NULL; // decompressed data will be stored here
+    size_t outLen;
+
+    int cLevel;
+    ZSTD_CStream* g_cstream = NULL;
+    ZSTD_DStream* g_dstream = NULL;
+    TestLoad_2* d = NULL;
+};
+
+TEST_P(ZSTD_ZSTD_decompressMixed, AOCL_Compression_zstd_ZSTD_decompressMixed_pass_common_1) //compress file, decompress file
+{
+    compress_decompress(ZSTD_Compress_API::compress, ZSTD_Decompress_API::decompress_dctx);
+}
+
+TEST_P(ZSTD_ZSTD_decompressMixed, AOCL_Compression_zstd_ZSTD_decompressMixed_pass_common_2) //compress file, decompress stream
+{
+    compress_decompress(ZSTD_Compress_API::compress, ZSTD_Decompress_API::decompress_stream);
+}
+
+TEST_P(ZSTD_ZSTD_decompressMixed, AOCL_Compression_zstd_ZSTD_decompressMixed_pass_common_3) //compress stream, decompress stream
+{
+    compress_decompress(ZSTD_Compress_API::compress_stream2_flush, ZSTD_Decompress_API::decompress_stream);
+}
+
+TEST_P(ZSTD_ZSTD_decompressMixed, AOCL_Compression_zstd_ZSTD_decompressMixed_pass_common_4) //compress stream, decompress file
+{
+    compress_decompress(ZSTD_Compress_API::compress_stream2_flush, ZSTD_Decompress_API::decompress_dctx);
+}
+
+#if AOCL_DECOMPRESS_FAST > 2
+    #define DECOMPRESS_MIXED_SIZE (2*1024*1024)+37 /* Larger inputs are needed to ensure FDS analytics and state changes are induced */
+#else
+    #define DECOMPRESS_MIXED_SIZE 800
+#endif
+INSTANTIATE_TEST_SUITE_P(
+    ZSTD_ZSTD_decompressMixed_TEST,
+    ZSTD_ZSTD_decompressMixed,
+    ::testing::Combine(::testing::Values(DECOMPRESS_MIXED_SIZE),
+                       ::testing::Values(gtest_data_gen_type::lowratio, gtest_data_gen_type::midratio,
+                         gtest_data_gen_type::highratio, gtest_data_gen_type::overlapcopy, gtest_data_gen_type::longmatch),
+                       ::testing::Range(1, 13)));
+/*********************************************
+ * End of ZSTD_ZSTD_decompressMixed
+ *********************************************/
