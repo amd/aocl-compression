@@ -116,6 +116,8 @@ void _force_has_format_string(const char *format, ...) {
     _FORCE_HAS_FORMAT_STRING(__VA_ARGS__); \
     RAWLOG(3, ": " __VA_ARGS__); \
     RAWLOG(3, "\n"); \
+    LOG_FORMATTED(ERR, logCtx, "check %s failed, returning %s", \
+            ERR_QUOTE(cond), ERR_QUOTE(ERROR(err))); \
     return ERROR(err); \
   }
 
@@ -131,6 +133,8 @@ void _force_has_format_string(const char *format, ...) {
     _FORCE_HAS_FORMAT_STRING(__VA_ARGS__); \
     RAWLOG(3, ": " __VA_ARGS__); \
     RAWLOG(3, "\n"); \
+    LOG_FORMATTED(ERR, logCtx, "unconditional check failed, returning %s", \
+           ERR_QUOTE(ERROR(err))); \
     return ERROR(err); \
   } while(0);
 
@@ -148,6 +152,8 @@ void _force_has_format_string(const char *format, ...) {
       _FORCE_HAS_FORMAT_STRING(__VA_ARGS__); \
       RAWLOG(3, ": " __VA_ARGS__); \
       RAWLOG(3, "\n"); \
+      LOG_FORMATTED(ERR, logCtx, "forwarding error in %s: %s", \
+             ERR_QUOTE(err), ERR_getErrorName(err_code)); \
       return err_code; \
     } \
   } while(0);

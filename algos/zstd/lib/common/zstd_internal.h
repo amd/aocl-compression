@@ -192,13 +192,15 @@ static UNUSED_ATTR const U32 OF_defaultNormLog = OF_DEFAULTNORMLOG;
 #define FDS_FAST2_NOTB_SO4_NOEXT_REP2 (U64)0x66 // 1 100 1 10, no large total bits, no offsets < 16, no external dictionary, no rep3,2
 #define FDS_FAST2_NOTB_SO3_NOEXT_REP3 (U64)0x5F // 1 011 1 11, no large total bits, no offsets < 8, no external dictionary, no rep3,2,1
 #define FDS_FAST2_NOTB_SO3_NOEXT_REP2 (U64)0x5E // 1 011 1 10, no large total bits, no offsets < 8, no external dictionary, no rep3,2
-#define FDS_DEFAULT_CONF FDS_NONE                   // No constraints
-#define FDS_ALL_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP3  // All constraints
+
+#define FDS_DEFAULT_CONF FDS_NONE                    // No constraints
+#define FDS_ALL_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP3   // All constraints
+#define FDS_FAST2_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP2 // AOCL_DECOMPRESS_FAST==2 fixed constraint set
 
 // Decompress fast settings
 /*
  * AOCL_DECOMPRESS_FAST = 1: No FDS frame inserted. Modifications in decompressor only.
- * AOCL_DECOMPRESS_FAST = 2: FDS frame inserted. All FDS_FAST2_NOTB_SO4_NOEXT_REP2 constraints imposed.
+ * AOCL_DECOMPRESS_FAST = 2: FDS frame inserted. FDS_FAST2_CONF constraints imposed.
  * AOCL_DECOMPRESS_FAST = 3: FDS frame inserted. Data aware compression. Constraints imposed selectively based on dynamic analysis.
 */
 #endif

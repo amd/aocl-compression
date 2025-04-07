@@ -767,9 +767,7 @@ public:
         char* cur = (char*)dst;
         cur += ZSTD_SKIPPABLEHEADERSIZE;
         EXPECT_EQ(*((U64*)cur), FDS_MAGIC_WORD);
-#if AOCL_DECOMPRESS_FAST == 2
-        EXPECT_EQ(*((U64*)(cur + FDS_MAGIC_WORD_BYTES)), FDS_FAST2_NOTB_SO4_NOEXT_REP2);
-#endif
+        EXPECT_EQ(*((U64*)(cur + FDS_MAGIC_WORD_BYTES)), FDS_DEFAULT_CONF);
     }
     void* dst;
 };
@@ -777,14 +775,14 @@ public:
 TEST_F(ZSTD_AOCL_ZSTD_writeFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_pass_1) { // dstCapacity sufficient
     size_t dstCapacity = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE;
     alloc_dst(dstCapacity);
-    EXPECT_EQ(dstCapacity, Test_AOCL_ZSTD_writeFdsFrame(dst, dstCapacity));
+    EXPECT_EQ(dstCapacity, Test_AOCL_ZSTD_writeFdsFrame(dst, dstCapacity, FDS_DEFAULT_CONF));
     validate_fds_frame();
 }
 
 TEST_F(ZSTD_AOCL_ZSTD_writeFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_fail_2) { // dstCapacity insufficient
     size_t dstCapacity = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE - 1;
     alloc_dst(dstCapacity);
-    EXPECT_EQ(Test_AOCL_ZSTD_writeFdsFrame(dst, dstCapacity), ERROR(dstSize_tooSmall));
+    EXPECT_EQ(Test_AOCL_ZSTD_writeFdsFrame(dst, dstCapacity, FDS_DEFAULT_CONF), ERROR(dstSize_tooSmall));
 }
 /*********************************************
 * End of ZSTD_AOCL_ZSTD_writeFdsFrame
@@ -811,7 +809,7 @@ public:
     }
 
     void write_valid_fds_frame(size_t sz) {
-        EXPECT_FALSE(ZSTD_isError(Test_AOCL_ZSTD_writeFdsFrame(src, sz)));
+        EXPECT_FALSE(ZSTD_isError(Test_AOCL_ZSTD_writeFdsFrame(src, sz, FDS_DEFAULT_CONF)));
     }
 
     ZSTD_DCtx* dctx;
@@ -823,11 +821,7 @@ TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_readFdsFrame
     alloc_src(srcSz);
     write_valid_fds_frame(srcSz);
     Test_AOCL_ZSTD_readFdsFrame(dctx, (char*)src + ZSTD_SKIPPABLEHEADERSIZE, srcSz - ZSTD_SKIPPABLEHEADERSIZE);
-#if AOCL_DECOMPRESS_FAST == 2
-    EXPECT_EQ(dctx->fds, FDS_FAST2_NOTB_SO4_NOEXT_REP2);
-#else
     EXPECT_EQ(dctx->fds, FDS_DEFAULT_CONF);
-#endif
 }
 
 TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_fail_2) { // srcSize insufficient

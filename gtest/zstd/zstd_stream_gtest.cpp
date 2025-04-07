@@ -1043,7 +1043,7 @@ public:
         return ret;
     }
 
-    size_t compress_iter_flush(TestLoad_2& d, size_t srcStep) { //compress iteratively using ZSTD_e_flush
+    size_t compress_iter_flush(TestLoad_2& d, size_t srcStep, bool forceNonContiguous = false) { //compress iteratively using ZSTD_e_flush
         size_t ret;
         buffOut.dst = d.getCompressedBuff();
         buffOut.size = d.getCompressedSize(); //provide large enough to hold all compressed data. This ensures forward progress on output in each iter.
@@ -1054,6 +1054,7 @@ public:
     
         size_t prev_in_pos = buffIn.pos;
         size_t prev_out_pos = buffOut.pos;
+        srand(0);
         do {
             ret = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_flush);
             if (Test_ZSTD_isError(ret))
@@ -1063,6 +1064,7 @@ public:
             prev_in_pos = buffIn.pos;
             prev_out_pos = buffOut.pos;
             buffIn.size += srcStep;
+            if (forceNonContiguous) g_cstream->blockState.matchState.forceNonContiguous = (rand() % 2);;
         } while (buffIn.size <= d.getOrigSize());
 
         if (!Test_ZSTD_isError(ret)) {
@@ -1268,9 +1270,18 @@ TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pas
     compress_incomplete(ZSTD_Compress_API::compress_stream2_continue, ZSTD_Compress_API::compress_stream2_end, ZSTD_Compress_API::compress_stream2_flush);
 }
 
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pass_common_25) //compress over multiple calls, non-contiguous
+{
+    TestLoad_2 d(150 * 1024); //> 128 KB
+    size_t srcStep = 4 * 1024; //small srcStep. Test_ZSTD_compressStream2 will just consume data without writing to output until it has sufficient data to compress in one go.
+    CHECK_PASS_ZSTD(compress_iter_flush(d, srcStep, true /* force non-contiguous source when iterating */));
+    EXPECT_EQ(buffIn.pos, buffIn.size); // all bytes consumed
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), buffOut.pos, ZSTD_decompressDCtx));
+}
+
 #ifdef AOCL_ENABLE_THREADS
 /* Library must be built with ZSTD_MULTITHREAD flag defined for this test to take multithreaded code path in zstd reference */
-TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_common_25) //reference multi-threaded
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pass_common_26) //reference multi-threaded
 {
     TestLoad_2 d((512 * 1024) + 1); //ZSTDMT_JOBSIZE_MIN + 1 : minimum size for reference multi-threading to get activated
     int max_threads = omp_get_max_threads();

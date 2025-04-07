@@ -436,37 +436,39 @@ set(AOCL_ZSTD_CFNGF_REP_MATCH [[
        offcode = REPCODE1_TO_OFFBASE;
        mLength += 4;
 
-       /* First write next hash table entry; we've already calculated it.
-       * This write is known to be safe because the ip1 is before the
-       * repcode (ip2). */
-       hashTable[hash1] = (U32)(ip1 - base);
-
        /* Count the forward length. */
        mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend);
-       if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1))
+       if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) 
+       {
+            /* First write next hash table entry; we've already calculated it.
+            * This write is known to be safe because the ip1 is before the
+            * repcode (ip2). */
+            hashTable[hash1] = (U32)(ip1 - base);
            goto _store_sequences;
+       }
     }
 ]])
 set(AOCL_ZSTD_CFNGF_MATCH [[
     if (rep_offset1 >= WILDCOPY_VECLEN) \
     { \
-        /* first write next hash table entry; we've already calculated it */ \
-        if (safe) \
-        { \
-            hashTable[hash1] = (U32)(ip1 - base); \
-        } \
-        else \
-        { \
-            if (step <= 4) \
-            { \
-                /* We need to avoid writing an index into the hash table >= ... */ \
-                hashTable[hash1] = (U32)(ip1 - base); \
-            } \
-        } \
         /* Count the forward length. */ \
         mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend); \
-        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) \
+        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) { \
+            /* write already calculated next hash table entry only if match is valid */ \
+            if (safe) \
+            { \
+                hashTable[hash1] = (U32)(ip1 - base); \
+            } \
+            else \
+            { \
+                if (step <= 4) \
+                { \
+                    /* We need to avoid writing an index into the hash table >= ... */ \
+                    hashTable[hash1] = (U32)(ip1 - base); \
+                } \
+            } \
             goto _store_sequences; \
+        } \
         else \
             rep_offset1 = prev_rep_offset1; /* revert */ \
     } \
@@ -521,44 +523,45 @@ set(AOCL_ZSTD_CFNGF_REP_MATCH "")
 set(AOCL_ZSTD_CFNGF_MATCH [[
     if (rep_offset1 >= WILDCOPY_VECLEN) \
     { \
-        /* first write next hash table entry; we've already calculated it */ \
-        if (safe) \
-        { \
-            hashTable[hash1] = (U32)(ip1 - base); \
-        } \
-        else \
-        { \
-            if (step <= 4) \
-            { \
-                /* We need to avoid writing an index into the hash table >= ... */ \
-                hashTable[hash1] = (U32)(ip1 - base); \
-            } \
-        } \
         /* Count the forward length. */ \
         mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend); \
-        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) \
+        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) { \
+            /* write already calculated next hash table entry only if match is valid */ \
+            if (safe) \
+            { \
+                hashTable[hash1] = (U32)(ip1 - base); \
+            } \
+            else \
+            { \
+                if (step <= 4) \
+                { \
+                    /* We need to avoid writing an index into the hash table >= ... */ \
+                    hashTable[hash1] = (U32)(ip1 - base); \
+                } \
+            } \
             goto _store_sequences; \
+        } \
         else \
             rep_offset1 = prev_rep_offset1; /* revert */ \
     } \
     else if (rep_offset1 > 0) /* rep_offset1 < WILDCOPY_VECLEN */ \
     { \
-        /* first write next hash table entry; we've already calculated it */ \
-        if (safe) \
-        { \
-            hashTable[hash1] = (U32)(ip1 - base); \
-        } \
-        else \
-        { \
-            if (step <= 4) \
-            { \
-                /* We need to avoid writing an index into the hash table >= ... */ \
-                hashTable[hash1] = (U32)(ip1 - base); \
-            } \
-        } \
         mLength = AOCL_ZSTD_isLongMatch(seqStore, ip0, match0, iend); \
         if (mLength) \
         { \
+            /* write already calculated next hash table entry only if match is valid */ \
+            if (safe) \
+            { \
+                hashTable[hash1] = (U32)(ip1 - base); \
+            } \
+            else \
+            { \
+                if (step <= 4) \
+                { \
+                    /* We need to avoid writing an index into the hash table >= ... */ \
+                    hashTable[hash1] = (U32)(ip1 - base); \
+                } \
+            } \
             ZSTD_storeSeq(seqStore, (size_t)(ip0 - anchor), anchor, iend, offcode, mLength); \
             goto _match_stored; \
         } \
@@ -586,23 +589,24 @@ set(AOCL_ZSTD_CFNGF_REP_MATCH "")
 set(AOCL_ZSTD_CFNGF_MATCH [[
     if (rep_offset1 >= WILDCOPY_VECLEN) \
     { \
-        /* first write next hash table entry; we've already calculated it */ \
-        if (safe) \
-        { \
-            hashTable[hash1] = (U32)(ip1 - base); \
-        } \
-        else \
-        { \
-            if (step <= 4) \
-            { \
-                /* We need to avoid writing an index into the hash table >= ... */ \
-                hashTable[hash1] = (U32)(ip1 - base); \
-            } \
-        } \
         /* Count the forward length. */ \
         mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend); \
-        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) \
+        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) { \
+            /* write already calculated next hash table entry only if match is valid */ \
+            if (safe) \
+            { \
+                hashTable[hash1] = (U32)(ip1 - base); \
+            } \
+            else \
+            { \
+                if (step <= 4) \
+                { \
+                    /* We need to avoid writing an index into the hash table >= ... */ \
+                    hashTable[hash1] = (U32)(ip1 - base); \
+                } \
+            } \
             goto _store_sequences; \
+        } \
         else \
             rep_offset1 = prev_rep_offset1; /* revert */ \
     } \

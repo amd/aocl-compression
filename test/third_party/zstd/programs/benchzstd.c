@@ -600,7 +600,22 @@ BMK_benchOutcome_t BMK_benchMemAdvanced(const void* srcBuffer, size_t srcSize,
     ZSTD_CCtx* const cctx = ZSTD_createCCtx();
     ZSTD_DCtx* const dctx = ZSTD_createDCtx();
 
+#ifdef AOCL_ENABLE_THREADS
+    size_t maxCompressedSize = 0;
+    {
+        /* Get exact maxCompressedSize based on how input will be split and fed to compress API */
+        for (size_t nbBlocks = 0, fileNb = 0; fileNb < nbFiles; fileNb++) { /* must replicate : Init data blocks */
+            size_t remaining = fileSizes[fileNb];
+            U32 const nbBlocksforThisFile = (adv->mode == BMK_decodeOnly) ? 1 : (U32)((remaining + (blockSize - 1)) / blockSize);
+            U32 const blockEnd = nbBlocks + nbBlocksforThisFile;
+            for (; nbBlocks < blockEnd; nbBlocks++) {
+                size_t const thisBlockSize = MIN(remaining, blockSize);
+                maxCompressedSize += (adv->mode == BMK_decodeOnly) ? thisBlockSize : ZSTD_compressBound(thisBlockSize);
+                remaining -= thisBlockSize;
+    }   }   }
+#else
     const size_t maxCompressedSize = dstCapacity ? dstCapacity : ZSTD_compressBound(srcSize) + (maxNbBlocks * 1024);
+#endif
 
     void* const internalDstBuffer = dstBuffer ? NULL : malloc(maxCompressedSize);
     void* const compressedBuffer = dstBuffer ? dstBuffer : internalDstBuffer;

@@ -1583,7 +1583,7 @@ ZSTDLIB_API int Test_AOCL_ZSTD_window_needsExtDict(const ZSTD_window_t* window, 
                                        size_t srcSize, int forceNonContiguous);
 ZSTDLIB_API U32 Test_ZSTD_window_update(ZSTD_window_t* window, void const* src,
                             size_t srcSize, int forceNonContiguous);
-ZSTDLIB_API size_t Test_AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity);
+ZSTDLIB_API size_t Test_AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity, U64 state);
 #endif /* AOCL_UNIT_TEST */
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 #endif /* AOCL_ZSTD_OPT */

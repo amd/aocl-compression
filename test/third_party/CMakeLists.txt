@@ -169,7 +169,10 @@ if (BUILD_UTILITY)
   
           # Set the path to the zstd program directory
           file(GLOB ZSTD_PROGRAM_SRCS "${BU_ZSTD_PROGRAMS_DIR}/*.c")
-  
+          if (AOCL_ENABLE_THREADS)
+            set_property(SOURCE ${ZSTD_PROGRAM_SRCS} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
+          endif ()
+
           # Create testbench zstd_utility
           set (zstd_utility zstd_utility) 
           add_executable(${zstd_utility} ${ZSTD_PROGRAM_SRCS}) 

@@ -2276,7 +2276,7 @@ static size_t ZSTD_resetCCtx_internal(ZSTD_CCtx* zc,
      * and point params at the applied params.
      */
     zc->appliedParams = *params;
-#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
+#if AOCL_DECOMPRESS_FAST > 1
     if (!zc->seqStore.fds_config.single_pass) {
         /* In non-single pass mode, input might be passed in chunks and compressed into multiple frames. 
          * Frame boundaries are determined dynamically. At the point where a frame is ended and a new frame is created,
@@ -4922,14 +4922,10 @@ size_t ZSTD_referenceExternalSequences(ZSTD_CCtx* cctx, rawSeq* seq, size_t nbSe
 #if AOCL_DECOMPRESS_FAST > 1
 /* Write FDS frame to dst.
  * return number of bytes written or a ZSTD error. */
-MEM_STATIC size_t AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity) {
+MEM_STATIC size_t AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity, U64 state) {
     char src[FDS_FRAME_LENGTH];
     *((U64*)src) = FDS_MAGIC_WORD;
-#if AOCL_DECOMPRESS_FAST == 2
-    *((U64*)(src + FDS_MAGIC_WORD_BYTES)) = FDS_FAST2_NOTB_SO4_NOEXT_REP2;
-#else
-    *((U64*)(src + FDS_MAGIC_WORD_BYTES)) = FDS_DEFAULT_CONF;
-#endif
+    *((U64*)(src + FDS_MAGIC_WORD_BYTES)) = state;
     return ZSTD_writeSkippableFrame(dst, dstCapacity, src, FDS_FRAME_LENGTH, 0);
 }
 
@@ -5000,7 +4996,11 @@ MEM_STATIC size_t AOCL_ZSTD_writeFdsFrameIfSupported(ZSTD_CCtx* cctx,
         /* Insert an FDS frame before writing the ZSTD frame, if FDS mode is supported for selected compressor */
         if (AOCL_is_FdsSupported(hasExtDict, cctx))
         {
-            fds = AOCL_ZSTD_writeFdsFrame(*dst, *dstCapacity);
+#if AOCL_DECOMPRESS_FAST == 2
+            fds = AOCL_ZSTD_writeFdsFrame(*dst, *dstCapacity, FDS_FAST2_CONF);
+#else
+            fds = AOCL_ZSTD_writeFdsFrame(*dst, *dstCapacity, FDS_DEFAULT_CONF);
+#endif
             if (ZSTD_isError(fds)) {
                 return fds;
             }
@@ -5060,7 +5060,7 @@ static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
         if (fds) {
             cctx->seqStore.fds_config.written = 1;
 #if AOCL_DECOMPRESS_FAST == 2
-            cctx->seqStore.fds_config.state = FDS_FAST2_NOTB_SO4_NOEXT_REP2; // all FDS constraints
+            cctx->seqStore.fds_config.state = FDS_FAST2_CONF;
 #else
             cctx->seqStore.fds_config.state = FDS_FAST2_ANALYZE; // dynamic
 #endif
@@ -5099,9 +5099,8 @@ static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
             0, ZSTDcrp_makeClean, cctx->bufferedPolicy), "ZSTD_resetCCtx_internal failed. Unable to restart new frame.");
 
         /* Write new FDS frame with FDS_NONE */
-        ZSTD_STATIC_ASSERT(FDS_DEFAULT_CONF == FDS_NONE);
         fdsDst = dst;
-        fds = AOCL_ZSTD_writeFdsFrame(dst, dstCapacity);
+        fds = AOCL_ZSTD_writeFdsFrame(dst, dstCapacity, FDS_NONE);
         FORWARD_IF_ERROR(fds, "AOCL_ZSTD_writeFdsFrame failed. Unable to restart new frame.");
         assert(fds <= dstCapacity);
         dstCapacity -= fds;
@@ -6110,7 +6109,7 @@ size_t ZSTD_compress_advanced_internal(
 {
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_compress_advanced_internal (srcSize:%u)", (unsigned)srcSize);
     DEBUGLOG(4, "ZSTD_compress_advanced_internal (srcSize:%u)", (unsigned)srcSize);
-#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
+#if AOCL_DECOMPRESS_FAST > 1
     cctx->seqStore.fds_config.single_pass = 1;
 #endif
     FORWARD_IF_ERROR( ZSTD_compressBegin_internal(cctx,
@@ -6134,7 +6133,7 @@ size_t ZSTD_compress_usingDict(ZSTD_CCtx* cctx,
     {
         ZSTD_parameters const params = ZSTD_getParams_internal(compressionLevel, srcSize, dict ? dictSize : 0, ZSTD_cpm_noAttachDict);
         assert(params.fParams.contentSizeFlag == 1);
-#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
+#if AOCL_DECOMPRESS_FAST > 1
         cctx->seqStore.fds_config.single_pass = 1;
 #endif
         ZSTD_CCtxParams_init_internal(&cctx->simpleApiParams, &params, (compressionLevel == 0) ? ZSTD_CLEVEL_DEFAULT: compressionLevel);
@@ -6583,7 +6582,7 @@ static size_t ZSTD_compress_usingCDict_internal(ZSTD_CCtx* cctx,
         LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
         return ERROR(GENERIC);
     }
-#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
+#if AOCL_DECOMPRESS_FAST > 1
         cctx->seqStore.fds_config.single_pass = 1;
 #endif
     FORWARD_IF_ERROR(ZSTD_compressBegin_usingCDict_internal(cctx, cdict, fParams, srcSize), ""); /* will check if cdict != NULL */
@@ -7284,7 +7283,7 @@ size_t ZSTD_compress2(ZSTD_CCtx* cctx,
     /* Enable stable input/output buffers. */
     cctx->requestedParams.inBufferMode = ZSTD_bm_stable;
     cctx->requestedParams.outBufferMode = ZSTD_bm_stable;
-#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
+#if AOCL_DECOMPRESS_FAST > 1
     cctx->seqStore.fds_config.single_pass = 1;
 #endif
     {   size_t oPos = 0;
@@ -8164,8 +8163,8 @@ U32 Test_ZSTD_window_update(ZSTD_window_t* window, void const* src,
     return ZSTD_window_update(window, src, srcSize, forceNonContiguous);
 }
 
-size_t Test_AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity) {
-    return AOCL_ZSTD_writeFdsFrame(dst, dstCapacity);
+size_t Test_AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity, U64 state) {
+    return AOCL_ZSTD_writeFdsFrame(dst, dstCapacity, state);
 }
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 
