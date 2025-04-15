@@ -151,7 +151,7 @@ Example programs illustrating how to use AOCL-Compression APIs are presented her
 .. toctree::
    :maxdepth: 2
 
-   EXAMPLE_README
+   examples
 
 **Contacts**
 

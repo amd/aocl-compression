@@ -140,11 +140,11 @@ NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression 
 AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
 AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
 ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
-BUILD_UTILITY                       |  Enable third party utility build: zstd (Disabled by default)" OFF)
+BUILD_UTILITY                       |  Enable third party utility build: minigzip(zlib), zstd_utility(zstd) (Disabled by default)
 
 * NOTE: <br>
-   1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by <br>
-   setting environment variable AOCL_ZLIB_QUICK_MODE=ON. It also improves performance for levels 2, 3 and 5 <br>
+   1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by
+   setting environment variable AOCL_ZLIB_QUICK_MODE=ON. It also improves performance for levels 2, 3 and 5
    while trading off compression ratio. <br>
 
 Running AOCL-Compression Test Bench On Linux
@@ -396,7 +396,7 @@ Following are a few sample commands to use the script available in the 'scripts'
 Generating Documentation
 ------------------------
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
-- Documents will be generated in HTML format in the folder __docs/html__ as doxygen output &  __docs/sphinx/html__ as sphinx output. Open the index.html file from respective folders in any browser to view the documentation.
+- Documents will be generated in HTML format in the folder __docs/sphinx/html__ . Open index.html file from the folder in any browser to view the documentation.
 - The following packages are expected before running CMake with `-DBUILD_DOC=ON` option:
    1. Doxygen.
    2. Python packages:

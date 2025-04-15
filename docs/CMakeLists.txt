@@ -25,7 +25,7 @@
 # 
 # @brief CMake based sphinx documentation generator.
 #
-# Checks if necessary packages are installed for generating doxygen & sphinx documentation
+# Checks if necessary packages are installed for generating sphinx documentation
 # if they are not installed then neccessary steps are shown to install the required packages.
 #
 # @author Niranjan, Reddy
@@ -47,9 +47,9 @@ else()
 endif()
 
 
-# Check if Doxygen documentation generated successfully, if yes continue building sphinx documentation
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/html/index.html)
-    message(STATUS "Doxygen documentation generated successfully, to view documentation open ${W_DIR}/html/index.html .")
+# Check if xml generated successfully from Doxygen, if yes continue building sphinx documentation
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/xml/index.xml)
+    message(STATUS "xml generated from Doxygen successfully, at ${W_DIR}/xml/ .")
 
 # Check for python and the documentation packages:
 # - Sphinx
@@ -129,6 +129,6 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/html/index.html)
       message(STATUS "Sphinx generated successfully at ${W_DIR}/sphinx/html")
       file(REMOVE_RECURSE ${W_DIR}/sphinx/doctrees)
     endif()
-else() # !(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/docs/html/index.html)
+else() # !(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/docs/xml/index.xml)
     message(STATUS "Doxygen document generation failed.")
-endif() # (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/docs/html/index.html)
+endif() # (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/docs/xml/index.xml)

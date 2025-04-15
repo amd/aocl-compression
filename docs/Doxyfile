@@ -61,7 +61,7 @@ PROJECT_BRIEF          =
 # pixels and the maximum width should not exceed 200 pixels. Doxygen will copy
 # the logo to the output directory.
 
-PROJECT_LOGO           = styling/AMD_Logo.png
+PROJECT_LOGO           =
 
 # The OUTPUT_DIRECTORY tag is used to specify the (relative or absolute) path
 # into which the generated documentation will be written. If a relative path is
@@ -802,7 +802,7 @@ LAYOUT_FILE            =
 # The CITE_BIB_FILES tag can be used to specify one or more bib files containing
 # the reference definitions. This must be a list of .bib files. The .bib
 # extension is automatically appended if omitted. This requires the bibtex tool
-# to be installed. See also https://en.wikipedia.org/wiki/BibTeX for more info.
+# to be installed.
 # For LaTeX the style of the bibliography can be controlled using
 # LATEX_BIB_STYLE. To use this feature you need bibtex and perl available in the
 # search path. See also \cite for info how to create references.
@@ -918,18 +918,18 @@ WARN_LOGFILE           =
 # spaces. See also FILE_PATTERNS and EXTENSION_MAPPING
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = ../api \
-                         ./README.md \
-                         ./INSTALLATION.md \
-                         ../algos/lz4 \
-                         ../algos/snappy \
+INPUT                  = ../api/aocl_compression.h \
+                         ../algos/lz4/lz4.h \
+                         ../algos/lz4/lz4hc.h \
+                         ../algos/lz4/lz4frame.h \
+                         ../algos/snappy/snappy.h \
+                         ../algos/snappy/snappy-c.h \
                          ../algos/zlib/zlib.h \
-                         ../algos/zlib/README.md \
-                         ../algos/bzip2 \
-                         ../algos/lzma \
-                         ../algos/zstd/lib/zstd.h \
-                         ../algos/zstd/README_DOXYGEN.md \
-                         EXAMPLE_README.md
+                         ../algos/bzip2/bzlib.h \
+                         ../algos/lzma/lzma.h \
+                         ../algos/lzma/LzmaDec.h \
+                         ../algos/lzma/LzmaEnc.h \
+                         ../algos/zstd/lib/zstd.h
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding. Doxygen uses
@@ -1307,7 +1307,7 @@ IGNORE_PREFIX          =
 # If the GENERATE_HTML tag is set to YES, doxygen will generate HTML output
 # The default value is: YES.
 
-GENERATE_HTML          = YES
+GENERATE_HTML          = NO
 
 # The HTML_OUTPUT tag is used to specify where the HTML docs will be put. If a
 # relative path is entered the value of OUTPUT_DIRECTORY will be put in front of
@@ -1342,7 +1342,7 @@ HTML_FILE_EXTENSION    = .html
 # of the possible markers and block names see the documentation.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_HEADER            = styling/header.html
+HTML_HEADER            =
 
 # The HTML_FOOTER tag can be used to specify a user-defined HTML footer for each
 # generated HTML page. If the tag is left blank doxygen will generate a standard
@@ -1352,7 +1352,7 @@ HTML_HEADER            = styling/header.html
 # that doxygen normally uses.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_FOOTER            = styling/footer.html
+HTML_FOOTER            =
 
 # The HTML_STYLESHEET tag can be used to specify a user-defined cascading style
 # sheet that is used by each HTML page. It can be used to fine-tune the look of
@@ -1382,8 +1382,7 @@ HTML_STYLESHEET        =
 # documentation.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_EXTRA_STYLESHEET  = styling/doxygen-awesome.css \
-                         styling/doxygen-awesome-sidebar-only.css
+HTML_EXTRA_STYLESHEET  =
 
 # The HTML_EXTRA_FILES tag can be used to specify one or more extra images or
 # other source files which should be copied to the HTML output directory. Note
@@ -1393,8 +1392,7 @@ HTML_EXTRA_STYLESHEET  = styling/doxygen-awesome.css \
 # files will be copied as-is; there are no commands or markers available.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_EXTRA_FILES       = styling/doxygen-fragment-copy-button.js \
-                         styling/doxygen-interactive-toc.js
+HTML_EXTRA_FILES       =
 
 # The HTML_COLORSTYLE tag can be used to specify if the generated HTML output
 # should be rendered with a dark or light theme.
@@ -1411,8 +1409,7 @@ HTML_COLORSTYLE        = AUTO_LIGHT
 
 # The HTML_COLORSTYLE_HUE tag controls the color of the HTML output. Doxygen
 # will adjust the colors in the style sheet and background images according to
-# this color. Hue is specified as an angle on a color-wheel, see
-# https://en.wikipedia.org/wiki/Hue for more information. For instance the value
+# this color. Hue is specified as an angle on a color-wheel. For instance the value
 # 0 represents red, 60 is yellow, 120 is green, 180 is cyan, 240 is blue, 300
 # purple, and 360 is red again.
 # Minimum value: 0, maximum value: 359, default value: 220.
@@ -2101,8 +2098,7 @@ LATEX_BATCHMODE        = NO
 LATEX_HIDE_INDICES     = NO
 
 # The LATEX_BIB_STYLE tag can be used to specify the style to use for the
-# bibliography, e.g. plainnat, or ieeetr. See
-# https://en.wikipedia.org/wiki/BibTeX and \cite for more info.
+# bibliography, e.g. plainnat, or ieeetr.
 # The default value is: plain.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
