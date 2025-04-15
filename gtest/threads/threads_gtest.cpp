@@ -44,7 +44,6 @@
 #include "threads/threads.h"
 #include "api/aocl_compression.h"
 #include "api/types.h"
-#include "algos/common/aoclThreadUtils.h"
 
 using namespace std;
 

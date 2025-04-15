@@ -1,4 +1,3 @@
-
 /*-------------------------------------------------------------*/
 /*--- Private header file for the library.                  ---*/
 /*---                                       bzlib_private.h ---*/
@@ -467,7 +466,9 @@ typedef
       Int32*   save_gLimit;
       Int32*   save_gBase;
       Int32*   save_gPerm;
-
+#ifdef AOCL_ENABLE_THREADS
+      mt_data_list* mt_head_node;
+#endif /* AOCL_ENABLE_THREADS */
    }
    DState;
 
@@ -551,6 +552,34 @@ extern int AOCL_use_libsais;
    So total extra elements required is "m_d*temp_n=20*2"
 */
 #define AOCL_LIBSAIS_FS 20*2
+
+#ifdef AOCL_ENABLE_THREADS
+#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC) \
+do { \
+      mt_data_list* mt_head_node = s->mt_head_node; \
+      if(mt_head_node) \
+      { \
+         /* Creating a checksum node and assigning a checksum value. */ \
+         mt_checksum_node * current = (mt_checksum_node *)malloc(sizeof(mt_checksum_node)); \
+         current->checksum = blockCRC; \
+         current->next = NULL; \
+         /* Head of the list would be stored in mt_head_node. */ \
+         if(mt_head_node->head == NULL) \
+         { \
+            mt_head_node->current = current; \
+            mt_head_node->head = current; \
+         } \
+         else \
+         { \
+            mt_head_node->current->next = current; \
+            mt_head_node->current = current; \
+         } \
+      } \
+} while (0)
+#else
+#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC)
+#endif
+
 #endif
 extern void aocl_register_mainSimpleSort_fmv (int optOff, int optLevel);
 

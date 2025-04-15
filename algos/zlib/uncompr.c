@@ -14,7 +14,6 @@
 #ifdef AOCL_ENABLE_THREADS
 #include <string.h>
 #include "threads/threads.h"
-#include "algos/common/aoclThreadUtils.h"
 #include "aocl_zlib_utils.h"
 #define MAX_WBITS 15
 #endif
@@ -158,7 +157,7 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
     if(rap_metadata_len < 0)
         return Z_MEM_ERROR;
 
-    if (AOCL_MT_NO_PARTITIONS(thread_group_handle))
+    if (AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle))
     {
         source += (rap_metadata_len + header_size); // skip RAP frame and header
         *sourceLen -= (rap_metadata_len + header_size + trailer_size);

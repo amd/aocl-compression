@@ -103,7 +103,6 @@
 
 #ifdef AOCL_ENABLE_THREADS
 #include "threads/threads.h"
-#include "algos/common/aoclThreadUtils.h"
 #endif
 
 #ifdef AOCL_ZSTD_OPT
@@ -1366,7 +1365,7 @@ size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const
         return ERROR(GENERIC);
     }
 
-    if (AOCL_MT_NO_PARTITIONS(thread_group_handle))
+    if (AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle))
     {
         LOG_UNFORMATTED(INFO, logCtx, "Running single threaded decompression");
         //Single thread available for processing. Skip RAP frame and process data in one go

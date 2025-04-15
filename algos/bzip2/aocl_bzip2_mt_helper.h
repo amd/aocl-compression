@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
  
- /** @file aocl_multithreaded_utility.h
+ /** @file aocl_bzip2_mt_helper.h
  *  
  *  @brief Helper functions for multithreaded compression/decompression functions.
  *
@@ -70,9 +70,12 @@ void append(Char **output, UInt32 c, Int32 bits, bit_stream *state);
 // Flushes any remaining bits in the buffer to the output.
 void finish_append(Char **output, bit_stream *state);
 
-// Free resources related to multithreaded compression including thread group, global table, and checksum list.
-void aocl_bzip2_mt_destroy(aocl_thread_group_t *thread_group_handle, mt_data_list *mt_head_table);
+// Computes a combined checksum from the individual checksums of all blocks handled by the current thread.
+UInt32 bz_mt_cur_thread_checksum(mt_checksum_node * current, UInt32 checksum);
+
+// Frees the memory allocated for the multithreaded checksum nodes.
+void bz_mt_free_checksum_nodes(Int32 num_threads, mt_data_list *mt_head_table);
 
 // Performs post-processing steps after multi-threaded BZIP2 compression.
 // It combines the compressed data from each thread, calculates the final checksum, and appends it to the output.
-UInt32 aocl_bzip2_mt_post_processing(Char *dest, aocl_thread_group_t *thread_group_handle, mt_data_list* mt_head_table);
+UInt32 aocl_bzip2_mt_post_processing(Char *dest, aocl_thread_group_t *thread_group_handle, mt_data_list* mt_head_table, Int32 rap_frame_length);

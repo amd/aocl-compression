@@ -369,7 +369,6 @@ typedef enum {
 
 #ifdef AOCL_ENABLE_THREADS_LZ4
 #include "threads/threads.h"
-#include "algos/common/aoclThreadUtils.h"
 #endif
 
 /*-************************************
@@ -3735,7 +3734,7 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
     }
     
 
-    if (AOCL_MT_NO_PARTITIONS(thread_group_handle))
+    if (AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle))
     {
         LOG_UNFORMATTED(INFO, logCtx, "Running single threaded decompress");
         result = LZ4_decompress_safe_ST(source + ret_status, dest, compressedSize - ret_status, maxDecompressedSize);

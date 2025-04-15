@@ -762,27 +762,7 @@ void BZ2_compressBlock ( EState* s, Bool is_last_block )
    if (s->nblock > 0) {
 
       BZ_FINALISE_CRC ( s->blockCRC );
-#ifdef AOCL_ENABLE_THREADS
-      mt_data_list* mt_head_node = s->mt_head_node;
-      if(mt_head_node)
-      {
-         // Creating a checksum node and assigning a checksum value.
-         mt_checksum_node * current = (mt_checksum_node *)malloc(sizeof(mt_checksum_node));
-         current->checksum = s->blockCRC;
-         current->next = NULL;
-         // Head of the list would be stored in mt_head_node.
-         if(mt_head_node->head == NULL)
-         {
-            mt_head_node->current = current;
-            mt_head_node->head = current;
-         }
-         else
-         {
-            mt_head_node->current->next = current;
-            mt_head_node->current = current;
-         }
-      }
-#endif /* AOCL_ENABLE_THREADS */
+      AOCL_APPEND_CHECKSUM_NODE(s, s->blockCRC);
       s->combinedCRC = (s->combinedCRC << 1) | (s->combinedCRC >> 31);
       s->combinedCRC ^= s->blockCRC;
       if (s->blockNo > 1) s->numZ = 0;

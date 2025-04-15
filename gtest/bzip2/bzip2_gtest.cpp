@@ -45,6 +45,9 @@
 #include "algos/bzip2/bzlib.h"
 #include "algos/bzip2/bzlib_private.h"
 #include "gtest_utils.h"
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif /* AOCL_ENABLE_THREADS */
 
 #define DEFAULT_OPT_LEVEL 2
 
@@ -625,7 +628,12 @@ bool verify_uncompressed_equal_original(char * compressed, unsigned int compress
     EXPECT_EQ(uncompressedLen, orginalLen);
     if(memcmp(uncompressedBuf.data(), original, orginalLen) != 0)
         return false;
+#ifndef AOCL_ENABLE_THREADS
     return is_valid_bzip2_frame(compressed);
+#else
+    int rap_frame_len = aocl_skip_rap_frame_mt(compressed, compressedLen);
+    return is_valid_bzip2_frame(compressed + rap_frame_len);
+#endif /* AOCL_ENABLE_THREADS */
 }
 
 /*

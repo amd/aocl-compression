@@ -114,7 +114,6 @@
 
 #ifdef AOCL_ENABLE_THREADS
 #include "threads/threads.h"
-#include "algos/common/aoclThreadUtils.h"
 #endif
 // AOCL definitions end
 
@@ -5159,7 +5158,7 @@ aocl_thread_group_t thread_group_handle;
     ret_status = 0;
   }
 
-  if (ret_status == 0 /* for when compressed is NULL*/ || AOCL_MT_NO_PARTITIONS(thread_group_handle)) {
+  if (ret_status == 0 /* for when compressed is NULL*/ || AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle)) {
     LOG_UNFORMATTED(INFO, logCtx, "Running single threaded decompression");
     size_t ulength;
     const char *start_compressed = compressed + ret_status;

@@ -370,8 +370,8 @@ if (AOCL_ENABLE_THREADS)
                            threads/threads.c
                            threads/threads.h)
     if (NOT AOCL_EXCLUDE_BZIP2)
-        set(BZIP2_SRC_FILES ${BZIP2_SRC_FILES}  ${ALGOS_PATH}/bzip2/aocl_multithreaded_utility.c 
-                                                ${ALGOS_PATH}/bzip2/aocl_multithreaded_utility.h)
+        set(BZIP2_SRC_FILES ${BZIP2_SRC_FILES}  ${ALGOS_PATH}/bzip2/aocl_bzip2_mt_helper.c 
+                                                ${ALGOS_PATH}/bzip2/aocl_bzip2_mt_helper.h)
     endif ()
 endif ()
 

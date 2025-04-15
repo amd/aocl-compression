@@ -26,14 +26,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
  
- /** @file aocl_multithreaded_utility.c
+ /** @file aocl_bzip2_mt_helper.c
  *  
  *  @brief Helper functions for multithreaded compression/decompression functions.
  *
  *  @author Niranjan Reddy
  */
 
-#include "aocl_multithreaded_utility.h"
+#include "aocl_bzip2_mt_helper.h"
 
 // Calculates the bit padding needed by matching a fixed trail pattern in the data.
 Int32 get_empty_bits(const UChar *compressed_data)
@@ -134,12 +134,20 @@ void append_checksum(Char **output, UInt32 checksum, bit_stream *state)
     finish_append(output, state);
 }
 
-// Free resources related to multithreaded compression including thread group, global table, and checksum list.
-void aocl_bzip2_mt_destroy(aocl_thread_group_t *thread_group_handle, mt_data_list *mt_head_table)
+// Computes a combined checksum from the individual checksums of all blocks handled by the current thread.
+UInt32 bz_mt_cur_thread_checksum(mt_checksum_node * current, UInt32 checksum)
 {
-    aocl_destroy_parallel_compress_mt(thread_group_handle);
-    // Free checksum nodes of each thread.
-    for (Int32 i = 0; i < thread_group_handle->num_threads; i++)
+    while(current)
+    {
+        combine_checksum(&checksum, current->checksum);
+        current = current->next;
+    }
+    return checksum;
+}
+
+void bz_mt_free_checksum_nodes(Int32 num_threads, mt_data_list *mt_head_table)
+{
+    for (Int32 i = 0; i < num_threads; i++)
     {
         mt_checksum_node *current = mt_head_table[i].head;
         while (current)
@@ -148,6 +156,7 @@ void aocl_bzip2_mt_destroy(aocl_thread_group_t *thread_group_handle, mt_data_lis
             current = current->next;
             free(temp);
         }
+        mt_head_table[i].head = NULL;
     }
 }
 
@@ -155,53 +164,60 @@ void aocl_bzip2_mt_destroy(aocl_thread_group_t *thread_group_handle, mt_data_lis
     Performs post-processing steps after multi-threaded BZIP2 compression.
     It combines the compressed data from each thread, calculates the final checksum, and appends it to the output.
 */
-UInt32 aocl_bzip2_mt_post_processing(Char *dest, aocl_thread_group_t *thread_group_handle, mt_data_list* mt_head_table)
+UInt32 aocl_bzip2_mt_post_processing(Char *dest, aocl_thread_group_t *thread_group_handle, mt_data_list* mt_head_table, Int32 rap_frame_length)
 {
     Char * output = dest;
     UInt32 checksum = 0;
     bit_stream state = {0, 0};
-    UInt32 offset = 0;
+    UInt32 offset = RAP_START_OF_PARTITIONS + (RAP_DATA_BYTES_WITH_DECOMP_LEN * thread_group_handle->num_threads);
+    aocl_thread_info_t * thread_data_table = thread_group_handle->threads_info_list;
+
+    *(AOCL_UINT32*)(&output[RAP_MAGIC_WORD_BYTES]) = rap_frame_length;
+    output += RAP_START_OF_PARTITIONS;
 
     // A table is created, where each element represents, destination ptr, source ptr, and size of copy for all the threads.
     for (Int32 thread_id = 0; thread_id < thread_group_handle->num_threads; thread_id++)
     {
-        AOCL_UINTP dst_size = thread_group_handle->threads_info_list[thread_id].dst_trap_size;
+        AOCL_UINTP dst_size = thread_data_table[thread_id].dst_trap_size;
 
-        if(thread_group_handle->threads_info_list[thread_id].is_error)
+        if(thread_data_table[thread_id].is_error)
             return 0;
 
         if (thread_id != 0)
             dst_size -= BZIP2_HEADER_BYTES;
 
-        thread_group_handle->threads_info_list[thread_id].partition_src_size = offset;
-        thread_group_handle->threads_info_list[thread_id].dst_trap_size = dst_size;
+        // generate RAP data and write to corresponding location in destination buffer
+        *(AOCL_UINT32*)output = offset;
+        output += RAP_OFFSET_BYTES;
+        *(AOCL_UINT32*)output = dst_size;
+        output += RAP_LEN_BYTES;
+        *(AOCL_UINT32*)output = thread_data_table[thread_id].partition_src_size;
+        output += DECOMP_LEN_BYTES;
+
+        thread_data_table[thread_id].partition_src_size = offset;
+        thread_data_table[thread_id].dst_trap_size = dst_size;
         offset += dst_size;
 
         // Combine the checksums from all threads.
-        mt_checksum_node *current = mt_head_table[thread_id].head;
-        while (current)
-        {
-            combine_checksum(&checksum, current->checksum);
-            current = current->next;
-        }
+        checksum = bz_mt_cur_thread_checksum(mt_head_table[thread_id].head, checksum);
     }
     
     // Copy the data from all threads to dest.
     #pragma omp parallel shared(thread_group_handle) num_threads(thread_group_handle->num_threads)
     {
         Int32 thread_id = omp_get_thread_num();
-        AOCL_CHAR *dst_single = thread_group_handle->threads_info_list[thread_id].dst_trap;
-        AOCL_UINTP dst_size = thread_group_handle->threads_info_list[thread_id].dst_trap_size;
+        AOCL_CHAR *dst_single = thread_data_table[thread_id].dst_trap;
+        AOCL_UINTP dst_size = thread_data_table[thread_id].dst_trap_size;
 
         if (thread_id != 0)
         {
             dst_single += BZIP2_HEADER_BYTES;
         }
 
-        memcpy(output+thread_group_handle->threads_info_list[thread_id].partition_src_size, dst_single, dst_size);
+        memcpy(dest+thread_data_table[thread_id].partition_src_size, dst_single, dst_size);
     }
     
-    output += offset;
+    output = dest + offset;
 
     // Append final checksum.
     append_checksum(&output, checksum, &state);

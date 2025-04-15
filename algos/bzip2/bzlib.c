@@ -1,4 +1,3 @@
-
 /*-------------------------------------------------------------*/
 /*--- Library top-level functions.                          ---*/
 /*---                                               bzlib.c ---*/
@@ -1177,6 +1176,9 @@ int BZ_API(BZ2_bzDecompressInit)
    s->tt                    = NULL;
    s->currBlockNo           = 0;
    s->verbosity             = verbosity;
+#ifdef AOCL_ENABLE_THREADS
+   s->mt_head_node = NULL;
+#endif /* AOCL_ENABLE_THREADS */
 
    return BZ_OK;
 }
@@ -1484,6 +1486,7 @@ int BZ_API(BZ2_bzDecompress) ( bz_stream *strm )
             if (s->verbosity >= 2) VPrintf0 ( "]" );
             if (s->calculatedBlockCRC != s->storedBlockCRC)
                return BZ_DATA_ERROR;
+            AOCL_APPEND_CHECKSUM_NODE(s, s->storedBlockCRC);
             s->calculatedCombinedCRC 
                = (s->calculatedCombinedCRC << 1) | 
                     (s->calculatedCombinedCRC >> 31);
@@ -2024,7 +2027,8 @@ int BZ2_bzBuffToBuffCompress_internal
 }
 
 #ifdef AOCL_ENABLE_THREADS
-#include "aocl_multithreaded_utility.h"
+#include "aocl_bzip2_mt_helper.h"
+// Multi-threaded version of the BZ2_bzBuffToBuffCompress function.
 int BZ_API(BZ2_bzBuffToBuffCompress) 
                          ( char*         dest, 
                            unsigned int* destLen,
@@ -2067,7 +2071,6 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
          verbosity, 
          workFactor,
          NULL);
-
 
    // memory allocation for multithreaded checksum table.
    mt_head_table = (mt_data_list *)malloc(sizeof(mt_data_list) * thread_group_handle.num_threads);
@@ -2161,7 +2164,7 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
       thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
    }
 
-   *destLen = aocl_bzip2_mt_post_processing(dest, &thread_group_handle, mt_head_table);
+   *destLen = aocl_bzip2_mt_post_processing(dest, &thread_group_handle, mt_head_table, rap_frame_length);
 
    int ret = 0;
    // check for errors.
@@ -2177,7 +2180,8 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
       }
    }
 
-   aocl_bzip2_mt_destroy(&thread_group_handle, mt_head_table);
+   aocl_destroy_parallel_compress_mt(&thread_group_handle);
+   bz_mt_free_checksum_nodes(thread_group_handle.num_threads, mt_head_table);
    free(mt_head_table);
    mt_head_table = NULL;
 
@@ -2186,6 +2190,7 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
 #endif /* AOCL_ENABLE_THREADS */
 
 /*---------------------------------------------------*/
+#ifndef AOCL_ENABLE_THREADS
 int BZ_API(BZ2_bzBuffToBuffDecompress) 
                            ( char*         dest, 
                              unsigned int* destLen,
@@ -2195,6 +2200,19 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)
                              int           verbosity )
 {
    AOCL_SETUP_NATIVE();
+#else
+int BZ_API(BZ2_bzBuffToBuffDecompress_internal) 
+                           ( char*         dest, 
+                             unsigned int* destLen,
+                             char*         source, 
+                             unsigned int  sourceLen,
+                             int           small,
+                             int           verbosity,
+                             int           state,
+                             int           level,
+                             mt_data_list * mt_head_node)
+{
+#endif /* AOCL_ENABLE_THREADS */
    bz_stream strm;
    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
    int ret;
@@ -2217,6 +2235,36 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)
       LOG_UNFORMATTED(INFO, logCtx, "Exit");
       return ret;
    }
+#ifdef AOCL_ENABLE_THREADS
+   DState * s = (DState *)strm.state;
+   s->state = state;
+   if(state != BZ_X_MAGIC_1)
+   {
+      /*
+       * Manual memory allocation for multi-threaded decompression:
+       * In BZ2_decompress (decompress.c), memory allocation normally occurs when s->state 
+       * equals BZ_X_MAGIC_1 (first block with BZIP2 header), since only BZIP2 header has the information about blockSize100k,
+       * after the memory is allocated this memory is reused for subsequent blocks in single-threaded processing. 
+       * However, in parallel processing, only the first thread encounters BZ_X_MAGIC_1 state and performs allocation. 
+       * All other threads start with BZ_X_BLKHDR_1 state (block header only, no BZIP2 header), 
+       * so BZ2_decompress skips memory allocation for them. We manually handle this allocation 
+       * here for parallel threads, using blockSize100k information obtained from the first 
+       * thread's BZIP2 header.
+       * Memory cleanup is handled by BZ2_bzDecompressEnd.
+       */
+      s->blockSize100k = level;
+      if (s->smallDecompress) {
+         s->ll16 = strm.bzalloc(strm.opaque, s->blockSize100k * 100000 * sizeof(UInt16),1 );
+         s->ll4  = strm.bzalloc(strm.opaque,  
+                     ((1 + s->blockSize100k * 100000) >> 1) * sizeof(UChar) , 1);
+         if (s->ll16 == NULL || s->ll4 == NULL) return (BZ_MEM_ERROR);
+      } else {
+         s->tt  = strm.bzalloc(strm.opaque,  s->blockSize100k * 100000 * sizeof(Int32) , 1);
+         if (s->tt == NULL) return (BZ_MEM_ERROR);
+      }
+   }
+   s->mt_head_node = mt_head_node;
+#endif /* AOCL_ENABLE_THREADS */
 
    strm.next_in = source;
    strm.next_out = dest;
@@ -2251,6 +2299,140 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)
    return ret; 
 }
 
+#ifdef AOCL_ENABLE_THREADS
+// It reads the RAP (Random Access Partition) metadata to determine the starting position
+// for each thread's output in the final decompressed buffer.
+int mt_calculate_dst_offset(char const *source, int thread_id)
+{
+   source = source + RAP_START_OF_PARTITIONS;
+   int len = 0;
+   for(int i = 0; i < thread_id; i++)
+   {
+      len += *(AOCL_UINT32 *)(source + RAP_DATA_BYTES);
+      source += RAP_DATA_BYTES_WITH_DECOMP_LEN;
+   }
+   return len;
+}
+
+// Multi-threaded version of the BZ2_bzBuffToBuffDecompress function.
+int BZ_API(BZ2_bzBuffToBuffDecompress)(char *dest,
+                                       unsigned int *destLen,
+                                       char *source,
+                                       unsigned int sourceLen,
+                                       int small,
+                                       int verbosity)
+{
+   AOCL_SETUP_NATIVE();
+   if (dest == NULL || destLen == NULL || source == NULL || (small != 0 && small != 1) || verbosity < 0 || verbosity > 4)
+   {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
+      return BZ_PARAM_ERROR;
+   }
+   aocl_thread_group_t thread_group_handle;
+   aocl_thread_info_t cur_thread_info;
+   Int32 rap_metadata_len = aocl_setup_parallel_decompress_mt(&thread_group_handle, source, dest, sourceLen, *destLen, 0);
+
+   if(rap_metadata_len < 0)
+   {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
+      return rap_metadata_len;
+   }
+   // If RAP metadata is missing or only one thread is available, fall back to single-threaded decompression
+   if (AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle))
+      return BZ2_bzBuffToBuffDecompress_internal(dest, destLen, source + rap_metadata_len, sourceLen - rap_metadata_len, small, verbosity, BZ_X_MAGIC_1, 0, NULL);
+
+   // memory allocation for multithreaded checksum table.
+   mt_data_list * mt_head_table = (mt_data_list *)malloc(sizeof(mt_data_list) * thread_group_handle.num_threads);
+   memset(mt_head_table, 0, sizeof(mt_data_list) * thread_group_handle.num_threads);
+
+   int level = source[rap_metadata_len + 3] - BZ_HDR_0;
+   #pragma omp parallel private(cur_thread_info) shared(thread_group_handle, mt_head_table) num_threads(thread_group_handle.num_threads)
+   {
+      int state = BZ_X_MAGIC_1;
+      int local_result = 0;
+      AOCL_UINT32 thread_id = omp_get_thread_num();
+      AOCL_INT32 thread_parallel_res = 0;
+      Int32 dst_offset = 0;
+      mt_data_list * mt_head_node = &mt_head_table[thread_id];
+
+      AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
+
+      Int32 current_thread_id = AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur);
+      dst_offset = mt_calculate_dst_offset(source, current_thread_id);
+      state = current_thread_id ? BZ_X_BLKHDR_1 : BZ_X_MAGIC_1;
+      thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, &cur_thread_info, 0 /*cmpr_bound_pad*/, current_thread_id);
+      
+      // If partition setup was successful
+      if (thread_parallel_res == 0)
+      {
+         unsigned int dst_len = cur_thread_info.dst_trap_size;
+         local_result = BZ2_bzBuffToBuffDecompress_internal(cur_thread_info.dst_trap, &dst_len,
+                                                                  cur_thread_info.partition_src,
+                                                                  cur_thread_info.partition_src_size,
+                                                                  small, verbosity, state, level, mt_head_node);
+         cur_thread_info.dst_trap_size = (AOCL_UINTP)dst_len;
+         local_result = (local_result == BZ_OUTBUFF_FULL) ? BZ_OK : local_result;
+      } // aocl_do_partition_decompress_mt
+      else
+      {
+         local_result = thread_parallel_res;
+      }
+
+      ti_cur->dst_trap = cur_thread_info.dst_trap;
+      ti_cur->is_error = -1 * local_result;
+
+      // Copy the decompressed data to the final destination buffer
+      if(dst_offset + cur_thread_info.dst_trap_size <= thread_group_handle.dst_size)
+         memcpy(dest + dst_offset, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+      else
+      {
+         ti_cur->is_error = -1 * BZ_OUTBUFF_FULL;
+         break;
+      }
+   
+      // If this is the last thread, update the total decompressed length
+      if(thread_id == thread_group_handle.num_threads-1)
+         *destLen = dst_offset + cur_thread_info.dst_trap_size;
+
+      AOCL_MT_PROCESS_PARTITION_END(ti_cur);
+   } // #pragma omp parallel
+
+   int is_error = BZ_OK;
+   UInt32 calculated_checksum = 0;
+   // Aggregate error status from all threads
+   for(int thread_id = 0; thread_id < thread_group_handle.num_threads; thread_id++)
+   {
+      AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
+      if(ti_cur->is_error != BZ_OK)
+      {
+         is_error = -1 * ti_cur->is_error;
+      }
+      AOCL_MT_PROCESS_PARTITION_END(ti_cur);
+
+      calculated_checksum = bz_mt_cur_thread_checksum(mt_head_table[thread_id].head, calculated_checksum);
+   }
+
+   if(is_error == BZ_OK)
+   {
+      UInt32 stored_checksum = 0;
+      // Extract the stored checksum from the end of the compressed source data (last 4 bytes)
+      for(int i=0;i<4;i++)
+      {
+         unsigned char uc = (unsigned char)source[sourceLen - 4 + i];
+         stored_checksum = (stored_checksum << 8) | uc;
+      }
+      if(stored_checksum != calculated_checksum)
+         is_error = BZ_DATA_ERROR;
+   }
+   
+   aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+   bz_mt_free_checksum_nodes(thread_group_handle.num_threads, mt_head_table);
+   free(mt_head_table);
+   mt_head_table = NULL;
+
+   return is_error;
+}
+#endif /* AOCL_ENABLE_THREADS */
 
 /*---------------------------------------------------*/
 /*--

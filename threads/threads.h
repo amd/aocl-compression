@@ -142,6 +142,26 @@ extern "C"
 
 #define WINDOW_FACTOR 4
 
+#define AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle) (thread_group_handle.threads_info_list == NULL) /* no partitions found after setup */
+
+#define AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur) ti_cur->thread_id /* serialized id of partition associated with a thread */
+
+#define AOCL_MT_IS_FIRST_PARTITION(ti_cur) \
+        (AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur) == 0) /* is first partition of first thread? */
+
+#define AOCL_MT_IS_LAST_PARTITION(thread_group_handle, ti_cur, thread_id) ( /* is last partition of last thread? */ \
+        (thread_id == (thread_group_handle.num_threads - 1) /* last thread */) \
+        && ti_cur->next == NULL /* last partition for this thread */)
+
+#define AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id) /* processing partitions serially. loop start */ \
+        aocl_thread_info_t* ti_cur = &thread_group_handle.threads_info_list[thread_id]; \
+        while (ti_cur) {
+
+
+#define AOCL_MT_PROCESS_PARTITION_END(ti_cur) /* processing partitions serially. loop end */ \
+        ti_cur = ti_cur->next; /* next linked partition */ \
+        }
+
 //#define AOCL_THREADS_LOG
 #ifdef AOCL_THREADS_LOG
 #include <stdio.h>
