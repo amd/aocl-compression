@@ -7,33 +7,6 @@
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
  */
- /*
-  * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
-  *
-  * Redistribution and use in source and binary forms, with or without
-  * modification, are permitted provided that the following conditions are met:
-  *
-  * 1. Redistributions of source code must retain the above copyright notice,
-  * this list of conditions and the following disclaimer.
-  * 2. Redistributions in binary form must reproduce the above copyright notice,
-  * this list of conditions and the following disclaimer in the documentation
-  * and/or other materials provided with the distribution.
-  * 3. Neither the name of the copyright holder nor the names of its
-  * contributors may be used to endorse or promote products derived from this
-  * software without specific prior written permission.
-  *
-  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-  * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-  * POSSIBILITY OF SUCH DAMAGE.
-  */
 
 #ifndef ZSTD_PORTABILITY_MACROS_H
 #define ZSTD_PORTABILITY_MACROS_H
@@ -95,30 +68,45 @@
 /* Mark the internal assembly functions as hidden  */
 #ifdef __ELF__
 # define ZSTD_HIDE_ASM_FUNCTION(func) .hidden func
+#elif defined(__APPLE__)
+# define ZSTD_HIDE_ASM_FUNCTION(func) .private_extern func
 #else
 # define ZSTD_HIDE_ASM_FUNCTION(func)
+#endif
+
+/* Compile time determination of BMI2 support */
+#ifndef STATIC_BMI2
+#  if defined(__BMI2__)
+#    define STATIC_BMI2 1
+#  elif defined(_MSC_VER) && defined(__AVX2__)
+#    define STATIC_BMI2 1 /* MSVC does not have a BMI2 specific flag, but every CPU that supports AVX2 also supports BMI2 */
+#  endif
+#endif
+
+#ifndef STATIC_BMI2
+#  define STATIC_BMI2 0
 #endif
 
 /* Enable runtime BMI2 dispatch based on the CPU.
  * Enabled for clang & gcc >=4.8 on x86 when BMI2 isn't enabled by default.
  */
 #ifndef DYNAMIC_BMI2
-  #if ((defined(__clang__) && __has_attribute(__target__)) \
+#  if ((defined(__clang__) && __has_attribute(__target__)) \
       || (defined(__GNUC__) \
           && (__GNUC__ >= 5 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)))) \
-      && (defined(__x86_64__) || defined(_M_X64)) \
+      && (defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)) \
       && !defined(__BMI2__)
-  #  define DYNAMIC_BMI2 1
-  #else
-  #  define DYNAMIC_BMI2 0
-  #endif
+#    define DYNAMIC_BMI2 1
+#  else
+#    define DYNAMIC_BMI2 0
+#  endif
 #endif
 
 /**
- * Only enable assembly for GNUC compatible compilers,
+ * Only enable assembly for GNU C compatible compilers,
  * because other platforms may not support GAS assembly syntax.
  *
- * Only enable assembly for Linux / MacOS, other platforms may
+ * Only enable assembly for Linux / MacOS / Win32, other platforms may
  * work, but they haven't been tested. This could likely be
  * extended to BSD systems.
  *
@@ -126,7 +114,7 @@
  * 100% of code to be instrumented to work.
  */
 #if defined(__GNUC__)
-#  if defined(__linux__) || defined(__linux) || defined(__APPLE__)
+#  if defined(__linux__) || defined(__linux) || defined(__APPLE__) || defined(_WIN32)
 #    if ZSTD_MEMORY_SANITIZER
 #      define ZSTD_ASM_SUPPORTED 0
 #    elif ZSTD_DATAFLOW_SANITIZER

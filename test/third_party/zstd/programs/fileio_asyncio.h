@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -22,10 +22,6 @@
 
 #ifndef ZSTD_FILEIO_ASYNCIO_H
 #define ZSTD_FILEIO_ASYNCIO_H
-
-#if defined (__cplusplus)
-extern "C" {
-#endif
 
 #include "mem.h"     /* U32, U64 */
 #include "fileio_types.h"
@@ -196,9 +192,5 @@ FILE* AIO_ReadPool_getFile(const ReadPoolCtx_t *ctx);
 /* AIO_ReadPool_closeFile:
  * Closes the current set file. Waits for all current enqueued tasks to complete and resets state. */
 int AIO_ReadPool_closeFile(ReadPoolCtx_t *ctx);
-
-#if defined (__cplusplus)
-}
-#endif
 
 #endif /* ZSTD_FILEIO_ASYNCIO_H */

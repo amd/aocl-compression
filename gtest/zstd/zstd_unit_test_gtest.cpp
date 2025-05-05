@@ -415,7 +415,7 @@ public:
         seqStore.lit = seqStore.litStart;
         seqStore.maxNbLit = MAX_LIT_LENGTH;
 
-        seqStore.sequencesStart = (seqDef*)calloc(MAX_SEQUENCES_POSSIBLE, sizeof(seqDef));
+        seqStore.sequencesStart = (SeqDef*)calloc(MAX_SEQUENCES_POSSIBLE, sizeof(SeqDef));
         seqStore.sequences = seqStore.sequencesStart;
         seqStore.maxNbSeq = MAX_SEQUENCES_POSSIBLE;
     }
@@ -438,7 +438,7 @@ public:
             reset_sequences();
             Test_AOCL_ZSTD_storeSequences(&seqStore, ip, anchor, iend, (U32)OFFSET_TO_OFFBASE(off), mat);
             size_t seqCnt = seqStore.sequences - seqStore.sequencesStart;
-            seqDef* curSeq = seqStore.sequencesStart;
+            SeqDef* curSeq = seqStore.sequencesStart;
             for (size_t i = 0; i < seqCnt; ++i) { // for each sequence validate if total_bits is within bounds
                 U32 offBase = curSeq[0].offBase;
                 if (OFFBASE_IS_OFFSET(offBase)) {
@@ -454,7 +454,7 @@ public:
 
     BYTE* anchor;
     const BYTE* iend;
-    seqStore_t seqStore;
+    SeqStore_t seqStore;
 };
 
 TEST_F(ZSTD_is_totalbits_limited_seq_possible, AOCL_Compression_zstd_is_totalbits_limited_seq_possible_common_1) { // specific cases
@@ -555,7 +555,7 @@ TEST_F(ZSTD_AOCL_is_FdsSupported, AOCL_Compression_zstd_AOCL_is_FdsSupported_com
     }
 
     // ZSTD_dictMatchState
-    ZSTD_matchState_t ms;
+    ZSTD_MatchState_t ms;
     ms.dedicatedDictSearch = ZSTD_dictMatchState;
     zc->blockState.matchState.dictMatchState = &ms;
     hasExtDict = 0;

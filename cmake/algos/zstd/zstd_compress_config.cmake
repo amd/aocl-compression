@@ -261,7 +261,7 @@ set(AOCL_ZSTD_CDNGF_IS_LONG_MATCH [[
      * while imposing constraints, stop enforcing constraints. */
     #define AOCL_LONG_MATCH_LIMIT_DFAST (16 * 1024)
     FORCE_INLINE_TEMPLATE
-    size_t AOCL_ZSTD_isLongMatch(seqStore_t* seqStore, 
+    size_t AOCL_ZSTD_isLongMatch(SeqStore_t* seqStore, 
     const BYTE* ip, const BYTE* match, const BYTE* const iend)
     {
         if (MEM_read64(match) == MEM_read64(ip)) {
@@ -440,8 +440,8 @@ set(AOCL_ZSTD_CFNGF_REP_MATCH [[
        mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend);
        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) 
        {
-            /* First write next hash table entry; we've already calculated it.
-            * This write is known to be safe because the ip1 is before the
+            /* Write next hash table entry: it's already calculated.
+            * This write is known to be safe because ip1 is before the
             * repcode (ip2). */
             hashTable[hash1] = (U32)(ip1 - base);
            goto _store_sequences;
@@ -503,7 +503,7 @@ set(AOCL_ZSTD_CFNGF_IS_LONG_MATCH [[
      * while imposing constraints, stop enforcing constraints. */
     #define AOCL_LONG_MATCH_LIMIT_FAST (16 * 1024)
     FORCE_INLINE_TEMPLATE
-    size_t AOCL_ZSTD_isLongMatch(seqStore_t* seqStore, 
+    size_t AOCL_ZSTD_isLongMatch(SeqStore_t* seqStore, 
         const BYTE* ip, const BYTE* match, const BYTE* const iend)
     {
         if (MEM_read64(match) == MEM_read64(ip)) 

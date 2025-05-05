@@ -43,7 +43,7 @@
 @AOCL_ZSTD_CDNGF_COMMENT@
 FORCE_INLINE_TEMPLATE
 size_t @AOCL_ZSTD_CDNGF_FUNC@(
-    ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+    ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
     void const* src, size_t srcSize, U32 const mls /* template */)
 {
     ZSTD_compressionParameters const* cParams = &ms->cParams;

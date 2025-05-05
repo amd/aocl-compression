@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -299,7 +299,7 @@ static fileStats DiB_fileStats(const char** fileNamesTable, int nbFiles, size_t 
           fs.oneSampleTooLarge |= (fileSize > 2*SAMPLESIZE_MAX);
 
           /* Limit to the first SAMPLESIZE_MAX (128kB) of the file */
-          DISPLAYLEVEL(3, "Sample file '%s' is too large, limiting to %d KB",
+          DISPLAYLEVEL(3, "Sample file '%s' is too large, limiting to %d KB\n",
               fileNamesTable[n], SAMPLESIZE_MAX / (1 KB));
         }
         fs.nbSamples += 1;

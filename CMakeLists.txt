@@ -70,6 +70,7 @@ else()
 endif()
 option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Enabled by default)" ON)
 option (AOCL_ZSTD_SEARCH_SKIP_OPT "Enable ZSTD match skipping optimization that steps more aggresively when matches are not found (Enabled by default)" ON)
+option (AOCL_ZSTD_DYN_BLOCK_SIZE "Enable ZSTD dynamic block size determination  (Disabled by default)" OFF)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option (AOCL_TEST_COVERAGE "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" OFF)
 if(UNIX)
@@ -343,6 +344,7 @@ set (ZSTD_SRC_FILES ${ALGOS_PATH}/zstd/lib/common/code_alignment.c
                     ${ALGOS_PATH}/zstd/lib/compress/fse_compress.c
                     ${ALGOS_PATH}/zstd/lib/compress/huf_compress.c
                     ${ALGOS_PATH}/zstd/lib/compress/hist.c
+                    ${ALGOS_PATH}/zstd/lib/compress/zstd_preSplit.c
                     ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress.c
                     ${ALGOS_PATH}/zstd/lib/decompress/huf_decompress.c
                     ${ALGOS_PATH}/zstd/lib/decompress/huf_decompress_amd64.S

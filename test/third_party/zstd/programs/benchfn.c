@@ -9,7 +9,9 @@
  * You may select, at your option, one of the above-listed licenses.
  */
 
-
+/* AOCL changes:
+ *  + update blockResults over iterations.
+*/
 
 /* *************************************
 *  Includes
@@ -115,7 +117,6 @@ static BMK_runOutcome_t BMK_setValid_runTime(BMK_runTime_t runTime)
 BMK_runOutcome_t BMK_benchFunction(BMK_benchParams_t p,
                                    unsigned nbLoops)
 {
-    size_t dstSize = 0;
     nbLoops += !nbLoops;   /* minimum nbLoops is 1 */
 
     /* init */
@@ -125,7 +126,8 @@ BMK_runOutcome_t BMK_benchFunction(BMK_benchParams_t p,
     }   }
 
     /* benchmark */
-    {   UTIL_time_t const clockStart = UTIL_getTime();
+    {   size_t dstSize = 0;
+        UTIL_time_t const clockStart = UTIL_getTime();
         unsigned loopNb;
         if (p.initFn != NULL) p.initFn(p.initPayload);
         

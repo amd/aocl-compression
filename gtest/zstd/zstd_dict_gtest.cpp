@@ -225,7 +225,7 @@ struct Test_ZSTD_CDict_s {
     ZSTD_dictContentType_e dictContentType;
     U32* entropyWorkspace;
     ZSTD_cwksp workspace;
-    ZSTD_matchState_t matchState;
+    ZSTD_MatchState_t matchState;
     ZSTD_compressedBlockState_t cBlockState;
     ZSTD_customMem customMem;
     U32 dictID;

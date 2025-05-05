@@ -112,29 +112,39 @@ int zstd_bigdict_main(int argc, char** argv)
         ret = 1; break;
     }
 
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_windowLog, 31)))
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_windowLog, 31))) {
         ret = 1; break;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, 1)))
+    }
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, 1))) {
         ret = 1; break;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_overlapLog, 9)))
+    }
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_overlapLog, 9))) {
         ret = 1; break;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 1)))
+    }
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 1))) {
         ret = 1; break;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_strategy, ZSTD_btopt)))
+    }
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_strategy, ZSTD_btopt))) {
         ret = 1; break;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_targetLength, 7)))
+    }
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_targetLength, 7))) {
         ret = 1; break;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_minMatch, 7)))
+    }
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_minMatch, 7))) {
         ret = 1; break;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_searchLog, 1)))
+    }
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_searchLog, 1))) {
         ret = 1; break;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_hashLog, 10)))
+    }
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_hashLog, 10))) {
         ret = 1; break;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_chainLog, 10)))
+    }
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_chainLog, 10))) {
         ret = 1; break;
-
-    if (ZSTD_isError(ZSTD_DCtx_setParameter(dctx, ZSTD_d_windowLogMax, 31)))
+    }
+    if (ZSTD_isError(ZSTD_DCtx_setParameter(dctx, ZSTD_d_windowLogMax, 31))) {
         ret = 1; break;
+    }
 
     RDG_genBuffer(buffer, bufferSize, 1.0, 0.0, 0xbeefcafe);
 
@@ -143,13 +153,15 @@ int zstd_bigdict_main(int argc, char** argv)
         int i;
         for (i = 0; i < 10; ++i) {
             fprintf(stderr, "Compressing 1 GB\n");
-            if (compress(cctx, dctx, out, outSize, buffer, dataSize, roundtrip, ZSTD_e_continue))
+            if (compress(cctx, dctx, out, outSize, buffer, dataSize, roundtrip, ZSTD_e_continue)) {
                 ret = 1; break;
+            }
         }
     }
     fprintf(stderr, "Compressing 1 GB\n");
-    if (compress(cctx, dctx, out, outSize, buffer, dataSize, roundtrip, ZSTD_e_end))
+    if (compress(cctx, dctx, out, outSize, buffer, dataSize, roundtrip, ZSTD_e_end)) {
         ret = 1; break;
+    }
 
     fprintf(stderr, "Success!\n");
     break;

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  *
  * All rights reserved.
  *
@@ -138,7 +138,7 @@ struct ZSTD_DCtx_s
     const void* virtualStart;     /* virtual start of previous segment if it was just before current one */
     const void* dictEnd;          /* end of previous segment */
     size_t expected;
-    ZSTD_frameHeader fParams;
+    ZSTD_FrameHeader fParams;
     U64 processedCSize;
     U64 decodedSize;
     blockType_e bType;            /* used in ZSTD_decompressContinue(), store blockType between block header decoding and block decompression stages */
@@ -155,10 +155,11 @@ struct ZSTD_DCtx_s
     size_t litSize;
     size_t rleSize;
     size_t staticSize;
+    int isFrameDecompression;
 #if AOCL_DECOMPRESS_FAST > 1
     size_t fds;                   /* fast decompress settings flag */
 #endif
-#if DYNAMIC_BMI2 != 0
+#if DYNAMIC_BMI2
     int bmi2;                     /* == 1 if the CPU supports BMI2 and 0 otherwise. CPU support is determined dynamically once per context lifetime. */
 #endif
 
@@ -171,6 +172,7 @@ struct ZSTD_DCtx_s
     ZSTD_DDictHashSet* ddictSet;                    /* Hash set for multiple ddicts */
     ZSTD_refMultipleDDicts_e refMultipleDDicts;     /* User specified: if == 1, will allow references to multiple DDicts. Default == 0 (disabled) */
     int disableHufAsm;
+    int maxBlockSizeParam;
 
     /* streaming */
     ZSTD_dStreamStage streamStage;
@@ -214,7 +216,7 @@ struct ZSTD_DCtx_s
 };  /* typedef'd to ZSTD_DCtx within "zstd.h" */
 
 MEM_STATIC int ZSTD_DCtx_get_bmi2(const struct ZSTD_DCtx_s *dctx) {
-#if DYNAMIC_BMI2 != 0
+#if DYNAMIC_BMI2
 	return dctx->bmi2;
 #else
     (void)dctx;

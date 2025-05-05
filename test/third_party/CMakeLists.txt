@@ -52,6 +52,7 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
                             ${ZSTD_TP_PATH}/programs/datagen.c
                             ${ZSTD_TP_PATH}/programs/timefn.c
                             ${ZSTD_TP_PATH}/programs/util.c
+                            ${ZSTD_TP_PATH}/programs/lorem.c
                             ${ZSTD_TP_PATH}/tests/bigdict.c
                             ${ZSTD_TP_PATH}/tests/external_matchfinder.c
                             ${ZSTD_TP_PATH}/tests/invalidDictionaries.c

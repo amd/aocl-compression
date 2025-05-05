@@ -40,7 +40,9 @@
 #include "zstd_compress_internal.h"  /* ZSTD_hashPtr, ZSTD_count, ZSTD_storeSeq */
 #include "zstd_fast.h"
 
-static void ZSTD_fillHashTableForCDict(ZSTD_matchState_t* ms,
+static
+ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+void ZSTD_fillHashTableForCDict(ZSTD_MatchState_t* ms,
                         const void* const end,
                         ZSTD_dictTableLoadMethod_e dtlm)
 {
@@ -75,7 +77,9 @@ static void ZSTD_fillHashTableForCDict(ZSTD_matchState_t* ms,
                 }   }   }   }
 }
 
-static void ZSTD_fillHashTableForCCtx(ZSTD_matchState_t* ms,
+static
+ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+void ZSTD_fillHashTableForCCtx(ZSTD_MatchState_t* ms,
                         const void* const end,
                         ZSTD_dictTableLoadMethod_e dtlm)
 {
@@ -109,7 +113,7 @@ static void ZSTD_fillHashTableForCCtx(ZSTD_matchState_t* ms,
     }   }   }   }
 }
 
-void ZSTD_fillHashTable(ZSTD_matchState_t* ms,
+void ZSTD_fillHashTable(ZSTD_MatchState_t* ms,
                         const void* const end,
                         ZSTD_dictTableLoadMethod_e dtlm,
                         ZSTD_tableFillPurpose_e tfp)
@@ -119,6 +123,50 @@ void ZSTD_fillHashTable(ZSTD_matchState_t* ms,
     } else {
         ZSTD_fillHashTableForCCtx(ms, end, dtlm);
     }
+}
+
+
+typedef int (*ZSTD_match4Found) (const BYTE* currentPtr, const BYTE* matchAddress, U32 matchIdx, U32 idxLowLimit);
+
+static int
+ZSTD_match4Found_cmov(const BYTE* currentPtr, const BYTE* matchAddress, U32 matchIdx, U32 idxLowLimit)
+{
+    /* Array of ~random data, should have low probability of matching data.
+     * Load from here if the index is invalid.
+     * Used to avoid unpredictable branches. */
+    static const BYTE dummy[] = {0x12,0x34,0x56,0x78};
+
+    /* currentIdx >= lowLimit is a (somewhat) unpredictable branch.
+     * However expression below compiles into conditional move.
+     */
+    const BYTE* mvalAddr = ZSTD_selectAddr(matchIdx, idxLowLimit, matchAddress, dummy);
+    /* Note: this used to be written as : return test1 && test2;
+     * Unfortunately, once inlined, these tests become branches,
+     * in which case it becomes critical that they are executed in the right order (test1 then test2).
+     * So we have to write these tests in a specific manner to ensure their ordering.
+     */
+    if (MEM_read32(currentPtr) != MEM_read32(mvalAddr)) return 0;
+    /* force ordering of these tests, which matters once the function is inlined, as they become branches */
+#if defined(__GNUC__)
+    __asm__("");
+#endif
+    return matchIdx >= idxLowLimit;
+}
+
+static int
+ZSTD_match4Found_branch(const BYTE* currentPtr, const BYTE* matchAddress, U32 matchIdx, U32 idxLowLimit)
+{
+    /* using a branch instead of a cmov,
+     * because it's faster in scenarios where matchIdx >= idxLowLimit is generally true,
+     * aka almost all candidates are within range */
+    U32 mval;
+    if (matchIdx >= idxLowLimit) {
+        mval = MEM_read32(matchAddress);
+    } else {
+        mval = MEM_read32(currentPtr) ^ 1; /* guaranteed to not match. */
+    }
+
+    return (MEM_read32(currentPtr) == mval);
 }
 
 
@@ -168,17 +216,17 @@ void ZSTD_fillHashTable(ZSTD_matchState_t* ms,
  *
  * This is also the work we do at the beginning to enter the loop initially.
  */
-FORCE_INLINE_TEMPLATE size_t
-ZSTD_compressBlock_fast_noDict_generic(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+FORCE_INLINE_TEMPLATE
+ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+size_t ZSTD_compressBlock_fast_noDict_generic(
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize,
-        U32 const mls, U32 const hasStep)
+        U32 const mls, int useCmov)
 {
     const ZSTD_compressionParameters* const cParams = &ms->cParams;
     U32* const hashTable = ms->hashTable;
     U32 const hlog = cParams->hashLog;
-    /* support stepSize of 0 */
-    size_t const stepSize = hasStep ? (cParams->targetLength + !(cParams->targetLength) + 1) : 2;
+    size_t const stepSize = cParams->targetLength + !(cParams->targetLength) + 1; /* min 2 */
     const BYTE* const base = ms->window.base;
     const BYTE* const istart = (const BYTE*)src;
     const U32   endIndex = (U32)((size_t)(istart - base) + srcSize);
@@ -200,8 +248,7 @@ ZSTD_compressBlock_fast_noDict_generic(
 
     size_t hash0; /* hash for ip0 */
     size_t hash1; /* hash for ip1 */
-    U32 idx; /* match idx for ip0 */
-    U32 mval; /* src value at match idx */
+    U32 matchIdx; /* match idx for ip0 */
 
     U32 offcode;
     const BYTE* match0;
@@ -214,6 +261,7 @@ ZSTD_compressBlock_fast_noDict_generic(
     size_t step;
     const BYTE* nextStep;
     const size_t kStepIncr = (1 << (kSearchStrength - 1));
+    const ZSTD_match4Found matchFound = useCmov ? ZSTD_match4Found_cmov : ZSTD_match4Found_branch;
 
     DEBUGLOG(5, "ZSTD_compressBlock_fast_generic");
     ip0 += (ip0 == prefixStart);
@@ -242,7 +290,7 @@ _start: /* Requires: ip0 */
     hash0 = ZSTD_hashPtr(ip0, hlog, mls);
     hash1 = ZSTD_hashPtr(ip1, hlog, mls);
 
-    idx = hashTable[hash0];
+    matchIdx = hashTable[hash0];
 
     do {
         /* load repcode match for ip[2]*/
@@ -262,35 +310,25 @@ _start: /* Requires: ip0 */
             offcode = REPCODE1_TO_OFFBASE;
             mLength += 4;
 
-            /* First write next hash table entry; we've already calculated it.
-             * This write is known to be safe because the ip1 is before the
+            /* Write next hash table entry: it's already calculated.
+             * This write is known to be safe because ip1 is before the
              * repcode (ip2). */
             hashTable[hash1] = (U32)(ip1 - base);
 
             goto _match;
         }
 
-        /* load match for ip[0] */
-        if (idx >= prefixStartIndex) {
-            mval = MEM_read32(base + idx);
-        } else {
-            mval = MEM_read32(ip0) ^ 1; /* guaranteed to not match. */
-        }
-
-        /* check match at ip[0] */
-        if (MEM_read32(ip0) == mval) {
-            /* found a match! */
-
-            /* First write next hash table entry; we've already calculated it.
-             * This write is known to be safe because the ip1 == ip0 + 1, so
-             * we know we will resume searching after ip1 */
+         if (matchFound(ip0, base + matchIdx, matchIdx, prefixStartIndex)) {
+            /* Write next hash table entry (it's already calculated).
+            * This write is known to be safe because the ip1 == ip0 + 1,
+            * so searching will resume after ip1 */
             hashTable[hash1] = (U32)(ip1 - base);
 
             goto _offset;
         }
 
         /* lookup ip[1] */
-        idx = hashTable[hash1];
+        matchIdx = hashTable[hash1];
 
         /* hash ip[2] */
         hash0 = hash1;
@@ -305,36 +343,19 @@ _start: /* Requires: ip0 */
         current0 = (U32)(ip0 - base);
         hashTable[hash0] = current0;
 
-        /* load match for ip[0] */
-        if (idx >= prefixStartIndex) {
-            mval = MEM_read32(base + idx);
-        } else {
-            mval = MEM_read32(ip0) ^ 1; /* guaranteed to not match. */
-        }
-
-        /* check match at ip[0] */
-        if (MEM_read32(ip0) == mval) {
-            /* found a match! */
-
-            /* first write next hash table entry; we've already calculated it */
+         if (matchFound(ip0, base + matchIdx, matchIdx, prefixStartIndex)) {
+            /* Write next hash table entry, since it's already calculated */
             if (step <= 4) {
-                /* We need to avoid writing an index into the hash table >= the
-                 * position at which we will pick up our searching after we've
-                 * taken this match.
-                 *
-                 * The minimum possible match has length 4, so the earliest ip0
-                 * can be after we take this match will be the current ip0 + 4.
-                 * ip1 is ip0 + step - 1. If ip1 is >= ip0 + 4, we can't safely
-                 * write this position.
-                 */
+                /* Avoid writing an index if it's >= position where search will resume.
+                * The minimum possible match has length 4, so search can resume at ip0 + 4.
+                */
                 hashTable[hash1] = (U32)(ip1 - base);
             }
-
             goto _offset;
         }
 
         /* lookup ip[1] */
-        idx = hashTable[hash1];
+        matchIdx = hashTable[hash1];
 
         /* hash ip[2] */
         hash0 = hash1;
@@ -356,7 +377,7 @@ _start: /* Requires: ip0 */
     } while (ip3 < ilimit);
 
 _cleanup:
-    /* Note that there are probably still a couple positions we could search.
+    /* Note that there are probably still a couple positions one could search.
      * However, it seems to be a meaningful performance hit to try to search
      * them. So let's not. */
 
@@ -385,7 +406,7 @@ _cleanup:
 _offset: /* Requires: ip0, idx */
 
     /* Compute the offset code. */
-    match0 = base + idx;
+    match0 = base + matchIdx;
     rep_offset2 = rep_offset1;
     rep_offset1 = (U32)(ip0-match0);
     offcode = OFFSET_TO_OFFBASE(rep_offset1);
@@ -430,12 +451,12 @@ _match: /* Requires: ip0, match0, offcode */
     goto _start;
 }
 
-#define ZSTD_GEN_FAST_FN(dictMode, mls, step)                                                            \
-    static size_t ZSTD_compressBlock_fast_##dictMode##_##mls##_##step(                                      \
-            ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                    \
+#define ZSTD_GEN_FAST_FN(dictMode, mml, cmov)                                                       \
+    static size_t ZSTD_compressBlock_fast_##dictMode##_##mml##_##cmov(                              \
+            ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                    \
             void const* src, size_t srcSize)                                                       \
     {                                                                                              \
-        return ZSTD_compressBlock_fast_##dictMode##_generic(ms, seqStore, rep, src, srcSize, mls, step); \
+        return ZSTD_compressBlock_fast_##dictMode##_generic(ms, seqStore, rep, src, srcSize, mml, cmov); \
     }
 
 ZSTD_GEN_FAST_FN(noDict, 4, 1)
@@ -449,439 +470,47 @@ ZSTD_GEN_FAST_FN(noDict, 6, 0)
 ZSTD_GEN_FAST_FN(noDict, 7, 0)
 
 size_t ZSTD_compressBlock_fast(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
-        void const* src, size_t srcSize)
+    ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+    void const* src, size_t srcSize)
 {
-    U32 const mls = ms->cParams.minMatch;
-    assert(ms->dictMatchState == NULL);
-
-    if (ms->cParams.targetLength > 1) {
-        switch(mls)
-        {
-        default: /* includes case 3 */
-        case 4 :
-            return ZSTD_compressBlock_fast_noDict_4_1(ms, seqStore, rep, src, srcSize);
-        case 5 :
-            return ZSTD_compressBlock_fast_noDict_5_1(ms, seqStore, rep, src, srcSize);
-        case 6 :
-            return ZSTD_compressBlock_fast_noDict_6_1(ms, seqStore, rep, src, srcSize);
-        case 7 :
-            return ZSTD_compressBlock_fast_noDict_7_1(ms, seqStore, rep, src, srcSize);
-        }
-    } else {
-        switch(mls)
-        {
-        default: /* includes case 3 */
-        case 4 :
-            return ZSTD_compressBlock_fast_noDict_4_0(ms, seqStore, rep, src, srcSize);
-        case 5 :
-            return ZSTD_compressBlock_fast_noDict_5_0(ms, seqStore, rep, src, srcSize);
-        case 6 :
-            return ZSTD_compressBlock_fast_noDict_6_0(ms, seqStore, rep, src, srcSize);
-        case 7 :
-            return ZSTD_compressBlock_fast_noDict_7_0(ms, seqStore, rep, src, srcSize);
-        }
-
+U32 const mml = ms->cParams.minMatch;
+/* use cmov when "candidate in range" branch is likely unpredictable */
+int const useCmov = ms->cParams.windowLog < 19;
+assert(ms->dictMatchState == NULL);
+if (useCmov) {
+    switch(mml)
+    {
+    default: /* includes case 3 */
+    case 4 :
+        return ZSTD_compressBlock_fast_noDict_4_1(ms, seqStore, rep, src, srcSize);
+    case 5 :
+        return ZSTD_compressBlock_fast_noDict_5_1(ms, seqStore, rep, src, srcSize);
+    case 6 :
+        return ZSTD_compressBlock_fast_noDict_6_1(ms, seqStore, rep, src, srcSize);
+    case 7 :
+        return ZSTD_compressBlock_fast_noDict_7_1(ms, seqStore, rep, src, srcSize);
+    }
+} else {
+    /* use a branch instead */
+    switch(mml)
+    {
+    default: /* includes case 3 */
+    case 4 :
+        return ZSTD_compressBlock_fast_noDict_4_0(ms, seqStore, rep, src, srcSize);
+    case 5 :
+        return ZSTD_compressBlock_fast_noDict_5_0(ms, seqStore, rep, src, srcSize);
+    case 6 :
+        return ZSTD_compressBlock_fast_noDict_6_0(ms, seqStore, rep, src, srcSize);
+    case 7 :
+        return ZSTD_compressBlock_fast_noDict_7_0(ms, seqStore, rep, src, srcSize);
     }
 }
-
-#ifdef AOCL_ZSTD_OPT
-#define PREFETCH_OFFSET 8
-#define PREFETCH_SAFETY (PREFETCH_OFFSET + 4) // value at ip + PREFETCH_SAFETY can be read to prefetch match candidates. +4 as endmost prefetching happens with ip0 + 4.
-/* Compute hash for search key at PREFETCH_OFFSET from ip
-*  Prefetch match candidate stored at hashTable[hashIndex]
-*  If hashTable[hashIndex] is empty, (base + 0) is still a valid address and can be accessed. No check added for this to avoid branching. */
-#define PREFETCH_MATCH(ip) { \
-    size_t nexth = ZSTD_hashPtr((ip) + PREFETCH_OFFSET, hlog, mls); \
-    U32 idxn = hashTable[nexth]; \
-    PREFETCH_L1(base + idxn); \
 }
-
-#if AOCL_DECOMPRESS_FAST > 2
-#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds2_analyze.h"
-#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds3_base.h"
-#elif AOCL_DECOMPRESS_FAST == 2
-#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds2_base.h"
-#endif
-
-#if AOCL_DECOMPRESS_FAST != 2 /* FDS 2 calls only *_fds2_base functions */
-/* The following optimizations have been included in the optimized function:
-    - when the AOCL_ZSTD_SEARCH_SKIP_OPT flag is enabled,
-        - the search tolerance is reduced to 2^6 (64) instead of 2^8 (256)
-        - for every 64 byte blocks that goes without a single match, the step rate is increased by 3 instead of 1
-        - unnecessary prefetching is avoided when increasing step size
-        - stepSize is fixed at 2
-    - AOCL_ZSTD_count is called in place of ZSTD_count
-    - Prefetch potential future match candidates
-*/
-FORCE_INLINE_TEMPLATE size_t
-AOCL_ZSTD_compressBlock_fast_noDict_generic(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
-        void const* src, size_t srcSize,
-        U32 const mls, U32 const hasStep)
-{
-    const ZSTD_compressionParameters* const cParams = &ms->cParams;
-    U32* const hashTable = ms->hashTable;
-    U32 const hlog = cParams->hashLog;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-    size_t const stepSize = 2;
-#else
-    /* support stepSize of 0 */
-    size_t const stepSize = hasStep ? (cParams->targetLength + !(cParams->targetLength) + 1) : 2;
-#endif
-    const BYTE* const base = ms->window.base;
-    const BYTE* const istart = (const BYTE*)src;
-    const U32   endIndex = (U32)((size_t)(istart - base) + srcSize);
-    const U32   prefixStartIndex = ZSTD_getLowestPrefixIndex(ms, endIndex, cParams->windowLog);
-    const BYTE* const prefixStart = base + prefixStartIndex;
-    const BYTE* const iend = istart + srcSize;
-    const BYTE* const ilimit = iend - HASH_READ_SIZE - PREFETCH_SAFETY;
-
-    const BYTE* anchor = istart;
-    const BYTE* ip0 = istart;
-    const BYTE* ip1;
-    const BYTE* ip2;
-    const BYTE* ip3;
-    U32 current0;
-
-    U32 rep_offset1 = rep[0];
-    U32 rep_offset2 = rep[1];
-    U32 offsetSaved1 = 0, offsetSaved2 = 0;
-
-    size_t hash0; /* hash for ip0 */
-    size_t hash1; /* hash for ip1 */
-    U32 idx; /* match idx for ip0 */
-    U32 mval; /* src value at match idx */
-
-    U32 offcode;
-    const BYTE* match0;
-    size_t mLength;
-
-    /* ip0 and ip1 are always adjacent. The targetLength skipping and
-     * uncompressibility acceleration is applied to every other position,
-     * matching the behavior of #1562. step therefore represents the gap
-     * between pairs of positions, from ip0 to ip2 or ip1 to ip3. */
-    size_t step;
-    const BYTE* nextStep;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-    const size_t kStepIncr = (1 << (aocl_kSearchStrengthFast - 1));
-#else
-    const size_t kStepIncr = (1 << (kSearchStrength - 1));
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
-
-    DEBUGLOG(5, "ZSTD_compressBlock_fast_generic");
-    ip0 += (ip0 == prefixStart);
-    {   U32 const curr = (U32)(ip0 - base);
-        U32 const windowLow = ZSTD_getLowestPrefixIndex(ms, curr, cParams->windowLog);
-        U32 const maxRep = curr - windowLow;
-        if (rep_offset2 > maxRep) offsetSaved2 = rep_offset2, rep_offset2 = 0;
-        if (rep_offset1 > maxRep) offsetSaved1 = rep_offset1, rep_offset1 = 0;
-    }
-
-    /* start each op */
-_start: /* Requires: ip0 */
-    step = stepSize;
-    nextStep = ip0 + kStepIncr;
-
-    /* calculate positions, ip0 - anchor == 0, so we skip step calc */
-    ip1 = ip0 + 1;
-    ip2 = ip0 + step;
-    ip3 = ip2 + 1;
-
-    if (ip3 >= ilimit) {
-        goto _cleanup;
-    }
-
-    hash0 = ZSTD_hashPtr(ip0, hlog, mls);
-    PREFETCH_MATCH(ip0);
-    hash1 = ZSTD_hashPtr(ip1, hlog, mls);
-    PREFETCH_MATCH(ip1);
-
-    idx = hashTable[hash0];
-
-    do {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-        // Alternate between values 2 and 3 for step while searching for a match. In case
-        // the value of step exceeds 3 (this happens when the value of step is incremented
-        // when ip2 exceeds nextStep), we let step retain its value.
-        step = (step > 3) ? step : step ^ 1;
-#endif
-        /* load repcode match for ip[2]*/
-        const U32 rval = MEM_read32(ip2 - rep_offset1);
-
-        /* write back hash table entry */
-        current0 = (U32)(ip0 - base);
-        hashTable[hash0] = current0;
-
-        /* check repcode at ip[2] */
-        if ((MEM_read32(ip2) == rval) & (rep_offset1 > 0)) {
-            ip0 = ip2;
-            match0 = ip0 - rep_offset1;
-            mLength = ip0[-1] == match0[-1];
-            ip0 -= mLength;
-            match0 -= mLength;
-            offcode = REPCODE1_TO_OFFBASE;
-            mLength += 4;
-
-            /* First write next hash table entry; we've already calculated it.
-             * This write is known to be safe because the ip1 is before the
-             * repcode (ip2). */
-            hashTable[hash1] = (U32)(ip1 - base);
-
-            goto _match;
-        }
-
-        /* load match for ip[0] */
-        if (idx >= prefixStartIndex) {
-            mval = MEM_read32(base + idx);
-        } else {
-            mval = MEM_read32(ip0) ^ 1; /* guaranteed to not match. */
-        }
-
-        /* check match at ip[0] */
-        if (MEM_read32(ip0) == mval) {
-            /* found a match! */
-            PREFETCH_MATCH(ip0 + 4);
-            /* First write next hash table entry; we've already calculated it.
-             * This write is known to be safe because the ip1 == ip0 + 1, so
-             * we know we will resume searching after ip1 */
-            hashTable[hash1] = (U32)(ip1 - base);
-
-            goto _offset;
-        }
-
-        /* lookup ip[1] */
-        idx = hashTable[hash1];
-
-        /* hash ip[2] */
-        hash0 = hash1;
-        hash1 = ZSTD_hashPtr(ip2, hlog, mls);
-
-        /* advance to next positions */
-        ip0 = ip1;
-        ip1 = ip2;
-        ip2 = ip3;
-
-        /* write back hash table entry */
-        current0 = (U32)(ip0 - base);
-        hashTable[hash0] = current0;
-
-        /* load match for ip[0] */
-        if (idx >= prefixStartIndex) {
-            mval = MEM_read32(base + idx);
-        } else {
-            mval = MEM_read32(ip0) ^ 1; /* guaranteed to not match. */
-        }
-
-        /* check match at ip[0] */
-        if (MEM_read32(ip0) == mval) {
-            /* found a match! */
-            PREFETCH_MATCH(ip0 + 4);
-            /* first write next hash table entry; we've already calculated it */
-            if (step <= 4) {
-                /* We need to avoid writing an index into the hash table >= the
-                 * position at which we will pick up our searching after we've
-                 * taken this match.
-                 *
-                 * The minimum possible match has length 4, so the earliest ip0
-                 * can be after we take this match will be the current ip0 + 4.
-                 * ip1 is ip0 + step - 1. If ip1 is >= ip0 + 4, we can't safely
-                 * write this position.
-                 */
-                hashTable[hash1] = (U32)(ip1 - base);
-            }
-
-            goto _offset;
-        }
-
-        /* lookup ip[1] */
-        idx = hashTable[hash1];
-
-        /* hash ip[2] */
-        hash0 = hash1;
-        hash1 = ZSTD_hashPtr(ip2, hlog, mls);
-
-        /* advance to next positions */
-        ip0 = ip1;
-        ip1 = ip2;
-        ip2 = ip0 + step;
-        ip3 = ip1 + step;
-
-        /* calculate step */
-        if (ip2 >= nextStep) {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-            step += 3;
-            LOG_FORMATTED(DEBUG, logCtx, "step = %zu", step);
-#else
-            step++;
-            PREFETCH_L1(ip1 + 64);
-            PREFETCH_L1(ip1 + 128);
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
-            nextStep += kStepIncr;
-        }
-    } while (ip3 < ilimit);
-
-_cleanup:
-    /* Note that there are probably still a couple positions we could search.
-     * However, it seems to be a meaningful performance hit to try to search
-     * them. So let's not. */
-
-    /* When the repcodes are outside of the prefix, we set them to zero before the loop.
-     * When the offsets are still zero, we need to restore them after the block to have a correct
-     * repcode history. If only one offset was invalid, it is easy. The tricky case is when both
-     * offsets were invalid. We need to figure out which offset to refill with.
-     *     - If both offsets are zero they are in the same order.
-     *     - If both offsets are non-zero, we won't restore the offsets from `offsetSaved[12]`.
-     *     - If only one is zero, we need to decide which offset to restore.
-     *         - If rep_offset1 is non-zero, then rep_offset2 must be offsetSaved1.
-     *         - It is impossible for rep_offset2 to be non-zero.
-     *
-     * So if rep_offset1 started invalid (offsetSaved1 != 0) and became valid (rep_offset1 != 0), then
-     * set rep[0] = rep_offset1 and rep[1] = offsetSaved1.
-     */
-    offsetSaved2 = ((offsetSaved1 != 0) && (rep_offset1 != 0)) ? offsetSaved1 : offsetSaved2;
-
-    /* save reps for next block */
-    rep[0] = rep_offset1 ? rep_offset1 : offsetSaved1;
-    rep[1] = rep_offset2 ? rep_offset2 : offsetSaved2;
-
-    /* Return the last literals size */
-    return (size_t)(iend - anchor);
-
-_offset: /* Requires: ip0, idx */
-
-    /* Compute the offset code. */
-    match0 = base + idx;
-    rep_offset2 = rep_offset1;
-    rep_offset1 = (U32)(ip0-match0);
-    offcode = OFFSET_TO_OFFBASE(rep_offset1);
-    mLength = 4;
-
-    /* Count the backwards match length. */
-    while (((ip0>anchor) & (match0>prefixStart)) && (ip0[-1] == match0[-1])) {
-        ip0--;
-        match0--;
-        mLength++;
-    }
-
-_match: /* Requires: ip0, match0, offcode */
-
-    /* Count the forward length. */
-    mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend);
-
-    ZSTD_storeSeq(seqStore, (size_t)(ip0 - anchor), anchor, iend, offcode, mLength);
-
-    ip0 += mLength;
-    anchor = ip0;
-
-    /* Fill table and check for immediate repcode. */
-    if (ip0 <= ilimit) {
-        /* Fill Table */
-        assert(base+current0+2 > istart);  /* check base overflow */
-        hashTable[ZSTD_hashPtr(base+current0+2, hlog, mls)] = current0+2;  /* here because current+2 could be > iend-8 */
-        hashTable[ZSTD_hashPtr(ip0 - 2, hlog, mls)] = (U32)(ip0 - 2 - base);
-
-        if (rep_offset2 > 0) { /* rep_offset2==0 means rep_offset2 is invalidated */
-            while ( (ip0 <= ilimit) && (MEM_read32(ip0) == MEM_read32(ip0 - rep_offset2)) ) {
-                /* store sequence */
-                size_t const rLength = AOCL_ZSTD_count(ip0+4, ip0+4-rep_offset2, iend) + 4;
-                { U32 const tmpOff = rep_offset2; rep_offset2 = rep_offset1; rep_offset1 = tmpOff; } /* swap rep_offset2 <=> rep_offset1 */
-                hashTable[ZSTD_hashPtr(ip0, hlog, mls)] = (U32)(ip0-base);
-                ip0 += rLength;
-                ZSTD_storeSeq(seqStore, 0 /*litLen*/, anchor, iend, REPCODE1_TO_OFFBASE, rLength);
-                anchor = ip0;
-                continue;   /* faster when present (confirmed on gcc-8) ... (?) */
-    }   }   }
-
-    goto _start;
-}
-#endif /* AOCL_DECOMPRESS_FAST != 2 */
-
-#if AOCL_DECOMPRESS_FAST == 2 /* FDS */
-#define AOCL_ZSTD_GEN_FAST_NODICT_FN(mls, step)                                                                 \
-    static size_t AOCL_ZSTD_compressBlock_fast_noDict_##mls##_##step(                                           \
-            ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                                 \
-            void const* src, size_t srcSize)                                                                    \
-    {                                                                                                           \
-        return AOCL_ZSTD_compressBlock_fast_noDict_generic_fds2_base(ms, seqStore, rep, src, srcSize, mls, step);     \
-    }
-#elif AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
-#define AOCL_ZSTD_GEN_FAST_NODICT_FN(mls, step)                                                                 \
-    static size_t AOCL_ZSTD_compressBlock_fast_noDict_##mls##_##step(                                           \
-            ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                                 \
-            void const* src, size_t srcSize)                                                                    \
-    {                                                                                                           \
-        switch(seqStore->fds_config.state)                                                                      \
-        {                                                                                                       \
-        case FDS_FAST2_ANALYZE:                                                                                 \
-            return AOCL_ZSTD_compressBlock_fast_noDict_generic_fds2_analyze(ms, seqStore, rep, src, srcSize, mls, step); \
-        case FDS_ALL_CONF:                                                                                 \
-            return AOCL_ZSTD_compressBlock_fast_noDict_generic_fds3_base(ms, seqStore, rep, src, srcSize, mls, step); \
-        default:                                                                                                \
-            return AOCL_ZSTD_compressBlock_fast_noDict_generic(ms, seqStore, rep, src, srcSize, mls, step);     \
-        }                                                                                                       \
-    }
-#else  /* no FDS */
-#define AOCL_ZSTD_GEN_FAST_NODICT_FN(mls, step)                                                                 \
-    static size_t AOCL_ZSTD_compressBlock_fast_noDict_##mls##_##step(                                           \
-            ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                                 \
-            void const* src, size_t srcSize)                                                                    \
-    {                                                                                                           \
-        return AOCL_ZSTD_compressBlock_fast_noDict_generic(ms, seqStore, rep, src, srcSize, mls, step);         \
-    }
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
-
-AOCL_ZSTD_GEN_FAST_NODICT_FN(4, 1)
-AOCL_ZSTD_GEN_FAST_NODICT_FN(5, 1)
-AOCL_ZSTD_GEN_FAST_NODICT_FN(6, 1)
-AOCL_ZSTD_GEN_FAST_NODICT_FN(7, 1)
-
-AOCL_ZSTD_GEN_FAST_NODICT_FN(4, 0)
-AOCL_ZSTD_GEN_FAST_NODICT_FN(5, 0)
-AOCL_ZSTD_GEN_FAST_NODICT_FN(6, 0)
-AOCL_ZSTD_GEN_FAST_NODICT_FN(7, 0)
-
-size_t AOCL_ZSTD_compressBlock_fast(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
-        void const* src, size_t srcSize)
-{
-    U32 const mls = ms->cParams.minMatch;
-    assert(ms->dictMatchState == NULL);
-
-    if (ms->cParams.targetLength > 1) {
-        switch(mls)
-        {
-        default: /* includes case 3 */
-        case 4 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_4_1(ms, seqStore, rep, src, srcSize);
-        case 5 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_5_1(ms, seqStore, rep, src, srcSize);
-        case 6 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_6_1(ms, seqStore, rep, src, srcSize);
-        case 7 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_7_1(ms, seqStore, rep, src, srcSize);
-        }
-    } else {
-        switch(mls)
-        {
-        default: /* includes case 3 */
-        case 4 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_4_0(ms, seqStore, rep, src, srcSize);
-        case 5 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_5_0(ms, seqStore, rep, src, srcSize);
-        case 6 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_6_0(ms, seqStore, rep, src, srcSize);
-        case 7 :
-            return AOCL_ZSTD_compressBlock_fast_noDict_7_0(ms, seqStore, rep, src, srcSize);
-        }
-
-    }
-}
-#endif /* AOCL_ZSTD_OPT */
 
 FORCE_INLINE_TEMPLATE
+ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
 size_t ZSTD_compressBlock_fast_dictMatchState_generic(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize, U32 const mls, U32 const hasStep)
 {
     const ZSTD_compressionParameters* const cParams = &ms->cParams;
@@ -900,7 +529,7 @@ size_t ZSTD_compressBlock_fast_dictMatchState_generic(
     const BYTE* const ilimit = iend - HASH_READ_SIZE;
     U32 offset_1=rep[0], offset_2=rep[1];
 
-    const ZSTD_matchState_t* const dms = ms->dictMatchState;
+    const ZSTD_MatchState_t* const dms = ms->dictMatchState;
     const ZSTD_compressionParameters* const dictCParams = &dms->cParams ;
     const U32* const dictHashTable = dms->hashTable;
     const U32 dictStartIndex       = dms->window.dictLimit;
@@ -926,7 +555,7 @@ size_t ZSTD_compressBlock_fast_dictMatchState_generic(
 
     if (ms->prefetchCDictTables) {
         size_t const hashTableBytes = (((size_t)1) << dictCParams->hashLog) * sizeof(U32);
-        PREFETCH_AREA(dictHashTable, hashTableBytes)
+        PREFETCH_AREA(dictHashTable, hashTableBytes);
     }
 
     /* init */
@@ -964,8 +593,7 @@ size_t ZSTD_compressBlock_fast_dictMatchState_generic(
             size_t const dictHashAndTag1 = ZSTD_hashPtr(ip1, dictHBits, mls);
             hashTable[hash0] = curr;   /* update hash table */
 
-            if (((U32) ((prefixStartIndex - 1) - repIndex) >=
-                 3) /* intentional underflow : ensure repIndex isn't overlapping dict + prefix */
+            if ((ZSTD_index_overlap_check(prefixStartIndex, repIndex))
                 && (MEM_read32(repMatch) == MEM_read32(ip0 + 1))) {
                 const BYTE* const repMatchEnd = repIndex < prefixStartIndex ? dictEnd : iend;
                 mLength = ZSTD_count_2segments(ip0 + 1 + 4, repMatch + 4, iend, repMatchEnd, prefixStart) + 4;
@@ -998,8 +626,8 @@ size_t ZSTD_compressBlock_fast_dictMatchState_generic(
                 }
             }
 
-            if (matchIndex > prefixStartIndex && MEM_read32(match) == MEM_read32(ip0)) {
-                /* found a regular match */
+            if (ZSTD_match4Found_cmov(ip0, match, matchIndex, prefixStartIndex)) {
+                /* found a regular match of size >= 4 */
                 U32 const offset = (U32) (ip0 - match);
                 mLength = ZSTD_count(ip0 + 4, match + 4, iend) + 4;
                 while (((ip0 > anchor) & (match > prefixStart))
@@ -1049,7 +677,7 @@ size_t ZSTD_compressBlock_fast_dictMatchState_generic(
                 const BYTE* repMatch2 = repIndex2 < prefixStartIndex ?
                         dictBase - dictIndexDelta + repIndex2 :
                         base + repIndex2;
-                if ( ((U32)((prefixStartIndex-1) - (U32)repIndex2) >= 3 /* intentional overflow */)
+                if ( (ZSTD_index_overlap_check(prefixStartIndex, repIndex2))
                    && (MEM_read32(repMatch2) == MEM_read32(ip0))) {
                     const BYTE* const repEnd2 = repIndex2 < prefixStartIndex ? dictEnd : iend;
                     size_t const repLength2 = ZSTD_count_2segments(ip0+4, repMatch2+4, iend, repEnd2, prefixStart) + 4;
@@ -1085,7 +713,7 @@ ZSTD_GEN_FAST_FN(dictMatchState, 6, 0)
 ZSTD_GEN_FAST_FN(dictMatchState, 7, 0)
 
 size_t ZSTD_compressBlock_fast_dictMatchState(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize)
 {
     U32 const mls = ms->cParams.minMatch;
@@ -1105,8 +733,10 @@ size_t ZSTD_compressBlock_fast_dictMatchState(
 }
 
 
-static size_t ZSTD_compressBlock_fast_extDict_generic(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+static
+ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+size_t ZSTD_compressBlock_fast_extDict_generic(
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize, U32 const mls, U32 const hasStep)
 {
     const ZSTD_compressionParameters* const cParams = &ms->cParams;
@@ -1341,7 +971,7 @@ _match: /* Requires: ip0, match0, offcode, matchEnd */
         while (ip0 <= ilimit) {
             U32 const repIndex2 = (U32)(ip0-base) - offset_2;
             const BYTE* const repMatch2 = repIndex2 < prefixStartIndex ? dictBase + repIndex2 : base + repIndex2;
-            if ( (((U32)((prefixStartIndex-1) - repIndex2) >= 3) & (offset_2 > 0))  /* intentional underflow */
+            if ( ((ZSTD_index_overlap_check(prefixStartIndex, repIndex2)) & (offset_2 > 0))
                  && (MEM_read32(repMatch2) == MEM_read32(ip0)) ) {
                 const BYTE* const repEnd2 = repIndex2 < prefixStartIndex ? dictEnd : iend;
                 size_t const repLength2 = ZSTD_count_2segments(ip0+4, repMatch2+4, iend, repEnd2, prefixStart) + 4;
@@ -1364,7 +994,7 @@ ZSTD_GEN_FAST_FN(extDict, 6, 0)
 ZSTD_GEN_FAST_FN(extDict, 7, 0)
 
 size_t ZSTD_compressBlock_fast_extDict(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize)
 {
     U32 const mls = ms->cParams.minMatch;
@@ -1383,6 +1013,382 @@ size_t ZSTD_compressBlock_fast_extDict(
     }
 }
 
+/* ***************************************************************
+*  AOCL optimized functions
+*****************************************************************/
+#ifdef AOCL_ZSTD_OPT
+#define PREFETCH_OFFSET 8
+#define PREFETCH_SAFETY (PREFETCH_OFFSET + 4) // value at ip + PREFETCH_SAFETY can be read to prefetch match candidates. +4 as endmost prefetching happens with ip0 + 4.
+/* Compute hash for search key at PREFETCH_OFFSET from ip
+*  Prefetch match candidate stored at hashTable[hashIndex]
+*  If hashTable[hashIndex] is empty, (base + 0) is still a valid address and can be accessed. No check added for this to avoid branching. */
+#define PREFETCH_MATCH(ip) { \
+    size_t nexth = ZSTD_hashPtr((ip) + PREFETCH_OFFSET, hlog, mls); \
+    U32 idxn = hashTable[nexth]; \
+    PREFETCH_L1(base + idxn); \
+}
+
+#if AOCL_DECOMPRESS_FAST > 2
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds2_analyze.h"
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds3_base.h"
+#elif AOCL_DECOMPRESS_FAST == 2
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds2_base.h"
+#endif
+
+#if AOCL_DECOMPRESS_FAST != 2 /* FDS 2 calls only *_fds2_base functions */
+/* The following optimizations have been included in the optimized function:
+    - when the AOCL_ZSTD_SEARCH_SKIP_OPT flag is enabled,
+        - the search tolerance is reduced to 2^6 (64) instead of 2^8 (256)
+        - for every 64 byte blocks that goes without a single match, the step rate is increased by 3 instead of 1
+        - unnecessary prefetching is avoided when increasing step size
+        - stepSize is fixed at 2
+    - AOCL_ZSTD_count is called in place of ZSTD_count
+    - Prefetch potential future match candidates
+*/
+FORCE_INLINE_TEMPLATE
+ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+size_t AOCL_ZSTD_compressBlock_fast_noDict_generic(
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        void const* src, size_t srcSize,
+        U32 const mls, int useCmov)
+{
+    const ZSTD_compressionParameters* const cParams = &ms->cParams;
+    U32* const hashTable = ms->hashTable;
+    U32 const hlog = cParams->hashLog;
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+    size_t const stepSize = 2;
+#else
+    /* support stepSize of 0 */
+    size_t const stepSize = cParams->targetLength + !(cParams->targetLength) + 1; /* min 2 */
+#endif
+    const BYTE* const base = ms->window.base;
+    const BYTE* const istart = (const BYTE*)src;
+    const U32   endIndex = (U32)((size_t)(istart - base) + srcSize);
+    const U32   prefixStartIndex = ZSTD_getLowestPrefixIndex(ms, endIndex, cParams->windowLog);
+    const BYTE* const prefixStart = base + prefixStartIndex;
+    const BYTE* const iend = istart + srcSize;
+    const BYTE* const ilimit = iend - HASH_READ_SIZE - PREFETCH_SAFETY;
+
+    const BYTE* anchor = istart;
+    const BYTE* ip0 = istart;
+    const BYTE* ip1;
+    const BYTE* ip2;
+    const BYTE* ip3;
+    U32 current0;
+
+    U32 rep_offset1 = rep[0];
+    U32 rep_offset2 = rep[1];
+    U32 offsetSaved1 = 0, offsetSaved2 = 0;
+
+    size_t hash0; /* hash for ip0 */
+    size_t hash1; /* hash for ip1 */
+    U32 matchIdx; /* match idx for ip0 */
+
+    U32 offcode;
+    const BYTE* match0;
+    size_t mLength;
+
+    /* ip0 and ip1 are always adjacent. The targetLength skipping and
+     * uncompressibility acceleration is applied to every other position,
+     * matching the behavior of #1562. step therefore represents the gap
+     * between pairs of positions, from ip0 to ip2 or ip1 to ip3. */
+    size_t step;
+    const BYTE* nextStep;
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+    const size_t kStepIncr = (1 << (aocl_kSearchStrengthFast - 1));
+#else
+    const size_t kStepIncr = (1 << (kSearchStrength - 1));
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
+    const ZSTD_match4Found matchFound = useCmov ? ZSTD_match4Found_cmov : ZSTD_match4Found_branch;
+
+    DEBUGLOG(5, "ZSTD_compressBlock_fast_generic");
+    ip0 += (ip0 == prefixStart);
+    {   U32 const curr = (U32)(ip0 - base);
+        U32 const windowLow = ZSTD_getLowestPrefixIndex(ms, curr, cParams->windowLog);
+        U32 const maxRep = curr - windowLow;
+        if (rep_offset2 > maxRep) offsetSaved2 = rep_offset2, rep_offset2 = 0;
+        if (rep_offset1 > maxRep) offsetSaved1 = rep_offset1, rep_offset1 = 0;
+    }
+
+    /* start each op */
+_start: /* Requires: ip0 */
+    step = stepSize;
+    nextStep = ip0 + kStepIncr;
+
+    /* calculate positions, ip0 - anchor == 0, so we skip step calc */
+    ip1 = ip0 + 1;
+    ip2 = ip0 + step;
+    ip3 = ip2 + 1;
+
+    if (ip3 >= ilimit) {
+        goto _cleanup;
+    }
+
+    hash0 = ZSTD_hashPtr(ip0, hlog, mls);
+    PREFETCH_MATCH(ip0);
+    hash1 = ZSTD_hashPtr(ip1, hlog, mls);
+    PREFETCH_MATCH(ip1);
+
+    matchIdx = hashTable[hash0];
+
+    do {
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+        // Alternate between values 2 and 3 for step while searching for a match. In case
+        // the value of step exceeds 3 (this happens when the value of step is incremented
+        // when ip2 exceeds nextStep), we let step retain its value.
+        step = (step > 3) ? step : step ^ 1;
+#endif
+        /* load repcode match for ip[2]*/
+        const U32 rval = MEM_read32(ip2 - rep_offset1);
+
+        /* write back hash table entry */
+        current0 = (U32)(ip0 - base);
+        hashTable[hash0] = current0;
+
+        /* check repcode at ip[2] */
+        if ((MEM_read32(ip2) == rval) & (rep_offset1 > 0)) {
+            ip0 = ip2;
+            match0 = ip0 - rep_offset1;
+            mLength = ip0[-1] == match0[-1];
+            ip0 -= mLength;
+            match0 -= mLength;
+            offcode = REPCODE1_TO_OFFBASE;
+            mLength += 4;
+
+            /* Write next hash table entry: it's already calculated.
+             * This write is known to be safe because ip1 is before the
+             * repcode (ip2). */
+            hashTable[hash1] = (U32)(ip1 - base);
+
+            goto _match;
+        }
+
+        if (matchFound(ip0, base + matchIdx, matchIdx, prefixStartIndex)) {
+            PREFETCH_MATCH(ip0 + 4);
+            /* Write next hash table entry (it's already calculated).
+            * This write is known to be safe because the ip1 == ip0 + 1,
+            * so searching will resume after ip1 */
+            hashTable[hash1] = (U32)(ip1 - base);
+
+            goto _offset;
+        }
+
+        /* lookup ip[1] */
+        matchIdx = hashTable[hash1];
+
+        /* hash ip[2] */
+        hash0 = hash1;
+        hash1 = ZSTD_hashPtr(ip2, hlog, mls);
+
+        /* advance to next positions */
+        ip0 = ip1;
+        ip1 = ip2;
+        ip2 = ip3;
+
+        /* write back hash table entry */
+        current0 = (U32)(ip0 - base);
+        hashTable[hash0] = current0;
+
+        if (matchFound(ip0, base + matchIdx, matchIdx, prefixStartIndex)) {
+            PREFETCH_MATCH(ip0 + 4);
+            /* Write next hash table entry, since it's already calculated */
+            if (step <= 4) {
+                /* Avoid writing an index if it's >= position where search will resume.
+                * The minimum possible match has length 4, so search can resume at ip0 + 4.
+                */
+                hashTable[hash1] = (U32)(ip1 - base);
+            }
+            goto _offset;
+        }
+
+        /* lookup ip[1] */
+        matchIdx = hashTable[hash1];
+
+        /* hash ip[2] */
+        hash0 = hash1;
+        hash1 = ZSTD_hashPtr(ip2, hlog, mls);
+
+        /* advance to next positions */
+        ip0 = ip1;
+        ip1 = ip2;
+        ip2 = ip0 + step;
+        ip3 = ip1 + step;
+
+        /* calculate step */
+        if (ip2 >= nextStep) {
+#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
+            step += 3;
+            LOG_FORMATTED(DEBUG, logCtx, "step = %zu", step);
+#else
+            step++;
+            PREFETCH_L1(ip1 + 64);
+            PREFETCH_L1(ip1 + 128);
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
+            nextStep += kStepIncr;
+        }
+    } while (ip3 < ilimit);
+
+_cleanup:
+    /* Note that there are probably still a couple of positions one could search.
+     * However, it seems to be a meaningful performance hit to try to search
+     * them. So let's not. */
+
+    /* When the repcodes are outside of the prefix, we set them to zero before the loop.
+     * When the offsets are still zero, we need to restore them after the block to have a correct
+     * repcode history. If only one offset was invalid, it is easy. The tricky case is when both
+     * offsets were invalid. We need to figure out which offset to refill with.
+     *     - If both offsets are zero they are in the same order.
+     *     - If both offsets are non-zero, we won't restore the offsets from `offsetSaved[12]`.
+     *     - If only one is zero, we need to decide which offset to restore.
+     *         - If rep_offset1 is non-zero, then rep_offset2 must be offsetSaved1.
+     *         - It is impossible for rep_offset2 to be non-zero.
+     *
+     * So if rep_offset1 started invalid (offsetSaved1 != 0) and became valid (rep_offset1 != 0), then
+     * set rep[0] = rep_offset1 and rep[1] = offsetSaved1.
+     */
+    offsetSaved2 = ((offsetSaved1 != 0) && (rep_offset1 != 0)) ? offsetSaved1 : offsetSaved2;
+
+    /* save reps for next block */
+    rep[0] = rep_offset1 ? rep_offset1 : offsetSaved1;
+    rep[1] = rep_offset2 ? rep_offset2 : offsetSaved2;
+
+    /* Return the last literals size */
+    return (size_t)(iend - anchor);
+
+_offset: /* Requires: ip0, idx */
+
+    /* Compute the offset code. */
+    match0 = base + matchIdx;
+    rep_offset2 = rep_offset1;
+    rep_offset1 = (U32)(ip0-match0);
+    offcode = OFFSET_TO_OFFBASE(rep_offset1);
+    mLength = 4;
+
+    /* Count the backwards match length. */
+    while (((ip0>anchor) & (match0>prefixStart)) && (ip0[-1] == match0[-1])) {
+        ip0--;
+        match0--;
+        mLength++;
+    }
+
+_match: /* Requires: ip0, match0, offcode */
+
+    /* Count the forward length. */
+    mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend);
+
+    ZSTD_storeSeq(seqStore, (size_t)(ip0 - anchor), anchor, iend, offcode, mLength);
+
+    ip0 += mLength;
+    anchor = ip0;
+
+    /* Fill table and check for immediate repcode. */
+    if (ip0 <= ilimit) {
+        /* Fill Table */
+        assert(base+current0+2 > istart);  /* check base overflow */
+        hashTable[ZSTD_hashPtr(base+current0+2, hlog, mls)] = current0+2;  /* here because current+2 could be > iend-8 */
+        hashTable[ZSTD_hashPtr(ip0 - 2, hlog, mls)] = (U32)(ip0 - 2 - base);
+
+        if (rep_offset2 > 0) { /* rep_offset2==0 means rep_offset2 is invalidated */
+            while ( (ip0 <= ilimit) && (MEM_read32(ip0) == MEM_read32(ip0 - rep_offset2)) ) {
+                /* store sequence */
+                size_t const rLength = AOCL_ZSTD_count(ip0+4, ip0+4-rep_offset2, iend) + 4;
+                { U32 const tmpOff = rep_offset2; rep_offset2 = rep_offset1; rep_offset1 = tmpOff; } /* swap rep_offset2 <=> rep_offset1 */
+                hashTable[ZSTD_hashPtr(ip0, hlog, mls)] = (U32)(ip0-base);
+                ip0 += rLength;
+                ZSTD_storeSeq(seqStore, 0 /*litLen*/, anchor, iend, REPCODE1_TO_OFFBASE, rLength);
+                anchor = ip0;
+                continue;   /* faster when present (confirmed on gcc-8) ... (?) */
+    }   }   }
+
+    goto _start;
+}
+#endif /* AOCL_DECOMPRESS_FAST != 2 */
+
+#if AOCL_DECOMPRESS_FAST == 2 /* FDS */
+#define AOCL_ZSTD_GEN_FAST_NODICT_FN(mml, cmov)                                                                 \
+    static size_t AOCL_ZSTD_compressBlock_fast_noDict_##mml##_##cmov(                                           \
+            ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                                 \
+            void const* src, size_t srcSize)                                                                    \
+    {                                                                                                           \
+        return AOCL_ZSTD_compressBlock_fast_noDict_generic_fds2_base(ms, seqStore, rep, src, srcSize, mml, cmov); \
+    }
+#elif AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
+#define AOCL_ZSTD_GEN_FAST_NODICT_FN(mml, cmov)                                                                 \
+    static size_t AOCL_ZSTD_compressBlock_fast_noDict_##mml##_##cmov(                                           \
+            ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                                 \
+            void const* src, size_t srcSize)                                                                    \
+    {                                                                                                           \
+        switch(seqStore->fds_config.state)                                                                      \
+        {                                                                                                       \
+        case FDS_FAST2_ANALYZE:                                                                                 \
+            return AOCL_ZSTD_compressBlock_fast_noDict_generic_fds2_analyze(ms, seqStore, rep, src, srcSize, mml, cmov); \
+        case FDS_ALL_CONF:                                                                                      \
+            return AOCL_ZSTD_compressBlock_fast_noDict_generic_fds3_base(ms, seqStore, rep, src, srcSize, mml, cmov); \
+        default:                                                                                                \
+            return AOCL_ZSTD_compressBlock_fast_noDict_generic(ms, seqStore, rep, src, srcSize, mml, cmov);     \
+        }                                                                                                       \
+    }
+#else  /* no FDS */
+#define AOCL_ZSTD_GEN_FAST_NODICT_FN(mml, cmov)                                                                 \
+    static size_t AOCL_ZSTD_compressBlock_fast_noDict_##mml##_##cmov(                                           \
+            ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                                 \
+            void const* src, size_t srcSize)                                                                    \
+    {                                                                                                           \
+        return AOCL_ZSTD_compressBlock_fast_noDict_generic(ms, seqStore, rep, src, srcSize, mml, cmov);         \
+    }
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
+
+AOCL_ZSTD_GEN_FAST_NODICT_FN(4, 1)
+AOCL_ZSTD_GEN_FAST_NODICT_FN(5, 1)
+AOCL_ZSTD_GEN_FAST_NODICT_FN(6, 1)
+AOCL_ZSTD_GEN_FAST_NODICT_FN(7, 1)
+
+AOCL_ZSTD_GEN_FAST_NODICT_FN(4, 0)
+AOCL_ZSTD_GEN_FAST_NODICT_FN(5, 0)
+AOCL_ZSTD_GEN_FAST_NODICT_FN(6, 0)
+AOCL_ZSTD_GEN_FAST_NODICT_FN(7, 0)
+
+size_t AOCL_ZSTD_compressBlock_fast(
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        void const* src, size_t srcSize)
+{
+    U32 const mml = ms->cParams.minMatch;
+    /* use cmov when "candidate in range" branch is likely unpredictable */
+    int const useCmov = ms->cParams.windowLog < 19;
+    assert(ms->dictMatchState == NULL);
+
+    if (useCmov) {
+        switch(mml)
+        {
+        default: /* includes case 3 */
+        case 4 :
+            return AOCL_ZSTD_compressBlock_fast_noDict_4_1(ms, seqStore, rep, src, srcSize);
+        case 5 :
+            return AOCL_ZSTD_compressBlock_fast_noDict_5_1(ms, seqStore, rep, src, srcSize);
+        case 6 :
+            return AOCL_ZSTD_compressBlock_fast_noDict_6_1(ms, seqStore, rep, src, srcSize);
+        case 7 :
+            return AOCL_ZSTD_compressBlock_fast_noDict_7_1(ms, seqStore, rep, src, srcSize);
+        }
+    } else {
+        /* use a branch instead */
+        switch(mml)
+        {
+        default: /* includes case 3 */
+        case 4 :
+            return AOCL_ZSTD_compressBlock_fast_noDict_4_0(ms, seqStore, rep, src, srcSize);
+        case 5 :
+            return AOCL_ZSTD_compressBlock_fast_noDict_5_0(ms, seqStore, rep, src, srcSize);
+        case 6 :
+            return AOCL_ZSTD_compressBlock_fast_noDict_6_0(ms, seqStore, rep, src, srcSize);
+        case 7 :
+            return AOCL_ZSTD_compressBlock_fast_noDict_7_0(ms, seqStore, rep, src, srcSize);
+        }
+
+    }
+}
+#endif /* AOCL_ZSTD_OPT */
+
 #ifdef AOCL_ZSTD_OPT
 /* The following optimizations have been included in the optimized function:
     - when the AOCL_ZSTD_SEARCH_SKIP_OPT flag is enabled,
@@ -1392,8 +1398,10 @@ size_t ZSTD_compressBlock_fast_extDict(
         - stepSize is fixed at 2
     - AOCL_ZSTD_count_2segments is called in place of ZSTD_count_2segments
 */
-static size_t AOCL_ZSTD_compressBlock_fast_extDict_generic(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+static
+ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+size_t AOCL_ZSTD_compressBlock_fast_extDict_generic(
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize, U32 const mls, U32 const hasStep)
 {
     const ZSTD_compressionParameters* const cParams = &ms->cParams;
@@ -1647,7 +1655,7 @@ _match: /* Requires: ip0, match0, offcode, matchEnd */
         while (ip0 <= ilimit) {
             U32 const repIndex2 = (U32)(ip0-base) - offset_2;
             const BYTE* const repMatch2 = repIndex2 < prefixStartIndex ? dictBase + repIndex2 : base + repIndex2;
-            if ( (((U32)((prefixStartIndex-1) - repIndex2) >= 3) & (offset_2 > 0))  /* intentional underflow */
+            if ( ((ZSTD_index_overlap_check(prefixStartIndex, repIndex2)) & (offset_2 > 0))
                  && (MEM_read32(repMatch2) == MEM_read32(ip0)) ) {
                 const BYTE* const repEnd2 = repIndex2 < prefixStartIndex ? dictEnd : iend;
                 size_t const repLength2 = AOCL_ZSTD_count_2segments(ip0+4, repMatch2+4, iend, repEnd2, prefixStart) + 4;
@@ -1666,7 +1674,7 @@ _match: /* Requires: ip0, match0, offcode, matchEnd */
 
 #define AOCL_ZSTD_GEN_FAST_EXTDICT_FN(mls, step)                                                         \
     static size_t AOCL_ZSTD_compressBlock_fast_extDict_##mls##_##step(                                   \
-            ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                         \
+            ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],                         \
             void const* src, size_t srcSize)                                                            \
     {                                                                                                   \
         return AOCL_ZSTD_compressBlock_fast_extDict_generic(ms, seqStore, rep, src, srcSize, mls, step); \
@@ -1678,7 +1686,7 @@ AOCL_ZSTD_GEN_FAST_EXTDICT_FN(6, 0)
 AOCL_ZSTD_GEN_FAST_EXTDICT_FN(7, 0)
 
 size_t AOCL_ZSTD_compressBlock_fast_extDict(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize)
 {
     U32 const mls = ms->cParams.minMatch;

@@ -498,10 +498,7 @@ void ZSTD_ZSTD_compress_base::compress_src_null(ZSTD_Compress_API api, ZSTD_CCtx
     TestLoad_2 d(800);
     size_t outLen = run_compress(api, cctx, cLevel, d.getCompressedBuff(), d.getCompressedSize(), NULL, d.getOrigSize());
     CHECK_FAIL_ZSTD(outLen);
-    if (api == ZSTD_Compress_API::compress_sequence)
-        EXPECT_EQ(outLen, ERROR(externalSequences_invalid));
-    else
-        EXPECT_EQ(outLen, ERROR(srcSize_wrong));
+    EXPECT_EQ(outLen, ERROR(srcSize_wrong));
 }
 
 void ZSTD_ZSTD_compress_base::compress_dst_null(ZSTD_Compress_API api, ZSTD_CCtx* cctx, int cLevel) { // compress dst null
@@ -1922,7 +1919,7 @@ public:
         size_t ret = run_get_frameHeader(fht, &fh, src, srcLen);
         EXPECT_EQ(ret, 0);
         EXPECT_EQ(fh.frameType, ZSTD_skippableFrame);
-        EXPECT_EQ(fh.headerSize, 0);
+        EXPECT_EQ(fh.headerSize, ZSTD_SKIPPABLEHEADERSIZE);
     }
 
     size_t zstd_srcLen_small(ZSTD_frameHeaderType fht, int smallLen) { // srcLen < minimum header size

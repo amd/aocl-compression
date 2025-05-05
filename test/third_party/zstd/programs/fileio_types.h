@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -54,7 +54,7 @@ typedef struct FIO_prefs_s {
     size_t targetCBlockSize;
     int srcSizeHint;
     int testMode;
-    ZSTD_paramSwitch_e literalCompressionMode;
+    ZSTD_ParamSwitch_e literalCompressionMode;
 
     /* IO preferences */
     int removeSrcFile;
@@ -70,7 +70,7 @@ typedef struct FIO_prefs_s {
     int contentSize;
     int allowBlockDevices;
     int passThrough;
-    ZSTD_paramSwitch_e mmapDict;
+    ZSTD_ParamSwitch_e mmapDict;
 } FIO_prefs_t;
 
 typedef enum {FIO_mallocDict, FIO_mmapDict} FIO_dictBufferType_t;

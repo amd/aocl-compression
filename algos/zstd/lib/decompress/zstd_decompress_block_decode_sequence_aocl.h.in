@@ -48,9 +48,9 @@ FORCE_INLINE_TEMPLATE seq_t
 {
     seq_t seq;
     /*
-     * ZSTD_seqSymbol is a structure with a total of 64 bits wide. So it can be
-     * loaded in one operation and extracted its fields by simply shifting or
-     * bit-extracting on aarch64.
+     * ZSTD_seqSymbol is a 64 bits wide structure.
+     * It can be loaded in one operation
+     * and its fields extracted by simply shifting or bit-extracting on aarch64.
      * GCC doesn't recognize this and generates more unnecessary ldr/ldrb/ldrh
      * operations that cause performance drop. This can be avoided by using this
      * ZSTD_memcpy hack.
@@ -111,7 +111,7 @@ FORCE_INLINE_TEMPLATE seq_t
                     offset = @AOCL_ZSTD_DS_OFBASE@ + ll0 + BIT_readBitsFast(&seqState->DStream, 1);
                     {
                         size_t temp = (offset == 3) ? seqState->prevOffset[0] - 1 : seqState->prevOffset[offset];
-                        temp += !temp;   /* 0 is not valid; input is corrupted; force offset to 1 */
+                        temp -= !temp; /* 0 is not valid: input corrupted => force offset to -1 => corruption detected at execSequence */
                         if (offset != 1) seqState->prevOffset[2] = seqState->prevOffset[1];
                         seqState->prevOffset[1] = seqState->prevOffset[0];
                         seqState->prevOffset[0] = offset = temp;

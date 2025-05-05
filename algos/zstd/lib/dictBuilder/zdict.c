@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -75,9 +75,9 @@ static const U32 g_selectivity_default = 9;
 *  Console display
 ***************************************/
 #undef  DISPLAY
-#define DISPLAY(...)         { fprintf(stderr, __VA_ARGS__); fflush( stderr ); }
+#define DISPLAY(...)         do { fprintf(stderr, __VA_ARGS__); fflush( stderr ); } while (0)
 #undef  DISPLAYLEVEL
-#define DISPLAYLEVEL(l, ...) if (notificationLevel>=l) { DISPLAY(__VA_ARGS__); }    /* 0 : no display;   1: errors;   2: default;  3: details;  4: debug */
+#define DISPLAYLEVEL(l, ...) do { if (notificationLevel>=l) { DISPLAY(__VA_ARGS__); } } while (0)    /* 0 : no display;   1: errors;   2: default;  3: details;  4: debug */
 
 static clock_t ZDICT_clockSpan(clock_t nPrevious) { return clock() - nPrevious; }
 
@@ -478,10 +478,16 @@ static size_t ZDICT_trainBuffer_legacy(dictItem* dictList, U32 dictListSize,
     clock_t const refreshRate = CLOCKS_PER_SEC * 3 / 10;
 
 #   undef  DISPLAYUPDATE
-#   define DISPLAYUPDATE(l, ...) if (notificationLevel>=l) { \
-            if (ZDICT_clockSpan(displayClock) > refreshRate)  \
-            { displayClock = clock(); DISPLAY(__VA_ARGS__); \
-            if (notificationLevel>=4) fflush(stderr); } }
+#   define DISPLAYUPDATE(l, ...)                                   \
+        do {                                                       \
+            if (notificationLevel>=l) {                            \
+                if (ZDICT_clockSpan(displayClock) > refreshRate) { \
+                    displayClock = clock();                        \
+                    DISPLAY(__VA_ARGS__);                          \
+                }                                                  \
+                if (notificationLevel>=4) fflush(stderr);          \
+            }                                                      \
+        } while (0)
 
     /* init */
     DISPLAYLEVEL(2, "\r%70s\r", "");   /* clean display line */
@@ -575,7 +581,7 @@ static void ZDICT_countEStats(EStats_ress_t esr, const ZSTD_parameters* params,
     if (ZSTD_isError(cSize)) { DISPLAYLEVEL(3, "warning : could not compress sample size %u \n", (unsigned)srcSize); return; }
 
     if (cSize) {  /* if == 0; block is not compressible */
-        const seqStore_t* const seqStorePtr = ZSTD_getSeqStore(esr.zc);
+        const SeqStore_t* const seqStorePtr = ZSTD_getSeqStore(esr.zc);
 
         /* literals stats */
         {   const BYTE* bytePtr;
@@ -603,7 +609,7 @@ static void ZDICT_countEStats(EStats_ress_t esr, const ZSTD_parameters* params,
             }
 
             if (nbSeq >= 2) { /* rep offsets */
-                const seqDef* const seq = seqStorePtr->sequencesStart;
+                const SeqDef* const seq = seqStorePtr->sequencesStart;
                 U32 offset1 = seq[0].offBase - ZSTD_REP_NUM;
                 U32 offset2 = seq[1].offBase - ZSTD_REP_NUM;
                 if (offset1 >= MAXREPOFFSET) offset1 = 0;
@@ -1103,7 +1109,6 @@ size_t ZDICT_trainFromBuffer(void* dictBuffer, size_t dictBufferCapacity,
                              const void* samplesBuffer, const size_t* samplesSizes, unsigned nbSamples)
 {
     ZDICT_fastCover_params_t params;
-    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     DEBUGLOG(3, "ZDICT_trainFromBuffer");
     memset(&params, 0, sizeof(params));
     params.d = 8;
@@ -1113,11 +1118,9 @@ size_t ZDICT_trainFromBuffer(void* dictBuffer, size_t dictBufferCapacity,
 #if defined(DEBUGLEVEL) && (DEBUGLEVEL>=1)
     params.zParams.notificationLevel = DEBUGLEVEL;
 #endif
-    size_t ret = ZDICT_optimizeTrainFromBuffer_fastCover(dictBuffer, dictBufferCapacity,
+    return ZDICT_optimizeTrainFromBuffer_fastCover(dictBuffer, dictBufferCapacity,
                                                samplesBuffer, samplesSizes, nbSamples,
                                                &params);
-    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-    return ret;
 }
 
 size_t ZDICT_addEntropyTablesFromBuffer(void* dictBuffer, size_t dictContentSize, size_t dictBufferCapacity,

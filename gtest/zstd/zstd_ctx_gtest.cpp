@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -191,7 +191,7 @@ size_t Test_ZSTD_sizeof_DCtx(const ZSTD_DCtx* dctx) {
 }
 
 void Test_ZSTD_registerSequenceProducer(ZSTD_CCtx* cctx,
-  void* sequenceProducerState, ZSTD_sequenceProducer_F* sequenceProducer){
+  void* sequenceProducerState, ZSTD_sequenceProducer_F sequenceProducer){
     ZSTD_registerSequenceProducer(cctx, sequenceProducerState, sequenceProducer);
 }
 
@@ -2308,8 +2308,9 @@ public:
 
 TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_pass_common_1) // valid custom sequence producer
 {
-    Test_ZSTD_registerSequenceProducer(getCtx(), sps, &ValidSequenceProducer); // register valid producer
-    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, ValidSequenceProducer); // register valid producer
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdFunc, nullptr);
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdState, nullptr);
 
     // compress and validate
     TestLoad_2 d(800);
@@ -2321,8 +2322,9 @@ TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSe
 
 TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_fail_common_2) // dummy custom sequence producer
 {
-    Test_ZSTD_registerSequenceProducer(getCtx(), sps, &DummySequenceProducer); // register sequence producer that does nothing
-    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, DummySequenceProducer); // register sequence producer that does nothing
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdFunc, nullptr);
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdState, nullptr);
 
     // compress
     TestLoad_2 d(800);
@@ -2332,8 +2334,9 @@ TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSe
 
 TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_pass_common_3) // dummy custom sequence producer with fallback
 {
-    Test_ZSTD_registerSequenceProducer(getCtx(), sps, &DummySequenceProducer); // register sequence producer that does nothing
-    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, DummySequenceProducer); // register sequence producer that does nothing
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdFunc, nullptr);
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdState, nullptr);
 
     // compress and validate
     TestLoad_2 d(800);
@@ -2345,8 +2348,9 @@ TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSe
 
 TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_fail_common_4) // error custom sequence producer
 {
-    Test_ZSTD_registerSequenceProducer(getCtx(), sps, &ErrorSequenceProducer); // register sequence producer that fails
-    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, ErrorSequenceProducer); // register sequence producer that fails
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdFunc, nullptr);
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdState, nullptr);
 
     // compress
     TestLoad_2 d(800);
@@ -2356,8 +2360,9 @@ TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSe
 
 TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_pass_common_5) // error custom sequence producer with fallback
 {
-    Test_ZSTD_registerSequenceProducer(getCtx(), sps, &ErrorSequenceProducer); // register sequence producer that does nothing
-    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+    Test_ZSTD_registerSequenceProducer(getCtx(), sps, ErrorSequenceProducer); // register sequence producer that does nothing
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdFunc, nullptr);
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdState, nullptr);
 
     // compress and validate
     TestLoad_2 d(800);
@@ -2369,19 +2374,21 @@ TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSe
 
 TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_fail_common_6) // cctx is null
 {
-    Test_ZSTD_registerSequenceProducer(NULL, sps, &ValidSequenceProducer); // no feedback. testing for no crash.
+    Test_ZSTD_registerSequenceProducer(NULL, sps, ValidSequenceProducer); // no feedback. testing for no crash.
 }
 
 TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_fail_common_7) // sequence producer is null
 {
     Test_ZSTD_registerSequenceProducer(getCtx(), sps, NULL); // no feedback. testing for no crash.
-    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 0);
+    EXPECT_EQ(getCtx()->requestedParams.extSeqProdFunc, nullptr);
+    EXPECT_EQ(getCtx()->requestedParams.extSeqProdState, nullptr);
 }
 
 TEST_F(ZSTD_ZSTD_registerSequenceProducer, AOCL_Compression_zstd_ZSTD_registerSequenceProducer_fail_common_8) // sequence producer state is null
 {
-    Test_ZSTD_registerSequenceProducer(getCtx(), NULL, &ValidSequenceProducer); // no feedback. testing for no crash.
-    EXPECT_EQ(getCtx()->requestedParams.useSequenceProducer, 1);
+    Test_ZSTD_registerSequenceProducer(getCtx(), NULL, ValidSequenceProducer); // no feedback. testing for no crash.
+    EXPECT_NE(getCtx()->requestedParams.extSeqProdFunc, nullptr);
+    EXPECT_EQ(getCtx()->requestedParams.extSeqProdState, nullptr);
 }
 /*********************************************
  * End of ZSTD_ZSTD_registerSequenceProducer
