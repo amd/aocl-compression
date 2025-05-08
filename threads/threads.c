@@ -107,12 +107,6 @@ AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp,
         thread_grp->leftover_part_src_bytes = thread_grp->src_size %
                                                 thread_grp->num_threads;
     }
-#ifdef AOCL_THREADS_LOG
-    printf("Input stream size: [%td], Minimum per thread chunk size: [%d]\n",
-        thread_grp->src_size, chunk_size);
-    printf("Number of max threads: [%d], Number of threads set for execution: [%d]\n",
-        max_threads, thread_grp->num_threads);
-#endif
     return 0;
 }
 
@@ -130,6 +124,13 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
     AOCL_INT32 res = aocl_setup_partition_internal(thread_grp, src, dst, in_size, out_size, window_len, window_factor);
     if (res != 0)
         return res;
+
+#ifdef AOCL_THREADS_LOG
+    printf("Input stream size: [%td], common_part_src_size: [%ld], leftover_part_src_bytes: [%ld]\n",
+        thread_grp->src_size, thread_grp->common_part_src_size, thread_grp->leftover_part_src_bytes);
+    printf("Number of max threads: [%d], Number of threads set for execution: [%d]\n",
+        omp_get_max_threads(), thread_grp->num_threads);
+#endif
 
     AOCL_INT32 rap_frame_len = 0;
     if (thread_grp->num_threads == 1)

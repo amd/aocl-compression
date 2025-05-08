@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -668,7 +668,7 @@ public:
         string bwt = "";
         for(int i=0;i<n;i++)
         {
-            bwt += s[(dest[i]-1+n)%n];
+            bwt += (unsigned char)dest[i];
         }
 
         // Buckets of each character are initialized,
@@ -735,9 +735,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_1)
     */
     string s = "idzdzargib";
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -756,9 +756,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_2)
     */
     string s = "or/bookmarks/bookmarksOv";
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -769,9 +769,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_3)
     // In second level LMS indexes generated is only 1
     string s = "duprwuvuvn";
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -788,9 +788,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_4)
     string s = " 0  0  0  0  0  0  0  0 ";
 
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -804,9 +804,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_5)
     string s = "1111111111111111111111";
 
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -820,9 +820,9 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_6)
     string s = "mkkldmkkld";
 
     int n = s.size();
-    vector<int> dest = vector<int>(n);
+    vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
     string unbwt = unBWT(dest, s, origIndex);
     EXPECT_EQ(unbwt, s);
@@ -834,6 +834,8 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_7)
         Inputs that caused failures while modifying libsais to BWT compatible code.
     */
     vector<string> test_input_strings = {
+        "g.lag.lag.lag",
+        "cadbcadbcadbc",
         "mmiissiissiippii",
         "nwlrbbmqbhcdarzowkkyhiddqscdxrjmowfrxsjybldbefsarcbynecdyggxxpklorellnmpapqfwkhopkmcoqhnwnkuewhsqmgb",
         "zvfrkmlnozjkpqpxrjxkitzyxacbhhkicqc",
@@ -844,18 +846,96 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_7)
         "<andi><btr><ander><ander><ander><andel><",
         "ny></andi></andi></andi></lm></impi></an",
         "sel><sel><String:sel><sel><",
-        "plateString:plate"
+        "plateString:plate",
+        "",
+        "o",
+        "oo"
     };
 
     for(string s: test_input_strings){
 
         int n = s.size();
-        vector<int> dest = vector<int>(n);
+        vector<int> dest = vector<int>(n+AOCL_LIBSAIS_FS);
 
-        int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, 0, nullptr);
+        int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
 
         string unbwt = unBWT(dest, s, origIndex);
         EXPECT_EQ(unbwt, s);
+    }
+}
+
+// Test cases 8, 9, and 10 use a large input to verify whether 2 bytes of padding are provided per recursion level.
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_8)
+{
+    string s = "g.la";
+    for (int i = 0; i < 18; i++)
+        s += s;
+    s = s + 'g';
+    int n = s.size();
+    vector<int> dest = vector<int>(n + AOCL_LIBSAIS_FS);
+
+    int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
+
+    string unbwt = unBWT(dest, s, origIndex);
+    EXPECT_EQ(unbwt, s);
+}
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_9) // Large inputs to generate, m = n/2, where n%2==0, throughout the recursive calls (except last few calls).
+{
+    vector<char> arr_input[2] = {{2, 1, 3, 0, 2, 1, 3, 0}, {2, 0, 3, 1, 2, 0, 3, 1}};
+    for (int i = 0; i < 2; i++)
+    {
+        string s = "";
+        for (auto c : arr_input[i])
+            s += c;
+        int j = 4;
+        while (s.size() <= 1 << 20)
+        {
+            int n = s.size();
+            vector<int> dest = vector<int>(n + AOCL_LIBSAIS_FS);
+
+            int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
+
+            string unbwt = unBWT(dest, s, origIndex);
+            EXPECT_EQ(unbwt, s);
+
+            string ss = s;
+            s = "";
+            for (auto c : ss)
+            {
+                s += j;
+                s += c;
+            }
+            j++;
+        }
+    }
+}
+
+TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_10) // Large inputs to generate, m = n/2, where n%2==1, throughout the recursive calls (except first call).
+{
+    vector<char> test_input_string = {0};
+    string s = "";
+    for (auto c : test_input_string)
+        s += c;
+    int j = 1;
+    while (s.size() <= 1 << 20)
+    {
+        int n = s.size();
+        vector<int> dest = vector<int>(n + AOCL_LIBSAIS_FS);
+
+        int origIndex = Test_libsais((unsigned char *)s.data(), (int *)dest.data(), n, AOCL_LIBSAIS_FS, nullptr);
+
+        string unbwt = unBWT(dest, s, origIndex);
+        EXPECT_EQ(unbwt, s);
+
+        string ss = s;
+        s = "";
+        for (auto c : ss)
+        {
+            s += j;
+            s += c;
+        }
+        j++;
     }
 }
 
@@ -1207,7 +1287,7 @@ class BZIP2_BZ2_bzBuffToBuffCompress : public OPT_LEVEL_TESTS
     void Init()
     {
         sourcePass = vector<char>(sourceLenPassCase, 'a');
-        destPass = vector<char>(destSize, 'a');
+        destPass = vector<char>(destLenPass, 'a');
         // Initilizing `source` with random data
         for(unsigned int i = 0; i < sourceLenPassCase; i++)
         {
@@ -1314,6 +1394,70 @@ TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCo
     EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
 }
 
+TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCompress_pass_common_16)
+{
+    for(int i=1;i<15;i++)
+    {
+        sourceLenPassCase = i;
+        destLenPass = i+600;
+        Init();
+        EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
+        EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+    }
+}
+
+TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCompress_pass_common_17)
+{
+    for(int j=1;j<=8;j++)
+    {
+        sourceLenPassCase = 256*j;
+        destLenPass = sourceLenPassCase+600;
+        Init();
+
+        // Increasing characters pattern
+        for(int i=0;i<sourceLenPassCase;i++)
+        {
+            sourcePass[i] = i%256;
+        }
+        EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
+        EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+
+        int k = 0;
+        // Decreasing characters pattern
+        for(int i=sourceLenPassCase-1;i>=0;i--)
+        {
+            sourcePass[k++] = i%256;
+        }
+        destLenPass = sourceLenPassCase+600;
+        EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
+        EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+    }
+}
+
+TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCompress_pass_common_18)
+{
+    sourceLenPassCase = 256*32;
+    destLenPass = sourceLenPassCase+600;
+    Init();
+
+    // Generate input containing all the characters
+    for(int i=0;i<sourceLenPassCase;i++)
+    {
+        sourcePass[i] = i%256;
+    }
+
+    // Shuffle the pattern generated
+    for(int i = 0;i<sourceLenPassCase;i++)
+    {
+        int a = rand()%sourceLenPassCase;
+        int b = rand()%sourceLenPassCase;
+        swap(sourcePass[a], sourcePass[b]);
+    }
+
+    EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
+    EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+}
+
 INSTANTIATE_TEST_SUITE_P(
     BZIP2,
     BZIP2_BZ2_bzBuffToBuffCompress,
@@ -1356,7 +1500,7 @@ class BZIP2_BZ2_bzBuffToBuffDecompress : public OPT_LEVEL_TESTS
         {
             source[i] = rand() % 255;
         }
-        dest = vector<char>(destSize, 'a');
+        dest = vector<char>(destLen, 'a');
         EXPECT_EQ(BZIP2_API::BuffToBuffCompress(dest.data(), &destLen, source.data(), sourceLen, 1, verbosity, 0), BZ_OK);
     }
 
@@ -2994,6 +3138,13 @@ class BZIP2_BZ2_bzRead : public OPT_LEVEL_TESTS
 
     void SetUp() override
     {
+        // Code path setup
+        {
+            aocl_destroy_bzip2();
+            DynamicDispatch opt = GetParam();
+            aocl_setup_bzip2(opt.optOff, opt.optLevel, 0, 0, 0);
+        }
+
         file_name = get_file_name();
 
         create_test_file();
@@ -3316,7 +3467,7 @@ TEST_F(BZIP2_BZ2_bzReadClose, AOCL_Compression_bzip2_BZ2_bzReadClose_pass_common
 class BZIP2_BZ2_bzReadGetUnused : public BZIP2_BZ2_bzRead
 {};
 
-TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_1) // bzf is NULL
+TEST_P(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_1) // bzf is NULL
 {
     void * unused = NULL;
     int nUnused = 0;
@@ -3328,7 +3479,7 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fai
     EXPECT_EQ(nUnused, 0);
 }
 
-TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_2) // BZ2_bzRead is not called before calling ReadGetUnused
+TEST_P(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_2) // BZ2_bzRead is not called before calling ReadGetUnused
 {
     void * unused = NULL;
     int nUnused = 0;
@@ -3340,7 +3491,7 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fai
     EXPECT_EQ(nUnused, 0);
 }
 
-TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_3) // unused is NULL
+TEST_P(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_3) // unused is NULL
 {
     void * unused = NULL;
     int nUnused = 0;
@@ -3355,7 +3506,7 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fai
     EXPECT_EQ(nUnused, 0);
 }
 
-TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_4) // nUnused is NULL
+TEST_P(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fail_common_4) // nUnused is NULL
 {
     void * unused = NULL;
     int nUnused = 0;
@@ -3370,7 +3521,7 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_fai
     EXPECT_EQ(nUnused, 0);
 }
 
-TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_pass_common_5) // Extra data added at the end of bzip2 compressed data
+TEST_P(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_pass_common_5) // Extra data added at the end of bzip2 compressed data
 {
     int extra_len = 100;
     vector<char> extra_buffer(extra_len);   // This is the extra buffer of length 100
@@ -3418,6 +3569,12 @@ TEST_F(BZIP2_BZ2_bzReadGetUnused, AOCL_Compression_bzip2_BZ2_bzReadGetUnused_pas
     EXPECT_EQ(nUnused, extra_len);
     EXPECT_EQ(memcmp(unused, extra_buffer.data(), extra_len), 0); // Check if the leftover data is same as the extra data that was added into compressed file
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    BZIP2,
+    BZIP2_BZ2_bzReadGetUnused,
+    ::testing::ValuesIn(get_dynamic_dispatcher_flags()));
+
 
 /*********************************************
  * "End" of BZ2_bzReadGetUnused Tests

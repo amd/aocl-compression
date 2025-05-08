@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -24,7 +25,7 @@ extern "C" {
 /* ===  Dependencies  === */
 #include <stddef.h>   /* size_t */
 #define ZSTD_STATIC_LINKING_ONLY   /* ZSTD_compressionParameters */
-#include "../lib/zstd.h"     /* ZSTD_compressionParameters */
+#include "zstd.h"     /* ZSTD_compressionParameters */
 
 
 /* ===  Constants  === */

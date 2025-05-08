@@ -22,7 +22,7 @@ Please see the file LICENSE for full copyright information.
 --*/
 
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -79,15 +79,12 @@ typedef size_t                          fast_uint_t;
 #define SUFFIX_GROUP_MARKER             (((sa_sint_t)1) << (SUFFIX_GROUP_BIT - 1))
 
 #define BUCKETS_INDEX2(_c, _s)          (((_c) << 1) + (_s))
-#define BUCKETS_INDEX4(_c, _s)          (((_c) << 2) + (_s))
 
 #define LIBSAIS_LOCAL_BUFFER_SIZE       (1024)
 #define LIBSAIS_PER_THREAD_CACHE_SIZE   (24576)
 
 #define AOCL_BWT
 #ifdef AOCL_BWT
-// TODO:  For future optimizations, one way to avoid having to do this is to
-//        add a sentinel node at the start of the list which contains the same value as T[n-1].
 #define MOD(i, n) ((i+n)%n)
 #endif
 
@@ -463,6 +460,7 @@ static void libsais_accumulate_counts_s32(sa_sint_t * RESTRICT buckets, fast_sin
 
 #endif
 
+#ifndef AOCL_BWT
 static void libsais_gather_lms_suffixes_8u(const uint8_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, fast_sint_t m, fast_sint_t omp_block_start, fast_sint_t omp_block_size)
 {
     if (omp_block_size > 0)
@@ -546,6 +544,7 @@ static void libsais_gather_lms_suffixes_8u_omp(const uint8_t * RESTRICT T, sa_si
 #endif
     }
 }
+#endif /* AOCL_BWT */
 
 static sa_sint_t libsais_gather_lms_suffixes_32s(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n)
 {
@@ -662,7 +661,7 @@ static void libsais_count_lms_suffixes_32s_2k(const sa_sint_t * RESTRICT T, sa_s
 
 #ifdef AOCL_BWT
     c1 = T[0];
-    int j = 0;
+    sa_sint_t j = 0;
     while (j < n && (c1 = T[j]) == c0) { ++j; }
     s = c0 > c1;
 #endif /* AOCL_BWT */
@@ -748,6 +747,7 @@ static void libsais_count_compacted_lms_suffixes_32s_2k(const sa_sint_t * RESTRI
 
 #endif
 
+#if !defined(AOCL_BWT) || defined(AOCL_UNIT_TEST)
 static sa_sint_t libsais_count_and_gather_lms_suffixes_8u(const uint8_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t * RESTRICT buckets, fast_sint_t omp_block_start, fast_sint_t omp_block_size)
 {
     memset(buckets, 0, (size_t)4 * ALPHABET_SIZE * sizeof(sa_sint_t));
@@ -780,7 +780,7 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_8u(const uint8_t * RESTRI
             3. comparision of previous character to present char  : "T[i-1]>T[i]"
             
             so all these are encoded as:
-                (T[i] << 2)    (T[i]>T[i-1])   (T[i-1]>T[i])
+                (T[i] << 2)    (T[i]>T[i+1])   (T[i-1]>T[i])
                     ^                ^               ^
                     |                |               |
             2nd bit to 9th bit    1st bit          0th bit
@@ -891,6 +891,12 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_8u_omp(const uint8_t * RE
 
     return m;
 }
+
+int32_t Test_count_and_gather_lms_suffixes(const uint8_t * T, int32_t * SA, int32_t n, int32_t * buckets)
+{
+    return libsais_count_and_gather_lms_suffixes_8u_omp(T, SA, n, buckets, 1, NULL);
+}
+#endif /* !defined(AOCL_BWT) || defined(AOCL_UNIT_TEST) */
 
 static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, fast_sint_t omp_block_start, fast_sint_t omp_block_size)
 {
@@ -2333,7 +2339,7 @@ static sa_sint_t AOCL_libsais_partial_sorting_scan_left_to_right_8u(const uint8_
         d += (p0 < 0);
         p0 &= SAINT_MAX;
 
-        sa_sint_t v0 = BUCKETS_INDEX2(T[MOD(p0 - 1, n)], T[MOD(p0 - 2, n)] >= T[MOD(p0 - 1, n)]);
+        sa_sint_t v0 = BUCKETS_INDEX2(T[p0 - 1], T[p0 - 2] >= T[p0 - 1]);
         SA[induction_bucket[v0]++] = MOD(p0 - 1, n) | ((sa_sint_t)(distinct_names[v0] != d) << (SAINT_BIT - 1));
 
         distinct_names[v0] = d;
@@ -2342,7 +2348,7 @@ static sa_sint_t AOCL_libsais_partial_sorting_scan_left_to_right_8u(const uint8_
         d += (p1 < 0);
         p1 &= SAINT_MAX;
 
-        sa_sint_t v1 = BUCKETS_INDEX2(T[MOD(p1 - 1, n)], T[MOD(p1 - 2, n)] >= T[MOD(p1 - 1, n)]);
+        sa_sint_t v1 = BUCKETS_INDEX2(T[p1 - 1], T[p1 - 2] >= T[p1 - 1]);
         SA[induction_bucket[v1]++] = MOD(p1 - 1, n) | ((sa_sint_t)(distinct_names[v1] != d) << (SAINT_BIT - 1));
 
         distinct_names[v1] = d;
@@ -2352,7 +2358,7 @@ static sa_sint_t AOCL_libsais_partial_sorting_scan_left_to_right_8u(const uint8_
         sa_sint_t p = SA[i];
         d += (p < 0);
         p &= SAINT_MAX;
-        sa_sint_t v = BUCKETS_INDEX2(T[MOD(p - 1, n)], T[MOD(p - 2, n)] >= T[MOD(p - 1, n)]);
+        sa_sint_t v = BUCKETS_INDEX2(T[p - 1], T[p - 2] >= T[p - 1]);
         SA[induction_bucket[v]++] = MOD(p - 1, n) | ((sa_sint_t)(distinct_names[v] != d) << (SAINT_BIT - 1));
         distinct_names[v] = d;
     }
@@ -2597,19 +2603,19 @@ static sa_sint_t AOCL_libsais_partial_sorting_scan_left_to_right_32s_6k(const sa
         libsais_prefetchr(&T[SA[i + 2 * prefetch_distance + 1] & SAINT_MAX] - 1);
         libsais_prefetchr(&T[SA[i + 2 * prefetch_distance + 1] & SAINT_MAX] - 2);
 
-        sa_sint_t p0 = SA[i + prefetch_distance + 0] & SAINT_MAX; sa_sint_t v0 = BUCKETS_INDEX4(T[MOD(p0 - 1,n)], 0); libsais_prefetchw(&buckets[v0]);
-        sa_sint_t p1 = SA[i + prefetch_distance + 1] & SAINT_MAX; sa_sint_t v1 = BUCKETS_INDEX4(T[MOD(p1 - 1,n)], 0); libsais_prefetchw(&buckets[v1]);
+        sa_sint_t p0 = SA[i + prefetch_distance + 0] & SAINT_MAX; sa_sint_t v0 = BUCKETS_INDEX4(T[p0 - 1], 0); libsais_prefetchw(&buckets[v0]);
+        sa_sint_t p1 = SA[i + prefetch_distance + 1] & SAINT_MAX; sa_sint_t v1 = BUCKETS_INDEX4(T[p1 - 1], 0); libsais_prefetchw(&buckets[v1]);
 
-        sa_sint_t p2 = SA[i + 0]; d += (p2 < 0); p2 &= SAINT_MAX; sa_sint_t v2 = BUCKETS_INDEX4(T[MOD(p2 - 1, n)], T[MOD(p2 - 2, n)] >= T[MOD(p2 - 1, n)]);
+        sa_sint_t p2 = SA[i + 0]; d += (p2 < 0); p2 &= SAINT_MAX; sa_sint_t v2 = BUCKETS_INDEX4(T[p2 - 1], T[p2 - 2] >= T[p2 - 1]);
         SA[buckets[v2]++] = MOD(p2 - 1, n) | ((sa_sint_t)(buckets[2 + v2] != d) << (SAINT_BIT - 1)); buckets[2 + v2] = d;
 
-        sa_sint_t p3 = SA[i + 1]; d += (p3 < 0); p3 &= SAINT_MAX; sa_sint_t v3 = BUCKETS_INDEX4(T[MOD(p3 - 1, n)], T[MOD(p3 - 2, n)] >= T[MOD(p3 - 1, n)]);
+        sa_sint_t p3 = SA[i + 1]; d += (p3 < 0); p3 &= SAINT_MAX; sa_sint_t v3 = BUCKETS_INDEX4(T[p3 - 1], T[p3 - 2] >= T[p3 - 1]);
         SA[buckets[v3]++] = MOD(p3 - 1, n) | ((sa_sint_t)(buckets[2 + v3] != d) << (SAINT_BIT - 1)); buckets[2 + v3] = d;
     }
 
     for (j += 2 * prefetch_distance + 1; i < j; i += 1)
     {
-        sa_sint_t p = SA[i]; d += (p < 0); p &= SAINT_MAX; sa_sint_t v = BUCKETS_INDEX4(T[MOD(p - 1, n)], T[MOD(p - 2, n)] >= T[MOD(p - 1, n)]);
+        sa_sint_t p = SA[i]; d += (p < 0); p &= SAINT_MAX; sa_sint_t v = BUCKETS_INDEX4(T[p - 1], T[p - 2] >= T[p - 1]);
         SA[buckets[v]++] = MOD(p - 1, n) | ((sa_sint_t)(buckets[2 + v] != d) << (SAINT_BIT - 1)); buckets[2 + v] = d;
     }
 
@@ -3263,14 +3269,14 @@ static sa_sint_t AOCL_libsais_partial_sorting_scan_right_to_left_8u(const uint8_
         sa_sint_t p0 = SA[i - 0];
         d += (p0 < 0);
         p0 &= SAINT_MAX;
-        sa_sint_t v0 = BUCKETS_INDEX2(T[MOD(p0 - 1, n)], T[MOD(p0 - 2, n)] > T[MOD(p0 - 1, n)]);
+        sa_sint_t v0 = BUCKETS_INDEX2(T[p0 - 1], T[p0 - 2] > T[p0 - 1]);
         SA[--induction_bucket[v0]] = MOD(p0 - 1, n) | ((sa_sint_t)(distinct_names[v0] != d) << (SAINT_BIT - 1));
         distinct_names[v0] = d;
 
         sa_sint_t p1 = SA[i - 1];
         d += (p1 < 0);
         p1 &= SAINT_MAX;
-        sa_sint_t v1 = BUCKETS_INDEX2(T[MOD(p1 - 1, n)], T[MOD(p1 - 2, n)] > T[MOD(p1 - 1, n)]);
+        sa_sint_t v1 = BUCKETS_INDEX2(T[p1 - 1], T[p1 - 2] > T[p1 - 1]);
         SA[--induction_bucket[v1]] = MOD(p1 - 1, n) | ((sa_sint_t)(distinct_names[v1] != d) << (SAINT_BIT - 1));
         distinct_names[v1] = d;
     }
@@ -3280,7 +3286,7 @@ static sa_sint_t AOCL_libsais_partial_sorting_scan_right_to_left_8u(const uint8_
         sa_sint_t p = SA[i];
         d += (p < 0);
         p &= SAINT_MAX;
-        sa_sint_t v = BUCKETS_INDEX2(T[MOD(p - 1, n)], T[MOD(p - 2, n)] > T[MOD(p - 1, n)]);
+        sa_sint_t v = BUCKETS_INDEX2(T[p - 1], T[p - 2] > T[p - 1]);
         SA[--induction_bucket[v]] = MOD(p - 1, n) | ((sa_sint_t)(distinct_names[v] != d) << (SAINT_BIT - 1));
         distinct_names[v] = d;
     }
@@ -3521,19 +3527,19 @@ static sa_sint_t AOCL_libsais_partial_sorting_scan_right_to_left_32s_6k(const sa
         libsais_prefetchr(&T[SA[i - 2 * prefetch_distance - 1] & SAINT_MAX] - 1);
         libsais_prefetchr(&T[SA[i - 2 * prefetch_distance - 1] & SAINT_MAX] - 2);
 
-        sa_sint_t p0 = SA[i - prefetch_distance - 0] & SAINT_MAX; sa_sint_t v0 = BUCKETS_INDEX4(T[MOD(p0 - 1, n)], 0); libsais_prefetchw(&buckets[v0]);
-        sa_sint_t p1 = SA[i - prefetch_distance - 1] & SAINT_MAX; sa_sint_t v1 = BUCKETS_INDEX4(T[MOD(p1 - 1, n)], 0); libsais_prefetchw(&buckets[v1]);
+        sa_sint_t p0 = SA[i - prefetch_distance - 0] & SAINT_MAX; sa_sint_t v0 = BUCKETS_INDEX4(T[p0 - 1], 0); libsais_prefetchw(&buckets[v0]);
+        sa_sint_t p1 = SA[i - prefetch_distance - 1] & SAINT_MAX; sa_sint_t v1 = BUCKETS_INDEX4(T[p1 - 1], 0); libsais_prefetchw(&buckets[v1]);
 
-        sa_sint_t p2 = SA[i - 0]; d += (p2 < 0); p2 &= SAINT_MAX; sa_sint_t v2 = BUCKETS_INDEX4(T[MOD(p2 - 1, n)], T[MOD(p2 - 2, n)] > T[MOD(p2 - 1, n)]);
+        sa_sint_t p2 = SA[i - 0]; d += (p2 < 0); p2 &= SAINT_MAX; sa_sint_t v2 = BUCKETS_INDEX4(T[p2 - 1], T[p2 - 2] > T[p2 - 1]);
         SA[--buckets[v2]] = MOD(p2 - 1, n) | ((sa_sint_t)(buckets[2 + v2] != d) << (SAINT_BIT - 1)); buckets[2 + v2] = d;
 
-        sa_sint_t p3 = SA[i - 1]; d += (p3 < 0); p3 &= SAINT_MAX; sa_sint_t v3 = BUCKETS_INDEX4(T[MOD(p3 - 1, n)], T[MOD(p3 - 2, n)] > T[MOD(p3 - 1, n)]);
+        sa_sint_t p3 = SA[i - 1]; d += (p3 < 0); p3 &= SAINT_MAX; sa_sint_t v3 = BUCKETS_INDEX4(T[p3 - 1], T[p3 - 2] > T[p3 - 1]);
         SA[--buckets[v3]] = MOD(p3 - 1, n) | ((sa_sint_t)(buckets[2 + v3] != d) << (SAINT_BIT - 1)); buckets[2 + v3] = d;
     }
 
     for (j -= 2 * prefetch_distance + 1; i >= j; i -= 1)
     {
-        sa_sint_t p = SA[i]; d += (p < 0); p &= SAINT_MAX; sa_sint_t v = BUCKETS_INDEX4(T[MOD(p - 1, n)], T[MOD(p - 2, n)] > T[MOD(p - 1, n)]);
+        sa_sint_t p = SA[i]; d += (p < 0); p &= SAINT_MAX; sa_sint_t v = BUCKETS_INDEX4(T[p - 1], T[p - 2] > T[p - 1]);
         SA[--buckets[v]] = MOD(p - 1, n) | ((sa_sint_t)(buckets[2 + v] != d) << (SAINT_BIT - 1)); buckets[2 + v] = d;
     }
 
@@ -5031,7 +5037,7 @@ static sa_sint_t AOCL_libsais_final_sorting_scan_left_to_right_8u(const uint8_t 
             p--;
             // Whenever the integer is made negative, those will be skipped to consider for sorting
             // SA[i] = p ^ SAINT_MIN; makes the integers positive if they are negative already
-            // Below negative sign will be formed if prev char is S
+            // Below, negative sign will be formed if prev char is S
             SA[induction_bucket[T[p]]++] = p | ((sa_sint_t)(T[p - 1] < T[p]) << (SAINT_BIT - 1));
         }
         else if(p == 1)
@@ -5085,7 +5091,7 @@ static void libsais_final_sorting_scan_left_to_right_32s(const sa_sint_t * RESTR
             p--;
             // Whenever the integer is made negative, those will be skipped to consider for sorting
             // SA[i] = p ^ SAINT_MIN; makes the integers positive if they are negative already
-            // Below negative sign will be formed if prev char is S
+            // Below, negative sign will be formed if prev char is S
             SA[induction_bucket[T[p]]++] = p | ((sa_sint_t)(T[p - 1] < T[p]) << (SAINT_BIT - 1));
         }
         else if(p == 1)
@@ -5717,24 +5723,26 @@ static sa_sint_t AOCL_libsais_final_sorting_scan_right_to_left_8u(const uint8_t 
     for (i = omp_block_start + omp_block_size - 1, j = omp_block_start; i >= j; i -= 1)
     {
         sa_sint_t p = SA[i];
-        SA[i] = p & SAINT_MAX;
+        sa_sint_t temp = p & SAINT_MAX;
+        uint8_t c = T[(temp > 0)?(temp-1):(omp_block_size-1)];
+        SA[i] = c;
         if (p > 1)
         {
             p--;
             // Whenever the integer is made negative, those will be skipped to consider for sorting
             // SA[i] = p ^ SAINT_MIN; makes the integers positive if they are negative already
-            SA[--induction_bucket[T[p]]] = p | ((sa_sint_t)(T[p - (p > 0)] > T[p]) << (SAINT_BIT - 1));
+            SA[--induction_bucket[c]] = p | ((sa_sint_t)(T[p - (p > 0)] > c) << (SAINT_BIT - 1));
         }
         else if(p == 1)
         {
             p--;
-            SA[--induction_bucket[T[p]]] = p | ((sa_sint_t)(T[(omp_block_size + p - 1)%omp_block_size] > T[p]) << (SAINT_BIT - 1));
-            zero_index = induction_bucket[T[p]];
+            SA[--induction_bucket[c]] = p | ((sa_sint_t)(T[(omp_block_size + p - 1)%omp_block_size] > c) << (SAINT_BIT - 1));
+            zero_index = induction_bucket[c];
         }
         else if(p == 0)
         {
             p = omp_block_size-1;
-            SA[--induction_bucket[T[p]]] = p | ((sa_sint_t)(T[(omp_block_size + p - 1)%omp_block_size] > T[p]) << (SAINT_BIT - 1));
+            SA[--induction_bucket[c]] = p | ((sa_sint_t)(T[(omp_block_size + p - 1)%omp_block_size] > c) << (SAINT_BIT - 1));
         }
     }
     return zero_index;
@@ -6363,7 +6371,7 @@ static sa_sint_t libsais_induce_final_order_8u_omp(const uint8_t * RESTRICT T, s
     if (!bwt)
     {
         #ifdef AOCL_BWT
-            int zero_index1, zero_index2;
+            sa_sint_t zero_index1, zero_index2;
 
             zero_index1 = AOCL_libsais_final_sorting_scan_left_to_right_8u(T, SA, &buckets[6 * ALPHABET_SIZE], 0, n);
             if (threads > 1 && n >= 65536) { libsais_clear_lms_suffixes_omp(SA, n, ALPHABET_SIZE, &buckets[6 * ALPHABET_SIZE], &buckets[7 * ALPHABET_SIZE], threads); }
@@ -6847,7 +6855,7 @@ static void libsais_reconstruct_compacted_lms_suffixes_32s_2k_omp(sa_sint_t * RE
 #ifdef AOCL_BWT
         // All distinct elements are copied
         memmove(&SA[n - m], &SA[n + fs - m], (size_t)f * sizeof(sa_sint_t));
-        int temp = SA[n-m+f-1];
+        sa_sint_t temp = SA[n-m+f-1];
 #else
         memmove(&SA[n - m - 1], &SA[n + fs - m], (size_t)f * sizeof(sa_sint_t));
 #endif /* AOCL_BWT */
@@ -6963,19 +6971,29 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
         fs / k <  2
     */
 #ifdef AOCL_BWT
-    // If SA array doesn't contain enough space for storing 6 buckets each of size k, then we dynamically allocate memory of required size. 
-    int dynamic_memory_alloc = 0;
-    if (!(k > 0 && ((fs / k >= 6) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 6))))
-        dynamic_memory_alloc = 1;
     if (1)
 #else
     if (k > 0 && ((fs / k >= 6) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 6)))
 #endif /* AOCL_BWT */
     {
         sa_sint_t alignment = (fs - 1024) / k >= 6 ? (sa_sint_t)1024 : (sa_sint_t)16;
-        sa_sint_t * buckets;
+        sa_sint_t * buckets = (fs - alignment) / k >= 6 ? (sa_sint_t *)libsais_align_up(&SA[n + fs - 6 * (fast_sint_t)k - alignment], (size_t)alignment * sizeof(sa_sint_t)) : &SA[n + fs - 6 * (fast_sint_t)k];
+        buckets = (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 6) ? local_buffer : buckets;
 #ifdef AOCL_BWT
         sa_sint_t * dynamic_memory = NULL;
+        sa_sint_t dynamic_memory_alloc = 0;
+        /*
+            If SA array doesn't contain enough space for storing 6 buckets each of size k,
+            or
+            If buckets[] array overlap with current T[-2]
+            in those cases memory is allocated dynamically.
+        */
+        if ((!(k > 0 && ((fs / k >= 6) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 6)))) || 
+            ((SA < buckets) && (buckets < T) && (&buckets[6 * k - 1] >= &T[-2])))
+        {
+            dynamic_memory_alloc = 1;
+        }
+
         if(dynamic_memory_alloc)
         {
             const sa_sint_t align = 1024;
@@ -6983,12 +7001,7 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
             dynamic_memory = (sa_sint_t *)calloc(6*(k+1) + align, sizeof(sa_sint_t));
             buckets = (sa_sint_t *)libsais_align_up(dynamic_memory, align * sizeof(sa_sint_t));
         }
-        else
 #endif /* AOCL_BWT */
-        {
-            buckets = (fs - alignment) / k >= 6 ? (sa_sint_t *)libsais_align_up(&SA[n + fs - 6 * (fast_sint_t)k - alignment], (size_t)alignment * sizeof(sa_sint_t)) : &SA[n + fs - 6 * (fast_sint_t)k];
-            buckets = (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 6) ? local_buffer : buckets;
-        }
         /*
             Refer to `libsais_count_and_gather_lms_suffixes_8u_omp` from `libsais_main_8u`.
 
@@ -7190,10 +7203,18 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
                     |<--- n_next ---->|<--------- fs_next ---------->|         |<---- n_next --->|
 
                 */
-                if (libsais_main_32s_recursion(SA + n + fs - m + f, SA, m - f, names - f, fs + n - 2 * m + f, threads, thread_state, local_buffer) != 0)
+                sa_sint_t * T_next = SA + n + fs - m + f;
+                sa_sint_t n_next = m - f;
+                sa_sint_t t1 = T_next[-1];
+                sa_sint_t t2 = T_next[-2];
+                T_next[-1] = T_next[n_next-1];
+                T_next[-2] = T_next[n_next-2];
+                if (libsais_main_32s_recursion(T_next, SA, n_next, names - f, fs + n - 2 * m + f - AOCL_LIBSAIS_MOD_ELEMENTS, threads, thread_state, local_buffer) != 0)
                 {
                     return -2;
                 }
+                T_next[-1] = t1;
+                T_next[-2] = t2;
                 /*
                     First f elements are copied from where distinct & renamed elements are stored after `libsais_compact_lms_suffixes_32s_omp`,
                     & then renamed indexes (m-f elements) are copied from the same place to the last part of SA array, so totally `f + 'm-f'` elements which is m elements are copied
@@ -7271,7 +7292,7 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
                 If `m` is zero, which means there is no LMS indexes, this case occurs only when all elements are same,
                 in such cases the order of indexes doesn't matter, so initiating each index with certain order according to the order of occurrence.
             */
-            for(int i=0;i<n;i++)
+            for (sa_sint_t i = 0; i < n; i++)
             {
                 SA[i] = i;
             }
@@ -7446,6 +7467,7 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
 
     */
 
+#ifndef AOCL_BWT
     /*
         All LMS indexes are stored in SA array, [from n-m to n-1].
         The array buckets[] is modified to store the number of occurrences of a character along with its current type and previous type which is L/S, so there are 4 combinations: LL,LS,SL,SS.
@@ -7468,6 +7490,56 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
                             First character is compared with last character to get its previous type.
     */
     sa_sint_t m = libsais_count_and_gather_lms_suffixes_8u_omp(T, SA, n, buckets, threads, thread_state);
+#else
+    /*
+    Before:
+        if (SA[1] == -1) -> no LMS character index at SA[1], or SA[1] also contains an LMS character index.
+        Note: &SA[1] = &(s->ptr[1])
+
+        |<------------------------------- SA --------------------------------------------->|
+        |<- SA[0] ->|<-------------------------- SA[1....] ------------------------------->|
+              ^     |<---------------------- SA ------------------------------------------>|
+              |     |<- SA[1] ->|<------- LMS characters -------->|<------ buckets ------->|
+        length of         ^         from SA[1] to SA[sa_index-1]      SA[sa_index] to SA[sa_index + 4*1024 - 1]
+        LMS array is      |
+        stored          SA[1] == -1,
+                            -> means no LMS chrctr
+                        SA[1] != -1
+                            -> LMS character is prsnt
+
+    After:
+        All LMS indexes are stored in SA array, [from n-m to n-1].
+        The array buckets[] is modified to store the number of occurrences of a character along with its current type and previous type which is L/S, so there are 4 combinations: LL,LS,SL,SS.
+        Integer "m" is returned, which represents number of LMS indexes.
+
+        SA[]:
+        |<-------------------------- n ints -------------------------------->|
+
+                           |<--------------- initialization ---------------->|
+                           |<--last m elements are updated to LMS indexes -->|
+
+
+        buckets[]:
+        |----------------|----------------|----------------|----------------|----------------|----------------|----------------|----------------|
+        |<------ 0 ----->|<------ 1 ----->|<------ 2 ----->|<------ 3 ----->|<------ 4 ----->|<------ 5 ----->|<------ 6 ----->|<------ 7 ----->|
+
+        |<-------------------------- initialization ----------------------->|
+
+        BWT Modifications:  Last character is compared with first character instead of senital character,
+                            First character is compared with last character to get its previous type.
+    */
+    sa_sint_t m = SA[0];
+    memcpy(buckets, &SA[m+1], sizeof(sa_sint_t)*4*ALPHABET_SIZE);
+    if(SA[1] == -1)
+    {
+        m--;
+        memmove(&SA[n-m], &SA[2],  sizeof(sa_sint_t)*m);
+    }
+    else
+    {
+        memmove(&SA[n-m], &SA[1], sizeof(sa_sint_t)*m);
+    }
+#endif /* AOCL_BWT */
     /*
         bucket_start = &buckets[6 * ALPHABET_SIZE];
         bucket_end   = &buckets[7 * ALPHABET_SIZE];
@@ -7489,6 +7561,10 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
 
     if (m > 0)
     {
+        #ifdef AOCL_BWT
+            sa_sint_t * temp_SA = (sa_sint_t *)libsais_alloc_aligned(sizeof(sa_sint_t)*m, 4096);
+            memcpy(temp_SA, &SA[n-m], sizeof(sa_sint_t)*m);
+        #endif /* AOCL_BWT */
         /* Represents first lms suffix index */
         sa_sint_t first_lms_suffix    = SA[n - m];
 
@@ -7620,7 +7696,7 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
                 The result will be: first `m` elements of `SA` will contain the rank of the LMS indexes.
 
                 SA[]:
-                |<---------------------------------- n  -------------------------------------->|
+                |<----------------------------------- n -------------------------------------->|
                                                              
                 |<--------------- used & altered --------------->|<------- read trough ------->|
                 |<-------- updated ------->|                     |<- renumbered LMS indexes -->|
@@ -7632,8 +7708,14 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
                 BWT Modifications:  There are multiple changes, primarily: if enough space is not available, we dynamically allocate 6 * (current number of LMS indexes generated).
                                     Earlier different implementations were taken depending on available free space in SA.
             */
-            if (libsais_main_32s_entry(SA + n + fs - m, SA, m, names, fs + n - 2 * m, threads, thread_state) != 0)
+            sa_sint_t * T_next = SA + n + fs - m;
+            T_next[-1] = T_next[m-1];
+            T_next[-2] = T_next[m-2];
+            if (libsais_main_32s_entry(T_next, SA, m, names, fs + n - 2 * m - AOCL_LIBSAIS_MOD_ELEMENTS, threads, thread_state) != 0)
             {
+                #ifdef AOCL_BWT
+                    libsais_free_aligned(temp_SA);
+                #endif /* AOCL_BWT */
                 return -2;
             }
             /*
@@ -7651,7 +7733,11 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
                                     last element of 1st half which would be in the middle of SA array.
                                     To prevent this, the function exits once the pointer moves beyond first half.
             */
-            libsais_gather_lms_suffixes_8u_omp(T, SA, n, threads, thread_state);
+            #ifdef AOCL_BWT
+                memcpy(&SA[n-m], temp_SA,  sizeof(sa_sint_t)*m);
+            #else
+                libsais_gather_lms_suffixes_8u_omp(T, SA, n, threads, thread_state);
+            #endif /* AOCL_BWT */
             /*
                 From the above step, all LMS indexes are gathered from SA[n-m] to SA[n-1]
                 The rank of these indexes are stored from SA[0] to SA[m-1], in the recursion step.
@@ -7669,6 +7755,9 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
             */
             libsais_reconstruct_lms_suffixes_omp(SA, n, m, threads);
         }
+        #ifdef AOCL_BWT
+            libsais_free_aligned(temp_SA);
+        #endif /* AOCL_BWT */
         /*
             Distributes all LMS indexes in accordance to their order in last part of each character's respective bucket.
 
@@ -7693,12 +7782,12 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
     else
     {
         /*
-            If `m` is zero, which means there is no LMS indexes, this case occurs only when all elements are same,
-            in such cases the order of indexes doesn't matter, so initiating each index with certain order according to the order of occurrence.
+            If `m` is zero, which means there is no LMS indexes, this case occurs only when all elements are same.
+            Hence initializing all elements to same character.
         */
-        for(int i=0;i<n;i++)
+        for (sa_sint_t i = 0; i < n; i++)
         {
-            SA[i] = i;
+            SA[i] = T[0];
         }
         return 0;
     }
@@ -7830,7 +7919,11 @@ int32_t libsais(const uint8_t * T, int32_t * SA, int32_t n, int32_t fs, int32_t 
     else if (n < 2)
     {
         if (freq != NULL) { memset(freq, 0, ALPHABET_SIZE * sizeof(int32_t)); }
+#ifndef AOCL_BWT
         if (n == 1) { SA[0] = 0; if (freq != NULL) { freq[T[0]]++; } }
+#else
+        if (n == 1) { SA[0] = T[0]; if (freq != NULL) { freq[T[0]]++; } }
+#endif /* AOCL_BWT */
         return 0;
     }
 

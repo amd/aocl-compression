@@ -90,10 +90,12 @@ Option                              |  Description
 ------------------------------------|----------------------------------------------------------------------------------------
 AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |  Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
 SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Enabled by default)
+SNAPPY_HIGH_COMPRESSION             |  Enable Snappy high compression to get better ratio by compromising on speed (Disabled by default)
+SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS |  Enable Snappy branchless decompression optimization (Disabled by default for GCC and enabled for all other compilers)
 LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
-AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST|  Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Enabled by default)
-AOCL_DECOMPRESS_FAST                |  Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for ZSTD. (Disabled by default)
+AOCL_ZSTD_SEARCH_SKIP_OPT           |  Enable ZSTD match skipping optimization that steps more aggresively when matches are not found (Enabled by default)
+AOCL_DECOMPRESS_FAST                |  Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values: {1,2,3} ZSTD, {1,2} Snappy, {1} LZ4. (Disabled by default)
 AOCL_TEST_COVERAGE                  |  Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)
 AOCL_ENABLE_LOG_FEATURE             |  Enables logging through environment variable `AOCL_ENABLE_LOG` (Disabled by default)
 CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
@@ -119,10 +121,11 @@ NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression 
 AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
 AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
 ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
+BUILD_UTILITY                       |  Enable third party utility build: zstd (Disabled by default)" OFF)
 
 * NOTE: <br>
-   1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by <br>
-   setting environment variable AOCL_ZLIB_QUICK_MODE. It also improves performance for levels 2, 3 and 5 <br>
+   1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by
+   setting environment variable AOCL_ZLIB_QUICK_MODE=ON. It also improves performance for levels 2, 3 and 5
    while trading off compression ratio. <br>
 
 Running tests with CTest

@@ -2,7 +2,7 @@
 2020-03-19 : Igor Pavlov : Public domain */
 
 /*
-* Copyright (C) 2022-24, Advanced Micro Devices. All rights reserved.
+* Modifications Copyright (C) 2022-24, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:

@@ -1,7 +1,7 @@
 /* chunkcopy.h -- fast chunk copy and set operations
  * Copyright (C) 2017 ARM, Inc.
  * Copyright 2017 The Chromium Authors
- * Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
  * Use of this source code is governed by a BSD-style license that can be
  * found in the Chromium source repository LICENSE file.
  */

@@ -1,5 +1,5 @@
 // Copyright 2008 Google Inc. All Rights Reserved.
-// Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+// Modifications Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -32,10 +32,87 @@
 #ifndef THIRD_PARTY_SNAPPY_SNAPPY_INTERNAL_H_
 #define THIRD_PARTY_SNAPPY_SNAPPY_INTERNAL_H_
 
+#include <utility>
+
 #include "snappy-stubs-internal.h"
+
+#if SNAPPY_HAVE_SSSE3
+// Please do not replace with <x86intrin.h> or with headers that assume more
+// advanced SSE versions without checking with all the OWNERS.
+#include <emmintrin.h>
+#include <tmmintrin.h>
+#endif
+
+#if SNAPPY_HAVE_NEON
+#include <arm_neon.h>
+#endif
+
+#if SNAPPY_HAVE_SSSE3 || SNAPPY_HAVE_NEON
+#define SNAPPY_HAVE_VECTOR_BYTE_SHUFFLE 1
+#else
+#define SNAPPY_HAVE_VECTOR_BYTE_SHUFFLE 0
+#endif
 
 namespace snappy {
 namespace internal {
+
+#if SNAPPY_HAVE_VECTOR_BYTE_SHUFFLE
+#if SNAPPY_HAVE_SSSE3
+using V128 = __m128i;
+#elif SNAPPY_HAVE_NEON
+using V128 = uint8x16_t;
+#endif
+
+// Load 128 bits of integer data. `src` must be 16-byte aligned.
+inline V128 V128_Load(const V128* src);
+
+// Load 128 bits of integer data. `src` does not need to be aligned.
+inline V128 V128_LoadU(const V128* src);
+
+// Store 128 bits of integer data. `dst` does not need to be aligned.
+inline void V128_StoreU(V128* dst, V128 val);
+
+// Shuffle packed 8-bit integers using a shuffle mask.
+// Each packed integer in the shuffle mask must be in [0,16).
+inline V128 V128_Shuffle(V128 input, V128 shuffle_mask);
+
+// Constructs V128 with 16 chars |c|.
+inline V128 V128_DupChar(char c);
+
+#if SNAPPY_HAVE_SSSE3
+inline V128 V128_Load(const V128* src) { return _mm_load_si128(src); }
+
+inline V128 V128_LoadU(const V128* src) { return _mm_loadu_si128(src); }
+
+inline void V128_StoreU(V128* dst, V128 val) { _mm_storeu_si128(dst, val); }
+
+inline V128 V128_Shuffle(V128 input, V128 shuffle_mask) {
+  return _mm_shuffle_epi8(input, shuffle_mask);
+}
+
+inline V128 V128_DupChar(char c) { return _mm_set1_epi8(c); }
+
+#elif SNAPPY_HAVE_NEON
+inline V128 V128_Load(const V128* src) {
+  return vld1q_u8(reinterpret_cast<const uint8_t*>(src));
+}
+
+inline V128 V128_LoadU(const V128* src) {
+  return vld1q_u8(reinterpret_cast<const uint8_t*>(src));
+}
+
+inline void V128_StoreU(V128* dst, V128 val) {
+  vst1q_u8(reinterpret_cast<uint8_t*>(dst), val);
+}
+
+inline V128 V128_Shuffle(V128 input, V128 shuffle_mask) {
+  assert(vminvq_u8(shuffle_mask) >= 0 && vmaxvq_u8(shuffle_mask) <= 15);
+  return vqtbl1q_u8(input, shuffle_mask);
+}
+
+inline V128 V128_DupChar(char c) { return vdupq_n_u8(c); }
+#endif
+#endif  // SNAPPY_HAVE_VECTOR_BYTE_SHUFFLE
 
 // Working memory performs a single allocation to hold all scratch space
 // required for compression.
@@ -96,8 +173,9 @@ char* CompressFragment(const char* input,
 // loading from s2 + n.
 //
 // Separate implementation for 64-bit, little-endian cpus.
-#if !defined(SNAPPY_IS_BIG_ENDIAN) && \
-    (defined(ARCH_K8) || defined(ARCH_PPC) || defined(ARCH_ARM))
+#if !SNAPPY_IS_BIG_ENDIAN && \
+    (defined(__x86_64__) || defined(_M_X64) || defined(ARCH_PPC) || \
+     defined(ARCH_ARM))
 static inline std::pair<size_t, bool> FindMatchLength(const char* s1,
                                                       const char* s2,
                                                       const char* s2_limit,
@@ -155,8 +233,9 @@ static inline std::pair<size_t, bool> FindMatchLength(const char* s1,
       uint64_t xorval = a1 ^ a2;
       int shift = Bits::FindLSBSetNonZero64(xorval);
       size_t matched_bytes = shift >> 3;
+      uint64_t a3 = UNALIGNED_LOAD64(s2 + 4);
 #ifndef __x86_64__
-      *data = UNALIGNED_LOAD64(s2 + matched_bytes);
+      a2 = static_cast<uint32_t>(xorval) == 0 ? a3 : a2;
 #else
       // Ideally this would just be
       //
@@ -167,19 +246,21 @@ static inline std::pair<size_t, bool> FindMatchLength(const char* s1,
       // use a conditional move (it's tuned to cut data dependencies). In this
       // case there is a longer parallel chain anyway AND this will be fairly
       // unpredictable.
-      uint64_t a3 = UNALIGNED_LOAD64(s2 + 4);
       asm("testl %k2, %k2\n\t"
           "cmovzq %1, %0\n\t"
           : "+r"(a2)
-          : "r"(a3), "r"(xorval));
-      *data = a2 >> (shift & (3 * 8));
+          : "r"(a3), "r"(xorval)
+          : "cc");
 #endif
+      *data = a2 >> (shift & (3 * 8));
       return std::pair<size_t, bool>(matched_bytes, true);
     } else {
       matched = 8;
       s2 += 8;
     }
   }
+  SNAPPY_PREFETCH(s1 + 64);
+  SNAPPY_PREFETCH(s2 + 64);
 
   // Find out how long the match is. We loop over the data 64 bits at a
   // time until we find a 64-bit block that doesn't match; then we find
@@ -195,16 +276,17 @@ static inline std::pair<size_t, bool> FindMatchLength(const char* s1,
       uint64_t xorval = a1 ^ a2;
       int shift = Bits::FindLSBSetNonZero64(xorval);
       size_t matched_bytes = shift >> 3;
-#ifndef __x86_64__
-      *data = UNALIGNED_LOAD64(s2 + matched_bytes);
-#else
       uint64_t a3 = UNALIGNED_LOAD64(s2 + 4);
+#ifndef __x86_64__
+      a2 = static_cast<uint32_t>(xorval) == 0 ? a3 : a2;
+#else
       asm("testl %k2, %k2\n\t"
           "cmovzq %1, %0\n\t"
           : "+r"(a2)
-          : "r"(a3), "r"(xorval));
-      *data = a2 >> (shift & (3 * 8));
+          : "r"(a3), "r"(xorval)
+          : "cc");
 #endif
+      *data = a2 >> (shift & (3 * 8));
       matched += matched_bytes;
       assert(matched >= 8);
       return std::pair<size_t, bool>(matched, false);
@@ -224,133 +306,6 @@ static inline std::pair<size_t, bool> FindMatchLength(const char* s1,
   return std::pair<size_t, bool>(matched, matched < 8);
 }
 
-#ifdef AOCL_SNAPPY_OPT
-static inline std::pair<size_t, bool> AOCL_FindMatchLength(const char* s1,
-                                                      const char* s2,
-                                                      const char* s2_limit,
-                                                      uint64_t* data) {
-  assert(s2_limit >= s2);
-  size_t matched = 0;
-
-  // This block isn't necessary for correctness; we could just start looping
-  // immediately.  As an optimization though, it is useful.  It creates some not
-  // uncommon code paths that determine, without extra effort, whether the match
-  // length is less than 8.  In short, we are hoping to avoid a conditional
-  // branch, and perhaps get better code layout from the C++ compiler.
-  if (s2 <= s2_limit - 16) {
-    uint64_t a1 = UNALIGNED_LOAD64(s1);
-    uint64_t a2 = UNALIGNED_LOAD64(s2);
-    if (a1 != a2) {
-      // This code is critical for performance. The reason is that it determines
-      // how much to advance `ip` (s2). This obviously depends on both the loads
-      // from the `candidate` (s1) and `ip`. Furthermore the next `candidate`
-      // depends on the advanced `ip` calculated here through a load, hash and
-      // new candidate hash lookup (a lot of cycles). This makes s1 (ie.
-      // `candidate`) the variable that limits throughput. This is the reason we
-      // go through hoops to have this function update `data` for the next iter.
-      // The straightforward code would use *data, given by
-      //
-      // *data = UNALIGNED_LOAD64(s2 + matched_bytes) (Latency of 5 cycles),
-      //
-      // as input for the hash table lookup to find next candidate. However
-      // this forces the load on the data dependency chain of s1, because
-      // matched_bytes directly depends on s1. However matched_bytes is 0..7, so
-      // we can also calculate *data by
-      //
-      // *data = AlignRight(UNALIGNED_LOAD64(s2), UNALIGNED_LOAD64(s2 + 8),
-      //                    matched_bytes);
-      //
-      // The loads do not depend on s1 anymore and are thus off the bottleneck.
-      // The straightforward implementation on x86_64 would be to use
-      //
-      // shrd rax, rdx, cl  (cl being matched_bytes * 8)
-      //
-      // unfortunately shrd with a variable shift has a 4 cycle latency. So this
-      // only wins 1 cycle. The BMI2 shrx instruction is a 1 cycle variable
-      // shift instruction but can only shift 64 bits. If we focus on just
-      // obtaining the least significant 4 bytes, we can obtain this by
-      //
-      // *data = ConditionalMove(matched_bytes < 4, UNALIGNED_LOAD64(s2),
-      //     UNALIGNED_LOAD64(s2 + 4) >> ((matched_bytes & 3) * 8);
-      //
-      // Writen like above this is not a big win, the conditional move would be
-      // a cmp followed by a cmov (2 cycles) followed by a shift (1 cycle).
-      // However matched_bytes < 4 is equal to
-      // static_cast<uint32_t>(xorval) != 0. Writen that way, the conditional
-      // move (2 cycles) can execute in parallel with FindLSBSetNonZero64
-      // (tzcnt), which takes 3 cycles.
-      uint64_t xorval = a1 ^ a2;
-      int shift = Bits::FindLSBSetNonZero64(xorval);
-      size_t matched_bytes = shift >> 3;
-#ifndef __x86_64__
-      *data = UNALIGNED_LOAD64(s2 + matched_bytes);
-#else
-      // Ideally this would just be
-      //
-      // a2 = static_cast<uint32_t>(xorval) == 0 ? a3 : a2;
-      //
-      // However clang correctly infers that the above statement participates on
-      // a critical data dependency chain and thus, unfortunately, refuses to
-      // use a conditional move (it's tuned to cut data dependencies). In this
-      // case there is a longer parallel chain anyway AND this will be fairly
-      // unpredictable.
-      uint64_t a3 = UNALIGNED_LOAD64(s2 + 4);
-      asm("testl %k2, %k2\n\t"
-          "cmovzq %1, %0\n\t"
-          : "+r"(a2)
-          : "r"(a3), "r"(xorval));
-      *data = a2 >> (shift & (3 * 8));
-#endif
-      return std::pair<size_t, bool>(matched_bytes, true);
-    } else {
-      matched = 8;
-      s2 += 8;
-    }
-  }
-
-  // Find out how long the match is. We loop over the data 64 bits at a
-  // time until we find a 64-bit block that doesn't match; then we find
-  // the first non-matching bit and use that to calculate the total
-  // length of the match.
-  while (s2 <= s2_limit - 16) {
-    uint64_t a1 = UNALIGNED_LOAD64(s1 + matched);
-    uint64_t a2 = UNALIGNED_LOAD64(s2);
-    if (a1 == a2) {
-      s2 += 8;
-      matched += 8;
-    } else {
-      uint64_t xorval = a1 ^ a2;
-      int shift = Bits::FindLSBSetNonZero64(xorval);
-      size_t matched_bytes = shift >> 3;
-#ifndef __x86_64__
-      *data = UNALIGNED_LOAD64(s2 + matched_bytes);
-#else
-      uint64_t a3 = UNALIGNED_LOAD64(s2 + 4);
-      asm("testl %k2, %k2\n\t"
-          "cmovzq %1, %0\n\t"
-          : "+r"(a2)
-          : "r"(a3), "r"(xorval));
-      *data = a2 >> (shift & (3 * 8));
-#endif
-      matched += matched_bytes;
-      assert(matched >= 8);
-      return std::pair<size_t, bool>(matched, false);
-    }
-  }
-  while (s2 < s2_limit) {
-    if (s1[matched] == *s2) {
-      ++s2;
-      ++matched;
-    } else {
-      if (s2 <= s2_limit - 8) {
-        *data = UNALIGNED_LOAD64(s2);
-      }
-      return std::pair<size_t, bool>(matched, matched < 8);
-    }
-  }
-  return std::pair<size_t, bool>(matched, matched < 8);
-}
-#endif /* AOCL_SNAPPY_OPT */
 #else
 static inline std::pair<size_t, bool> FindMatchLength(const char* s1,
                                                       const char* s2,
@@ -381,6 +336,31 @@ static inline std::pair<size_t, bool> FindMatchLength(const char* s1,
 }
 #endif
 
+static inline size_t FindMatchLengthPlain(const char* s1, const char* s2,
+                                          const char* s2_limit) {
+  // Implementation based on the x86-64 version, above.
+  assert(s2_limit >= s2);
+  int matched = 0;
+
+  while (s2 <= s2_limit - 8 &&
+         UNALIGNED_LOAD64(s2) == UNALIGNED_LOAD64(s1 + matched)) {
+    s2 += 8;
+    matched += 8;
+  }
+  if (LittleEndian::IsLittleEndian() && s2 <= s2_limit - 8) {
+    uint64_t x = UNALIGNED_LOAD64(s2) ^ UNALIGNED_LOAD64(s1 + matched);
+    int matching_bits = Bits::FindLSBSetNonZero64(x);
+    matched += matching_bits >> 3;
+    s2 += matching_bits >> 3;
+  } else {
+    while ((s2 < s2_limit) && (s1[matched] == *s2)) {
+      ++s2;
+      ++matched;
+    }
+  }
+  return matched;
+}
+
 // Lookup tables for decompression code.  Give --snappy_dump_decompression_table
 // to the unit test to recompute char_table.
 
@@ -403,7 +383,8 @@ static const int kMaximumTagLength = 5;  // COPY_4_BYTE_OFFSET plus the actual o
 // because of efficiency reasons:
 //      (1) Extracting a byte is faster than a bit-field
 //      (2) It properly aligns copy offset so we do not need a <<8
-static const uint16_t char_table[256] = {
+static constexpr uint16_t char_table[256] = {
+    // clang-format off
   0x0001, 0x0804, 0x1001, 0x2001, 0x0002, 0x0805, 0x1002, 0x2002,
   0x0003, 0x0806, 0x1003, 0x2003, 0x0004, 0x0807, 0x1004, 0x2004,
   0x0005, 0x0808, 0x1005, 0x2005, 0x0006, 0x0809, 0x1006, 0x2006,
@@ -435,7 +416,8 @@ static const uint16_t char_table[256] = {
   0x0039, 0x0f04, 0x1039, 0x2039, 0x003a, 0x0f05, 0x103a, 0x203a,
   0x003b, 0x0f06, 0x103b, 0x203b, 0x003c, 0x0f07, 0x103c, 0x203c,
   0x0801, 0x0f08, 0x103d, 0x203d, 0x1001, 0x0f09, 0x103e, 0x203e,
-  0x1801, 0x0f0a, 0x103f, 0x203f, 0x2001, 0x0f0b, 0x1040, 0x2040
+  0x1801, 0x0f0a, 0x103f, 0x203f, 0x2001, 0x0f0b, 0x1040, 0x2040,
+    // clang-format on
 };
 
 }  // end namespace internal

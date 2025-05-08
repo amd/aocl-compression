@@ -3,13 +3,17 @@
  * at a premium.
  *
  * Copyright (C) 2013 Intel Corporation. All rights reserved.
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * 
+ * Portions are Copyright (C) 2016 12Sided Technology, LLC.
+ * 
+ * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * 
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
 #include "aocl_zlib_x86.h"
 
-
+#ifdef AOCL_ZLIB_OPT
 #define MAX_SEARCH_DIST 32768
 
 #include "aocl_send_bits.h"
@@ -73,15 +77,6 @@ local inline void static_emit_lit(deflate_state *z_const s,z_const int lit)
     Tracecv(isgraph(lit), (stderr," '%c' ", lit));
 }
 
-local void static_emit_tree(deflate_state *z_const s,
-        z_const int flush)
-{
-    unsigned last;
-
-    last = flush == Z_FINISH ? 1 : 0;
-    OPT_send_bits(s, (STATIC_TREES<<1) + last, 3);
-}
-
 extern void (*bi_windup_fp)(deflate_state *s);
 
 local void static_emit_end_block(deflate_state *z_const s,
@@ -100,66 +95,105 @@ local void static_emit_end_block(deflate_state *z_const s,
     flush_pending_fp(s->strm);
 }
 
+#define BIT_BUF_SIZE 64
+#define STD_MAX_MATCH 258
+
+#define QUICK_START_BLOCK(s, last) { \
+    OPT_send_bits(s, (STATIC_TREES<<1) + last, 3); \
+    s->block_open = 1 + (int)last; \
+    s->block_start = (int)s->strstart; \
+}
+
+#define QUICK_END_BLOCK(s, last) { \
+    if (s->block_open) { \
+        static_emit_end_block(s, last); \
+        s->block_open = 0; \
+        if (s->strm->avail_out == 0) \
+            return (last) ? finish_started : need_more; \
+    } \
+}
+
 // call to this function only made for avx
 __attribute__((__target__("avx"))) // uses SSE4.2 intrinsics
-block_state ZLIB_INTERNAL deflate_quick(deflate_state *s, int flush)
-{
-    IPos hash_head;
-    unsigned dist, match_len;
+block_state ZLIB_INTERNAL deflate_quick(deflate_state* s, int flush) {
+	Pos hash_head;
+	int64_t dist;
+	unsigned match_len, last;
 
-    static_emit_tree(s, flush);
+	last = (flush == Z_FINISH) ? 1 : 0;
+	if (UNLIKELY(last && s->block_open != 2)) {
+		/* Emit end of previous block */
+		QUICK_END_BLOCK(s, 0);
+		/* Emit start of last block */
+		QUICK_START_BLOCK(s, last);
+	} else if (UNLIKELY(s->block_open == 0 && s->lookahead > 0)) {
+		/* Start new block only when we have lookahead data, so that if no
+		   input data is given an empty block will not be written */
+		QUICK_START_BLOCK(s, last);
+	}
 
-    do {
-        if (s->lookahead < MIN_LOOKAHEAD) {
-            aocl_fill_window_fp(s);
-            if (s->lookahead < MIN_LOOKAHEAD && flush == Z_NO_FLUSH) {
-                static_emit_end_block(s, 0);
-                return need_more;
-            }
-            if (s->lookahead == 0)
-                break;
-        }
+	for (;;) {
+		if (UNLIKELY(s->pending + ((BIT_BUF_SIZE + 7) >> 3) >= s->pending_buf_size)) {
+			flush_pending_fp(s->strm);
+			if (s->strm->avail_out == 0) {
+				return (last && s->strm->avail_in == 0 && s->bi_valid == 0 && s->block_open == 0) ? finish_started : need_more;
+			}
+		}
 
-        if (s->lookahead >= AOCL_MIN_MATCH) {
-            INSERT_STRING_MUL(s, s->strstart, hash_head);
-            dist = s->strstart - hash_head;
+		if (UNLIKELY(s->lookahead < MIN_LOOKAHEAD)) {
+			aocl_fill_window_fp(s);
+			if (UNLIKELY(s->lookahead < MIN_LOOKAHEAD && flush == Z_NO_FLUSH)) {
+				return need_more;
+			}
+			if (UNLIKELY(s->lookahead == 0))
+				break;
 
-            if ((dist-1) < (s->w_size - 1)) {
-				if(*(unsigned short *)(s->window + s->strstart) == *(unsigned short *)(s->window + s->strstart - dist)) {
-                	match_len = aocl_compare256_fp(s->window + s->strstart + 2, s->window + s->strstart - dist + 2) + 2;
+			if (UNLIKELY(s->block_open == 0)) {
+				/* Start new block when we have lookahead data, so that if no
+				   input data is given an empty block will not be written */
+				QUICK_START_BLOCK(s, last);
+			}
+		}
 
-                	if (match_len >= AOCL_MIN_MATCH) {
-                    	if (match_len > s->lookahead)
-                     		match_len = s->lookahead;
+		if (LIKELY(s->lookahead >= AOCL_MIN_MATCH)) {
+			INSERT_STRING_MUL(s, s->strstart, hash_head);
+			dist = s->strstart - hash_head;
 
-                    	static_emit_ptr(s, match_len - MIN_MATCH, s->strstart - hash_head);
-                    	s->lookahead -= match_len;
+			if (dist <= MAX_DIST(s) && dist > 0) {
+				const uint8_t* str_start = s->window + s->strstart;
+				const uint8_t* match_start = s->window + hash_head;
+
+				if (*(unsigned short*)(str_start) == *(unsigned short*)(match_start)) {
+					match_len = aocl_compare256_fp(str_start + 2, match_start + 2) + 2;
+
+					if (match_len >= AOCL_MIN_MATCH) {
+						if (UNLIKELY(match_len > s->lookahead))
+							match_len = s->lookahead;
+						if (UNLIKELY(match_len > STD_MAX_MATCH))
+							match_len = STD_MAX_MATCH;
+
+						static_emit_ptr(s, match_len - MIN_MATCH, (uint32_t)dist);
+						s->lookahead -= match_len;
 						s->strstart += match_len;
-                    	continue;
+						continue;
 					}
-                }
-            }
-        }
+				}
+			}
+		}
 
-        static_emit_lit(s, s->window[s->strstart]);
-        s->strstart++;
-        s->lookahead--;
-    } while (s->strm->avail_out != 0);
+		static_emit_lit(s, s->window[s->strstart]);
+		s->strstart++;
+		s->lookahead--;
+	}
 
-    if (s->strm->avail_out == 0 && flush != Z_FINISH)
-        return need_more;
+	s->insert = s->strstart < (MIN_MATCH - 1) ? s->strstart : (MIN_MATCH - 1);
+	if (UNLIKELY(last)) {
+		QUICK_END_BLOCK(s, 1);
+		return finish_done;
+	}
 
-    s->insert = s->strstart < MIN_MATCH - 1 ? s->strstart : MIN_MATCH-1;
-    if (flush == Z_FINISH) {
-        static_emit_end_block(s, 1);
-        if (s->strm->avail_out == 0)
-            return finish_started;
-        else
-            return finish_done;
-    }
-
-    static_emit_end_block(s, 0);
-    return block_done;
+	QUICK_END_BLOCK(s, 0);
+	return block_done;
 }
 
 local z_const unsigned quick_len_codes[MAX_MATCH-MIN_MATCH+1] = {
@@ -8426,4 +8460,4 @@ local z_const unsigned quick_dist_codes[MAX_SEARCH_DIST] = {
 	0x3ff1712, 0x3ff3712, 0x3ff5712, 0x3ff7712, 
 	0x3ff9712, 0x3ffb712, 0x3ffd712, 0x3fff712, 
 };
-
+#endif /* AOCL_ZLIB_OPT */

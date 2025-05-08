@@ -39,4 +39,20 @@
 extern void aocl_zlib_set_enable_dquick(int val);
 extern int aocl_zlib_get_enable_dquick(void);
 
+#ifdef AOCL_ENABLE_THREADS
+
+#define CALCULATE_CHECKSUM(source, len, wrap) \
+    (wrap == 1) ? adler32_x86(1L, (const Bytef *)source, len) : \
+    (wrap == 2) ? crc32(0L, (const Bytef *)source, len) : \
+    0
+
+#define UPDATE_CHECKSUM(checksum1, checksum2, len2, wrap) \
+    (wrap == 1) ? adler32_combine(checksum1, checksum2, len2) : \
+    (wrap == 2) ? crc32_combine(checksum1, checksum2, len2) : \
+    0
+
+extern int insert_Header_generic(Bytef *dest, int level, const int wrap);
+extern int insert_Trailer_generic(Bytef *dest, AOCL_UINT32 checksum, uLong sourceLen, const int wrap);
+#endif /* AOCL_ENABLE_THREADS */
+
 #endif /* AOCL_ZLIB_UTILS_H */

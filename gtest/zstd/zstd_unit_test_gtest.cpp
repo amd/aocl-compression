@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -823,7 +823,11 @@ TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_readFdsFrame
     alloc_src(srcSz);
     write_valid_fds_frame(srcSz);
     Test_AOCL_ZSTD_readFdsFrame(dctx, (char*)src + ZSTD_SKIPPABLEHEADERSIZE, srcSz - ZSTD_SKIPPABLEHEADERSIZE);
+#if AOCL_DECOMPRESS_FAST == 2
     EXPECT_EQ(dctx->fds, FDS_FAST2_NOTB_SO4_NOEXT_REP2);
+#else
+    EXPECT_EQ(dctx->fds, FDS_DEFAULT_CONF);
+#endif
 }
 
 TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_fail_2) { // srcSize insufficient
@@ -848,18 +852,18 @@ TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFram
     EXPECT_EQ(dctx->fds, 0);
 }
 
-TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_fail_4) { // type not FDS_FAST2_NOTB_SO4_NOEXT_REP2
+TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_pass_4) { // type not FDS_FAST2_NOTB_SO4_NOEXT_REP2
     size_t srcSz = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE;
     alloc_src(srcSz);
     
     //write non FDS frame
     char fds[FDS_FRAME_LENGTH];
     *((U64*)fds) = FDS_MAGIC_WORD;
-    *((U64*)(fds + FDS_MAGIC_WORD_BYTES)) = FDS_FAST2_NOTB_SO4_NOEXT_REP2 - 1; // wrong type
+    *((U64*)(fds + FDS_MAGIC_WORD_BYTES)) = (U64)-1; // unsupported type
     EXPECT_FALSE(ZSTD_isError(ZSTD_writeSkippableFrame(src, srcSz, fds, FDS_FRAME_LENGTH, 0)));
 
     Test_AOCL_ZSTD_readFdsFrame(dctx, (char*)src + ZSTD_SKIPPABLEHEADERSIZE, srcSz - ZSTD_SKIPPABLEHEADERSIZE);
-    EXPECT_EQ(dctx->fds, 0);
+    EXPECT_EQ(dctx->fds, (U64)-1); // value is read as is
 }
 /*********************************************
 * End of ZSTD_AOCL_ZSTD_readFdsFrame

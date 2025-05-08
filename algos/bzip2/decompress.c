@@ -10,7 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
-   Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -662,6 +662,7 @@ Int32 BZ2_decompress ( DState* s )
    it reads 20*21=420 bits , 420 bits=52.5 bytes , 52.5 bytes≈53 bytes
 */
 #define AOCL_WHILE_LIMIT 53
+#define AOCL_MTFL_FAST_PATH_LIMIT 128
 
 #define AOCL_GET_BITS1(lll,vvv,nnn)               \
    s->state = lll;                                \
@@ -1094,7 +1095,7 @@ Int32 AOCL_BZ2_decompress ( DState* s )
                UInt32 nn;
                nn = (UInt32)(nextSym - 1);
 
-               if (nn < MTFL_SIZE) {
+               if (nn < AOCL_MTFL_FAST_PATH_LIMIT) {
                   /* avoid general-case expense */
                   pp = s->mtfbase[0];
                   uc = s->mtfa[pp+nn];

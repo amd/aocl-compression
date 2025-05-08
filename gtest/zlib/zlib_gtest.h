@@ -58,6 +58,7 @@ extern "C" {
 }
 #endif
 #include "algos/zlib/aocl_send_bits.h"
+#include "algos/zlib/crc32_x86.h"
 #include "api/aocl_compression.h"
 #include "gtest/gtest.h"
 
@@ -65,13 +66,18 @@ using namespace std;
 
 #define MIN(a,b)    ( (a) < (b) ? (a) : (b) )
 
-// class for running same gtest for different optimization levels
-class AOCL_Compression_zlib : public ::testing::TestWithParam<int> {
+// class for running same gtest for different optimization levels and AOCL_ZLIB_QUICK_MODE
+class AOCL_Compression_zlib : public ::testing::TestWithParam<tuple<int, int>> {
     void SetUp() override{
-        aocl_setup_zlib(0, (int)GetParam(), 0, 0, 0);
+        int enable_dquick = get<0>(::testing::TestWithParam<tuple<int, int>>::GetParam());
+        test_aocl_zlib_set_enable_dquick(enable_dquick);
+
+        int optLevel = get<1>(::testing::TestWithParam<tuple<int, int>>::GetParam());
+        aocl_setup_zlib(0, optLevel, 0, 0, 0);
     }
 
     void TearDown() override {
+        test_aocl_zlib_set_enable_dquick(0);
         aocl_destroy_zlib();
     }
 };

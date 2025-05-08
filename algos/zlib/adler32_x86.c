@@ -403,7 +403,7 @@ void ZLIB_INTERNAL aocl_destroy_adler32(void) {
 
 /* This function intercepts non optimized code path and orchestrate
  * optimized code flow path */
-uint32_t ZEXPORT adler32_x86(uint32_t sum_A, const Bytef* buf, z_size_t len)
+uInt ZEXPORT adler32_x86(uInt sum_A, const Bytef* buf, z_size_t len)
 {
 #ifdef AOCL_ZLIB_OPT
     AOCL_SETUP_NATIVE();

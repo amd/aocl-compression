@@ -4,7 +4,7 @@
  */
 
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -46,6 +46,11 @@
  * real thing. On MSDOS, use only on file names without extension
  * or in pipe mode.
  */
+
+#ifdef _MSC_VER
+#define _CRT_NONSTDC_NO_DEPRECATE
+#define _CRT_SECURE_NO_DEPRECATE
+#endif
 
 #include "zlib.h"
 #include <stdio.h>
@@ -526,8 +531,7 @@ static void file_uncompress(char *file) {
  *   -1 to -9 : compression level
  */
 
-// AOCL: main() renamed to zlib_minigzip_main()
-int zlib_minigzip_main(int argc, char **argv) {
+int main(int argc, char **argv) {
     int copyout = 0;
     int uncompr = 0;
     gzFile file;

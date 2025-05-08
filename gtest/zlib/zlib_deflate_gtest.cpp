@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -408,13 +408,14 @@ TEST(AOCL_Compression_zlib, deflateTune_common)
   EXPECT_EQ(state->max_chain_length, 4);
 }
 
-TEST(AOCL_Compression_zlib, deflateBound_common)
+TEST_P(AOCL_Compression_zlib, deflateBound_common)
 {
   ZLIB_deflate_stream deflateObj;
   int is_quick_mode = 0;
   int sourceLen = 1 << 6;
 
-  if(getenv("AOCL_ZLIB_QUICK_MODE") != NULL)
+  const char* AOCL_enable_quick = getenv("AOCL_ZLIB_QUICK_MODE");
+  if (AOCL_enable_quick != NULL && (strcmp(AOCL_enable_quick, "ON") == 0))
     is_quick_mode = 1;
   
   if(is_quick_mode)
@@ -762,6 +763,204 @@ TEST_P(AOCL_Compression_zlib, deflate_large_buffers)
     deflate_large_buffers_(1); // validate level 1
     deflate_large_buffers_(Z_DEFAULT_COMPRESSION); // validate level 6
     deflate_large_buffers_(9); // validate level 9
+}
+
+#define GZIP_COMPR_BUFFER_SIZE (131072 * 4)
+#define GZIP_UNCOMPR_BUFFER_SIZE (131072 * 4)
+local int simulate_gz_comp(z_streamp strm, int flush, uint8_t** state_fd, uint8_t** state_x_next, uint8_t *state_out, uint32_t state_size) {
+    int ret;
+    unsigned have, put, max = ((unsigned)-1 >> 2) + 1;
+
+    /* run deflate() on provided input until it produces no more output */
+    ret = Z_OK;
+    do {
+        /* write out current buffer contents if full, or if flushing, but if
+           doing Z_FINISH then don't write until we get to Z_STREAM_END */
+        if (strm->avail_out == 0 || (flush != Z_NO_FLUSH &&
+            (flush != Z_FINISH || ret == Z_STREAM_END))) {
+            
+            
+            while (strm->next_out > *state_x_next) {
+                put = (unsigned)(strm->next_out - *state_x_next);
+                memcpy(*state_fd, *state_x_next, put);
+                *state_fd += put;
+                *state_x_next += put;
+            }
+            if (strm->avail_out == 0) {
+                strm->avail_out = state_size;
+                strm->next_out = state_out;
+                *state_x_next = state_out;
+            }
+        }
+
+        /* compress */
+        have = strm->avail_out;
+        ret = deflate(strm, flush);
+        EXPECT_NE(ret, Z_STREAM_ERROR);
+        if (ret == Z_STREAM_ERROR)
+            return -1;
+        have -= strm->avail_out;
+    } while (have);
+
+    /* all done, no errors */
+    return 0;
+}
+
+local z_size_t simulate_gz_read(z_streamp strm) {
+    z_size_t len = strm->avail_out;
+    unsigned n;
+
+    /* if len is zero, avoid unnecessary operations */
+    if (len == 0)
+        return 0;
+
+    /* decompress in one shot as this is just for validation */
+    //gz_fetch
+    int ret = inflateInit2(strm, 15 + 16);
+    EXPECT_EQ(ret, Z_OK);
+    if (ret != Z_OK) return 0;
+    EXPECT_GT(strm->avail_in, 0); //gz_avail - we already have input in strm->next_in
+    inflateReset(strm);
+
+    //gz_decomp
+    ret = inflate(strm, Z_NO_FLUSH);
+    EXPECT_GE(ret, Z_OK);
+
+    //gzclose_r
+    ret = inflateEnd(strm);
+    EXPECT_EQ(ret, Z_OK);
+
+    return strm->total_out;
+}
+
+local z_size_t simulate_gz_write(z_streamp strm, uint8_t* compr, uint8_t* uncompr, unsigned want, unsigned len) {
+    uint8_t* state_in, * state_out, * state_x_next, * state_fd;
+    uint32_t state_size = want;
+    int strategy = 0;
+    int level = 1;
+
+    state_in = (uint8_t*)calloc(1, want << 1); /* allocate input buffer (double size for gzprintf) */
+    state_out = (uint8_t*)calloc(1, want);
+
+    EXPECT_EQ(deflateInit2(strm, level, Z_DEFLATED,
+        MAX_WBITS + 16, DEF_MEM_LEVEL, strategy), Z_OK);
+
+    strm->next_out = state_out;
+    strm->avail_out = state_size;
+    strm->next_in = NULL;
+    strm->avail_in = 0;
+    state_x_next = strm->next_out;
+    state_fd = compr;
+    uint8_t* buf = uncompr;
+
+    /* for small len, copy to input buffer, otherwise compress directly */
+    if (len < state_size) {
+        /* copy to input buffer, compress when full */
+        do {
+            unsigned have, copy;
+
+            if (strm->avail_in == 0)
+                strm->next_in = state_in;
+            have = (unsigned)((strm->next_in + strm->avail_in) -
+                state_in);
+            copy = state_size - have;
+            if (copy > len)
+                copy = (unsigned)len;
+            memcpy(state_in + have, buf, copy);
+            strm->avail_in += copy;
+            //state->x.pos += copy;
+            buf = buf + copy;
+            len -= copy;
+            if (len && simulate_gz_comp(strm, Z_NO_FLUSH, &state_fd, &state_x_next, state_out, state_size) == -1)
+                goto cleanup;
+        } while (len);
+    }
+    else {
+        /* consume whatever's left in the input buffer */
+        if (strm->avail_in && simulate_gz_comp(strm, Z_NO_FLUSH, &state_fd, &state_x_next, state_out, state_size) == -1)
+            goto cleanup;
+
+        /* directly compress user buffer to file */
+        strm->next_in = (z_const Bytef*)buf;
+        do {
+            unsigned n = (unsigned)-1;
+            if (n > len)
+                n = (unsigned)len;
+            strm->avail_in = n;
+            //state->x.pos += n;
+            if (simulate_gz_comp(strm, Z_NO_FLUSH, &state_fd, &state_x_next, state_out, state_size) == -1)
+                goto cleanup;
+            len -= n;
+        } while (len);
+    }
+
+    EXPECT_NE(simulate_gz_comp(strm, Z_FINISH, &state_fd, &state_x_next, state_out, state_size), -1);
+    if (state_size) {
+        EXPECT_EQ(deflateEnd(strm), Z_OK);
+    }
+
+    EXPECT_LE(state_fd, compr + GZIP_COMPR_BUFFER_SIZE); //no overflow
+
+cleanup:
+    free(state_in);
+    free(state_out);
+
+    return (state_fd - compr); //compr_len
+}
+
+void simulate_gzip_read_write(unsigned want, unsigned len) {
+    ASSERT_LE(len, GZIP_UNCOMPR_BUFFER_SIZE);
+
+    z_stream c_strm, d_strm;
+    uint8_t* compr, * uncompr, *validate;
+    uint32_t compr_len, uncompr_len;
+    int32_t i;
+    time_t now;
+    int err;
+
+    //Setup
+    memset(&c_strm, 0, sizeof(c_strm));
+    memset(&d_strm, 0, sizeof(d_strm));
+
+    compr = (uint8_t*)calloc(1, GZIP_COMPR_BUFFER_SIZE);
+    ASSERT_TRUE(compr != NULL);
+    uncompr = (uint8_t*)calloc(1, GZIP_UNCOMPR_BUFFER_SIZE);
+    ASSERT_TRUE(uncompr != NULL);
+    validate = (uint8_t*)calloc(1, GZIP_UNCOMPR_BUFFER_SIZE);
+    ASSERT_TRUE(validate != NULL);
+
+    compr_len = 0;
+    uncompr_len = len;
+
+    srand((unsigned)time(&now));
+    for (i = 0; i < len; i++)
+        uncompr[i] = (uint8_t)(rand() % 256);
+    memcpy(validate, uncompr, len);
+
+    //Run
+    compr_len = simulate_gz_write(&c_strm, compr, uncompr, want, len);
+    EXPECT_GT(compr_len, 0);
+    
+    //Validate
+    memset(uncompr, 0, GZIP_UNCOMPR_BUFFER_SIZE);
+    d_strm.next_in = compr;
+    d_strm.avail_in = compr_len;
+    d_strm.next_out = uncompr;
+    d_strm.avail_out = uncompr_len;
+    EXPECT_EQ(simulate_gz_read(&d_strm), uncompr_len);
+    EXPECT_EQ(memcmp(validate, uncompr, uncompr_len), 0);
+
+    free(compr);
+    free(uncompr);
+    free(validate);
+}
+
+TEST_P(AOCL_Compression_zlib, simulate_gzip)
+{
+    simulate_gzip_read_write(8192, 8192 * 4); //GZBUFSIZE based on zlib
+    simulate_gzip_read_write(8192 * 4, 8192);
+    simulate_gzip_read_write(131072, 131072 * 3);  //GZBUFSIZE based on zlib-ng
+    simulate_gzip_read_write(131072 * 3, 131072);
 }
 
 #if defined(AOCL_INTERNAL_TEST)

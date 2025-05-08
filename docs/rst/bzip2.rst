@@ -30,4 +30,5 @@ BZIP2
 -----
 
 .. doxygengroup:: BZIP2_API
+   :project: compression
    :members:

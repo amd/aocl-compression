@@ -9,7 +9,7 @@
  */
 
 /*
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -1441,6 +1441,9 @@ typedef enum {
    *                                                  The function nonetheless guarantees forward progress : It will return only after it reads or write at least 1+ byte.
    *  - \b Exception : If the first call requests a ZSTD_e_end directive and provides enough dstCapacity, the function delegates to ZSTD_compress2() which is always blocking.
    *
+   *  @note : In AOCL_DECOMPRESS_FAST=3 mode, when using streaming APIs to compress, 'Frame_Content_Size' is force set to unknown. 
+   *          Multiple ZSTD frames might be created in this mode. The decision to terminate current frame and start a new frame is determined dynamically. 
+   *          As input size that results in a frame is known only after processing, updating it in the frame header is not possible post processing.
    * @warning ZSTD_compressStream2() : Requires v1.4.0+
    */
 ZSTDLIB_API size_t ZSTD_compressStream2( ZSTD_CCtx* cctx,

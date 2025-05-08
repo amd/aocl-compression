@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -578,6 +578,7 @@ TEST_F(LZ4HC_LZ4_initStreamHC, AOCL_Compression_lz4hc_LZ4_initStreamHC_pass_comm
 /*********************************************
  * "Begin" of AOCL_LZ4_initStreamHC Test
  *********************************************/
+#ifdef AOCL_LZ4HC_OPT
 class LZ4HC_AOCL_LZ4_initStreamHC : public ::testing::Test
 {
 public:
@@ -652,6 +653,7 @@ TEST_F(LZ4HC_AOCL_LZ4_initStreamHC, AOCL_Compression_lz4hc_AOCL_LZ4_initStreamHC
     for(int i=0; i<ctx_internal_size; i++)
         EXPECT_EQ(hcstate[i],0);
 }
+#endif /* AOCL_LZ4HC_OPT */
 /*********************************************
  * "End" of AOCL_LZ4_initStreamHC Tests
  *********************************************/
@@ -703,9 +705,11 @@ public:
 
     virtual int create_stream()
     {
+#ifdef AOCL_LZ4HC_OPT
         if (use_AOCL_LZ4_streamHC(opt_off, compression_level))
             strm = AOCL_LZ4_createStreamHC(); 
         else 
+#endif /* AOCL_LZ4HC_OPT */
             strm = LZ4_createStreamHC();
         EXPECT_NE(strm, nullptr);
         return 1;
@@ -713,9 +717,11 @@ public:
 
     void free_stream() 
     {
+#ifdef AOCL_LZ4HC_OPT
         if (use_AOCL_LZ4_streamHC(opt_off, compression_level))
             is_stream_created = AOCL_LZ4_freeStreamHC((AOCL_LZ4_streamHC_t*)strm);
         else
+#endif /* AOCL_LZ4HC_OPT */
             is_stream_created = LZ4_freeStreamHC((LZ4_streamHC_t*)strm); 
     }
 
@@ -895,6 +901,7 @@ class LZ4HC_LZ4_compress_HC_extStateHC_fastReset : public LZ4HC_LZ4_compress_HC_
     public:
     int create_stream() override
     {
+#ifdef AOCL_LZ4HC_OPT
         if(use_AOCL_LZ4_streamHC(opt_off, compression_level))
         {
             strm = AOCL_LZ4_createStreamHC();
@@ -902,7 +909,9 @@ class LZ4HC_LZ4_compress_HC_extStateHC_fastReset : public LZ4HC_LZ4_compress_HC_
             if (ctx == NULL) return 0;   /* init failure */
             else return 1;
         }
-        else{
+        else
+#endif /* AOCL_LZ4HC_OPT */
+        {
             strm = LZ4_createStreamHC();
             LZ4_streamHC_t* const ctx = LZ4_initStreamHC(strm, sizeof(*ctx));
             if (ctx == NULL) return 0;   /* init failure */
@@ -913,13 +922,16 @@ class LZ4HC_LZ4_compress_HC_extStateHC_fastReset : public LZ4HC_LZ4_compress_HC_
     bool initialize_stream()
     {
         memset(strm, 0, sizeof(strm));
+#ifdef AOCL_LZ4HC_OPT
         if (use_AOCL_LZ4_streamHC(opt_off, compression_level))
         {
             AOCL_LZ4_streamHC_t* const ctx = AOCL_LZ4_initStreamHC(strm, sizeof(*ctx));
             if (ctx == NULL) return false;   /* init failure */
             else return true;
         }
-        else{
+        else
+#endif /* AOCL_LZ4HC_OPT */
+        {
             LZ4_streamHC_t* const ctx = LZ4_initStreamHC(strm, sizeof(*ctx));
             if (ctx == NULL) return false;   /* init failure */
             else return true;

@@ -206,7 +206,7 @@ local const z_word_t FAR crc_big_table[] = {
 
 #endif
 
-#if N == 1
+#if NN == 1
 
 #if W == 8
 
@@ -1744,7 +1744,7 @@ local const z_word_t FAR crc_braid_big_table[][256] = {
 
 #endif
 
-#if N == 2
+#if NN == 2
 
 #if W == 8
 
@@ -3282,7 +3282,7 @@ local const z_word_t FAR crc_braid_big_table[][256] = {
 
 #endif
 
-#if N == 3
+#if NN == 3
 
 #if W == 8
 
@@ -4820,7 +4820,7 @@ local const z_word_t FAR crc_braid_big_table[][256] = {
 
 #endif
 
-#if N == 4
+#if NN == 4
 
 #if W == 8
 
@@ -6358,7 +6358,7 @@ local const z_word_t FAR crc_braid_big_table[][256] = {
 
 #endif
 
-#if N == 5
+#if NN == 5
 
 #if W == 8
 
@@ -7896,7 +7896,7 @@ local const z_word_t FAR crc_braid_big_table[][256] = {
 
 #endif
 
-#if N == 6
+#if NN == 6
 
 #if W == 8
 

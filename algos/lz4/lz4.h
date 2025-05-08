@@ -2,7 +2,7 @@
  *  LZ4 - Fast LZ compression algorithm
  *  Header File
  *  Copyright (C) 2011-2020, Yann Collet.
- *  Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ *  Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -180,7 +180,6 @@ LZ4LIB_API const char* LZ4_versionString (void);
 /**----- AOCL Optimization flags -----*/
 
 #ifdef AOCL_LZ4_OPT
-#define AOCL_LZ4_DATA_ACCESS_OPT_LOAD_EARLY
 //#define AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
 //#define AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
 #ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1

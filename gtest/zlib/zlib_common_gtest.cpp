@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -205,15 +205,15 @@ TEST_P(AOCL_Compression_zlib, uncompress2_negative)
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_2
   compressed[3] = t;
   uncompressLen = 3; // insufficient output buffer size
+  #ifdef AOCL_ENABLE_THREADS
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR); // AOCL_Compression_zlib_uncompress2_common_3
+  #else
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_3
+  #endif
   EXPECT_EQ(uncompress2(NULL, &uncompressLen, compressed, &compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_4
   EXPECT_EQ(uncompress2(uncompressed,NULL,compressed,&compressedLen),Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_5
-#ifdef AOCL_ENABLE_THREADS
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, NULL, &compressedLen), Z_BUF_ERROR);  // AOCL_Compression_zlib_uncompress2_common_6
-#else
   EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, NULL, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_6
-#endif
-  EXPECT_EQ(uncompress2(uncompressed,&uncompressLen,compressed,NULL),Z_BUF_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
+  EXPECT_EQ(uncompress2(uncompressed,&uncompressLen,compressed, NULL), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
 }
 
 TEST_P(AOCL_Compression_zlib, uncompress2_common)
@@ -251,7 +251,7 @@ TEST_P(AOCL_Compression_zlib, uncompress_negative)
   EXPECT_EQ(uncompress(NULL, &uncompressLen, compressed, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_4
   EXPECT_EQ(uncompress(uncompressed, NULL, compressed, compressedLen),Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress_common_5
 #ifdef AOCL_ENABLE_THREADS
-    EXPECT_EQ(uncompress(uncompressed, &uncompressLen, NULL, compressedLen), Z_BUF_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
+    EXPECT_EQ(uncompress(uncompressed, &uncompressLen, NULL, compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
 #else
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, NULL, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
 #endif
@@ -270,6 +270,19 @@ TEST_P(AOCL_Compression_zlib, uncompress_common)
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_OK);  // AOCL_Compression_zlib_uncompress_common_8
   EXPECT_EQ(uncompressLen, source.size());
   EXPECT_TRUE(cmpr(source.data(), (char *)uncompressed, source.size()));
+}
+
+void test_crc32_x86(uLong crc, const Bytef* buf, uInt len) {
+    int highest_supported_level = get_cpu_opt_flags(0);
+    uLong ref = crc32_z_c(crc, buf, len);
+#ifdef AOCL_ZLIB_AVX_OPT
+    if (highest_supported_level >= 2) // >= AVX
+        EXPECT_EQ(crc32_z_impl_x86_avx(crc, buf, len), ref);
+#endif /* AOCL_ZLIB_AVX_OPT */
+#ifdef AOCL_ZLIB_AVX512_OPT
+    if (highest_supported_level >= 4) // >= AVX512
+        EXPECT_EQ(crc32_z_impl_x86_avx512(crc, buf, len), ref);
+#endif /* AOCL_ZLIB_AVX512_OPT */
 }
 
 // common boundary test case for checksum APIs to minimize memory footprint while running in parallel
@@ -297,6 +310,7 @@ TEST(AOCL_Compression_zlib, checksum_boundary_common)
   EXPECT_EQ(crc32_z(7, buf, len), 7);
   EXPECT_EQ(crc32(7, buf, len), 7);
   EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
+  test_crc32_x86(adler, buf, len);
   
   EXPECT_EQ(adler32_combine(adler32(1, buf, 255), adler32(1, buf + 255, 1000), 1000), adler32(1, buf, 1255));
 
@@ -501,6 +515,59 @@ TEST_P(AOCL_Compression_zlib, adler32_x86_common)
   //len = UINT32_MAX;
   //EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
 
+  free(buf);
+  buf = nullptr;
+}
+
+TEST(AOCL_Compression_zlib, crc32_x86_common)
+{
+  size_t len = 5552;
+  Bytef *buf = (Bytef *)malloc(len);
+  for (size_t i = 0; i < len; i++)
+  {
+    buf[len - i - 1] = i % 255;
+  }
+
+  uLong crc = 1 << 16;
+  len = 10;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_1
+
+  crc = 0;
+  len = 10;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_2
+
+  crc = ((uLong)1L << 31) - 1;
+  len = 1;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_3
+
+  len = 10;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_4
+
+  len = 19;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_5
+
+  len = 5552;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_6
+
+  len = 64;
+  crc = 1;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_7
+
+  len = 1;
+  crc = 0xFFFFFFFF;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_8
+
+  len = 60;
+  crc = 0xFFFFFFFF;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_9
+
+  len = 0;
+  test_crc32_x86(crc, buf, len); // AOCL_Compression_zlib_crc32_x86_common_10
+
+  crc = 1 << 16;
+  len = 10;
+  EXPECT_EQ(crc32_z(crc, NULL, len), 0);  // AOCL_Compression_zlib_crc32_x86_common_11
+  
   free(buf);
   buf = nullptr;
 }
@@ -915,6 +982,118 @@ FUZZ_TEST(AOCL_Compression_zlib, uncompress_fuzz)
 })
 #endif
 ;
+
+#ifdef AOCL_ENABLE_THREADS
+void compress2_gzip_fuzz(vector<Bytef> source, size_t dest_sz,
+                    int level, int optOff, int optLevel)
+{
+  aocl_setup_zlib(optOff, optLevel, 0, 0, 0);
+
+  uLong destLen = dest_sz > ULONG_MAX ? ULONG_MAX : dest_sz;
+  uLong srcLen = source.size();
+  vector<Bytef> dest(destLen, 0);
+
+  compress2_gzip(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  aocl_destroy_zlib();
+}
+FUZZ_TEST(AOCL_Compression_zlib, compress2_gzip_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+            fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+            fuzztest::InRange<int>(-1, 9),
+            fuzztest::InRange<int>(0, 1),
+            fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_cpr_seed_t<Bytef> {
+  auto seed_files = READ_FUZZ_CPR_SEED();
+  return get_fuzz_cpr_seeds<Bytef>([](size_t src_sz) -> size_t {
+    size_t dst_sz = (size_t)compressBound_gzip((uLong)src_sz);
+    return limit_fuzz_size_max(dst_sz);
+  }, -1, 9, seed_files);
+})
+#endif
+;
+
+void uncompress2_gzip_fuzz(vector<Bytef> source, size_t dest_sz,
+                    int optOff, int optLevel)
+{
+  aocl_setup_zlib(optOff, optLevel, 0, 0, 0);
+
+  uLong destLen = dest_sz;
+  uLong srcLen = source.size();
+  vector<Bytef> dest(destLen, 0);
+
+  uncompress2_gzip(dest.data(), &destLen, source.data(), &srcLen);
+
+  aocl_destroy_zlib();
+}
+FUZZ_TEST(AOCL_Compression_zlib, uncompress2_gzip_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<Bytef> {
+  auto seed_files = READ_FUZZ_DPR_SEED();
+  return get_fuzz_dpr_seeds<Bytef>(seed_files);
+})
+#endif
+;
+
+void compress2_raw_fuzz(vector<Bytef> source, size_t dest_sz,
+                    int level, int optOff, int optLevel)
+{
+  aocl_setup_zlib(optOff, optLevel, 0, 0, 0);
+
+  uLong destLen = dest_sz > ULONG_MAX ? ULONG_MAX : dest_sz;
+  uLong srcLen = source.size();
+  vector<Bytef> dest(destLen, 0);
+
+  compress2_raw(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  aocl_destroy_zlib();
+}
+FUZZ_TEST(AOCL_Compression_zlib, compress2_raw_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+            fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+            fuzztest::InRange<int>(-1, 9),
+            fuzztest::InRange<int>(0, 1),
+            fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_cpr_seed_t<Bytef> {
+  auto seed_files = READ_FUZZ_CPR_SEED();
+  return get_fuzz_cpr_seeds<Bytef>([](size_t src_sz) -> size_t {
+    size_t dst_sz = (size_t)compressBound((uLong)src_sz);
+    return limit_fuzz_size_max(dst_sz);
+  }, -1, 9, seed_files);
+})
+#endif
+;
+
+void uncompress2_raw_fuzz(vector<Bytef> source, size_t dest_sz,
+                    int optOff, int optLevel)
+{
+  aocl_setup_zlib(optOff, optLevel, 0, 0, 0);
+
+  uLong destLen = dest_sz;
+  uLong srcLen = source.size();
+  vector<Bytef> dest(destLen, 0);
+
+  uncompress2_raw(dest.data(), &destLen, source.data(), &srcLen);
+
+  aocl_destroy_zlib();
+}
+FUZZ_TEST(AOCL_Compression_zlib, uncompress2_raw_fuzz)
+.WithDomains(fuzztest::Arbitrary<vector<Bytef>>(),
+             fuzztest::InRange<size_t>(0, READ_FUZZ_SIZE_MAX()),
+             fuzztest::InRange<int>(0, 1),
+             fuzztest::InRange<int>(0, 4))
+#ifdef AOCL_TEST_FUZZER_WITH_CORPUS
+.WithSeeds([]() -> fuzz_dpr_seed_t<Bytef> {
+  auto seed_files = READ_FUZZ_DPR_SEED();
+  return get_fuzz_dpr_seeds<Bytef>(seed_files);
+})
+#endif
+;
+#endif /* AOCL_ENABLE_THREADS */
 #endif /* AOCL_TEST_FUZZER */
 /*********************************************
  * End fuzz tests for zlib

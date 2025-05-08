@@ -4,6 +4,7 @@ This file is a part of libsais, a library for linear time suffix array,
 longest common prefix array and burrows wheeler transform construction.
 
    Copyright (c) 2021-2024 Ilya Grebnov <ilya.grebnov@gmail.com>
+   Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -28,6 +29,11 @@ Please see the file LICENSE for full copyright information.
 #define LIBSAIS_VERSION_MINOR   8
 #define LIBSAIS_VERSION_PATCH   4
 #define LIBSAIS_VERSION_STRING  "2.8.4"
+
+#define BUCKETS_INDEX4(_c, _s)          (((_c) << 2) + (_s))
+
+// Extra elements to store T[-1] & T[-2], in buffer SA.
+#define AOCL_LIBSAIS_MOD_ELEMENTS 2
 
 #ifdef _WIN32
     #ifdef LIBSAIS_SHARED
@@ -77,11 +83,14 @@ extern "C" {
     * @param T [0..n-1] The input string.
     * @param SA [0..n-1+fs] The output array of suffixes.
     * @param n The length of the given string.
-    * @param fs The extra space available at the end of SA array (0 should be enough for most cases).
+    * @param fs The extra space that needs to be allocated at the end of SA array, the minimum space required is 2*max_recursion_depth, i.e, 2*⌈log2(n)⌉.
     * @param freq [0..255] The output symbol frequency table (can be NULL).
     * @return 0 if no error occurred, -1 or -2 otherwise.
     */
     LIBSAIS_API int32_t libsais(const uint8_t * T, int32_t * SA, int32_t n, int32_t fs, int32_t * freq);
+
+    // Helper function for testing modified implementation of libsais.
+    LIBSAIS_API int32_t Test_count_and_gather_lms_suffixes(const uint8_t * T, int32_t * SA, int32_t n, int32_t * buckets);
 
     /**
     * Constructs the suffix array of a given integer array.

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -256,6 +256,11 @@ bool has_valid_frame_content_size(char* compressed, unsigned compressedLen) {
     return (sz != ZSTD_CONTENTSIZE_UNKNOWN) && (sz != ZSTD_CONTENTSIZE_ERROR);
 }
 
+bool has_unknown_frame_content_size(char* compressed, unsigned compressedLen) {
+    unsigned long long sz = Test_ZSTD_getFrameContentSize(compressed, compressedLen);
+    return (sz == ZSTD_CONTENTSIZE_UNKNOWN);
+}
+
 /* Read a block. Return 1 if last block, 0 if not last block, -1 error.
 *  Block_Header uses 3 bytes, written using little-endian convention. It contains 3 fields :
 *  Last_Block	Block_Type	Block_Size
@@ -331,7 +336,7 @@ size_t insert_frame(void* dst, size_t dstCapacity, const void* src, size_t srcSi
     return Test_ZSTD_compress(dst, dstCapacity, src, srcSize, ZSTD_CLEVEL_DEFAULT);
 }
 
-/* Insert a single zstd frame. Calls ZSTD_compress2 that does not have FDS and MT support.
+/* Insert a single zstd frame. Calls ZSTD_compress2 that does not have MT support.
  * Recommended for creation of zstd frame to test things like properties, etc */
 size_t insert_frame_reference(void* dst, size_t dstCapacity, const void* src, size_t srcSize) {
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
@@ -473,7 +478,7 @@ TEST(ZSTD_versionString, AOCL_Compression_zstd_ZSTD_versionString_common_2) // S
 void ZSTD_ZSTD_compress_base::validate_compress_format(char* compressed, unsigned compressedLen, unsigned dstCapacity) {
     EXPECT_LE(compressedLen, dstCapacity);
     EXPECT_TRUE(has_valid_frames(compressed, compressedLen));
-    EXPECT_TRUE(has_valid_frame_content_size(compressed, compressedLen));
+    EXPECT_TRUE(has_valid_frame_content_size(compressed, compressedLen) || has_unknown_frame_content_size(compressed, compressedLen));
 }
 
 void ZSTD_ZSTD_compress_base::validate_compress(char* src, unsigned srcSize, char* compressed, unsigned compressedLen, unsigned dstCapacity) {
@@ -687,6 +692,10 @@ void ZSTD_frame_creator::create_frame_reference()
 {
     src = d->getCompressedBuff();
     srcLen = insert_frame_reference(src, d->getCompressedSize(), original, origLen);  // Compress data from `original` buffer to `src` buffer.
+#if AOCL_DECOMPRESS_FAST > 1
+    src += ZSTD_FDS_FRAME_SIZE; // Skip FDS frame
+    srcLen -= ZSTD_FDS_FRAME_SIZE;
+#endif
 }
 
 void ZSTD_frame_creator::create_frame_overwrite()
@@ -2614,8 +2623,8 @@ void ZSTD_decompressStream_fuzz(std::vector<char> source, int dest_len)
     std::vector<char> output(dest_len);
     buffOut.dst = output.data();
     buffIn.src = source.data();
-    buffOut.size = 0;
-    buffIn.size = 0;
+    buffOut.size = output.size();
+    buffIn.size = source.size();
     ZSTD_decompressStream(zds, &buffOut, &buffIn);
     if(zds) ZSTD_freeDStream(zds);
 }

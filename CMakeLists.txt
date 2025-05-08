@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -34,7 +34,7 @@
 # @author S. Biplab Raut
 
 
-cmake_minimum_required(VERSION 3.22.0)
+cmake_minimum_required(VERSION 3.26.0)
 
 #set the project name
 project(AOCL-COMPRESSION-LIBRARY CXX C ASM)
@@ -46,8 +46,8 @@ add_compile_definitions(AOCL_BUILD_VERSION="Build ${TODAY}")
 message(STATUS "C Compiler: ${CMAKE_C_COMPILER_ID}")
 message(STATUS "CXX Compiler: ${CMAKE_CXX_COMPILER_ID}")
 if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-    if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 7.5)
-        message(FATAL_ERROR "Minimum GCC version supported is 7.5!")
+    if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 8.5)
+        message(FATAL_ERROR "Minimum GCC version supported is 8.5!")
     endif ()
 elseif ("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
     if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 11.0)
@@ -61,8 +61,14 @@ set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
 option (BUILD_STATIC_LIBS "Build static library (Default build type is shared library)" OFF)
 option (AOCL_LZ4_OPT_PREFETCH_BACKWARDS "Enable LZ4 optimizations related to backward prefetching of data" OFF)
 option (SNAPPY_MATCH_SKIP_OPT "Enable Snappy match skipping optimization (Enabled by default)" ON)
+option (SNAPPY_HIGH_COMPRESSION "Enable Snappy high compression to get better ratio by compromising on speed (Disabled by default)" OFF)
+if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
+    option (SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS "Enable Snappy branchless decompression optimization (Disabled by default for GCC)" OFF)
+else()
+    option (SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS "Enable Snappy branchless decompression optimization (Enabled by default for non-GCC compilers)" ON)
+endif()
 option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Enabled by default)" ON)
-option (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST "Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Enabled by default)" ON)
+option (AOCL_ZSTD_SEARCH_SKIP_OPT "Enable ZSTD match skipping optimization that steps more aggresively when matches are not found (Enabled by default)" ON)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option (AOCL_TEST_COVERAGE "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" OFF)
 if(UNIX)
@@ -80,6 +86,7 @@ option (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL "Build with xz utils lzma APIs. Expe
 option (AOCL_ENABLE_LOG_FEATURE "Enable logging support in library, for which log level is determined by environement variable AOCL_ENABLE_LOG (go through README.md) (Disabled by default)" OFF)
 option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression using SMP openMP threads (Disabled by default)" OFF)
 option (TEST_COVERAGE_THIRD_PARTY "Enable third party test bench based CTest suite (Disabled by default)" OFF)
+option (BUILD_UTILITY "Enable third party utility build: zstd (Disabled by default)" OFF)
 option (NATIVE_ENABLE_THREADS "Enable native multi-threaded compression for supported methods (Disabled by default)" OFF)
 option (AOCL_TEST_FUZZER "Enable AOCL Compression fuzzer (only on Linux with Clang compiler)" OFF)
 option (AOCL_TEST_FUZZER_WITH_CORPUS "Run fuzzer tests with corpus (only on Linux with Clang compiler)" OFF)
@@ -100,19 +107,42 @@ set_property(
     "OFF" "LOW" "HIGH"
 )
 
-set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for ZSTD" )
+set(AOCL_BZIP2_HUFFMAN_ITERATIONS "3" CACHE STRING "In BZIP2, huffman tables are fine-tuned by iterating through each block of data multiple times, AOCL_BZIP2_HUFFMAN_ITERATIONS controls the number of iterations (allowed values are 1, 2, 3 and 4), lower iterations enhance speed but worsen the compression ratio (3 by default).")
+set_property(
+    CACHE AOCL_BZIP2_HUFFMAN_ITERATIONS
+    PROPERTY STRINGS
+    "1" "2" "3" "4"
+)
+
+# Faster decompress settings for supported methods
+set(AOCL_DECOMPRESS_FAST "OFF" CACHE STRING "Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values: {1,2,3} ZSTD, {1,2} Snappy, {1} LZ4." )
 set_property(
     CACHE AOCL_DECOMPRESS_FAST
     PROPERTY STRINGS
-    "OFF" "1" "2" # higher generally leads to faster decompression with larger compromise on compression speed/ratio
+    "OFF" "1" "2" "3" # Higher values generally leads to faster decompression with larger compromise on compression speed/ratio
 )
-# Faster decompress settings for supported methods
+if (NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF" AND AOCL_ENABLE_THREADS)
+    message(WARNING "Fast decompression mode excluded as it is supported in single threaded mode only")
+    set(AOCL_DECOMPRESS_FAST "OFF") # Fast decompression modes supported in single threaded mode only
+endif()
 if(NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF")
     # ZSTD
     set(AOCL_ZSTD_WILDCOPY_LONG "ON") # >= 1 
-    # AOCL_DECOMPRESS_FAST = 2 is supported when compression is performed using ZSTD_compress, ZSTD_compressCCtx, ZSTD_compress_advanced or aocl_llc_compress APIs.
     # LZ4
     set(AOCL_LZ4_DECOMPRESS_FAST "ON")
+endif()
+
+# Avoid enabling AOCL and native multi-threaded implementations simultaneously as it might lead to sub-optimal performance
+if (AOCL_ENABLE_THREADS AND NATIVE_ENABLE_THREADS)
+    message(WARNING "Both AOCL_ENABLE_THREADS and NATIVE_ENABLE_THREADS are enabled. NATIVE_ENABLE_THREADS will be disabled.")
+    set(NATIVE_ENABLE_THREADS OFF)
+endif()
+
+# Force static build when BUILD_UTILITY is enabled as some utilities cannot link to shared library
+# Note: minigzip utility can be built by linking to shared library as well. If that is desired, disable this section.
+if (BUILD_UTILITY AND NOT BUILD_STATIC_LIBS)
+    message(WARNING "Building static library to allow all utilities to be built.")
+    set(BUILD_STATIC_LIBS ON)
 endif()
 
 if (AOCL_EXCLUDE_LZ4 AND NOT AOCL_EXCLUDE_LZ4HC)
@@ -193,6 +223,7 @@ set (API_SRC_FILES  api/code_alignment.cpp
                     api/types.h)
 
 set (ALGOS_PATH algos)
+set (CMAKE_CONFIG_PATH cmake)
 if (NOT AOCL_EXCLUDE_BZIP2)
 set (BZIP2_SRC_FILES    ${ALGOS_PATH}/bzip2/code_alignment.c
                         ${ALGOS_PATH}/bzip2/blocksort.c
@@ -209,6 +240,8 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_BZIP2")
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
+include(${CMAKE_CONFIG_PATH}/algos/lz4/lz4_compress_config.cmake)
+include(${CMAKE_CONFIG_PATH}/algos/lz4/lz4_decompress_config.cmake)
 set (LZ4_SRC_FILES  ${ALGOS_PATH}/lz4/code_alignment_lz4.c
                     ${ALGOS_PATH}/lz4/lz4.c
                     ${ALGOS_PATH}/lz4/lz4.h
@@ -260,6 +293,8 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/adler32_x86.c
                     ${ALGOS_PATH}/zlib/compress.c
                     ${ALGOS_PATH}/zlib/crc32.c
+                    ${ALGOS_PATH}/zlib/crc32_x86_pclmul.c
+                    ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
                     ${ALGOS_PATH}/zlib/deflate.c
                     ${ALGOS_PATH}/zlib/deflate_medium.c
                     ${ALGOS_PATH}/zlib/deflate_quick.c
@@ -283,6 +318,8 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()
 if (NOT AOCL_EXCLUDE_ZSTD)
+include(${CMAKE_CONFIG_PATH}/algos/zstd/zstd_compress_config.cmake)
+include(${CMAKE_CONFIG_PATH}/algos/zstd/zstd_decompress_config.cmake)
 set (ZSTD_SRC_FILES ${ALGOS_PATH}/zstd/lib/common/code_alignment.c
                     ${ALGOS_PATH}/zstd/lib/common/zstd_common.c
                     ${ALGOS_PATH}/zstd/lib/common/fse_decompress.c
@@ -324,6 +361,8 @@ set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h
 set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.cpp
 						utils/utils.h)
+# Source files utilizing AVX-512 and higher ISA extensions
+set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c)
 
 if (AOCL_ENABLE_THREADS)
     set (THREADS_SRC_FILES threads/code_alignment.c
@@ -418,7 +457,14 @@ endif()
 message(STATUS "C Compiler used: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ Compiler used: ${CMAKE_CXX_COMPILER}")
 set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
-find_package(OpenMP REQUIRED) # openmp required for all configurations
+
+if(WIN32 OR NOT OpenMP_libomp_LIBRARY)
+    find_package(OpenMP REQUIRED)
+else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+endif()
+
 if (WIN32)
 	if (CMAKE_BUILD_TYPE STREQUAL "Release")
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
@@ -432,6 +478,8 @@ if (WIN32)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fp:fast")
     endif()
 	set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_EXPECT=1")
+    set_source_files_properties(${AVX512_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-mpclmul;-mvpclmulqdq;/arch:AVX512")
+    # set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDYNAMIC_BMI2=1")
 if(NOT BUILD_STATIC_LIBS)
     set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DLL_EXPORT=1")
     set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")
@@ -440,20 +488,25 @@ if(NOT BUILD_STATIC_LIBS)
     set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_DLL_EXPORT=1")
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_DLL_EXPORT=1")
     set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DBZIP2_DLL_EXPORT=1")
-    if (TEST_COVERAGE_THIRD_PARTY)
+    if (TEST_COVERAGE_THIRD_PARTY OR BUILD_UTILITY)
         set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DFSE_DLL_EXPORT=1")
         set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DXXH_EXPORT=1")
     endif()
 endif()
 elseif (UNIX)
     set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_FLAGS "-msse4.1")
+if (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
+    # Optimization level controls at per function level are not available in Clang.
+    # Hence setting it at file level here for lz4.
+    set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-O2")
+endif()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
     if(ENABLE_FAST_MATH)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffast-math")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
     endif()
-    set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
+    set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_ATTRIBUTE_ALWAYS_INLINE=1;-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1;-DHAVE_BUILTIN_PREFETCH=1;-DSNAPPY_HAVE_X86_CRC32=1;")
 endif()
 
 include(CheckIncludeFile)
@@ -494,14 +547,21 @@ endif()
 if (SNAPPY_MATCH_SKIP_OPT)
     set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_MATCH_SKIP_OPT")
 endif()
+if (SNAPPY_HIGH_COMPRESSION)
+    set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_HIGH_COMPRESSION")
+endif()
+if (SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS)
+    set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS")
+endif()
 if (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS)
     set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS")
 endif()
-if (AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST)
-    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST")
+if (AOCL_ZSTD_SEARCH_SKIP_OPT)
+    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_SEARCH_SKIP_OPT")
 endif()
 if (AOCL_DECOMPRESS_FAST)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
+    set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
 endif()
 if (AOCL_ZSTD_WILDCOPY_LONG)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_WILDCOPY_LONG")
@@ -512,6 +572,16 @@ endif()
 if(AOCL_EXCLUDE_DEPRECATED_APIS)
     set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_DEPRECATED_APIS")
     set_property(SOURCE ${LZ4HC_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_DEPRECATED_APIS")
+endif()
+if (AOCL_BZIP2_HUFFMAN_ITERATIONS)
+    if (AOCL_BZIP2_HUFFMAN_ITERATIONS STREQUAL "1" OR
+        AOCL_BZIP2_HUFFMAN_ITERATIONS STREQUAL "2" OR
+        AOCL_BZIP2_HUFFMAN_ITERATIONS STREQUAL "3" OR
+        AOCL_BZIP2_HUFFMAN_ITERATIONS STREQUAL "4")
+        set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_BZIP2_HUFFMAN_ITERATIONS=${AOCL_BZIP2_HUFFMAN_ITERATIONS}")
+    else()
+        message(FATAL_ERROR "AOCL_BZIP2_HUFFMAN_ITERATIONS can only be '1', '2', '3' or '4', the provided value is:${AOCL_BZIP2_HUFFMAN_ITERATIONS}")
+    endif()
 endif()
 include(CheckCSourceCompiles)
 #
@@ -578,6 +648,7 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
     endif()
 endif()
 
+
 #Enabling strict warnings
 if(ENABLE_STRICT_WARNINGS)
     if (WIN32)
@@ -590,6 +661,13 @@ if(ENABLE_STRICT_WARNINGS)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wpedantic")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wpedantic")
         set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DENABLE_STRICT_WARNINGS")
+    endif()
+endif()
+
+# Add utility tests
+if (BUILD_UTILITY)
+    if (NOT TEST_COVERAGE_THIRD_PARTY)
+        add_subdirectory(test/third_party)
     endif()
 endif()
 
@@ -631,11 +709,14 @@ set_target_properties(${lib_name} PROPERTIES PUBLIC_HEADER "${INC_FILES}")
 
 target_include_directories(${lib_name}
                             PRIVATE ${CMAKE_SOURCE_DIR}
+                            PRIVATE ${PROJECT_BINARY_DIR} # required for files generated from .in templates
                             PRIVATE ${ALGOS_PATH}/common
                             PRIVATE api)
 
-if (OPENMP_FOUND)
+if (OPENMP_FOUND AND (WIN32 OR NOT OpenMP_libomp_LIBRARY))
     target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+else()
+    target_link_libraries(${lib_name} PUBLIC ${OpenMP_libomp_LIBRARY})
 endif ()
 
 #add benchmarking application and tests
@@ -660,7 +741,13 @@ if (NOT AOCL_EXCLUDE_BZIP2)
     install(DIRECTORY ${EXAMPLES_PATH}/bzip2 DESTINATION ${DEST_EXAMPLES_PATH})
 endif()
 if (NOT AOCL_EXCLUDE_ZLIB)
-    install(DIRECTORY ${EXAMPLES_PATH}/zlib DESTINATION ${DEST_EXAMPLES_PATH})
+    if(AOCL_ENABLE_THREADS)
+        install(DIRECTORY ${EXAMPLES_PATH}/zlib DESTINATION ${DEST_EXAMPLES_PATH})
+    else()
+        install(DIRECTORY ${EXAMPLES_PATH}/zlib DESTINATION ${DEST_EXAMPLES_PATH}
+            PATTERN "example_compress2_gzip.c" EXCLUDE
+            PATTERN "example_compress2_raw.c" EXCLUDE)
+    endif()
 endif()
 if (NOT AOCL_EXCLUDE_LZ4)
     install(DIRECTORY ${EXAMPLES_PATH}/lz4 DESTINATION ${DEST_EXAMPLES_PATH})
@@ -677,7 +764,12 @@ endif()
 if (NOT AOCL_EXCLUDE_ZSTD)
     install(DIRECTORY ${EXAMPLES_PATH}/zstd DESTINATION ${DEST_EXAMPLES_PATH})
 endif()
-install(DIRECTORY ${EXAMPLES_PATH}/api DESTINATION ${DEST_EXAMPLES_PATH})
+if(AOCL_ENABLE_THREADS)
+    install(DIRECTORY ${EXAMPLES_PATH}/api DESTINATION ${DEST_EXAMPLES_PATH})
+else()
+    install(DIRECTORY ${EXAMPLES_PATH}/api DESTINATION ${DEST_EXAMPLES_PATH}
+        PATTERN "example_aocl_llc_skip_rap_frame.c" EXCLUDE)
+endif()
 install(FILES ${EXAMPLES_PATH}/CMakeLists.txt DESTINATION ${DEST_EXAMPLES_PATH})
 install(FILES ${EXAMPLES_PATH}/README.md DESTINATION ${DEST_EXAMPLES_PATH})
 

@@ -9,7 +9,7 @@
  */
 
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -1043,11 +1043,7 @@ void AOCL_ZSTD_readFdsFrame(ZSTD_DCtx* dctx, void const* src, size_t srcSize) {
     src = (char*)src + FDS_MAGIC_WORD_BYTES;
 
     U64 metadata = MEM_read64(src);
-    if (metadata == FDS_FAST2_NOTB_SO4_NOEXT_REP2) { 
-        dctx->fds = FDS_FAST2_NOTB_SO4_NOEXT_REP2;
-    } else {  // if fds setting is not supported, reset flag.
-        dctx->fds = 0;
-    }
+    dctx->fds = metadata;
 }
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 
@@ -2543,6 +2539,9 @@ size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inB
             if ((MEM_readLE32(zds->headerBuffer) & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START) {  /* skippable frame */
                 zds->expected = MEM_readLE32(zds->headerBuffer + ZSTD_FRAMEIDSIZE);
                 zds->stage = ZSTDds_skipFrame;
+#if AOCL_DECOMPRESS_FAST > 1
+                AOCL_ZSTD_readFdsFrame(zds, (char*)istart + ZSTD_SKIPPABLEHEADERSIZE, (input->size) - ZSTD_SKIPPABLEHEADERSIZE);
+#endif
             } else {
                 FORWARD_IF_ERROR(ZSTD_decodeFrameHeader(zds, zds->headerBuffer, zds->lhSize), "");
                 zds->expected = ZSTD_blockHeaderSize;

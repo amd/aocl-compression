@@ -1,5 +1,6 @@
 /* crc32.c -- compute the CRC-32 of a data stream
  * Copyright (C) 1995-2022 Mark Adler
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  *
  * This interleaved implementation of a CRC makes use of pipelined multiple
@@ -30,34 +31,34 @@
 #include "zutil.h"      /* for Z_U4, Z_U8, z_crc_t, and FAR definitions */
 
  /*
-  A CRC of a message is computed on N braids of words in the message, where
-  each word consists of W bytes (4 or 8). If N is 3, for example, then three
+  A CRC of a message is computed on NN braids of words in the message, where
+  each word consists of W bytes (4 or 8). If NN is 3, for example, then three
   running sparse CRCs are calculated respectively on each braid, at these
   indices in the array of words: 0, 3, 6, ..., 1, 4, 7, ..., and 2, 5, 8, ...
   This is done starting at a word boundary, and continues until as many blocks
-  of N * W bytes as are available have been processed. The results are combined
-  into a single CRC at the end. For this code, N must be in the range 1..6 and
-  W must be 4 or 8. The upper limit on N can be increased if desired by adding
+  of NN * W bytes as are available have been processed. The results are combined
+  into a single CRC at the end. For this code, NN must be in the range 1..6 and
+  W must be 4 or 8. The upper limit on NN can be increased if desired by adding
   more #if blocks, extending the patterns apparent in the code. In addition,
-  crc32.h would need to be regenerated, if the maximum N value is increased.
+  crc32.h would need to be regenerated, if the maximum NN value is increased.
 
-  N and W are chosen empirically by benchmarking the execution time on a given
-  processor. The choices for N and W below were based on testing on Intel Kaby
+  NN and W are chosen empirically by benchmarking the execution time on a given
+  processor. The choices for NN and W below were based on testing on Intel Kaby
   Lake i7, AMD Ryzen 7, ARM Cortex-A57, Sparc64-VII, PowerPC POWER9, and MIPS64
   Octeon II processors. The Intel, AMD, and ARM processors were all fastest
-  with N=5, W=8. The Sparc, PowerPC, and MIPS64 were all fastest at N=5, W=4.
+  with NN=5, W=8. The Sparc, PowerPC, and MIPS64 were all fastest at NN=5, W=4.
   They were all tested with either gcc or clang, all using the -O3 optimization
   level. Your mileage may vary.
  */
 
-/* Define N */
+/* Define NN */
 #ifdef Z_TESTN
-#  define N Z_TESTN
+#  define NN Z_TESTN
 #else
-#  define N 5
+#  define NN 5
 #endif
-#if N < 1 || N > 6
-#  error N must be in 1..6
+#if NN < 1 || NN > 6
+#  error NN must be in 1..6
 #endif
 
 /*
@@ -147,6 +148,24 @@ local z_word_t byte_swap(z_word_t word) {
 
 /* CRC polynomial. */
 #define POLY 0xedb88320         /* p(x) reflected, with x^32 implied */
+
+#include "crc32_x86.h"
+#ifdef AOCL_ZLIB_OPT
+#include "utils/utils.h"
+#include "aocl_zlib_setup.h"
+
+/* Dynamic dispatcher setup function for native APIs.
+ * All native APIs that call aocl optimized functions within their call stack,
+ * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up
+ * appropriate code paths to take based on user defined environment variables,
+ * as well as cpu instruction set supported by the runtime machine. */
+static void aocl_setup_native(void);
+#define AOCL_SETUP_NATIVE() aocl_setup_native()
+
+
+/* flag to indicate status of dynamic dispatcher setup */
+static int setup_ok_zlib_crc = 0;
+#endif /* AOCL_ZLIB_OPT */
 
 /*
   Return a(x) multiplied by b(x) modulo p(x), where p(x) is the CRC polynomial,
@@ -330,7 +349,7 @@ local void make_crc_table(void) {
 
 #ifdef W
     /* initialize the braiding tables -- needs x2n_table[] */
-    braid(crc_braid_table, crc_braid_big_table, N, W);
+    braid(crc_braid_table, crc_braid_big_table, NN, W);
 #endif
 
 #ifdef MAKECRCH
@@ -389,13 +408,13 @@ local void make_crc_table(void) {
             "\n"
             "#endif\n");
 
-        /* write out braid tables for each value of N */
+        /* write out braid tables for each value of NN */
         for (n = 1; n <= 6; n++) {
             fprintf(out,
             "\n"
-            "#if N == %d\n", n);
+            "#if NN == %d\n", n);
 
-            /* compute braid tables for this N and 64-bit word_t */
+            /* compute braid tables for this NN and 64-bit word_t */
             braid(ltl, big, n, 8);
 
             /* write out braid tables for 64-bit z_word_t to crc32.h */
@@ -421,7 +440,7 @@ local void make_crc_table(void) {
             fprintf(out,
             "};\n");
 
-            /* compute braid tables for this N and 32-bit word_t */
+            /* compute braid tables for this NN and 32-bit word_t */
             braid(ltl, big, n, 4);
 
             /* write out braid tables for 32-bit z_word_t to crc32.h */
@@ -692,11 +711,8 @@ local z_word_t crc_word_big(z_word_t data) {
 #endif
 
 /* ========================================================================= */
-unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
+local unsigned long crc32_z_impl(unsigned long crc, const unsigned char FAR *buf,
                               z_size_t len) {
-    /* Return initial CRC, if requested. */
-    if (buf == Z_NULL) return 0;
-
 #ifdef DYNAMIC_CRC_TABLE
     once(&made, make_crc_table);
 #endif /* DYNAMIC_CRC_TABLE */
@@ -707,7 +723,7 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
 #ifdef W
 
     /* If provided enough bytes, do a braided CRC calculation. */
-    if (len >= N * W + W - 1) {
+    if (len >= NN * W + W - 1) {
         z_size_t blks;
         z_word_t const *words;
         unsigned endian;
@@ -719,9 +735,9 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
             crc = (crc >> 8) ^ crc_table[(crc ^ *buf++) & 0xff];
         }
 
-        /* Compute the CRC on as many N z_word_t blocks as are available. */
-        blks = len / (N * W);
-        len -= blks * N * W;
+        /* Compute the CRC on as many NN z_word_t blocks as are available. */
+        blks = len / (NN * W);
+        len -= blks * NN * W;
         words = (z_word_t const *)buf;
 
         /* Do endian check at execution time instead of compile time, since ARM
@@ -734,19 +750,19 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
 
             z_crc_t crc0;
             z_word_t word0;
-#if N > 1
+#if NN > 1
             z_crc_t crc1;
             z_word_t word1;
-#if N > 2
+#if NN > 2
             z_crc_t crc2;
             z_word_t word2;
-#if N > 3
+#if NN > 3
             z_crc_t crc3;
             z_word_t word3;
-#if N > 4
+#if NN > 4
             z_crc_t crc4;
             z_word_t word4;
-#if N > 5
+#if NN > 5
             z_crc_t crc5;
             z_word_t word5;
 #endif
@@ -757,15 +773,15 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
 
             /* Initialize the CRC for each braid. */
             crc0 = crc;
-#if N > 1
+#if NN > 1
             crc1 = 0;
-#if N > 2
+#if NN > 2
             crc2 = 0;
-#if N > 3
+#if NN > 3
             crc3 = 0;
-#if N > 4
+#if NN > 4
             crc4 = 0;
-#if N > 5
+#if NN > 5
             crc5 = 0;
 #endif
 #endif
@@ -780,35 +796,35 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
             while (--blks) {
                 /* Load the word for each braid into registers. */
                 word0 = crc0 ^ words[0];
-#if N > 1
+#if NN > 1
                 word1 = crc1 ^ words[1];
-#if N > 2
+#if NN > 2
                 word2 = crc2 ^ words[2];
-#if N > 3
+#if NN > 3
                 word3 = crc3 ^ words[3];
-#if N > 4
+#if NN > 4
                 word4 = crc4 ^ words[4];
-#if N > 5
+#if NN > 5
                 word5 = crc5 ^ words[5];
 #endif
 #endif
 #endif
 #endif
 #endif
-                words += N;
+                words += NN;
 
                 /* Compute and update the CRC for each word. The loop should
                    get unrolled. */
                 crc0 = crc_braid_table[0][word0 & 0xff];
-#if N > 1
+#if NN > 1
                 crc1 = crc_braid_table[0][word1 & 0xff];
-#if N > 2
+#if NN > 2
                 crc2 = crc_braid_table[0][word2 & 0xff];
-#if N > 3
+#if NN > 3
                 crc3 = crc_braid_table[0][word3 & 0xff];
-#if N > 4
+#if NN > 4
                 crc4 = crc_braid_table[0][word4 & 0xff];
-#if N > 5
+#if NN > 5
                 crc5 = crc_braid_table[0][word5 & 0xff];
 #endif
 #endif
@@ -817,15 +833,15 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
 #endif
                 for (k = 1; k < W; k++) {
                     crc0 ^= crc_braid_table[k][(word0 >> (k << 3)) & 0xff];
-#if N > 1
+#if NN > 1
                     crc1 ^= crc_braid_table[k][(word1 >> (k << 3)) & 0xff];
-#if N > 2
+#if NN > 2
                     crc2 ^= crc_braid_table[k][(word2 >> (k << 3)) & 0xff];
-#if N > 3
+#if NN > 3
                     crc3 ^= crc_braid_table[k][(word3 >> (k << 3)) & 0xff];
-#if N > 4
+#if NN > 4
                     crc4 ^= crc_braid_table[k][(word4 >> (k << 3)) & 0xff];
-#if N > 5
+#if NN > 5
                     crc5 ^= crc_braid_table[k][(word5 >> (k << 3)) & 0xff];
 #endif
 #endif
@@ -836,40 +852,40 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
             }
 
             /*
-              Process the last block, combining the CRCs of the N braids at the
+              Process the last block, combining the CRCs of the NN braids at the
               same time.
              */
             crc = crc_word(crc0 ^ words[0]);
-#if N > 1
+#if NN > 1
             crc = crc_word(crc1 ^ words[1] ^ crc);
-#if N > 2
+#if NN > 2
             crc = crc_word(crc2 ^ words[2] ^ crc);
-#if N > 3
+#if NN > 3
             crc = crc_word(crc3 ^ words[3] ^ crc);
-#if N > 4
+#if NN > 4
             crc = crc_word(crc4 ^ words[4] ^ crc);
-#if N > 5
+#if NN > 5
             crc = crc_word(crc5 ^ words[5] ^ crc);
 #endif
 #endif
 #endif
 #endif
 #endif
-            words += N;
+            words += NN;
         }
         else {
             /* Big endian. */
 
             z_word_t crc0, word0, comb;
-#if N > 1
+#if NN > 1
             z_word_t crc1, word1;
-#if N > 2
+#if NN > 2
             z_word_t crc2, word2;
-#if N > 3
+#if NN > 3
             z_word_t crc3, word3;
-#if N > 4
+#if NN > 4
             z_word_t crc4, word4;
-#if N > 5
+#if NN > 5
             z_word_t crc5, word5;
 #endif
 #endif
@@ -879,15 +895,15 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
 
             /* Initialize the CRC for each braid. */
             crc0 = byte_swap(crc);
-#if N > 1
+#if NN > 1
             crc1 = 0;
-#if N > 2
+#if NN > 2
             crc2 = 0;
-#if N > 3
+#if NN > 3
             crc3 = 0;
-#if N > 4
+#if NN > 4
             crc4 = 0;
-#if N > 5
+#if NN > 5
             crc5 = 0;
 #endif
 #endif
@@ -902,35 +918,35 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
             while (--blks) {
                 /* Load the word for each braid into registers. */
                 word0 = crc0 ^ words[0];
-#if N > 1
+#if NN > 1
                 word1 = crc1 ^ words[1];
-#if N > 2
+#if NN > 2
                 word2 = crc2 ^ words[2];
-#if N > 3
+#if NN > 3
                 word3 = crc3 ^ words[3];
-#if N > 4
+#if NN > 4
                 word4 = crc4 ^ words[4];
-#if N > 5
+#if NN > 5
                 word5 = crc5 ^ words[5];
 #endif
 #endif
 #endif
 #endif
 #endif
-                words += N;
+                words += NN;
 
                 /* Compute and update the CRC for each word. The loop should
                    get unrolled. */
                 crc0 = crc_braid_big_table[0][word0 & 0xff];
-#if N > 1
+#if NN > 1
                 crc1 = crc_braid_big_table[0][word1 & 0xff];
-#if N > 2
+#if NN > 2
                 crc2 = crc_braid_big_table[0][word2 & 0xff];
-#if N > 3
+#if NN > 3
                 crc3 = crc_braid_big_table[0][word3 & 0xff];
-#if N > 4
+#if NN > 4
                 crc4 = crc_braid_big_table[0][word4 & 0xff];
-#if N > 5
+#if NN > 5
                 crc5 = crc_braid_big_table[0][word5 & 0xff];
 #endif
 #endif
@@ -939,15 +955,15 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
 #endif
                 for (k = 1; k < W; k++) {
                     crc0 ^= crc_braid_big_table[k][(word0 >> (k << 3)) & 0xff];
-#if N > 1
+#if NN > 1
                     crc1 ^= crc_braid_big_table[k][(word1 >> (k << 3)) & 0xff];
-#if N > 2
+#if NN > 2
                     crc2 ^= crc_braid_big_table[k][(word2 >> (k << 3)) & 0xff];
-#if N > 3
+#if NN > 3
                     crc3 ^= crc_braid_big_table[k][(word3 >> (k << 3)) & 0xff];
-#if N > 4
+#if NN > 4
                     crc4 ^= crc_braid_big_table[k][(word4 >> (k << 3)) & 0xff];
-#if N > 5
+#if NN > 5
                     crc5 ^= crc_braid_big_table[k][(word5 >> (k << 3)) & 0xff];
 #endif
 #endif
@@ -958,26 +974,26 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
             }
 
             /*
-              Process the last block, combining the CRCs of the N braids at the
+              Process the last block, combining the CRCs of the NN braids at the
               same time.
              */
             comb = crc_word_big(crc0 ^ words[0]);
-#if N > 1
+#if NN > 1
             comb = crc_word_big(crc1 ^ words[1] ^ comb);
-#if N > 2
+#if NN > 2
             comb = crc_word_big(crc2 ^ words[2] ^ comb);
-#if N > 3
+#if NN > 3
             comb = crc_word_big(crc3 ^ words[3] ^ comb);
-#if N > 4
+#if NN > 4
             comb = crc_word_big(crc4 ^ words[4] ^ comb);
-#if N > 5
+#if NN > 5
             comb = crc_word_big(crc5 ^ words[5] ^ comb);
 #endif
 #endif
 #endif
 #endif
 #endif
-            words += N;
+            words += NN;
             crc = byte_swap(comb);
         }
 
@@ -1008,6 +1024,26 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf,
 
     /* Return the CRC, post-conditioned. */
     return crc ^ 0xffffffff;
+}
+
+#ifdef AOCL_ZLIB_OPT
+/* Function pointer holding the optimized variant as per the detected CPU
+ * features */
+static unsigned long (*crc32_z_impl_fp)(unsigned long crc, const unsigned char FAR* buf,
+    z_size_t len) = crc32_z_impl;
+#endif /* AOCL_ZLIB_OPT */
+
+unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR* buf,
+    z_size_t len) {
+    /* Return initial CRC, if requested. */
+    if (buf == Z_NULL) return 0;
+
+#ifdef AOCL_ZLIB_OPT
+    AOCL_SETUP_NATIVE();
+    return crc32_z_impl_fp(crc, buf, len);
+#else
+    return crc32_z_impl(crc, buf, len);
+#endif
 }
 
 #endif
@@ -1048,3 +1084,77 @@ uLong ZEXPORT crc32_combine_gen(z_off_t len2) {
 uLong ZEXPORT crc32_combine_op(uLong crc1, uLong crc2, uLong op) {
     return multmodp(op, crc1) ^ (crc2 & 0xffffffff);
 }
+
+#ifdef AOCL_ZLIB_OPT
+static inline void aocl_setup_crc32_fmv(int optOff, int optLevel)
+{
+    if (UNLIKELY(optOff == 1))
+    {
+        crc32_z_impl_fp = crc32_z_impl;
+    }
+    else
+    {
+        switch (optLevel)
+        {
+        case 0://C version
+        case 1://SSE version
+            crc32_z_impl_fp = crc32_z_impl;
+            break;
+        case 2://AVX version
+        case 3://AVX2 version
+#ifdef AOCL_ZLIB_AVX_OPT
+            crc32_z_impl_fp = crc32_z_impl_x86_avx;
+#else
+            crc32_z_impl_fp = crc32_z_impl;
+#endif
+            break;
+        case -1: // undecided. use defaults based on compiler flags
+        default://AVX512 and other versions
+#ifdef AOCL_ZLIB_AVX512_OPT
+            crc32_z_impl_fp = crc32_z_impl_x86_avx512;
+#elif defined(AOCL_ZLIB_AVX_OPT)
+            crc32_z_impl_fp = crc32_z_impl_x86_avx;
+#else
+            crc32_z_impl_fp = crc32_z_impl;
+#endif
+            break;
+        }
+    }
+}
+
+void ZLIB_INTERNAL aocl_setup_crc32(int optOff, int optLevel) {
+    AOCL_ENTER_CRITICAL(setup_zlib_crc)
+    if (!setup_ok_zlib_crc) {
+        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        aocl_setup_crc32_fmv(optOff, optLevel);
+        setup_ok_zlib_crc = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_crc)
+}
+
+static void aocl_setup_native(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_crc)
+    if (!setup_ok_zlib_crc) {
+        int optLevel = get_cpu_opt_flags(0);
+        int optOff = get_disable_opt_flags(0);
+        aocl_setup_crc32_fmv(optOff, optLevel);
+        setup_ok_zlib_crc = 1;
+    }
+    AOCL_EXIT_CRITICAL(setup_zlib_crc)
+}
+
+void ZLIB_INTERNAL aocl_destroy_crc32(void) {
+    AOCL_ENTER_CRITICAL(setup_zlib_crc)
+    setup_ok_zlib_crc = 0;
+    AOCL_EXIT_CRITICAL(setup_zlib_crc)
+}
+
+#endif /* AOCL_ZLIB_OPT */
+
+#ifdef AOCL_UNIT_TEST
+ZEXTERN_UNIT_TEST unsigned long ZEXPORT_UNIT_TEST
+crc32_z_c(unsigned long crc, const unsigned char FAR* buf,
+    z_size_t len) {
+    return crc32_z_impl(crc, buf, len);
+}
+#endif

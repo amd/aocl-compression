@@ -1,6 +1,6 @@
 /* trees.c -- output deflated data using Huffman coding
  * Copyright (C) 1995-2021 Jean-loup Gailly
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * detect_data_type() function provided freely by Cosmin Truta, 2006
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
@@ -369,16 +369,6 @@ void ZLIB_INTERNAL aocl_destroy_tree(void) {
 #endif /* AOCL_ZLIB_OPT */
 
 #ifndef AOCL_ZLIB_OPT
-#ifndef ZLIB_DEBUG
-#  define send_code(s, c, tree) OPT_send_bits(s, tree[c].Code, tree[c].Len)
-   /* Send a code of the given tree. c and tree must not have side effects */
-
-#else /* !ZLIB_DEBUG */
-#  define send_code(s, c, tree) \
-     { if (z_verbose>2) fprintf(stderr,"\ncd %3d ",(c)); \
-       OPT_send_bits(s, tree[c].Code, tree[c].Len); }
-#endif
-
 /* ===========================================================================
  * Send a value on a given number of bits.
  * IN assertion: length <= 16 and value fits in length bits.

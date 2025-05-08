@@ -10,7 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
-   Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -41,11 +41,11 @@
  * as well as cpu instruction set supported by the runtime machine. */
 static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE() aocl_setup_native()
+int AOCL_use_libsais = 0;
 #else
 #define AOCL_SETUP_NATIVE()
 #endif
 
-int AOCL_use_libsais = 0;
 static int setup_ok_bzip2 = 0; // flag to indicate status of dynamic dispatcher setup
 
 /*---------------------------------------------------*/
@@ -212,10 +212,15 @@ void aocl_register_copy_fmv(int optOff, int optLevel)
    }
 }
 
+#ifdef AOCL_BZIP2_OPT
 void aocl_register_bwt(int optOff)
 {
    AOCL_use_libsais = !optOff;
 }
+#define AOCL_REGISTER_BWT aocl_register_bwt(optOff);
+#else
+#define AOCL_REGISTER_BWT
+#endif
 
 BZ_EXTERN char * BZ_API(aocl_setup_bzip2) 
                      ( int optOff,
@@ -227,7 +232,7 @@ BZ_EXTERN char * BZ_API(aocl_setup_bzip2)
     AOCL_ENTER_CRITICAL(setup_bzip2)
     if (!setup_ok_bzip2) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_bwt(optOff);
+        AOCL_REGISTER_BWT
         aocl_register_decompress_fmv(optOff, optLevel);
         aocl_register_copy_fmv(optOff, optLevel);
         aocl_register_mainSimpleSort_fmv(optOff, optLevel);
@@ -243,7 +248,7 @@ static void aocl_setup_native(void) {
     if (!setup_ok_bzip2) {
         int optLevel = get_cpu_opt_flags(0);
         int optOff = get_disable_opt_flags(0);
-        aocl_register_bwt(optOff);
+        AOCL_REGISTER_BWT
         aocl_register_decompress_fmv(optOff, optLevel);
         aocl_register_copy_fmv(optOff, optLevel);
         aocl_register_mainSimpleSort_fmv(optOff, optLevel);
@@ -296,6 +301,20 @@ void prepare_new_block ( EState* s )
    BZ_INITIALISE_CRC ( s->blockCRC );
    for (i = 0; i < 256; i++) s->inUse[i] = False;
    s->blockNo++;
+#ifdef AOCL_BZIP2_OPT
+   if(AOCL_use_libsais)
+   {
+      s->repeat = 0;
+      s->SA = &s->ptr[1];
+      s->c = -1;
+      s->sw = 0;
+      s->lms = 0;
+      memset(s->buckets, 0, sizeof(Int32) * 4 * ALPHABET_SIZE);
+      s->sa_index = 1;
+      s->n_block = 0;
+      s->SA[0] = -1; // if SA[0] == -1, no LMS character at index 0 of SA, else LMS character is present at SA[0].
+   }
+#endif /* AOCL_BZIP2_OPT */
 }
 
 
@@ -324,6 +343,7 @@ int BZ_API(BZ2_bzCompressInit)
                      int        verbosity,
                      int        workFactor )
 {
+   AOCL_SETUP_NATIVE();
    Int32   n;
    EState* s;
 
@@ -348,8 +368,18 @@ int BZ_API(BZ2_bzCompressInit)
    s->ftab = NULL;
 
    n       = 100000 * blockSize100k;
-   s->arr1 = BZALLOC( n                  * sizeof(UInt32) );
-   s->arr2 = BZALLOC( (n+BZ_N_OVERSHOOT) * sizeof(UInt32) );
+#ifdef AOCL_BZIP2_OPT
+   if(AOCL_use_libsais)
+   {
+      s->arr1 = BZALLOC( (n+AOCL_LIBSAIS_FS)                  * sizeof(UInt32) );
+      s->arr2 = BZALLOC( (n+BZ_N_OVERSHOOT) * sizeof(UInt32) + 2);
+   }
+   else
+#endif /* AOCL_BZIP2_OPT */
+   {
+      s->arr1 = BZALLOC( n                  * sizeof(UInt32) );
+      s->arr2 = BZALLOC( (n+BZ_N_OVERSHOOT) * sizeof(UInt32) );
+   }
    s->ftab = BZALLOC( 65537              * sizeof(UInt32) );
 
    if (s->arr1 == NULL || s->arr2 == NULL || s->ftab == NULL) {
@@ -373,6 +403,13 @@ int BZ_API(BZ2_bzCompressInit)
    s->mtfv              = (UInt16*)s->arr1;
    s->zbits             = NULL;
    s->ptr               = (UInt32*)s->arr1;
+
+#ifdef AOCL_BZIP2_OPT
+// The last two characters `s->block`, need to be stored before 0th index of `s->block`.
+// Hence making the 0th index of `s->block` start from 2nd index from where it was originally allocated.
+   if(AOCL_use_libsais)
+      s->block += 2;
+#endif /* AOCL_BZIP2_OPT */
 
    strm->state          = s;
    strm->total_in_lo32  = 0;
@@ -503,6 +540,209 @@ Bool copy_input_until_stop ( EState* s )
 }
 
 #ifdef AOCL_BZIP2_OPT
+
+/*
+This macro serves the same purpose as libsais_count_and_gather_lms_suffixes_8u, as both take RLE output as input. However, there are key differences:
+   1. The function processes the input in reverse (end to beginning), handling 4 bytes at a time in each iteration,
+      whereas the macro processes the input in forward order (beginning to end), handling one byte at a time.
+   2. In the macro, repeated characters are updated in buckets only once, whereas in the function,
+      updates occur every time a character is encountered, regardless of whether it is repetitive.  
+*/
+#define AOCL_INSERT_CHAR_LEFTOVER_INDEXES(chh, n_block, next, c, repeat, lms, buckets, SA, sa_index) \
+   next = chh;                                                                                       \
+   if (c == next)                                                                                    \
+   {                                                                                                 \
+      repeat++;                                                                                      \
+   }                                                                                                 \
+   else                                                                                              \
+   {                                                                                                 \
+      lms = (lms >> 1) + ((c > next) << 1);                                                          \
+      buckets[BUCKETS_INDEX4(c, lms)]++;                                                             \
+      SA[sa_index] = n_block - repeat;                                                               \
+      sa_index += lms == 1;                                                                          \
+      if (repeat > 1)                                                                                \
+      {                                                                                              \
+         lms = (lms >> 1) + ((c > next) << 1);                                                       \
+         buckets[BUCKETS_INDEX4(c, lms)] += repeat - 1;                                              \
+      }                                                                                              \
+      repeat = 1;                                                                                    \
+      c = next;                                                                                      \
+   }
+
+/* 
+   This macro is applied only to the initial few characters, until two consecutive different characters are encountered,
+   as only then all the local variables will be initialized appropriately.
+*/
+#define AOCL_INSERT_CHAR_INITIAL_INDEXES(chh, sw, next, c, repeat, lms, buckets, SA, sa_index)        \
+   {                                                                                                  \
+      if (sw == 0)                                                                                    \
+      {                                                                                               \
+         if (c == -1)                                                                                 \
+         {                                                                                            \
+            c = chh;                                                                                  \
+            repeat = 1;                                                                               \
+         }                                                                                            \
+         else if (c != chh)                                                                           \
+         {                                                                                            \
+            next = chh;                                                                               \
+            lms = (c > next) << 1;                                                                    \
+            c = next;                                                                                 \
+            sw = 1;                                                                                   \
+         }                                                                                            \
+      }                                                                                               \
+      else                                                                                            \
+      {                                                                                               \
+         AOCL_INSERT_CHAR_LEFTOVER_INDEXES(chh, n_block, next, c, repeat, lms, buckets, SA, sa_index) \
+      }                                                                                               \
+   }
+
+#define AOCL_END_RLE_LMS                                             \
+   if (s->nblock > 0)                                                \
+   {                                                                 \
+      if (c == s->block[0])                                          \
+      {                                                              \
+         int j = 0;                                                  \
+         while (j + 1 < s->nblock && s->block[j] == s->block[j + 1]) \
+         {                                                           \
+            j++;                                                     \
+         }                                                           \
+         if (j + 1 < s->nblock)                                      \
+            next = s->block[j + 1];                                  \
+      }                                                              \
+      else                                                           \
+         next = s->block[0];                                         \
+   }                                                                 \
+   lms = (lms >> 1) + ((c > next) << 1);                             \
+   buckets[BUCKETS_INDEX4(c, lms)]++;                                \
+   SA[sa_index] = s->nblock - repeat;                                \
+   sa_index += lms == 1;                                             \
+   if (repeat > 1)                                                   \
+   {                                                                 \
+      lms = (lms >> 1) + ((c > next) << 1);                          \
+      buckets[BUCKETS_INDEX4(c, lms)] += repeat - 1;                 \
+   }                                                                 \
+   repeat = 1;                                                       \
+   int nblock = 1;                                                   \
+   c = s->block[0];                                                  \
+   while (nblock < s->nblock)                                        \
+   {                                                                 \
+      next = s->block[nblock++];                                     \
+      if (c == next)                                                 \
+      {                                                              \
+         repeat++;                                                   \
+      }                                                              \
+      else                                                           \
+      {                                                              \
+         lms = (lms >> 1) + ((c > next) << 1);                       \
+         buckets[BUCKETS_INDEX4(c, lms)]++;                          \
+         SA[0] = lms == 1 ? nblock - repeat - 1 : -1;                \
+         if (repeat > 1)                                             \
+         {                                                           \
+            lms = (lms >> 1) + ((c > next) << 1);                    \
+            buckets[BUCKETS_INDEX4(c, lms)] += repeat - 1;           \
+         }                                                           \
+         break;                                                      \
+      }                                                              \
+   }                                                                 \
+   s->ptr[0] = sa_index;                                             \
+   memcpy(&(s->ptr[sa_index + 1]), buckets, sizeof(int) * 4 * ALPHABET_SIZE);
+
+// This is a placeholder macro; it performs no operation.
+#define AOCL_DUMMY_MACRO(ch, dummy, next, c, repeat, lms, buckets, SA, sa_index)
+
+// This macro is an AOCL-specific implementation of the `add_pair_to_block` function.
+#define AOCL_ADD_PAIR_TO_BLOCK_SWITCH(s, FUNC, next, c, repeat, lms, buckets, SA, sa_index)           \
+   {                                                                                                  \
+      Int32 i;                                                                                        \
+      UChar ch = (UChar)(s->state_in_ch);                                                             \
+      for (i = 0; i < s->state_in_len; i++)                                                           \
+      {                                                                                               \
+         BZ_UPDATE_CRC(s->blockCRC, ch);                                                              \
+      }                                                                                               \
+      s->inUse[s->state_in_ch] = True;                                                                \
+      switch (s->state_in_len)                                                                        \
+      {                                                                                               \
+      case 1:                                                                                         \
+         s->block[s->nblock] = (UChar)ch;                                                             \
+         s->nblock++;                                                                                 \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                      \
+         break;                                                                                       \
+      case 2:                                                                                         \
+         s->block[s->nblock] = (UChar)ch;                                                             \
+         s->nblock++;                                                                                 \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                      \
+         s->block[s->nblock] = (UChar)ch;                                                             \
+         s->nblock++;                                                                                 \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                      \
+         break;                                                                                       \
+      case 3:                                                                                         \
+         s->block[s->nblock] = (UChar)ch;                                                             \
+         s->nblock++;                                                                                 \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                      \
+         s->block[s->nblock] = (UChar)ch;                                                             \
+         s->nblock++;                                                                                 \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                      \
+         s->block[s->nblock] = (UChar)ch;                                                             \
+         s->nblock++;                                                                                 \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                      \
+         break;                                                                                       \
+      default:                                                                                        \
+         s->inUse[s->state_in_len - 4] = True;                                                        \
+         s->block[s->nblock] = (UChar)ch;                                                             \
+         s->nblock++;                                                                                 \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                      \
+         s->block[s->nblock] = (UChar)ch;                                                             \
+         s->nblock++;                                                                                 \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                      \
+         s->block[s->nblock] = (UChar)ch;                                                             \
+         s->nblock++;                                                                                 \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                      \
+         s->block[s->nblock] = (UChar)ch;                                                             \
+         s->nblock++;                                                                                 \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                      \
+         s->block[s->nblock] = ((UChar)(s->state_in_len - 4));                                        \
+         s->nblock++;                                                                                 \
+         FUNC(s->block[s->nblock - 1], (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index); \
+         break;                                                                                       \
+      }                                                                                               \
+   }
+
+/*
+   This macro is an AOCL-specific implementation of the `ADD_CHAR_TO_BLOCK` macro.
+   It Allows max run length to be 255, instead of default value - 251.
+   Its behaviour is modified according to the value of the `FUNC` parameter:
+   • When `FUNC` is `AOCL_DUMMY_MACRO`, it functions as the original `ADD_CHAR_TO_BLOCK` macro.
+   • When `FUNC` is `AOCL_INSERT_CHAR_LEFTOVER_INDEXES`, it performs a combined computation of:
+      - RLE (Run-Length Encoding).
+      - LMS (Leftmost Suffix) count & gathering, in the context of SAIS (Suffix Array Induced Sorting).
+*/
+#define AOCL_ADD_CHAR_TO_BLOCK(zs, zchh0, FUNC, next, c, repeat, lms, buckets, SA, sa_index)         \
+   {                                                                                                 \
+      UInt32 zchh = (UInt32)(zchh0);                                                                 \
+      /*-- fast track the common case --*/                                                           \
+      if (zchh != zs->state_in_ch &&                                                                 \
+          zs->state_in_len == 1) {                                                                   \
+         UChar ch = (UChar)(zs->state_in_ch);                                                        \
+         BZ_UPDATE_CRC(zs->blockCRC, ch);                                                            \
+         zs->inUse[zs->state_in_ch] = True;                                                          \
+         zs->block[zs->nblock] = (UChar)ch;                                                          \
+         zs->nblock++;                                                                               \
+         zs->state_in_ch = zchh;                                                                     \
+         FUNC(ch, (s->nblock - 1), next, c, repeat, lms, buckets, SA, sa_index);                     \
+      }                                                                                              \
+      else                                                                                           \
+         /*-- general, uncommon cases --*/                                                           \
+         if (zchh != zs->state_in_ch ||                                                              \
+             zs->state_in_len == 259) {                                                              \
+            if (zs->state_in_ch < 256)                                                               \
+               AOCL_ADD_PAIR_TO_BLOCK_SWITCH(zs, FUNC, next, c, repeat, lms, buckets, SA, sa_index); \
+            zs->state_in_ch = zchh;                                                                  \
+            zs->state_in_len = 1;                                                                    \
+         } else {                                                                                    \
+            zs->state_in_len++;                                                                      \
+         }                                                                                           \
+   }
+
 /*
    In this optimized function, if condititions and variable incr/decr are
    removed from the while loop, and loop limit is pre-calculated before
@@ -533,11 +773,51 @@ Bool AOCL_copy_input_until_stop ( EState* s )
    if(s->mode != BZ_M_RUNNING)
       s->avail_in_expect-=chars_to_copy;
 
+   Int32 next = 0;   // Stores next character
+   UInt32 *SA = s->SA;
+   Int32 c = s->c;
+   Int32 repeat = s->repeat;
+   Int32 sw = s->sw;
+   Int32 lms = s->lms;
+   Int32 * buckets = s->buckets;
+   Int32 sa_index = s->sa_index;
+   Int32 n_block = s->n_block;
+   /*
+      if (SA[0] == -1) -> no LMS character index at SA[0], or SA[0] also contains an LMS character index.
+      Note: &SA[0] = &(s->ptr[1])
+
+      |<------------------------- s->ptr --------------------------------------------------->|
+      |<- s->ptr[0] ->|<---------------- s->ptr[1....] ------------------------------------->|
+            ^         |<---------------------- SA ------------------------------------------>|
+            |         |<- SA[0] ->|<------- LMS characters -------->|<------ buckets ------->|
+         length of         ^         from SA[1] to SA[sa_index-1]      SA[sa_index] to SA[sa_index + 4*1024 - 1]
+       LMS array is        |
+          stored        SA[0] == -1,
+                           -> means no LMS chrctr
+                        SA[0] != -1
+                           -> LMS character is prsnt
+   */
+
    while (s->nblock < s->nblockMAX && chars_to_copy) {
       chars_to_copy--;
-      ADD_CHAR_TO_BLOCK ( s, (UInt32)(*((UChar*)(s->strm->next_in)))); 
+      AOCL_ADD_CHAR_TO_BLOCK ( s, (UInt32)(*((UChar*)(s->strm->next_in))), AOCL_DUMMY_MACRO, next, c, repeat, lms, buckets, SA, sa_index);
+      s->strm->next_in++;
+      while(n_block < s->nblock)
+      {
+         AOCL_INSERT_CHAR_INITIAL_INDEXES(s->block[n_block], sw, next, c, repeat, lms, buckets, SA, sa_index);
+         n_block++;
+      }
+      if(sw)
+         break;
+   }
+
+   /* Similar to the previous "while" loop except this doesn't handle initialization checks.*/
+   while (s->nblock < s->nblockMAX && chars_to_copy) {
+      chars_to_copy--;
+      AOCL_ADD_CHAR_TO_BLOCK ( s, (UInt32)(*((UChar*)(s->strm->next_in))), AOCL_INSERT_CHAR_LEFTOVER_INDEXES, next, c, repeat, lms, buckets, SA, sa_index);
       s->strm->next_in++;
    }
+   n_block = s->nblock;
    
    // If the loop quits before `chars_to_copy` becomes zero, i.e, s->nblock >= s->nblockMAX
    // then those values will be corrected accordingly.
@@ -550,6 +830,32 @@ Bool AOCL_copy_input_until_stop ( EState* s )
    if(s->mode != BZ_M_RUNNING)
       s->avail_in_expect+=chars_to_copy;
    
+   if (s->mode != BZ_M_RUNNING && s->avail_in_expect == 0) {
+      flush_RL ( s );
+      while(n_block < s->nblock)
+      {
+         AOCL_INSERT_CHAR_INITIAL_INDEXES(s->block[n_block], sw, next, c, repeat, lms, buckets, SA, sa_index);
+         n_block++;
+      }
+      AOCL_END_RLE_LMS;
+      BZ2_compressBlock ( s, (Bool)(s->mode == BZ_M_FINISHING) );
+      s->state = BZ_S_OUTPUT;
+   }
+   else
+   if (s->nblock >= s->nblockMAX) {
+      AOCL_END_RLE_LMS;
+      BZ2_compressBlock ( s, False );
+      s->state = BZ_S_OUTPUT;
+   }
+
+   s->repeat = repeat;
+   s->SA = SA;
+   s->c = c;
+   s->sw = sw;
+   s->lms = lms;
+   s->sa_index = sa_index;
+   s->n_block = n_block;
+
    return progress_in;
 }
 #endif
@@ -691,22 +997,39 @@ Bool handle_compress ( bz_stream* strm )
       if (s->state == BZ_S_INPUT) {
 #ifdef AOCL_BZIP2_OPT
          progress_in |= AOCL_copy_input_until_stop_fp ( s );
+         if(AOCL_use_libsais)
+         {
+            if (s->mode != BZ_M_RUNNING && s->avail_in_expect == 0) {
+               continue;
+            }
+            else
+            if (s->nblock >= s->nblockMAX) {
+               continue;
+            }
+            else
+            if (s->strm->avail_in == 0) {
+               break;
+            }
+         }
+         else
 #else
          progress_in |= copy_input_until_stop ( s );
-#endif
-         if (s->mode != BZ_M_RUNNING && s->avail_in_expect == 0) {
-            flush_RL ( s );
-            BZ2_compressBlock ( s, (Bool)(s->mode == BZ_M_FINISHING) );
-            s->state = BZ_S_OUTPUT;
-         }
-         else
-         if (s->nblock >= s->nblockMAX) {
-            BZ2_compressBlock ( s, False );
-            s->state = BZ_S_OUTPUT;
-         }
-         else
-         if (s->strm->avail_in == 0) {
-            break;
+#endif /* AOCL_BZIP2_OPT */
+         {  
+            if (s->mode != BZ_M_RUNNING && s->avail_in_expect == 0) {
+               flush_RL ( s );
+               BZ2_compressBlock ( s, (Bool)(s->mode == BZ_M_FINISHING) );
+               s->state = BZ_S_OUTPUT;
+            }
+            else
+            if (s->nblock >= s->nblockMAX) {
+               BZ2_compressBlock ( s, False );
+               s->state = BZ_S_OUTPUT;
+            }
+            else
+            if (s->strm->avail_in == 0) {
+               break;
+            }
          }
       }
 
@@ -1563,11 +1886,45 @@ void BZ_API(BZ2_bzReadGetUnused)
 }
 #endif
 
+#ifdef AOCL_UNIT_TEST
+#define bucket_size (4 * ALPHABET_SIZE)
 
 int Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq)
 {
-   return libsais(T, SA, n, fs, freq);
+   if(n < 1)
+      return 0;
+
+   // T size of n UChars, but T[-2, -1] needs to be initialized to T[n-2, n-1]
+   // Hence initializing a temporary buffer of size n+2.
+   UChar * T_temp = (UChar *)malloc(n + 2);
+
+   memcpy(&T_temp[2], T, n);
+   // n == 1 will be handled as a special case in libsais.
+   if(n >= 2)
+   {
+      T_temp[0] = T[n-2];
+      T_temp[1] = T[n-1];
+   }
+
+   Int32 * SA_temp = malloc(sizeof(Int32) * (n + 1 + bucket_size + fs));
+   Int32 buckets[bucket_size] = {0};
+
+   Int32 m = Test_count_and_gather_lms_suffixes(&T_temp[2], SA_temp, n, buckets);
+   memmove(&SA_temp[1], &SA_temp[n-m], sizeof(Int32) * m);
+   memcpy(&SA_temp[m+1], buckets, sizeof(Int32) * bucket_size);
+   SA_temp[0] = m;
+
+   Int32 origIndex = libsais((const UChar *)&T_temp[2], SA_temp, n, fs, freq);
+
+   memcpy(SA, SA_temp, sizeof(Int32) * n);
+   free(T_temp);
+   free(SA_temp);
+
+   return origIndex;
 }
+
+#undef bucket_size
+#endif /* AOCL_UNIT_TEST */
 
 /*---------------------------------------------------*/
 /*--- Misc convenience stuff                      ---*/

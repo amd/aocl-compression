@@ -45,3 +45,69 @@ int aocl_zlib_get_enable_dquick(void)
     AOCL_EXIT_CRITICAL(sync_enable_dquick)
     return ret;
 }
+
+#ifdef AOCL_ENABLE_THREADS
+#include "zconf.h"
+#include "zutil.h"
+int insert_Header_generic(Bytef *dest, int level, const int wrap) {
+    int header_size = 0; // no header
+    if(wrap == 1)
+    {
+        // zlib
+        uInt header = (Z_DEFLATED + (7 << 4)) << 8;
+        uInt level_flags;
+        if(level < 2)
+            level_flags = 0; // compressor used fastest algorithm
+        else if (level < 6)
+            level_flags = 1; // compressor used fast algorithm
+        else if (level == 6)
+            level_flags = 2; // compressor used default algorithm
+        else
+            level_flags = 3; // compressor used maximum compression, slowest algorithm
+
+        header |= (level_flags << 6);
+        header += 31 - (header % 31);
+        dest[0] = (Byte)(header >> 8);
+        dest[1] = (Byte)(header & 0xff);
+        header_size = 2;
+    }
+#ifdef GZIP
+    else if(wrap == 2)
+    {
+        // gzip
+        dest[0] = 0x1F; // IDentification 1
+        dest[1] = 0x8B; // IDentification 2
+        dest[2] = 0x08; // CM
+        dest[3] = 0x00; // FLG
+        dest[4] = 0x00; // Modification TIME
+        dest[5] = 0x00; // Modification TIME
+        dest[6] = 0x00; // Modification TIME
+        dest[7] = 0x00; // Modification TIME
+        dest[8] = (level == 9 ? 0x02 : (level == 1 ? 0x04 : 0x00)); // XFL
+        dest[9] = OS_CODE; // OS_CODE
+        header_size = 10;
+    }
+#endif
+    return header_size;
+}
+
+int insert_Trailer_generic(Bytef *dest, AOCL_UINT32 checksum, uLong sourceLen, const int wrap) {
+    int trailer_size = 0; // no trailer
+    if(wrap == 1) {
+        // zlib
+        checksum = ((((checksum) >> 24) & 0xff) + (((checksum) >> 8) & 0xff00) + (((checksum) & 0xff00) << 8) + (((checksum) & 0xff) << 24));
+        memcpy(dest, &checksum, 4);
+        trailer_size = 4;
+    }
+#ifdef GZIP
+    else if (wrap == 2) {
+        // gzip
+        memcpy(dest, &checksum, 4); // CRC32
+        sourceLen = sourceLen % 4294967296L;
+        memcpy(dest + 4, &((AOCL_UINT32)sourceLen), 4); // ISIZE
+        trailer_size = 8;
+    }
+#endif
+    return trailer_size;
+}
+#endif /* AOCL_ENABLE_THREADS */

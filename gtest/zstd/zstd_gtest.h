@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -64,6 +64,8 @@
 #endif /* AOCL_ENABLE_THREADS */
 
 #define DEFAULT_OPT_LEVEL 2 // system running gtest must have AVX support
+
+#define ZSTD_FDS_FRAME_SIZE (FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE)
 
  /* This base class can be used for all fixtures
   * that require dynamic dispatcher setup */
@@ -316,6 +318,7 @@ size_t insert_frame_overwrite(char* dst, size_t dstCapacity, char* src, size_t s
 size_t insert_N_frames(char* dst, size_t dstCapacity, char* src, size_t srcSize, size_t N, size_t& srcWritten);
 size_t insert_frame_via_stream(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 bool has_valid_frame_content_size(char* compressed, unsigned compressedLen);
+bool has_unknown_frame_content_size(char* compressed, unsigned compressedLen);
 int get_cparam_below_lower(ZSTD_cParameter param);
 int get_cparam_above_upper(ZSTD_cParameter param);
 int get_cparam_within_bounds(ZSTD_cParameter param);

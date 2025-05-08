@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -30,18 +31,18 @@
 
 #include "timefn.h"      /* UTIL_time_t */
 #include "benchfn.h"
-#include "../lib/common/mem.h"
+#include "mem.h"
 #ifndef ZSTD_STATIC_LINKING_ONLY
 #define ZSTD_STATIC_LINKING_ONLY
 #endif
-#include "../lib/zstd.h"
+#include "zstd.h"
 #include "datagen.h"     /* RDG_genBuffer */
 #ifndef XXH_INLINE_ALL
 #define XXH_INLINE_ALL
 #endif
-#include "../lib/common/xxhash.h"
+#include "xxhash.h"
 #include "benchzstd.h"
-#include "../lib/zstd_errors.h"
+#include "zstd_errors.h"
 
 
 /* *************************************
@@ -238,6 +239,8 @@ static size_t local_defaultCompress(
 }
 
 /* `addArgs` is the context */
+/* AOCL: Modified to process zstd frame that follows a skippable frame 
+ * TODO: Modify to process multiple frames if present in srcBuffer. */
 static size_t local_defaultDecompress(
                     const void* srcBuffer, size_t srcSize,
                     void* dstBuffer, size_t dstCapacity,
@@ -256,6 +259,9 @@ static size_t local_defaultDecompress(
         moreToFlush = ZSTD_decompressStream(dctx, &out, &in);
         if (ZSTD_isError(moreToFlush)) {
             return moreToFlush;
+        }
+        if(!moreToFlush && out.pos == 0 && in.size != 0) {
+            moreToFlush = 1;
         }
     }
     return out.pos;

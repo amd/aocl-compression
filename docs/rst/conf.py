@@ -1,5 +1,5 @@
 # ##############################################################################
-# Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -32,17 +32,16 @@
 import os
 # -- Project information -----------------------------------------------------
 project = 'AOCL-Compression'
-copyright = '2020-2024, Advanced Micro Devices, Inc'
+copyright = '2020-2025, Advanced Micro Devices, Inc'
 author = 'Advanced Micro Devices, Inc'
-version = '5.0.0'
-release = '5.0.0'
+version = '5.1.0'
+release = '5.1.0'
 
 extensions = ['breathe', 'myst_parser']
 pwd = os.path.dirname(os.path.abspath(__file__))
 pwd = os.path.join(pwd, '..')
 pwd = os.path.join(pwd,'xml')
-breathe_projects = {"aocl-compression": pwd}
-breathe_default_project = "aocl-compression"
+breathe_projects = {"compression": pwd}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_template']

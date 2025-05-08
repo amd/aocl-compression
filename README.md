@@ -108,10 +108,12 @@ Option                              |  Description
 ------------------------------------|----------------------------------------------------------------------------------------
 AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |  Enable LZ4 optimizations related to backward prefetching of data (Disabled by default)
 SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Enabled by default)
+SNAPPY_HIGH_COMPRESSION             |  Enable Snappy high compression to get better ratio by compromising on speed (Disabled by default)
+SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS |  Enable Snappy branchless decompression optimization (Disabled by default for GCC and enabled for all other compilers)
 LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
-AOCL_ZSTD_SEARCH_SKIP_OPT_DFAST_FAST|  Enable ZSTD match skipping optimization, and reduce search strength/tolerance for levels 1-4 (Enabled by default)
-AOCL_DECOMPRESS_FAST                |  Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values 1, 2 for ZSTD. (Disabled by default)
+AOCL_ZSTD_SEARCH_SKIP_OPT           |  Enable ZSTD match skipping optimization that steps more aggresively when matches are not found (Enabled by default)
+AOCL_DECOMPRESS_FAST                |  Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values: {1,2,3} ZSTD, {1,2} Snappy, {1} LZ4. (Disabled by default)
 AOCL_TEST_COVERAGE                  |  Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)
 AOCL_ENABLE_LOG_FEATURE             |  Enables logging through environment variable `AOCL_ENABLE_LOG` (Disabled by default)
 CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
@@ -138,10 +140,11 @@ NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression 
 AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
 AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
 ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
+BUILD_UTILITY                       |  Enable third party utility build: zstd (Disabled by default)" OFF)
 
 * NOTE: <br>
    1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by <br>
-   setting environment variable AOCL_ZLIB_QUICK_MODE. It also improves performance for levels 2, 3 and 5 <br>
+   setting environment variable AOCL_ZLIB_QUICK_MODE=ON. It also improves performance for levels 2, 3 and 5 <br>
    while trading off compression ratio. <br>
 
 Running AOCL-Compression Test Bench On Linux
@@ -260,7 +263,7 @@ Running AOCL-Compression Test Bench On Windows
 ----------------------------------------------
 
 * CAUTION: <br>
-   Before running the test bench, check whether it points to the right library dependency. <br>
+   Before running the test bench, ensure it points to the right library dependencies for aocl_compression, openMP, etc. <br>
 
 Test bench on Windows supports all the user options as Linux,
 except for the `-c` option to link and test IPP compression methods.
@@ -273,7 +276,7 @@ Running AOCL-Compression Examples
 ---------------------------------
 
 * CAUTION: <br>
-   Before running the example programs, check whether it points to the right library dependency. <br>
+   Before running the example programs, ensure it points to the right library dependencies for aocl_compression, openMP, etc. <br>
 
 Example programs are provided for both unified API and native APIs of each compression method.
 The library should be built with -DBUILD_EXAMPLE=ON. Other cmake options including 
@@ -288,6 +291,10 @@ The library should be built with -DBUILD_EXAMPLE=ON. Other cmake options includi
 * To run example program that demonstrates obtaining format compliant compressed stream from multithreaded unified API,
   build the library by using -DAOCL_ENABLE_THREADS=ON and run the command:<br>
   `example_aocl_llc_skip_rap_frame <input filename>`
+
+* To run example program that demonstrates obtaining format compliant gzip compressed stream from multithreaded API,
+  build the library by using -DAOCL_ENABLE_THREADS=ON and run the command:<br>
+  `example_compress2_gzip <input filename>`
 
 Running tests with CTest
 ------------------------
@@ -421,8 +428,8 @@ Enabling specific instructions (ISA)
 
 Multi-threaded Compression and Decompression
 --------------------------------------------
-- Parallel compression and decompression of lz4, zlib, zstd and snappy is implemented using
-  openMP multi-threading. A RAP (random access point) frame is introduced in AOCL-Compression
+- Parallel compression and decompression of lz4, lz4hc, zlib (zlib, deflate and gzip formats), zstd and snappy 
+  is implemented using openMP multi-threading. A RAP (random access point) frame is introduced in AOCL-Compression
   to support parallel decompression of the compressed streams/files. Use AOCL_ENABLE_THREADS
   config option to enable the multi-threading.
 - A stream compressed with multi-threaded AOCL-Compression library can be decompressed using any

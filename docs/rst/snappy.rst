@@ -30,10 +30,12 @@ SNAPPY
 ------
 
 .. doxygengroup:: SNAPPY_API
+   :project: compression
    :members:
 
 SNAPPY C APIs
 =============
 
 .. doxygengroup:: SNAPPY_C_API
+   :project: compression
    :members:

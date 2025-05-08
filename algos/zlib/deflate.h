@@ -1,6 +1,6 @@
 /* deflate.h -- internal compression state
  * Copyright (C) 1995-2018 Jean-loup Gailly
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -116,7 +116,10 @@ typedef struct internal_state {
     ulg   gzindex;       /* where in extra, name, or comment */
     Byte  method;        /* can only be DEFLATED */
     int   last_flush;    /* value of flush param for previous deflate call */
-
+#ifdef AOCL_ZLIB_OPT 
+    int   block_open;    /* Whether or not a block is currently open for the QUICK deflation scheme.
+                          * This is set to 1 if there is an active block, or 0 if the block was just closed. */
+#endif
                 /* used by deflate.c: */
 
     uInt  w_size;        /* LZ77 window size (32K by default) */
@@ -489,5 +492,17 @@ local void send_bits(deflate_state *s, int value, int length) {
 #endif /* ZLIB_DEBUG */
 
 #endif /* AOCL_ZLIB_OPT */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#if defined(AOCL_UNIT_TEST)
+ZEXTERN void ZEXPORT test_aocl_zlib_set_enable_dquick(int val);
+#endif
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* DEFLATE_H */

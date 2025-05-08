@@ -1,6 +1,6 @@
 /* inflate.c -- zlib decompression
  * Copyright (C) 1995-2022 Mark Adler
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -696,6 +696,9 @@ local int aocl_updatewindow(z_streamp strm, const Bytef *end, unsigned copy)
    will return Z_BUF_ERROR if it has not reached the end of the stream.
  */
 
+#if defined(__clang__) 
+__asm__(".p2align 6");
+#endif
 int ZEXPORT inflate(z_streamp strm, int flush) {
     AOCL_SETUP_NATIVE();
     struct inflate_state FAR *state;

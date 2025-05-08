@@ -1,6 +1,6 @@
 /* deflate.c -- compress data using the deflation algorithm
  * Copyright (C) 1995-2023 Jean-loup Gailly and Mark Adler
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -643,6 +643,9 @@ local int aocl_deflateInit2__opt(z_streamp strm, int level, int method,
 #endif
     s->level = level;
     s->strategy = strategy;
+#ifdef AOCL_ZLIB_OPT 
+    s->block_open = 0;
+#endif
     s->method = (Byte)method;
 
     return deflateReset(strm);
@@ -2022,6 +2025,9 @@ local block_state deflate_fast(deflate_state *s, int flush) {
 
 #ifdef AOCL_ZLIB_OPT
 
+#if defined(__clang__) 
+__asm__(".p2align 6");
+#endif
 local block_state aocl_deflate_fast_opt(deflate_state *s, int flush)
 {
     IPos hash_head;       /* head of the hash chain */
@@ -2387,7 +2393,8 @@ static void aocl_setup_deflate_fmv(int optOff, int optLevel)
     aocl_register_longest_match(optOff, optLevel);
     
     if (!setup_ok_zlib_deflate) {
-        if(getenv("AOCL_ZLIB_QUICK_MODE") != NULL)
+        const char* AOCL_enable_quick = getenv("AOCL_ZLIB_QUICK_MODE");
+        if (AOCL_enable_quick != NULL && (strcmp(AOCL_enable_quick, "ON") == 0))
             aocl_zlib_set_enable_dquick(1);
         else
             aocl_zlib_set_enable_dquick(0);
@@ -2427,11 +2434,11 @@ static void aocl_setup_deflate_fmv(int optOff, int optLevel)
     }
 }
 
-void ZLIB_INTERNAL aocl_setup_deflate(int optOff, int optLevel)
+void ZLIB_INTERNAL aocl_setup_deflate(int _optOff, int optLevel)
 {
     AOCL_ENTER_CRITICAL(setup_zlib_deflate)
     if (!setup_ok_zlib_deflate) {
-        optOff = optOff ? 1 : get_disable_opt_flags(0);
+        optOff = _optOff ? 1 : get_disable_opt_flags(0);
         aocl_setup_tree(optOff, optLevel);
         aocl_setup_deflate_fmv(optOff, optLevel);
         setup_ok_zlib_deflate = 1;

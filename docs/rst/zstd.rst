@@ -30,4 +30,5 @@ ZSTD
 ----
 
 .. doxygengroup:: ZSTD_API
+   :project: compression
    :members:

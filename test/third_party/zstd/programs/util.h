@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -7,6 +8,7 @@
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
  */
+
 
 #ifndef UTIL_H_MODULE
 #define UTIL_H_MODULE
@@ -23,7 +25,7 @@ extern "C" {
 #include <stddef.h>       /* size_t, ptrdiff_t */
 #include <sys/types.h>    /* stat, utime */
 #include <sys/stat.h>     /* stat, chmod */
-#include "../lib/common/mem.h"          /* U64 */
+#include "mem.h"          /* U64 */
 
 
 /*-************************************************************

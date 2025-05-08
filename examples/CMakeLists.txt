@@ -33,7 +33,7 @@
 #
 # @author Ashish Sriram
 
-cmake_minimum_required(VERSION 3.22.0)
+cmake_minimum_required(VERSION 3.26.0)
 
 # Use out-of-src-tree build if building directly from AOCL-Compression package
 if(NOT DEFINED ENABLE_EXAMPLE_OUTOFSRCTREE)
@@ -122,7 +122,11 @@ else()
         add_examples_dir(snappy)
     endif ()
     if (NOT AOCL_EXCLUDE_ZLIB)
-        add_examples_dir(zlib)
+        add_example(example_compress2 zlib/example_compress2.c)
+        if (AOCL_ENABLE_THREADS)
+            add_example(example_compress2_gzip zlib/example_compress2_gzip.c)
+            add_example(example_compress2_raw zlib/example_compress2_raw.c)
+        endif()
     endif ()
     if (NOT AOCL_EXCLUDE_ZSTD)
         add_examples_dir(zstd)

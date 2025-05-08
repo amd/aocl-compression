@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -186,7 +186,21 @@ static UNUSED_ATTR const U32 OF_defaultNormLog = OF_DEFAULTNORMLOG;
 */
 #if AOCL_DECOMPRESS_FAST > 1
 // Metadata flags currently supported
+#define FDS_NONE                      (U64)0    // No constraints
+#define FDS_FAST2_ANALYZE             (U64)(-1) // Under analysis. Impose maximum constraints 
+#define FDS_FAST2_NOTB_SO4_NOEXT_REP3 (U64)0x67 // 1 100 1 11, no large total bits, no offsets < 16, no external dictionary, no rep3,2,1
 #define FDS_FAST2_NOTB_SO4_NOEXT_REP2 (U64)0x66 // 1 100 1 10, no large total bits, no offsets < 16, no external dictionary, no rep3,2
+#define FDS_FAST2_NOTB_SO3_NOEXT_REP3 (U64)0x5F // 1 011 1 11, no large total bits, no offsets < 8, no external dictionary, no rep3,2,1
+#define FDS_FAST2_NOTB_SO3_NOEXT_REP2 (U64)0x5E // 1 011 1 10, no large total bits, no offsets < 8, no external dictionary, no rep3,2
+#define FDS_DEFAULT_CONF FDS_NONE                   // No constraints
+#define FDS_ALL_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP3  // All constraints
+
+// Decompress fast settings
+/*
+ * AOCL_DECOMPRESS_FAST = 1: No FDS frame inserted. Modifications in decompressor only.
+ * AOCL_DECOMPRESS_FAST = 2: FDS frame inserted. All FDS_FAST2_NOTB_SO4_NOEXT_REP2 constraints imposed.
+ * AOCL_DECOMPRESS_FAST = 3: FDS frame inserted. Data aware compression. Constraints imposed selectively based on dynamic analysis.
+*/
 #endif
 
 /*-*******************************************
@@ -340,6 +354,17 @@ typedef enum {
     ZSTD_llt_matchLength = 2       /* represents a long match */
 } ZSTD_longLengthType_e;
 
+#if AOCL_DECOMPRESS_FAST > 1
+typedef struct {
+    U64 state;       // AOCL fast decompress settings
+    U32 ratio;       // Compression ratio of block compressor
+    U16 count;       // Analysis counter
+    U16 written;     // Is FDS frame written to stream?
+    U64 single_pass; // Is input provided through a single-pass API?
+                     // APIs like : ZSTD_compress(), ZSTD_compress2(), ZSTD_compressCCtx(), ZSTD_compress_usingDict(), etc
+} aocl_fds_t;
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
+
 typedef struct {
     seqDef* sequencesStart;
     seqDef* sequences;      /* ptr to end of sequences */
@@ -357,6 +382,9 @@ typedef struct {
      */
     ZSTD_longLengthType_e longLengthType;
     U32                   longLengthPos;  /* Index of the sequence to apply long length modification to */
+#if AOCL_DECOMPRESS_FAST > 1
+    aocl_fds_t fds_config; /* AOCL fast decompress settings */
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 } seqStore_t;
 
 typedef struct {

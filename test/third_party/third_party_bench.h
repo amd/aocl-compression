@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -68,7 +68,6 @@ int zstd_decodecorpus_main(int argc, char** argv);
 #ifndef AOCL_EXCLUDE_ZLIB
 int zlib_example_main(int argc, char** argv);
 int zlib_infcover_main(int argc, char** argv);
-int zlib_minigzip_main(int argc, char** argv);
 #endif
 
 /* List of all test bench targets. 
@@ -104,11 +103,9 @@ static const test_bench_t tp_test_bench[] = {
 #ifndef AOCL_EXCLUDE_ZLIB
     { "ZLIB_EXAMPLE",             zlib_example_main },
     { "ZLIB_INFCOVER",            zlib_infcover_main },
-    { "ZLIB_MINIGZIP",            zlib_minigzip_main },
 #else
     { "ZLIB_EXAMPLE",             unsupported_method_test },
     { "ZLIB_INFCOVER",            unsupported_method_test },
-    { "ZLIB_MINIGZIP",            unsupported_method_test },
 #endif
 };
 
