@@ -1,5 +1,5 @@
 jenkinsURLs:
-  - https://swjenkins.amd.com/job/automations/job/entrypoints/job/github-psdb-entrypoint/
+  - https://ai-ci.amd.com/job/automations/job/entrypoints/job/github-psdb-entrypoint/
 help:
   doc: https://confluence.amd.com/display/SI/PSDB+Jenkins+Trigger+-+GitHub+Guide
   enabled: false
