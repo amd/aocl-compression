@@ -48,6 +48,9 @@ static void aocl_setup_native(void);
 #endif
 
 static int setup_ok_zlib_adler = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_zlib_adler = ATOMIC_FLAG_INIT;
+#endif /* AOCL_ENABLE_THREADS */
 
 /* Largest prime smaller than 65536 */
 #define BASE 65521U

@@ -29,6 +29,9 @@
 #include "utils/utils.h"
 
 static int enable_dquick = 0; // flag to enable/disable deflate quick compression
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag sync_enable_dquick = ATOMIC_FLAG_INIT;
+#endif
 
 void aocl_zlib_set_enable_dquick(int val)
 {

@@ -61,6 +61,9 @@ static void aocl_setup_native(void);
 #endif
 
 static int setup_ok_lzma_decode = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_lzmadec = ATOMIC_FLAG_INIT;
+#endif
 
 /* Key terms used in range decoder:
 *
@@ -2116,9 +2119,9 @@ static void aocl_setup_native(void) {
 #endif
 
 void aocl_destroy_lzma_decode(void){
-    AOCL_ENTER_CRITICAL(setup_lzma_decode)
+    AOCL_ENTER_CRITICAL(setup_lzmadec)
     setup_ok_lzma_decode = 0;
-    AOCL_EXIT_CRITICAL(setup_lzma_decode)
+    AOCL_EXIT_CRITICAL(setup_lzmadec)
 }
 
 #ifdef AOCL_UNIT_TEST

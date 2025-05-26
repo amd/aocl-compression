@@ -42,6 +42,9 @@
 #include "aocl_zlib_setup.h"
 
 static int setup_ok_zlib_longest = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_zlib_longest = ATOMIC_FLAG_INIT;
+#endif /* AOCL_ENABLE_THREADS */
 
 #define NIL 0
 

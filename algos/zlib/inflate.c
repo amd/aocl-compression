@@ -98,6 +98,9 @@
 #include "aocl_zlib_setup.h"
 
 static int setup_ok_zlib_inflate = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_zlib_inflate = ATOMIC_FLAG_INIT;
+#endif
 
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,

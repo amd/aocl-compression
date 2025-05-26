@@ -132,6 +132,9 @@ static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE()
 #endif
 static int setup_ok_snappy = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static std::atomic_flag setup_snappy = ATOMIC_FLAG_INIT;
+#endif
 
 /* --------- Forward declarations for dynamic ISA selection - start ---------*/
 

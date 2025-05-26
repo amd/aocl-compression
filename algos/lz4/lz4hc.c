@@ -259,6 +259,9 @@ static void aocl_setup_native_hc(void);
 #endif /* AOCL_LZ4HC_OPT */
 
 int setup_ok_lz4hc = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_lz4hc = ATOMIC_FLAG_INIT;
+#endif
 
 /**************************************
 *  Init

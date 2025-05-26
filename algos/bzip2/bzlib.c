@@ -47,6 +47,9 @@ int AOCL_use_libsais = 0;
 #endif
 
 static int setup_ok_bzip2 = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_bzip2 = ATOMIC_FLAG_INIT;
+#endif
 
 /*---------------------------------------------------*/
 /*--- Compression stuff                           ---*/

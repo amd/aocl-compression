@@ -59,6 +59,9 @@
 #undef FASTEST // not supported with AOCL zlib optimizations
 static int setup_ok_zlib_deflate = 0; // flag to indicate status of dynamic dispatcher setup
 static int optLevel = 0, optOff = 1; // optimization configurations
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_zlib_deflate = ATOMIC_FLAG_INIT;
+#endif /* AOCL_ENABLE_THREADS */
 
 // This increases the hash table size (default to 128K) and reduces the number of collisions.
 #define AOCL_ADDITIONAL_HASH_BITS 2

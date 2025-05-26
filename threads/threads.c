@@ -490,6 +490,9 @@ AOCL_INT32 aocl_set_partition_stats_mt(aocl_thread_group_t *thread_grp,
 #ifdef AOCL_UNIT_TEST
 /* Functions to override omp_get_max_threads() for unit testing */
 static int test_omp_max_threads = 1;
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_test_omp_max_threads = ATOMIC_FLAG_INIT;
+#endif
 int omp_get_max_threads_manual(void) 
 {
     return test_omp_max_threads;

@@ -16,6 +16,9 @@
 
 int zlibOptOff = 0; // default, run reference code
 static int setup_ok_zlib = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_zlib = ATOMIC_FLAG_INIT;
+#endif /* AOCL_ENABLE_THREADS */
 
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,

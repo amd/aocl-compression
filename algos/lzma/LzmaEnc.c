@@ -102,6 +102,9 @@ static void aocl_setup_native(void);
 #endif
 
 static int setup_ok_lzma_encode = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_lzmaenc = ATOMIC_FLAG_INIT;
+#endif
 
 //Forward declarations to allow default pointer initializations
 // Function pointers for optimization overloads
@@ -4623,9 +4626,9 @@ static void aocl_setup_native(void) {
 #endif
 
 void aocl_destroy_lzma_encode(void){
-    AOCL_ENTER_CRITICAL(setup_lzma_encode)
+    AOCL_ENTER_CRITICAL(setup_lzmaenc)
     setup_ok_lzma_encode = 0;
-    AOCL_EXIT_CRITICAL(setup_lzma_encode)
+    AOCL_EXIT_CRITICAL(setup_lzmaenc)
 }
 
 #ifdef AOCL_UNIT_TEST

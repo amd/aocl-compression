@@ -987,6 +987,9 @@ int AOCL_LZ4_postProcessing_mt(aocl_thread_group_t *thread_group_handle, int rap
 /* `setup_ok_lz4` placed inside #ifndef LZ4_COMMONDEFS_ONLY to avoid
  warnings related to unused variable. */
 static int setup_ok_lz4 = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_lz4 = ATOMIC_FLAG_INIT;
+#endif
 
 /* --------- Forward declarations for dynamic ISA selection - start ---------*/
 

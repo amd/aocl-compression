@@ -38,6 +38,7 @@ cmake_minimum_required(VERSION 3.26.0)
 
 #set the project name
 project(AOCL-COMPRESSION-LIBRARY CXX C ASM)
+set(CMAKE_C_STANDARD 11) # support atomic operations
 message(STATUS "Building for AOCL COMPRESSION LIBRARY")
 
 string(TIMESTAMP TODAY "%Y%m%d")
@@ -462,11 +463,13 @@ message(STATUS "C Compiler used: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ Compiler used: ${CMAKE_CXX_COMPILER}")
 set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
 
-if(WIN32 OR NOT OpenMP_libomp_LIBRARY)
-    find_package(OpenMP REQUIRED)
-else()
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+if(AOCL_ENABLE_THREADS) # OpenMP dependency for MT feature support
+    if(WIN32 OR NOT OpenMP_libomp_LIBRARY)
+        find_package(OpenMP REQUIRED)
+    else()
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+    endif()
 endif()
 
 if (WIN32)
