@@ -107,6 +107,13 @@ static const codec_list_t codec_list[AOCL_COMPRESSOR_ALGOS_NUM] =
     {"ZSTD",   1, 22, 0, 0, 1, 1, 1, 1, 1, SIZE_MAX , ".zst"}
 };
 
+typedef enum {
+    FILE_TYPE = 0,  
+    STREAM_TYPE,  
+    DICT_TYPE,  
+    INVALID  
+} APIType;
+
 //Main data structure for Test bench functionality
 typedef struct
 {
@@ -129,7 +136,7 @@ typedef struct
     AOCL_UINTP file_size;
     AOCL_INTP useIPP;
     AOCL_CHAR *ippDir;
-    AOCL_INTP useNAPI;
+    APIType NapiType;
     FILE *fp;                    //file pointer for input data
     FILE *fpDict;                //file pointer for dictionary data
     AOCL_CHAR *fName;

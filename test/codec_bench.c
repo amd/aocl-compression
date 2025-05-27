@@ -109,7 +109,7 @@ AOCL_VOID print_user_options (AOCL_VOID)
     printf("-d          File to dump output data. Based on -r, saves compressed/decompressed data.\n");
     printf("-f          Input uncompressed file to be used for validation in -rdecompress mode.\n");
     printf("-c          Run IPP library methods. Provide the path for the IPP library path after the -c option.\n");
-    printf("-n          Use Native APIs for compression/decompression.\n");
+    printf("-n          Use Native APIs for compression/decompression. Additional options like stream and dict are supported for ZSTD only.\n");
     printf("-y          External dictionary file to be used in compress and decompress for supported native APIs. Ignored if -n is not set.\n");
 }
 
@@ -349,12 +349,12 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
     codec_bench_handle->decompPtr = NULL;
     codec_bench_handle->optOff = 0;
     codec_bench_handle->useIPP = 0;
-    codec_bench_handle->useNAPI = 0;
+    codec_bench_handle->NapiType = INVALID;
     codec_bench_handle->dumpFp = NULL;
     codec_bench_handle->dumpFile = NULL;
     codec_bench_handle->valFp = NULL;
     codec_bench_handle->runOperation = RUN_OPERATION_DEFAULT;
-    
+
     while (cnt < argc)
     {
         option = argv[cnt][0];
@@ -414,7 +414,23 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                 break;
 
                 case 'n':
-                    codec_bench_handle->useNAPI = 1;
+                    if (strcasecmp(&argv[cnt][2], "stream") == 0)
+                    {
+                        codec_bench_handle->NapiType = STREAM_TYPE;
+                    }
+                    else if (strcasecmp(&argv[cnt][2], "dict") == 0)
+                    {
+                        codec_bench_handle->NapiType = DICT_TYPE;
+                    }
+                    else if (strcasecmp(&argv[cnt][2], "") == 0)
+                    {
+                        codec_bench_handle->NapiType = FILE_TYPE;
+                    }
+                    else
+                    {
+                        LOG_BENCH(ERR, "Invalid API Type used. Allowed are stream and dict.\n");
+                        ret = ERR_CODEC_BENCH_ARGS;
+                    }
                 break;
                 case 'o':
                     codec_bench_handle->optOff = 1;
@@ -487,7 +503,7 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                     }
                     useDict = 1;
                     break;
- 
+
                 default:
                     ret = ERR_CODEC_BENCH_ARGS;
                 break;
@@ -528,6 +544,12 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
         codec_bench_handle->codec_method = -1;
     }
 
+    //dictionary and stream APIs are supported only for ZSTD(6)
+    if((codec_bench_handle->NapiType != INVALID) && (codec_bench_handle->codec_method != ZSTD) && ((codec_bench_handle->NapiType == DICT_TYPE) || (codec_bench_handle->NapiType == STREAM_TYPE) ))
+    {
+        LOG_BENCH(ERR, "dictionary and stream APIs are supported for ZSTD only\n");
+        return ERR_CODEC_BENCH_ARGS;
+    }    
     LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return ret;
 }
@@ -1524,7 +1546,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
         result = ipp_bench_run(aocl_codec_handle, &codec_bench_handle);
 #endif
     }
-    else if (codec_bench_handle.useNAPI)
+    else if (codec_bench_handle.NapiType != INVALID)
     {
         result = native_api_bench_run(aocl_codec_handle, &codec_bench_handle);
     }
