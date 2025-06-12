@@ -33,6 +33,9 @@
 #include "../common/huf.h"
 #include "../common/error_private.h"
 #include "../common/bits.h"       /* ZSTD_highbit32 */
+#if AOCL_DECOMPRESS_FAST > 1
+#include "../common/aocl_fds.h" /* AOCL_FDS */
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 
 
 /* **************************************************************
@@ -45,12 +48,14 @@
 /* **************************************************************
 *  Required declarations
 ****************************************************************/
+#if !defined(AOCL_DECOMPRESS_FAST) || (AOCL_DECOMPRESS_FAST <= 1)
 typedef struct nodeElt_s {
     U32 count;
     U16 parent;
     BYTE byte;
     BYTE nbBits;
 } nodeElt;
+#endif
 
 
 /* **************************************************************
@@ -1464,3 +1469,264 @@ size_t HUF_compress4X_repeat (void* dst, size_t dstSize,
                                  workSpace, wkspSize,
                                  hufTable, repeat, flags);
 }
+
+#if AOCL_DECOMPRESS_FAST > 1
+/* AOCL_HUF_estimateCompressedSize() : 
+ * Estimate the compressed size based on the Huffman tree.
+ */
+size_t AOCL_HUF_estimateCompressedSize(const nodeElt* huffNode, unsigned maxSymbolValue)
+{
+    size_t nbBits = 0;
+    int s;
+    for (s = 0; s <= (int)maxSymbolValue; ++s) {
+        nbBits += huffNode[s].count * huffNode[s].nbBits;
+    }
+    return nbBits >> 3;
+}
+
+/**
+ * AOCL_HUF_tableLog() :
+ * 1. Adjust Maximum Height: 
+ *    - Set the maximum height to a specified lower value.
+ * 2. Determine Ratio Loss: 
+ *    - Estimate the compressed size using both the default and revised table logs.
+ *    - Calculate the ratio loss incurred using revised table logs.
+ * 3. Threshold Comparison: 
+ *    - If the ratio loss is below the defined dynamic threshold, proceed to reduce the table log.
+ * 4. Adjust Threshold:
+ *    - If multiple blocks satisfy the criteria for a reduced table log, decrease the threshold,
+ *      making the ratio loss requirements more stringent.
+ *    - Conversely, if fewer blocks meet the criteria, increase the threshold to relax the requirements.
+ * 
+ * @note: Dynamic threshold:  varies between T_MIN and T_MAX, determined by the moving average over a 
+ *        specified window length, defined as `SLIDING_WINDOW`.
+ *        This dynamic adjustment process ensures an adaptive approach toward optimizing the table log
+ *        based on the current data conditions.
+ */
+size_t
+AOCL_HUF_tableLog(aocl_entropy_fds_t* entropy_fds_config, nodeElt* const huffNode, 
+                U32 maxSymbolValue, U32 maxNbBits, int nonNullRank)
+{
+    double RATIO_LOSS_THRESHOLD = T_MIN + (T_MAX - T_MIN) * (1.0 - entropy_fds_config->avgTableLogReduction);
+    int reduced_this_block = 0;
+     
+    /* make a copy of huffNode to avoid modifying the original */
+    nodeElt* huffNodeCopy = (nodeElt*)entropy_fds_config->ptrWorkspace;
+    ZSTD_memcpy(huffNodeCopy, huffNode, sizeof(nodeElt) * (maxSymbolValue + 1));
+
+    /* srcSize */
+    size_t sz = 0;
+    for(int i=0; i<maxSymbolValue; i++) {
+        sz += huffNode[i].count;
+    }
+
+    /* Default tablelog */
+    maxNbBits = HUF_setMaxHeight(huffNode, (U32)nonNullRank, maxNbBits);
+    if (maxNbBits > HUF_TABLELOG_MAX) {
+        return ERROR(GENERIC);   /* check fit into table */
+    }
+    double default_ratio = (double)AOCL_HUF_estimateCompressedSize(huffNode, maxSymbolValue) / sz;
+    
+    /* set the max height to the lower value */
+    U32 FDS_maxNbBits = HUF_setMaxHeight(huffNodeCopy, (U32)nonNullRank, AOCL_HUF_TABLELOG_MIN);
+    double aocl_ratio = (double)AOCL_HUF_estimateCompressedSize(huffNodeCopy, maxSymbolValue) / sz;
+    
+    if((maxNbBits > FDS_maxNbBits) && (aocl_ratio - default_ratio < RATIO_LOSS_THRESHOLD)){
+        reduced_this_block = 1;
+        maxNbBits = FDS_maxNbBits;
+        ZSTD_memcpy(huffNode, huffNodeCopy, sizeof(nodeElt) * (maxSymbolValue + 1));
+    }
+
+    // Update moving average
+    entropy_fds_config->avgTableLogReduction += ((double)reduced_this_block - entropy_fds_config->avgTableLogReduction) / SLIDING_WINDOW;
+    return maxNbBits;
+}
+
+/*
+ * AOCL_HUF_buildCTable_wksp() :
+ * Same as HUF_buildCTable_wksp, but calls AOCL_HUF_tableLog to get maxNbBits.
+ */
+size_t
+AOCL_HUF_buildCTable_wksp(aocl_entropy_fds_t* entropy_fds_config /*entropy_fds_config*/, HUF_CElt* CTable, const unsigned* count, U32 maxSymbolValue, U32 maxNbBits,
+                     void* workSpace, size_t wkspSize)
+{
+    HUF_buildCTable_wksp_tables* const wksp_tables =
+        (HUF_buildCTable_wksp_tables*)HUF_alignUpWorkspace(workSpace, &wkspSize, ZSTD_ALIGNOF(U32));
+    nodeElt* const huffNode0 = wksp_tables->huffNodeTbl;
+    nodeElt* const huffNode = huffNode0+1;
+    int nonNullRank;
+
+    HUF_STATIC_ASSERT(HUF_CTABLE_WORKSPACE_SIZE == sizeof(HUF_buildCTable_wksp_tables));
+
+    DEBUGLOG(5, "AOCL_HUF_buildCTable_wksp (alphabet size = %u)", maxSymbolValue+1);
+
+    /* safety checks */
+    if (wkspSize < sizeof(HUF_buildCTable_wksp_tables))
+        return ERROR(workSpace_tooSmall);
+    if (maxNbBits == 0) maxNbBits = HUF_TABLELOG_DEFAULT;
+    if (maxSymbolValue > HUF_SYMBOLVALUE_MAX)
+        return ERROR(maxSymbolValue_tooLarge);
+    ZSTD_memset(huffNode0, 0, sizeof(huffNodeTable));
+
+    /* sort, decreasing order */
+    HUF_sort(huffNode, count, maxSymbolValue, wksp_tables->rankPosition);
+    DEBUGLOG(6, "sorted symbols completed (%zu symbols)", showHNodeSymbols(huffNode, maxSymbolValue+1));
+
+    /* build tree */
+    nonNullRank = HUF_buildTree(huffNode, maxSymbolValue);
+
+    /* determine and enforce maxTableLog */
+    maxNbBits = AOCL_HUF_tableLog(entropy_fds_config, huffNode, maxSymbolValue, maxNbBits, nonNullRank);
+    if(FSE_isError(maxNbBits)) {
+        return maxNbBits;
+    }
+
+    HUF_buildCTableFromTree(CTable, huffNode, nonNullRank, maxSymbolValue, maxNbBits);
+
+    return maxNbBits;
+}
+
+/**
+ * AOCL_HUF_compress_internal() :
+ * Same as HUF_compress_internal, but uses AOCL_HUF_buildCTable_wksp to build the table.
+ */
+static size_t
+AOCL_HUF_compress_internal (aocl_entropy_fds_t* entropy_fds_config, void* dst, size_t dstSize,
+                 const void* src, size_t srcSize,
+                       unsigned maxSymbolValue, unsigned huffLog,
+                       HUF_nbStreams_e nbStreams,
+                       void* workSpace, size_t wkspSize,
+                       HUF_CElt* oldHufTable, HUF_repeat* repeat, int flags)
+{
+    HUF_compress_tables_t* const table = (HUF_compress_tables_t*)HUF_alignUpWorkspace(workSpace, &wkspSize, ZSTD_ALIGNOF(size_t));
+    BYTE* const ostart = (BYTE*)dst;
+    BYTE* const oend = ostart + dstSize;
+    BYTE* op = ostart;
+
+    DEBUGLOG(5, "AOCL_HUF_compress_internal (srcSize=%zu)", srcSize);
+    HUF_STATIC_ASSERT(sizeof(*table) + HUF_WORKSPACE_MAX_ALIGNMENT <= HUF_WORKSPACE_SIZE);
+
+    /* checks & inits */
+    if (wkspSize < sizeof(*table)) return ERROR(workSpace_tooSmall);
+    if (!srcSize) return 0;  /* Uncompressed */
+    if (!dstSize) return 0;  /* cannot fit anything within dst budget */
+    if (srcSize > HUF_BLOCKSIZE_MAX) return ERROR(srcSize_wrong);   /* current block size limit */
+    if (huffLog > HUF_TABLELOG_MAX) return ERROR(tableLog_tooLarge);
+    if (maxSymbolValue > HUF_SYMBOLVALUE_MAX) return ERROR(maxSymbolValue_tooLarge);
+    if (!maxSymbolValue) maxSymbolValue = HUF_SYMBOLVALUE_MAX;
+    if (!huffLog) huffLog = HUF_TABLELOG_DEFAULT;
+
+    /* Heuristic : If old table is valid, use it for small inputs */
+    if ((flags & HUF_flags_preferRepeat) && repeat && *repeat == HUF_repeat_valid) {
+        return HUF_compressCTable_internal(ostart, op, oend,
+                                           src, srcSize,
+                                           nbStreams, oldHufTable, flags);
+    }
+
+    /* If uncompressible data is suspected, do a smaller sampling first */
+    DEBUG_STATIC_ASSERT(SUSPECT_INCOMPRESSIBLE_SAMPLE_RATIO >= 2);
+    if ((flags & HUF_flags_suspectUncompressible) && srcSize >= (SUSPECT_INCOMPRESSIBLE_SAMPLE_SIZE * SUSPECT_INCOMPRESSIBLE_SAMPLE_RATIO)) {
+        size_t largestTotal = 0;
+        DEBUGLOG(5, "input suspected incompressible : sampling to check");
+        {   unsigned maxSymbolValueBegin = maxSymbolValue;
+            CHECK_V_F(largestBegin, HIST_count_simple (table->count, &maxSymbolValueBegin, (const BYTE*)src, SUSPECT_INCOMPRESSIBLE_SAMPLE_SIZE) );
+            largestTotal += largestBegin;
+        }
+        {   unsigned maxSymbolValueEnd = maxSymbolValue;
+            CHECK_V_F(largestEnd, HIST_count_simple (table->count, &maxSymbolValueEnd, (const BYTE*)src + srcSize - SUSPECT_INCOMPRESSIBLE_SAMPLE_SIZE, SUSPECT_INCOMPRESSIBLE_SAMPLE_SIZE) );
+            largestTotal += largestEnd;
+        }
+        if (largestTotal <= ((2 * SUSPECT_INCOMPRESSIBLE_SAMPLE_SIZE) >> 7)+4) return 0;   /* heuristic : probably not compressible enough */
+    }
+
+    /* Scan input and build symbol stats */
+    {   CHECK_V_F(largest, HIST_count_wksp (table->count, &maxSymbolValue, (const BYTE*)src, srcSize, table->wksps.hist_wksp, sizeof(table->wksps.hist_wksp)) );
+        if (largest == srcSize) { *ostart = ((const BYTE*)src)[0]; return 1; }   /* single symbol, rle */
+        if (largest <= (srcSize >> 7)+4) return 0;   /* heuristic : probably not compressible enough */
+    }
+    DEBUGLOG(6, "histogram detail completed (%zu symbols)", showU32(table->count, maxSymbolValue+1));
+
+    /* Check validity of previous table */
+    if ( repeat
+      && *repeat == HUF_repeat_check
+      && !HUF_validateCTable(oldHufTable, table->count, maxSymbolValue)) {
+        *repeat = HUF_repeat_none;
+    }
+    /* Heuristic : use existing table for small inputs */
+    if ((flags & HUF_flags_preferRepeat) && repeat && *repeat != HUF_repeat_none) {
+        return HUF_compressCTable_internal(ostart, op, oend,
+                                           src, srcSize,
+                                           nbStreams, oldHufTable, flags);
+    }
+
+    /* Build Huffman Tree */
+    huffLog = HUF_optimalTableLog(huffLog, srcSize, maxSymbolValue, &table->wksps, sizeof(table->wksps), table->CTable, table->count, flags);
+    {   size_t const maxBits = AOCL_HUF_buildCTable_wksp(entropy_fds_config, table->CTable, table->count,
+                                            maxSymbolValue, huffLog,
+                                            &table->wksps.buildCTable_wksp, sizeof(table->wksps.buildCTable_wksp));
+        CHECK_F(maxBits);
+        huffLog = (U32)maxBits;
+        DEBUGLOG(6, "bit distribution completed (%zu symbols)", showCTableBits(table->CTable + 1, maxSymbolValue+1));
+    }
+
+    /* Write table description header */
+    {   CHECK_V_F(hSize, HUF_writeCTable_wksp(op, dstSize, table->CTable, maxSymbolValue, huffLog,
+                                              &table->wksps.writeCTable_wksp, sizeof(table->wksps.writeCTable_wksp)) );
+        /* Check if using previous huffman table is beneficial */
+        if (repeat && *repeat != HUF_repeat_none) {
+            size_t const oldSize = HUF_estimateCompressedSize(oldHufTable, table->count, maxSymbolValue);
+            size_t const newSize = HUF_estimateCompressedSize(table->CTable, table->count, maxSymbolValue);
+            if (oldSize <= hSize + newSize || hSize + 12 >= srcSize) {
+                return HUF_compressCTable_internal(ostart, op, oend,
+                                                   src, srcSize,
+                                                   nbStreams, oldHufTable, flags);
+        }   }
+
+        /* Use the new huffman table */
+        if (hSize + 12ul >= srcSize) { return 0; }
+        op += hSize;
+        if (repeat) { *repeat = HUF_repeat_none; }
+        if (oldHufTable)
+            ZSTD_memcpy(oldHufTable, table->CTable, sizeof(table->CTable));  /* Save new table */
+    }
+    return HUF_compressCTable_internal(ostart, op, oend,
+                                       src, srcSize,
+                                       nbStreams, table->CTable, flags);
+}
+
+/**
+ * AOCL_HUF_compress1X_repeat:
+ * Same as HUF_compress1X_repeat, but calls AOCL_HUF_compress_internal.
+ */
+size_t AOCL_HUF_compress1X_repeat (aocl_entropy_fds_t* entropy_fds_config,
+    void* dst, size_t dstSize,
+    const void* src, size_t srcSize,
+    unsigned maxSymbolValue, unsigned huffLog,
+    void* workSpace, size_t wkspSize,
+    HUF_CElt* hufTable, HUF_repeat* repeat, int flags)
+{
+DEBUGLOG(5, "AOCL_HUF_compress1X_repeat (srcSize = %zu)", srcSize);
+return AOCL_HUF_compress_internal(entropy_fds_config, dst, dstSize, src, srcSize,
+               maxSymbolValue, huffLog, HUF_singleStream,
+               workSpace, wkspSize, hufTable,
+               repeat, flags);
+}
+
+/**
+ * AOCL_HUF_compress4X_repeat:
+ * Same as HUF_compress4X_repeat, but calls AOCL_HUF_compress_internal.
+ */
+size_t AOCL_HUF_compress4X_repeat (aocl_entropy_fds_t* entropy_fds_config,
+                      void* dst, size_t dstSize,
+                      const void* src, size_t srcSize,
+                      unsigned maxSymbolValue, unsigned huffLog,
+                      void* workSpace, size_t wkspSize,
+                      HUF_CElt* hufTable, HUF_repeat* repeat, int flags)
+{
+    DEBUGLOG(5, "AOCL_HUF_compress4X_repeat (srcSize = %zu)", srcSize);
+    return AOCL_HUF_compress_internal(entropy_fds_config, dst, dstSize, src, srcSize,
+                                 maxSymbolValue, huffLog, HUF_fourStreams,
+                                 workSpace, wkspSize,
+                                 hufTable, repeat, flags);
+}
+#endif /* AOCL_DECOMPRESS_FAST > 1 */

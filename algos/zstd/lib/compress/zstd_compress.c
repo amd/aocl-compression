@@ -75,6 +75,8 @@ static unsigned char aoclOptFlag = 0;
 
 static size_t(*ZSTD_compressContinue_internal_fp)(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity,
     const void* src, size_t srcSize, U32 frame, U32 lastFrameChunk);
+static size_t(*ZSTD_compressBlock_internal_fp)(ZSTD_CCtx* zc,
+    void* dst, size_t dstCapacity, const void* src, size_t srcSize, U32 frame);
 
 #ifdef AOCL_COMPRESS_FAST
 #include "clevels.h"
@@ -109,6 +111,10 @@ static size_t AOCL_ZSTD_compressContinue_internal(ZSTD_CCtx* cctx,
     void* dst, size_t dstCapacity,
     const void* src, size_t srcSize,
     U32 frame, U32 lastFrameChunk);
+static size_t
+AOCL_ZSTD_compressBlock_internal(ZSTD_CCtx* zc,
+    void* dst, size_t dstCapacity,
+    const void* src, size_t srcSize, U32 frame);
 #endif /* AOCL_ZSTD_OPT */
 
 #define ZSTD_LOG_FORMATTED(level, logType, str, ...) \
@@ -244,6 +250,9 @@ ZSTD_CCtx* ZSTD_initStaticCCtx(void* workspace, size_t workspaceSize)
     cctx->blockState.nextCBlock = (ZSTD_compressedBlockState_t*)ZSTD_cwksp_reserve_object(&cctx->workspace, sizeof(ZSTD_compressedBlockState_t));
     cctx->tmpWorkspace = ZSTD_cwksp_reserve_object(&cctx->workspace, TMP_WORKSPACE_SIZE);
     cctx->tmpWkspSize = TMP_WORKSPACE_SIZE;
+#if AOCL_DECOMPRESS_FAST > 1
+    cctx->entropy_fds_config.ptrWorkspace = (void*)((char*)cctx->tmpWorkspace + TMP_WORKSPACE_SIZE - AOCL_FDS_WORKSPACE_SIZE);
+#endif
     cctx->bmi2 = ZSTD_cpuid_bmi2(ZSTD_cpuid());
     return cctx;
 }
@@ -2348,6 +2357,9 @@ static size_t ZSTD_resetCCtx_internal(ZSTD_CCtx* zc,
                 zc->tmpWorkspace = ZSTD_cwksp_reserve_object(ws, TMP_WORKSPACE_SIZE);
                 RETURN_ERROR_IF(zc->tmpWorkspace == NULL, memory_allocation, "couldn't allocate tmpWorkspace");
                 zc->tmpWkspSize = TMP_WORKSPACE_SIZE;
+#if AOCL_DECOMPRESS_FAST > 1
+                zc->entropy_fds_config.ptrWorkspace = (void*)((char*)zc->tmpWorkspace + TMP_WORKSPACE_SIZE - AOCL_FDS_WORKSPACE_SIZE);
+#endif
         }   }
 
         ZSTD_cwksp_clear(ws);
@@ -4923,7 +4935,7 @@ static size_t ZSTD_compress_frameChunk(ZSTD_CCtx* cctx,
                 FORWARD_IF_ERROR(cSize, "ZSTD_compressBlock_splitBlock failed");
                 assert(cSize > 0 || cctx->seqCollector.collectSequences == 1);
             } else {
-                cSize = ZSTD_compressBlock_internal(cctx,
+                cSize = ZSTD_compressBlock_internal_fp(cctx,
                                         op+ZSTD_blockHeaderSize, dstCapacity-ZSTD_blockHeaderSize,
                                         ip, blockSize, 1 /* frame */);
                 FORWARD_IF_ERROR(cSize, "ZSTD_compressBlock_internal failed");
@@ -8280,6 +8292,8 @@ void ZSTD_CCtxParams_registerSequenceProducer(
 *****************************************************************/
 static size_t(*ZSTD_compressContinue_internal_fp)(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity,
     const void* src, size_t srcSize, U32 frame, U32 lastFrameChunk) = ZSTD_compressContinue_internal;
+static size_t(*ZSTD_compressBlock_internal_fp)(ZSTD_CCtx* zc,
+    void* dst, size_t dstCapacity, const void* src, size_t srcSize, U32 frame) = ZSTD_compressBlock_internal;
 
 /* Dynamic dispatcher that sets up the optimized AMD function variant */
 static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
@@ -8290,6 +8304,7 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
         aoclOptFlag = 0;
         AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
         ZSTD_compressContinue_internal_fp = ZSTD_compressContinue_internal;
+        ZSTD_compressBlock_internal_fp = ZSTD_compressBlock_internal;
         ZSTD_optimalBlockSize_fp = ZSTD_optimalBlockSize;
     }
     else
@@ -8305,6 +8320,7 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
                 aoclOptFlag = 1;
                 AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
                 ZSTD_compressContinue_internal_fp = AOCL_ZSTD_compressContinue_internal;
+                ZSTD_compressBlock_internal_fp = AOCL_ZSTD_compressBlock_internal;
 #ifdef AOCL_ZSTD_DYN_BLOCK_SIZE
                 ZSTD_optimalBlockSize_fp = ZSTD_optimalBlockSize;
 #else
@@ -8314,6 +8330,7 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
                 aoclOptFlag = 0;
                 AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
                 ZSTD_compressContinue_internal_fp = ZSTD_compressContinue_internal;
+                ZSTD_compressBlock_internal_fp = ZSTD_compressBlock_internal;
                 ZSTD_optimalBlockSize_fp = ZSTD_optimalBlockSize;
 #endif /* AOCL_ZSTD_OPT */
                 break;
@@ -8616,6 +8633,7 @@ size_t AOCL_ZSTD_compressBound(size_t srcSize, ZSTD_parameters params) {
 void ZSTD_resetFdsConfig(ZSTD_CCtx* cctx) 
 {
     memset(&cctx->seqStore.fds_config, 0, sizeof(cctx->seqStore.fds_config));
+    cctx->entropy_fds_config.avgTableLogReduction=0.0;
 }
 
 /* Write FDS frame to dst.
@@ -8770,6 +8788,8 @@ static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
 
     if (frame && (cctx->stage == ZSTDcs_init)) {
 #if AOCL_DECOMPRESS_FAST > 1
+        /* Initialize entropy FDS config */
+        cctx->entropy_fds_config.avgTableLogReduction = 0.0;
         assert(cctx->seqStore.fds_config.written == 0); // no FDS frame written yet
         /* FDS frame needs to be written before the start of every new ZSTD frame
         * provided dst buffer with sufficient capacity is available. */
@@ -8898,6 +8918,288 @@ static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
 #endif /* AOCL_DECOMPRESS_FAST > 2 */
         return cSize + fhSize;
     }
+}
+
+#if AOCL_DECOMPRESS_FAST > 1
+/**
+ * Same as ZSTD_entropyCompressSeqStore_internal, but
+ * - accepts additional parameter of type aocl_entropy_fds_t*,
+ * - calls AOCL_ZSTD_compressLiterals.
+ */
+MEM_STATIC size_t
+AOCL_ZSTD_entropyCompressSeqStore_internal(
+                              aocl_entropy_fds_t* entropy_fds_config,
+                              void* dst, size_t dstCapacity,
+                        const void* literals, size_t litSize,
+                        const SeqStore_t* seqStorePtr,
+                        const ZSTD_entropyCTables_t* prevEntropy,
+                              ZSTD_entropyCTables_t* nextEntropy,
+                        const ZSTD_CCtx_params* cctxParams,
+                              void* entropyWorkspace, size_t entropyWkspSize,
+                        const int bmi2)
+{
+    ZSTD_strategy const strategy = cctxParams->cParams.strategy;
+    unsigned* count = (unsigned*)entropyWorkspace;
+    FSE_CTable* CTable_LitLength = nextEntropy->fse.litlengthCTable;
+    FSE_CTable* CTable_OffsetBits = nextEntropy->fse.offcodeCTable;
+    FSE_CTable* CTable_MatchLength = nextEntropy->fse.matchlengthCTable;
+    const SeqDef* const sequences = seqStorePtr->sequencesStart;
+    const size_t nbSeq = (size_t)(seqStorePtr->sequences - seqStorePtr->sequencesStart);
+    const BYTE* const ofCodeTable = seqStorePtr->ofCode;
+    const BYTE* const llCodeTable = seqStorePtr->llCode;
+    const BYTE* const mlCodeTable = seqStorePtr->mlCode;
+    BYTE* const ostart = (BYTE*)dst;
+    BYTE* const oend = ostart + dstCapacity;
+    BYTE* op = ostart;
+    size_t lastCountSize;
+    int longOffsets = 0;
+
+    entropyWorkspace = count + (MaxSeq + 1);
+    entropyWkspSize -= (MaxSeq + 1) * sizeof(*count);
+
+    DEBUGLOG(5, "AOCL_ZSTD_entropyCompressSeqStore_internal (nbSeq=%zu, dstCapacity=%zu)", nbSeq, dstCapacity);
+    ZSTD_STATIC_ASSERT(HUF_WORKSPACE_SIZE >= (1<<MAX(MLFSELog,LLFSELog)));
+    assert(entropyWkspSize >= HUF_WORKSPACE_SIZE);
+
+    /* Compress literals */
+    {   size_t const numSequences = (size_t)(seqStorePtr->sequences - seqStorePtr->sequencesStart);
+        /* Base suspicion of uncompressibility on ratio of literals to sequences */
+        int const suspectUncompressible = (numSequences == 0) || (litSize / numSequences >= SUSPECT_UNCOMPRESSIBLE_LITERAL_RATIO);
+
+        size_t const cSize = AOCL_ZSTD_compressLiterals(entropy_fds_config,
+                                    op, dstCapacity,
+                                    literals, litSize,
+                                    entropyWorkspace, entropyWkspSize,
+                                    &prevEntropy->huf, &nextEntropy->huf,
+                                    cctxParams->cParams.strategy,
+                                    ZSTD_literalsCompressionIsDisabled(cctxParams),
+                                    suspectUncompressible, bmi2);
+        FORWARD_IF_ERROR(cSize, "AOCL_ZSTD_compressLiterals failed");
+        assert(cSize <= dstCapacity);
+        op += cSize;
+    }
+
+    /* Sequences Header */
+    RETURN_ERROR_IF((oend-op) < 3 /*max nbSeq Size*/ + 1 /*seqHead*/,
+                    dstSize_tooSmall, "Can't fit seq hdr in output buf!");
+    if (nbSeq < 128) {
+        *op++ = (BYTE)nbSeq;
+    } else if (nbSeq < LONGNBSEQ) {
+        op[0] = (BYTE)((nbSeq>>8) + 0x80);
+        op[1] = (BYTE)nbSeq;
+        op+=2;
+    } else {
+        op[0]=0xFF;
+        MEM_writeLE16(op+1, (U16)(nbSeq - LONGNBSEQ));
+        op+=3;
+    }
+    assert(op <= oend);
+    if (nbSeq==0) {
+        /* Copy the old tables over as if we repeated them */
+        ZSTD_memcpy(&nextEntropy->fse, &prevEntropy->fse, sizeof(prevEntropy->fse));
+        return (size_t)(op - ostart);
+    }
+    {   BYTE* const seqHead = op++;
+        /* build stats for sequences */
+        const ZSTD_symbolEncodingTypeStats_t stats =
+                ZSTD_buildSequencesStatistics(seqStorePtr, nbSeq,
+                                             &prevEntropy->fse, &nextEntropy->fse,
+                                              op, oend,
+                                              strategy, count,
+                                              entropyWorkspace, entropyWkspSize);
+        FORWARD_IF_ERROR(stats.size, "ZSTD_buildSequencesStatistics failed!");
+        *seqHead = (BYTE)((stats.LLtype<<6) + (stats.Offtype<<4) + (stats.MLtype<<2));
+        lastCountSize = stats.lastCountSize;
+        op += stats.size;
+        longOffsets = stats.longOffsets;
+    }
+
+    {   size_t const bitstreamSize = ZSTD_encodeSequences(
+                                        op, (size_t)(oend - op),
+                                        CTable_MatchLength, mlCodeTable,
+                                        CTable_OffsetBits, ofCodeTable,
+                                        CTable_LitLength, llCodeTable,
+                                        sequences, nbSeq,
+                                        longOffsets, bmi2);
+        FORWARD_IF_ERROR(bitstreamSize, "ZSTD_encodeSequences failed");
+        op += bitstreamSize;
+        assert(op <= oend);
+        /* zstd versions <= 1.3.4 mistakenly report corruption when
+         * FSE_readNCount() receives a buffer < 4 bytes.
+         * Fixed by https://github.com/facebook/zstd/pull/1146.
+         * This can happen when the last set_compressed table present is 2
+         * bytes and the bitstream is only one byte.
+         * In this exceedingly rare case, we will simply emit an uncompressed
+         * block, since it isn't worth optimizing.
+         */
+        if (lastCountSize && (lastCountSize + bitstreamSize) < 4) {
+            /* lastCountSize >= 2 && bitstreamSize > 0 ==> lastCountSize == 3 */
+            assert(lastCountSize + bitstreamSize == 3);
+            DEBUGLOG(5, "Avoiding bug in zstd decoder in versions <= 1.3.4 by "
+                        "emitting an uncompressed block.");
+            return 0;
+        }
+    }
+
+    DEBUGLOG(5, "compressed block size : %u", (unsigned)(op - ostart));
+    return (size_t)(op - ostart);
+}
+
+/**
+ * Same as ZSTD_entropyCompressSeqStore_wExtLitBuffer, but
+ * - accepts additional parameter of type aocl_entropy_fds_t*,
+ * - calls AOCL_ZSTD_entropyCompressSeqStore_internal.
+ */
+static size_t
+AOCL_ZSTD_entropyCompressSeqStore_wExtLitBuffer(
+                          aocl_entropy_fds_t* entropy_fds_config,
+                          void* dst, size_t dstCapacity,
+                    const void* literals, size_t litSize,
+                          size_t blockSize,
+                    const SeqStore_t* seqStorePtr,
+                    const ZSTD_entropyCTables_t* prevEntropy,
+                          ZSTD_entropyCTables_t* nextEntropy,
+                    const ZSTD_CCtx_params* cctxParams,
+                          void* entropyWorkspace, size_t entropyWkspSize,
+                          int bmi2)
+{
+    size_t const cSize = AOCL_ZSTD_entropyCompressSeqStore_internal(entropy_fds_config,
+                            dst, dstCapacity,
+                            literals, litSize,
+                            seqStorePtr, prevEntropy, nextEntropy, cctxParams,
+                            entropyWorkspace, entropyWkspSize, bmi2);
+    if (cSize == 0) return 0;
+    /* When srcSize <= dstCapacity, there is enough space to write a raw uncompressed block.
+     * Since we ran out of space, block must be not compressible, so fall back to raw uncompressed block.
+     */
+    if ((cSize == ERROR(dstSize_tooSmall)) & (blockSize <= dstCapacity)) {
+        ZSTD_LOG_FORMATTED(4, DEBUG, "not enough dstCapacity (%zu) for AOCL_ZSTD_entropyCompressSeqStore_internal()=> do not compress block", dstCapacity);
+        return 0;  /* block not compressed */
+    }
+    FORWARD_IF_ERROR(cSize, "AOCL_ZSTD_entropyCompressSeqStore_internal failed");
+
+    /* Check compressibility */
+    {   size_t const maxCSize = blockSize - ZSTD_minGain(blockSize, cctxParams->cParams.strategy);
+        if (cSize >= maxCSize) return 0;  /* block not compressed */
+    }
+    DEBUGLOG(5, "AOCL_ZSTD_entropyCompressSeqStore() cSize: %zu", cSize);
+    /* libzstd decoder before  > v1.5.4 is not compatible with compressed blocks of size ZSTD_BLOCKSIZE_MAX exactly.
+     * This restriction is indirectly already fulfilled by respecting ZSTD_minGain() condition above.
+     */
+    assert(cSize < ZSTD_BLOCKSIZE_MAX);
+    return cSize;
+}
+
+/**
+ * Same as ZSTD_entropyCompressSeqStore, but
+ * - accepts additional parameter of type aocl_entropy_fds_t*,
+ * - calls AOCL_ZSTD_entropyCompressSeqStore_wExtLitBuffer.
+ */
+static size_t
+AOCL_ZSTD_entropyCompressSeqStore(
+                    aocl_entropy_fds_t* entropy_fds_config,
+                    const SeqStore_t* seqStorePtr,
+                    const ZSTD_entropyCTables_t* prevEntropy,
+                          ZSTD_entropyCTables_t* nextEntropy,
+                    const ZSTD_CCtx_params* cctxParams,
+                          void* dst, size_t dstCapacity,
+                          size_t srcSize,
+                          void* entropyWorkspace, size_t entropyWkspSize,
+                          int bmi2)
+{
+    return AOCL_ZSTD_entropyCompressSeqStore_wExtLitBuffer(entropy_fds_config,
+                dst, dstCapacity,
+                seqStorePtr->litStart, (size_t)(seqStorePtr->lit - seqStorePtr->litStart),
+                srcSize,
+                seqStorePtr,
+                prevEntropy, nextEntropy,
+                cctxParams,
+                entropyWorkspace, entropyWkspSize,
+                bmi2);
+}
+
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
+
+/**
+ * Same as ZSTD_compressBlock_internal, but
+ * calls AOCL_ZSTD_entropyCompressSeqStore() with additional parameter of type aocl_entropy_fds_t* if AOCL_DECOMPRESS_FAST > 1.
+ */
+static size_t
+AOCL_ZSTD_compressBlock_internal(ZSTD_CCtx* zc,
+                            void* dst, size_t dstCapacity,
+                            const void* src, size_t srcSize, U32 frame)
+{
+    /* This is an estimated upper bound for the length of an rle block.
+     * This isn't the actual upper bound.
+     * Finding the real threshold needs further investigation.
+     */
+    const U32 rleMaxLength = 25;
+    size_t cSize;
+    const BYTE* ip = (const BYTE*)src;
+    BYTE* op = (BYTE*)dst;
+    DEBUGLOG(5, "AOCL_ZSTD_compressBlock_internal (dstCapacity=%u, dictLimit=%u, nextToUpdate=%u)",
+                (unsigned)dstCapacity, (unsigned)zc->blockState.matchState.window.dictLimit,
+                (unsigned)zc->blockState.matchState.nextToUpdate);
+
+    {   const size_t bss = ZSTD_buildSeqStore(zc, src, srcSize);
+        FORWARD_IF_ERROR(bss, "ZSTD_buildSeqStore failed");
+        if (bss == ZSTDbss_noCompress) {
+            RETURN_ERROR_IF(zc->seqCollector.collectSequences, sequenceProducer_failed, "Uncompressible block");
+            cSize = 0;
+            goto out;
+        }
+    }
+
+    if (zc->seqCollector.collectSequences) {
+        FORWARD_IF_ERROR(ZSTD_copyBlockSequences(&zc->seqCollector, ZSTD_getSeqStore(zc), zc->blockState.prevCBlock->rep), "copyBlockSequences failed");
+        ZSTD_blockState_confirmRepcodesAndEntropyTables(&zc->blockState);
+        return 0;
+    }
+
+    /* encode sequences and literals */
+#if AOCL_DECOMPRESS_FAST > 1
+    cSize = AOCL_ZSTD_entropyCompressSeqStore(&zc->entropy_fds_config, &zc->seqStore,
+            &zc->blockState.prevCBlock->entropy, &zc->blockState.nextCBlock->entropy,
+            &zc->appliedParams,
+            dst, dstCapacity,
+            srcSize,
+            zc->tmpWorkspace, zc->tmpWkspSize /* statically allocated in resetCCtx */,
+            zc->bmi2);
+#else
+    cSize = ZSTD_entropyCompressSeqStore(&zc->seqStore,
+            &zc->blockState.prevCBlock->entropy, &zc->blockState.nextCBlock->entropy,
+            &zc->appliedParams,
+            dst, dstCapacity,
+            srcSize,
+            zc->tmpWorkspace, zc->tmpWkspSize /* statically allocated in resetCCtx */,
+            zc->bmi2);
+#endif
+
+    if (frame &&
+        /* We don't want to emit our first block as a RLE even if it qualifies because
+         * doing so will cause the decoder (cli only) to throw a "should consume all input error."
+         * This is only an issue for zstd <= v1.4.3
+         */
+        !zc->isFirstBlock &&
+        cSize < rleMaxLength &&
+        ZSTD_isRLE(ip, srcSize))
+    {
+        cSize = 1;
+        op[0] = ip[0];
+    }
+
+out:
+    if (!ZSTD_isError(cSize) && cSize > 1) {
+        ZSTD_blockState_confirmRepcodesAndEntropyTables(&zc->blockState);
+    }
+    /* We check that dictionaries have offset codes available for the first
+     * block. After the first block, the offcode table might not have large
+     * enough codes to represent the offsets in the data.
+     */
+    if (zc->blockState.prevCBlock->entropy.fse.offcode_repeatMode == FSE_repeat_valid)
+        zc->blockState.prevCBlock->entropy.fse.offcode_repeatMode = FSE_repeat_check;
+
+    return cSize;
 }
 #endif /* AOCL_ZSTD_OPT */
 

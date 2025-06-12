@@ -2,6 +2,7 @@
  * huff0 huffman codec,
  * part of Finite State Entropy library
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2025, Advanced Micro Devices. All rights reserved.
  *
  * You can contact the author at :
  * - Source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -20,6 +21,10 @@
 #include "mem.h"          /* U32 */
 #define FSE_STATIC_LINKING_ONLY
 #include "fse.h"
+
+#if AOCL_DECOMPRESS_FAST > 1
+#include "aocl_fds.h"
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 
 /* ***   Tool functions *** */
 #define HUF_BLOCKSIZE_MAX (128 * 1024)   /**< maximum input size for a single block compressed with HUF_compress */
@@ -273,5 +278,26 @@ size_t HUF_readDTableX1_wksp(HUF_DTable* DTable, const void* src, size_t srcSize
 #ifndef HUF_FORCE_DECOMPRESS_X1
 size_t HUF_readDTableX2_wksp(HUF_DTable* DTable, const void* src, size_t srcSize, void* workSpace, size_t wkspSize, int flags);
 #endif
+
+#if AOCL_DECOMPRESS_FAST > 1
+/* AOCL FDS variants.
+ * Same as the reference implementation, but accepts additional parameter of type aocl_entropy_fds_t*.
+ */
+size_t AOCL_HUF_compress1X_repeat(aocl_entropy_fds_t* entropy_fds_config, void* dst, size_t dstSize,
+    const void* src, size_t srcSize,
+    unsigned maxSymbolValue, unsigned tableLog,
+    void* workSpace, size_t wkspSize,   /**< `workSpace` must be aligned on 4-bytes boundaries, `wkspSize` must be >= HUF_WORKSPACE_SIZE */
+    HUF_CElt* hufTable, HUF_repeat* repeat, int flags);
+
+size_t AOCL_HUF_compress4X_repeat(aocl_entropy_fds_t* entropy_fds_config, void* dst, size_t dstSize,
+    const void* src, size_t srcSize,
+    unsigned maxSymbolValue, unsigned tableLog,
+    void* workSpace, size_t wkspSize,    /**< `workSpace` must be aligned on 4-bytes boundaries, `wkspSize` must be >= HUF_WORKSPACE_SIZE */
+    HUF_CElt* hufTable, HUF_repeat* repeat, int flags);
+
+size_t AOCL_HUF_buildCTable_wksp (aocl_entropy_fds_t* entropy_fds_config, HUF_CElt* tree,
+    const unsigned* count, U32 maxSymbolValue, U32 maxNbBits,
+    void* workSpace, size_t wkspSize);
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 
 #endif   /* HUF_H_298734234 */

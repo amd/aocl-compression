@@ -27,6 +27,9 @@
 #endif
 #include "../common/bits.h" /* ZSTD_highbit32, ZSTD_NbCommonBytes */
 #include "zstd_preSplit.h" /* ZSTD_SLIPBLOCK_WORKSPACESIZE */
+#if AOCL_DECOMPRESS_FAST > 1
+#include "../common/aocl_fds.h"
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 
 /*-*************************************
 *  Constants
@@ -106,16 +109,6 @@ typedef enum {
     ZSTD_llt_matchLength = 2       /* represents a long match */
 } ZSTD_longLengthType_e;
 
-#if AOCL_DECOMPRESS_FAST > 1
-typedef struct {
-    U64 state;       // AOCL fast decompress settings
-    U32 ratio;       // Compression ratio of block compressor
-    U16 count;       // Analysis counter
-    U16 written;     // Is FDS frame written to stream?
-    U64 single_pass; // Is input provided through a single-pass API?
-    // APIs like : ZSTD_compress(), ZSTD_compress2(), ZSTD_compressCCtx(), ZSTD_compress_usingDict(), etc
-} aocl_fds_t;
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
 
 typedef struct {
     SeqDef* sequencesStart;
@@ -467,7 +460,12 @@ struct ZSTD_CCtx_params_s {
 
 #define COMPRESS_SEQUENCES_WORKSPACE_SIZE (sizeof(unsigned) * (MaxSeq + 2))
 #define ENTROPY_WORKSPACE_SIZE (HUF_WORKSPACE_SIZE + COMPRESS_SEQUENCES_WORKSPACE_SIZE)
+#if AOCL_DECOMPRESS_FAST > 1
+#define AOCL_FDS_WORKSPACE_SIZE  (sizeof(nodeElt) * (255 /* HUF_SYMBOLVALUE_MAX */ + 1)) 
+#define TMP_WORKSPACE_SIZE ((MAX(ENTROPY_WORKSPACE_SIZE, ZSTD_SLIPBLOCK_WORKSPACESIZE)) + AOCL_FDS_WORKSPACE_SIZE)
+#else
 #define TMP_WORKSPACE_SIZE (MAX(ENTROPY_WORKSPACE_SIZE, ZSTD_SLIPBLOCK_WORKSPACESIZE))
+#endif
 
 /**
  * Indicates whether this compression proceeds directly from user-provided
@@ -569,6 +567,10 @@ struct ZSTD_CCtx_s {
     /* Buffer for output from external sequence producer */
     ZSTD_Sequence* extSeqBuf;
     size_t extSeqBufCapacity;
+#if AOCL_DECOMPRESS_FAST > 1
+    /* AOCL entropy fast decompress settings */
+    aocl_entropy_fds_t entropy_fds_config;
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 };
 
 typedef enum { ZSTD_dtlm_fast, ZSTD_dtlm_full } ZSTD_dictTableLoadMethod_e;

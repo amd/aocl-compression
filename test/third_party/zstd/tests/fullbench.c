@@ -228,6 +228,7 @@ static PrepResult prepLiterals(const void* src, size_t srcSize, int cLevel)
         ZSTD_getcBlockSize((char*)dst+frameHeaderSize, dstCapacity, &bp);  /* Get 1st block type */
         if (bp.blockType != bt_compressed) {
             DISPLAY("no compressed literals\n");
+            free(dst);
             return r;
     }   }
     {   size_t const skippedSize = frameHeaderSize + ZSTD_blockHeaderSize;
@@ -242,6 +243,7 @@ static PrepResult prepLiterals(const void* src, size_t srcSize, int cLevel)
     r.dst = dst;
     r.dstCapacity = dstCapacity;
     r.fixedOrigSize = srcSize > 128 KB ? 128 KB : srcSize;    /* speed relative to block */
+    free(dst);
     return r;
 }
 
@@ -342,6 +344,7 @@ static PrepResult prepSequences1stBlock(const void* src, size_t srcSize, int cLe
         size_t const cBlockSize = ZSTD_getcBlockSize(ip, dstCapacity, &bp);   /* Get 1st block type */
         if (bp.blockType != bt_compressed) {
             DISPLAY("no compressed sequences\n");
+            free(dst);
             return r;
         }
         iend = ip + ZSTD_blockHeaderSize + cBlockSize;   /* End of first block */
@@ -357,6 +360,7 @@ static PrepResult prepSequences1stBlock(const void* src, size_t srcSize, int cLe
     r.dst = dst;
     r.dstCapacity = dstCapacity;
     r.fixedOrigSize = srcSize > 128 KB ? 128 KB : srcSize;   /* speed relative to block */
+    free(dst);
     return r;
 }
 
