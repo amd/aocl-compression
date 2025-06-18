@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -87,8 +87,14 @@ typedef struct timespec timeVal;
 #else
 #ifdef __cplusplus
 #include <atomic>
+#ifdef AOCL_ENABLE_LOG_FEATURE
+static std::atomic_flag setup_logs __attribute__((unused)) = ATOMIC_FLAG_INIT;
+#endif
 #else
 #include <stdatomic.h>
+#ifdef AOCL_ENABLE_LOG_FEATURE
+static atomic_flag setup_logs __attribute__((unused)) = ATOMIC_FLAG_INIT;
+#endif
 #endif
 #include <immintrin.h> // For _mm_pause()
 // Atomic operations for critical section management
@@ -125,8 +131,7 @@ extern "C" {
 #include <stdlib.h>
 #define SET_MAX_LOG_LEVEL(logCtx)\
 {\
-                            _Pragma("omp critical")\
-                            {\
+                            AOCL_ENTER_CRITICAL(setup_logs)\
                                 char AOCL_Compression_logs[8] = {0};\
                                 size_t env_var_size = 8;\
                                 getenv_s(&env_var_size, AOCL_Compression_logs, env_var_size, "AOCL_ENABLE_LOG");\
@@ -142,13 +147,12 @@ extern "C" {
                                     logCtx.maxLevel = 4;\
                                 else\
                                     logCtx.maxLevel = 0;\
-                            }\
+                            AOCL_EXIT_CRITICAL(setup_logs)\
 }
 #else
 #define SET_MAX_LOG_LEVEL(logCtx)\
 {\
-                            _Pragma("omp critical")\
-                            {\
+                            AOCL_ENTER_CRITICAL(setup_logs)\
                                 const char * AOCL_Compression_logs = getenv("AOCL_ENABLE_LOG");\
                                 if(AOCL_Compression_logs == NULL)\
                                     logCtx.maxLevel = 0;\
@@ -162,7 +166,7 @@ extern "C" {
                                     logCtx.maxLevel = 4;\
                                 else\
                                     logCtx.maxLevel = 0;\
-                            }\
+                            AOCL_EXIT_CRITICAL(setup_logs)\
 }
 #endif /* _WINDOWS */
 #endif
