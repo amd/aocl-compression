@@ -106,7 +106,7 @@ LZ4_FORCE_INLINE int
     U32 offset = 0;
     U32 forwardH;
 
-    LOG_FORMATTED(INFO, logCtx, "srcSize=%i, maxOutputSize=%i tableType=%u", inputSize, maxOutputSize, tableType);
+    LOG_FORMATTED(DEBUG, logCtx, "srcSize=%i, maxOutputSize=%i tableType=%u", inputSize, maxOutputSize, tableType);
     DEBUGLOG(5, "@AOCL_LZ4_COMPRESS_GENERIC_VALIDATED_FUNC@: srcSize=%i, tableType=%u", inputSize, tableType);
     assert(ip != NULL);
     if (tableType == byU16) assert(inputSize<LZ4_64Klimit);  /* Size too large (not within 64K limit) */

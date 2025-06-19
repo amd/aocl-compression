@@ -116,6 +116,7 @@
 #endif
 #include "lz4.h"
 #include "utils/utils.h"
+#include "algos/common/aoclAlgoLog.h"
 /* see also "memory routines" below */
 
 
@@ -1745,7 +1746,9 @@ int LZ4_compress_fast_extState_internal(void* state, const char* source, char* d
 int LZ4_compress_fast_extState(void* state, const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
 {
     AOCL_SETUP_NATIVE();
-    return LZ4_compress_fast_extState_fp(state, source, dest, inputSize, maxOutputSize, acceleration);
+    int ret = LZ4_compress_fast_extState_fp(state, source, dest, inputSize, maxOutputSize, acceleration);
+    AOCL_LOG_API_SUMMARY(0, inputSize, ret);
+    return ret;
 }
 
 /**
@@ -1803,6 +1806,7 @@ int LZ4_compress_fast(const char* src, char* dest, int srcSize, int dstCapacity,
 
 #ifdef AOCL_ENABLE_THREADS_LZ4
     result = LZ4_compress_fast_mt_fp(src, dest, srcSize, dstCapacity, acceleration);
+    AOCL_LOG_API_SUMMARY(0, srcSize, result);
     return result;
 #else
 #if (LZ4_HEAPMODE)
@@ -2163,7 +2167,9 @@ int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
                                 int acceleration)
 {
     AOCL_SETUP_NATIVE();
-    return LZ4_compress_fast_continue_fp(LZ4_stream, source, dest, inputSize, maxOutputSize, acceleration);
+    int ret = LZ4_compress_fast_continue_fp(LZ4_stream, source, dest, inputSize, maxOutputSize, acceleration);
+    AOCL_LOG_API_SUMMARY(0, inputSize, ret);
+    return ret;
 }
 
 

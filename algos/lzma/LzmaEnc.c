@@ -41,6 +41,7 @@
 #endif
 
 #include "utils/utils.h"
+#include "algos/common/aoclAlgoLog.h"
 
 #include "LzmaEnc.h"
 
@@ -4536,6 +4537,7 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
 
   LzmaEnc_Destroy(p, alloc, allocBig);
   
+  AOCL_LOG_API_SUMMARY(props->level, srcLen, *destLen);
   LOG_UNFORMATTED(TRACE, logCtx, "Exit");
   return res;
 }

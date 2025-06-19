@@ -29,6 +29,7 @@
 */
 
 #include "utils/utils.h"
+#include "algos/common/aoclAlgoLog.h"
 #include "bzlib_private.h"
 #include "libsais.h"
 
@@ -2013,6 +2014,7 @@ int BZ2_bzBuffToBuffCompress_internal
    *destLen -= strm.avail_out;   
    BZ2_bzCompressEnd ( &strm );
    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+   AOCL_LOG_API_SUMMARY(blockSize100k, sourceLen, *destLen);
    return BZ_OK;
 
    output_overflow:

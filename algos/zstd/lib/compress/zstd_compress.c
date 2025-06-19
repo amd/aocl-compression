@@ -40,6 +40,7 @@
 *  Dependencies
 ***************************************/
 #include "utils/utils.h"
+#include "algos/common/aoclAlgoLog.h"
 
 #ifdef ERROR
 #undef ERROR /* Conflict with ERROR defined in zstd reference code */
@@ -3365,7 +3366,7 @@ ZSTD_blockCompressor ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_paramS
         int select = (int)strat - (int)ZSTD_greedy; //select in range : [0, 2] as strat in range : [ZSTD_greedy, ZSTD_lazy2]
         select = (aoclOptFlag * 3) + select;
         selectedCompressor = rowBasedBlockCompressors[(int)dictMode][select];
-        LOG_FORMATTED(INFO, logCtx, "Selecting a row-based matchfinder. Id : [%d][%d]", (int)dictMode, select);
+        LOG_FORMATTED(DEBUG, logCtx, "Selecting a row-based matchfinder. Id : [%d][%d]", (int)dictMode, select);
 #else
         static const ZSTD_blockCompressor rowBasedBlockCompressors[4][3] = {
             { ZSTD_compressBlock_greedy_row,
@@ -3384,7 +3385,7 @@ ZSTD_blockCompressor ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_paramS
         DEBUGLOG(4, "Selecting a row-based matchfinder");
         assert(useRowMatchFinder != ZSTD_ps_auto);
         selectedCompressor = rowBasedBlockCompressors[(int)dictMode][(int)strat - (int)ZSTD_greedy];
-        LOG_FORMATTED(INFO, logCtx, "Selecting a row-based matchfinder. Id : [%d][%d]", (int)dictMode, (int)strat - (int)ZSTD_greedy);
+        LOG_FORMATTED(DEBUG, logCtx, "Selecting a row-based matchfinder. Id : [%d][%d]", (int)dictMode, (int)strat - (int)ZSTD_greedy);
 #endif /* AOCL_ZSTD_OPT */
     } else {
 #ifdef AOCL_ZSTD_OPT
@@ -3397,7 +3398,7 @@ ZSTD_blockCompressor ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_paramS
 #else
         selectedCompressor = blockCompressor[(int)dictMode][(int)strat];
 #endif /* AOCL_ZSTD_OPT */
-        LOG_FORMATTED(INFO, logCtx, "Selecting a block compressor. Id : [%d][%d]", (int)dictMode, (int)strat);
+        LOG_FORMATTED(DEBUG, logCtx, "Selecting a block compressor. Id : [%d][%d]", (int)dictMode, (int)strat);
     }
     assert(selectedCompressor != NULL);
     return selectedCompressor;
@@ -6086,6 +6087,7 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
         /* Post processing end */
 
         aocl_destroy_parallel_compress_mt(&thread_group_handle);
+        AOCL_LOG_API_SUMMARY(cctx->requestedParams.compressionLevel, srcSize, result);
         LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return result;
     }//thread_group_handle.num_threads > 1
@@ -6098,6 +6100,7 @@ size_t ZSTD_compress_advanced (ZSTD_CCtx* cctx,
                                            dict, dictSize,
                                            &cctx->simpleApiParams);
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    AOCL_LOG_API_SUMMARY(cctx->requestedParams.compressionLevel, srcSize, result);
     return result;
 #endif //AOCL_ENABLE_THREADS
 }
@@ -6143,7 +6146,9 @@ size_t ZSTD_compress_usingDict(ZSTD_CCtx* cctx,
     }
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_compress_usingDict (srcSize=%u)", (unsigned)srcSize);
     DEBUGLOG(4, "ZSTD_compress_usingDict (srcSize=%u)", (unsigned)srcSize);
-    return ZSTD_compress_advanced_internal(cctx, dst, dstCapacity, src, srcSize, dict, dictSize, &cctx->simpleApiParams);
+    size_t result = ZSTD_compress_advanced_internal(cctx, dst, dstCapacity, src, srcSize, dict, dictSize, &cctx->simpleApiParams);
+    AOCL_LOG_API_SUMMARY(cctx->requestedParams.compressionLevel, srcSize, result);
+    return result;
 }
 
 size_t ZSTD_compressCCtx(ZSTD_CCtx* cctx,
@@ -7244,6 +7249,7 @@ size_t ZSTD_compressStream2( ZSTD_CCtx* cctx,
     FORWARD_IF_ERROR( ZSTD_compressStream_generic(cctx, output, input, endOp) , "");
     DEBUGLOG(5, "completed ZSTD_compressStream2");
     ZSTD_setBufferExpectations(cctx, output, input);
+    AOCL_LOG_API_SUMMARY(cctx->requestedParams.compressionLevel, input->pos, output->pos);
     return cctx->outBuffContentSize - cctx->outBuffFlushedSize; /* remaining to flush */
 }
 

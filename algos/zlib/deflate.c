@@ -50,6 +50,7 @@
 
 /* @(#) $Id$ */
 #include "utils/utils.h"
+#include "algos/common/aoclAlgoLog.h"
 #include "deflate.h"
 #include "aocl_zlib_x86.h"
 #include "aocl_zlib_setup.h"
@@ -1457,6 +1458,7 @@ int ZEXPORT deflate(z_streamp strm, int flush) {
      * to flush the rest.
      */
     if (s->wrap > 0) s->wrap = -s->wrap; /* write the trailer only once! */
+    AOCL_LOG_API_SUMMARY(s->level, strm->total_in, strm->total_out);
     return s->pending != 0 ? Z_OK : Z_STREAM_END;
 }
 

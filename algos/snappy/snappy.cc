@@ -111,6 +111,7 @@
 #endif /* AOCL_SNAPPY_AVX_OPT */
 
 #include "utils/utils.h"
+#include "algos/common/aoclAlgoLog.h"
 
 #ifdef AOCL_ENABLE_THREADS
 #include "threads/threads.h"
@@ -1731,6 +1732,7 @@ size_t Compress(Source* reader, Sink* writer, CompressionOptions options) {
   }
 
   Report(token, "snappy_compress", written, uncompressed_size);
+  AOCL_LOG_API_SUMMARY(options.level, uncompressed_size, written);
   return written;
 }
 
@@ -4019,6 +4021,7 @@ namespace internal {
 */
 char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
                        uint16_t* table, const int table_size) {
+  AOCL_LOG_INIT_STATS();
   // "ip" is the input pointer, and "op" is the output pointer.
   const char* ip = input;
   assert(input_size <= kBlockSize);
@@ -4031,7 +4034,7 @@ char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
   if (input_size >= kInputMarginBytes) {
     const char* ip_limit = input + input_size - kInputMarginBytes;
     
-    LOG_FORMATTED(DEBUG, logCtx, "Input size = %zu, Input size until limit = %zu",
+    LOG_FORMATTED(TRACE, logCtx, "Input size = %zu, Input size until limit = %zu",
      input_size, (size_t)(ip_limit - ip));
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
     uint32_t bbhl_prev = 0; //baseline bytes_between_hash_lookups to use
@@ -4115,8 +4118,9 @@ char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
         uint32_t bytes_between_hash_lookups = skip >> 5;
         skip += bytes_between_hash_lookups;
 #endif
-        LOG_FORMATTED(DEBUG, logCtx, "skip = %u", skip);
+        LOG_FORMATTED(TRACE, logCtx, "skip = %u", skip);
 
+        AOCL_LOG_UPDATE_SKIP(bytes_between_hash_lookups);
         const char* next_ip = ip + bytes_between_hash_lookups;
         if (next_ip > ip_limit) {
           ip = next_emit;
@@ -4170,6 +4174,7 @@ char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
         std::pair<size_t, bool> p =
             FindMatchLength(candidate + 4, ip + 4, ip_end, &data);
         size_t matched = 4 + p.first;
+        AOCL_LOG_UPDATE_MATCH(matched);
         ip += matched;
         size_t offset = base - candidate;
         assert(0 == memcmp(base, candidate, matched));
@@ -4212,11 +4217,12 @@ char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
 
  emit_remainder:
   // Emit the remaining bytes as a literal
-  LOG_FORMATTED(DEBUG, logCtx, "Emit remaining %d bytes", (int)(ip_end - ip));
+  LOG_FORMATTED(TRACE, logCtx, "Emit remaining %d bytes", (int)(ip_end - ip));
   if (ip < ip_end) {
     op = EmitLiteral</*allow_fast_path=*/false>(op, ip, ip_end - ip);
   }
 
+  AOCL_LOG_CLEAR_STATS(input_size);
   return op;
 }
 }
@@ -4363,6 +4369,7 @@ AOCL_SNAPPY_TARGET_AVX
 */
 char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op,
                        uint16_t* table, const int table_size) {
+  AOCL_LOG_INIT_STATS();
   // "ip" is the input pointer, and "op" is the output pointer.
   const char* ip = input;
   assert(input_size <= kBlockSize);
@@ -4383,7 +4390,7 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
     const char* ip_limit = input + input_size - kInputMarginBytes;
 #endif
     
-    LOG_FORMATTED(DEBUG, logCtx, "Input size = %zu, Input size until limit = %zu",
+    LOG_FORMATTED(TRACE, logCtx, "Input size = %zu, Input size until limit = %zu",
      input_size, (size_t)(ip_limit - ip));
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
     uint32_t bbhl_prev = 0; //baseline bytes_between_hash_lookups to use
@@ -4467,8 +4474,9 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
         uint32_t bytes_between_hash_lookups = skip >> 5;
         skip += bytes_between_hash_lookups;
 #endif
-        LOG_FORMATTED(DEBUG, logCtx, "skip = %u", skip);
+        LOG_FORMATTED(TRACE, logCtx, "skip = %u", skip);
 
+        AOCL_LOG_UPDATE_SKIP(bytes_between_hash_lookups);
         const char* next_ip = ip + bytes_between_hash_lookups;
         if (SNAPPY_PREDICT_FALSE(next_ip > ip_limit)) {
           ip = next_emit;
@@ -4566,6 +4574,7 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
         std::pair<size_t, bool> p =
             FindMatchLength(candidate + 4, ip + 4, ip_end, &data);
         size_t matched = 4 + p.first;
+        AOCL_LOG_UPDATE_MATCH(matched);
         ip += matched;
         size_t offset = base - candidate;
         assert(0 == memcmp(base, candidate, matched));
@@ -4608,11 +4617,12 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
 
  emit_remainder:
   // Emit the remaining bytes as a literal
-  LOG_FORMATTED(DEBUG, logCtx, "Emit remaining %d bytes", (int)(ip_end - ip));
+  LOG_FORMATTED(TRACE, logCtx, "Emit remaining %d bytes", (int)(ip_end - ip));
   if (ip < ip_end) {
     op = EmitLiteral</*allow_fast_path=*/false>(op, ip, ip_end - ip);
   }
 
+  AOCL_LOG_CLEAR_STATS(input_size);
   return op;
 }
 }

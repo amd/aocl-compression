@@ -56,7 +56,7 @@
 #include <limits.h>
 
 #include "algos/common/aoclHashChain.h"   /* required to implement cache efficient hash chain */
-
+#include "algos/common/aoclAlgoLog.h"
 
 /*===   Shared lz4.c code   ===*/
 #ifndef LZ4_SRC_INCLUDED
@@ -1654,13 +1654,14 @@ int LZ4_compress_HC(const char* src, char* dst, int srcSize, int dstCapacity, in
     ret = LZ4_compress_HC_internal_mt_fp(src, dst, srcSize, dstCapacity, compressionLevel);
 #else /* !AOCL_ENABLE_THREADS_LZ4HC */
 if(LZ4HC_USE_CEHC(compressionLevel))
-    return LZ4_compress_HC_fp(src, dst, srcSize, dstCapacity, compressionLevel);
+    ret = LZ4_compress_HC_fp(src, dst, srcSize, dstCapacity, compressionLevel);
 else
     ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
 #endif /* AOCL_ENABLE_THREADS_LZ4HC */
 #else /* !AOCL_LZ4HC_OPT */
     ret = LZ4_compress_HC_internal(src, dst, srcSize, dstCapacity, compressionLevel);
 #endif /* AOCL_LZ4HC_OPT */
+    AOCL_LOG_API_SUMMARY(compressionLevel, srcSize, ret);
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return ret;
 }
@@ -1886,11 +1887,14 @@ LZ4_compressHC_continue_generic (LZ4_streamHC_t* LZ4_streamHCPtr,
 int LZ4_compress_HC_continue (LZ4_streamHC_t* LZ4_streamHCPtr, const char* src, char* dst, int srcSize, int dstCapacity)
 {
     AOCL_SETUP_NATIVE_HC();
+    int ret;
     DEBUGLOG(5, "LZ4_compress_HC_continue");
     if (dstCapacity < LZ4_compressBound(srcSize))
-        return LZ4_compressHC_continue_generic (LZ4_streamHCPtr, src, dst, &srcSize, dstCapacity, limitedOutput);
+        ret = LZ4_compressHC_continue_generic (LZ4_streamHCPtr, src, dst, &srcSize, dstCapacity, limitedOutput);
     else
-        return LZ4_compressHC_continue_generic (LZ4_streamHCPtr, src, dst, &srcSize, dstCapacity, notLimited);
+        ret = LZ4_compressHC_continue_generic (LZ4_streamHCPtr, src, dst, &srcSize, dstCapacity, notLimited);
+    AOCL_LOG_API_SUMMARY(LZ4_streamHCPtr->internal_donotuse.compressionLevel, srcSize, ret);
+    return ret;
 }
 
 int LZ4_compress_HC_continue_destSize (LZ4_streamHC_t* LZ4_streamHCPtr, const char* src, char* dst, int* srcSizePtr, int targetDestSize)
