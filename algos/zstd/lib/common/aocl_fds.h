@@ -39,14 +39,24 @@
 
 #if AOCL_DECOMPRESS_FAST > 1
 
+typedef enum {
+    AOCL_ZSTD_fds_trans_none = 0, /* No transition */
+    AOCL_ZSTD_fds_trans_curr = 1, /* Transition occurred in Current block */
+    AOCL_ZSTD_fds_trans_next = 2  /* Transition suggested for Next block */
+} AOCL_ZSTD_fds_trans_e;
+
 typedef struct {
-    U64 state;       // AOCL fast decompress settings
-    U32 ratio;       // Compression ratio of block compressor
-    U16 count;       // Analysis counter
-    U16 written;     // Is FDS frame written to stream?
-    U64 single_pass; // Is input provided through a single-pass API?
-    // APIs like : ZSTD_compress(), ZSTD_compress2(), ZSTD_compressCCtx(), ZSTD_compress_usingDict(), etc
-} aocl_fds_t;
+    U64 processedSize;    /* Source bytes processed in current FDS frame */
+    U64 literalsSize;     /* Size of literals in current FDS frame */
+} aocl_fds_metrics_t;     /* Intra frame: Metrics are valid for one FDS frame. Values get reset on frame change. */
+
+typedef struct {
+    aocl_fds_metrics_t metrics;       /* Metrics for current FDS frame */
+    U64 minBytesPerFrame;             /* Minimum bytes per FDS frame */
+    U64 state;                        /* FDS state of block compressors */
+    U32 restart;                      /* Restart a new frame */
+    AOCL_ZSTD_fds_trans_e transition; /* Transition status */
+} aocl_fds_t;                         /* Inter frame: Metrics persist across frames. */
 
 #define AOCL_HUF_TABLELOG_MIN 8
 #define T_MIN 0.05          // Minimum thrshold for ratio loss

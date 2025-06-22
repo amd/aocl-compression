@@ -38,7 +38,7 @@
 
 /* AOCL changes:
  *  + renamed main() to zstd_fullbench_main().
- *  + AOCL_DFS_CORRECTION sections introduced to adjust test cases to
+ *  + AOCL_FDS_CORRECTION sections introduced to adjust test cases to
  *    account for skip frames being present in the compressed output when library
  *    is built in FDS mode.
 */
@@ -215,9 +215,9 @@ static PrepResult prepLiterals(const void* src, size_t srcSize, int cLevel)
     size_t dstCapacity = srcSize;
     void* dst = malloc(dstCapacity);
     void* prepBuffer;
-#ifdef AOCL_DFS_CORRECTION
-    /* Call ZSTD_compress2 instead as it does not add skippable frame */
-    size_t prepSize = Test_ZSTD_compress2(dst, dstCapacity, src, srcSize, cLevel);
+#ifdef AOCL_FDS_CORRECTION
+    /* Do not add FDS frames */
+    size_t prepSize = Test_refCompress(dst, dstCapacity, src, srcSize, cLevel);
 #else
     size_t prepSize = ZSTD_compress(dst, dstCapacity, src, srcSize, cLevel);
 #endif
@@ -326,9 +326,9 @@ static PrepResult prepSequences1stBlock(const void* src, size_t srcSize, int cLe
     const BYTE* ip = dst;
     const BYTE* iend;
     {   
-#ifdef AOCL_DFS_CORRECTION
-        /* Call ZSTD_compress2 instead as it does not add skippable frame */
-        size_t const cSize = Test_ZSTD_compress2(dst, dstCapacity, src, srcSize, cLevel);
+#ifdef AOCL_FDS_CORRECTION
+        /* Do not add FDS frames */
+        size_t const cSize = Test_refCompress(dst, dstCapacity, src, srcSize, cLevel);
 #else
         size_t const cSize = ZSTD_compress(dst, dstCapacity, src, srcSize, cLevel);
 #endif
@@ -506,7 +506,7 @@ local_ZSTD_decompressStream(const void* src, size_t srcSize,
     buffIn.src = src;
     buffIn.size = srcSize;
     buffIn.pos = 0;
-#ifdef AOCL_DFS_CORRECTION
+#ifdef AOCL_FDS_CORRECTION
     Test_decompressStreamMultiple(g_dstream, &buffOut, &buffIn);
 #else
     ZSTD_decompressStream(g_dstream, &buffOut, &buffIn);
@@ -569,7 +569,7 @@ static size_t local_ZSTD_decompressContinue(const void* src, size_t srcSize,
     size_t remainingCapacity = dstCapacity;
 
     (void)unused;
-#ifdef AOCL_DFS_CORRECTION
+#ifdef AOCL_FDS_CORRECTION
     while (ip < iend) { /* outer loop added to support multiple frames in src */
         ZSTD_decompressBegin(g_zdc); /* reset context */
         while (ip < iend) {

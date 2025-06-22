@@ -123,7 +123,7 @@ set_property(
     PROPERTY STRINGS
     "OFF" "1" "2" "3" # Higher values generally leads to faster decompression with larger compromise on compression speed/ratio
 )
-if (NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF" AND AOCL_ENABLE_THREADS)
+if (NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF" AND (AOCL_ENABLE_THREADS OR NATIVE_ENABLE_THREADS))
     message(WARNING "Fast decompression mode excluded as it is supported in single threaded mode only")
     set(AOCL_DECOMPRESS_FAST "OFF") # Fast decompression modes supported in single threaded mode only
 endif()
@@ -465,8 +465,8 @@ else ()
     else () # enable all debug flags
 		set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DBZ_DEBUG")
 		set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DEBUG")
-		set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUGLEVEL=1")
 	endif()
+    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUGLEVEL=1")
 endif()
 
 #set(USER_DEBUG_ON "-g")
@@ -599,7 +599,7 @@ endif()
 if (AOCL_ZSTD_WILDCOPY_LONG)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_WILDCOPY_LONG")
 endif()
-if (TEST_COVERAGE_THIRD_PARTY OR NATIVE_ENABLE_THREADS)
+if (NATIVE_ENABLE_THREADS)
     set_property(SOURCE ${ZSTD_SRC_FILES}  APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_MULTITHREAD")
     # Prefer -pthread flag
     set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -761,7 +761,7 @@ else()
 endif ()
 
 # Link pthread library for native multi-threading 
-if (TEST_COVERAGE_THIRD_PARTY OR NATIVE_ENABLE_THREADS)
+if (NATIVE_ENABLE_THREADS)
     target_link_libraries(${lib_name} PUBLIC Threads::Threads)
     message(STATUS "Linked Threads::Threads for native multi-threading support")
 endif()

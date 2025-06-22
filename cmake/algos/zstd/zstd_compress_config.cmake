@@ -29,22 +29,24 @@
 # @brief Function templates for aocl optimized zstd compress functions
 
 # Summary of functions used in AOCL compress block based on AOCL_DECOMPRESS_FAST settings and ZSTD_strategy:
-# ---------------------- | ---------------------- | -------------------------| ------------------------------------------------------------| ---------------------------------------------------------------|
-# ZSTD_strategy          | AOCL_DECOMPRESS_FAST=0 | AOCL_DECOMPRESS_FAST=1   | AOCL_DECOMPRESS_FAST=2                                      | AOCL_DECOMPRESS_FAST=3                                         |
-# ---------------------- | ---------------------- | -------------------------| ------------------------------------------------------------| ---------------------------------------------------------------|
-# ZSTD_fast              | AOCL_ZSTD_compressBlock_fast_noDict_generic       | AOCL_ZSTD_compressBlock_fast_noDict_generic_fds2_base       | AOCL_ZSTD_compressBlock_fast_noDict_generic_fds2_analyze,      |
-#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_fast_noDict_generic_fds3_base          |
-#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_fast_noDict_generic                    |
-# ---------------------- | ---------------------- | -------------------------| ------------------------------------------------------------| ---------------------------------------------------------------|
-# ZSTD_dfast             | AOCL_ZSTD_compressBlock_doubleFast_noDict_generic | AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds2_base | AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds2_analyze,| 
-#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds3_base    |
-#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_doubleFast_noDict_generic              |
-# ---------------------- | ---------------------- | -------------------------| ------------------------------------------------------------| ---------------------------------------------------------------|
-# ZSTD_greedy/lazy/lazy2 | AOCL_ZSTD_compressBlock_lazy_generic              | AOCL_ZSTD_compressBlock_lazy_fds2_base                      | AOCL_ZSTD_compressBlock_lazy_fds2_analyze,                     |
-#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_lazy_fds3_base,                        |
-#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_lazy_fds2_offset8,                     |
-#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_lazy_generic                           |
-# ---------------------- | ---------------------- | -------------------------| ------------------------------------------------------------| ---------------------------------------------------------------|
+# ---------------------- | ---------------------- | -------------------------| ------------------------------------------------------------| -----------------------------------------------------------------------|
+# ZSTD_strategy          | AOCL_DECOMPRESS_FAST=0 | AOCL_DECOMPRESS_FAST=1   | AOCL_DECOMPRESS_FAST=2                                      | AOCL_DECOMPRESS_FAST=3                                                 |
+# ---------------------- | ---------------------- | -------------------------| ------------------------------------------------------------| -----------------------------------------------------------------------|
+# ZSTD_fast              | AOCL_ZSTD_compressBlock_fast_noDict_generic       | AOCL_ZSTD_compressBlock_fast_noDict_generic_fds2_base       | AOCL_ZSTD_compressBlock_fast_noDict_generic_fds3_base_with_trans,      |
+#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_fast_noDict_generic_fds3_base                  |
+#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_fast_noDict_generic                            |
+# ---------------------- | ---------------------- | -------------------------| ------------------------------------------------------------| -----------------------------------------------------------------------|
+# ZSTD_dfast             | AOCL_ZSTD_compressBlock_doubleFast_noDict_generic | AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds2_base | AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds3_base_with_trans,| 
+#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds3_base            |
+#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_doubleFast_noDict_generic                      |
+# ---------------------- | ---------------------- | -------------------------| ------------------------------------------------------------| -----------------------------------------------------------------------|
+# ZSTD_greedy/lazy/lazy2 | AOCL_ZSTD_compressBlock_lazy_generic              | AOCL_ZSTD_compressBlock_lazy_fds2_base                      | AOCL_ZSTD_compressBlock_lazy_fds3_base_with_trans,                     |
+#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_lazy_fds3_base,                                |
+#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_lazy_fds3_offset8,                             |
+#                        |                                                   |                                                             | AOCL_ZSTD_compressBlock_lazy_generic                                   |
+# ---------------------- | ---------------------- | -------------------------| ------------------------------------------------------------| -----------------------------------------------------------------------|
+# AOCL_ZSTD_*_with_trans : functions allow state transition within a block's processing. This will require updating FDS state for the current frame. Hence, it is only supported for single_pass APIs where FDS
+# frame is guaranteed to be available to be updated.
 
 # Function template instantiation for zstd_lazy_aocl.h.in - start
 set(AOCL_ZSTD_CLNF_FUNC "AOCL_ZSTD_compressBlock_lazy_fds2_base")
@@ -56,7 +58,7 @@ set(AOCL_ZSTD_CLNF_REP_MATCH_D0_TEMPLATE [[
     */
     if ((offset_1 >= @AOCL_ZSTD_CLNF_MIN_OFFSET@) & (MEM_read32(ip + 1 - offset_1) == MEM_read32(ip + 1))) {
         matchLength = ZSTD_count(ip + 1 + 4, ip + 1 + 4 - offset_1, iend) + 4;
-        if ((depth == 0) && is_totalbits_limited_seq_possible(ip, anchor, matchLength, 1 /* Repeated_Offset1 */))
+        if ((depth == 0) && is_totalbits_limited_seq_possible(ip, anchor, matchLength, 1 /* Repeated_Offset1 */, MINMATCH))
             goto _storeSequence;
     }
 ]])
@@ -85,14 +87,14 @@ set(AOCL_ZSTD_CLNF_LONG_MATCH "")
 set(AOCL_ZSTD_CLNF_STORE_SEQ [[
 _storeSequence:
     assert((OFFBASE_IS_OFFSET(offBase) && (OFFBASE_TO_OFFSET(offBase) >= WILDCOPY_VECLEN)) || (!OFFBASE_IS_OFFSET(offBase)));
-    AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength);
+    AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength, MINMATCH);
 ]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
     ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_base.h
 )
 
-set(AOCL_ZSTD_CLNF_FUNC "AOCL_ZSTD_compressBlock_lazy_fds2_offset8")
+set(AOCL_ZSTD_CLNF_FUNC "AOCL_ZSTD_compressBlock_lazy_fds3_offset8")
 set(AOCL_ZSTD_CLNF_MIN_OFFSET "(WILDCOPY_VECLEN/2)")
 string(REPLACE "@AOCL_ZSTD_CLNF_MIN_OFFSET@" "${AOCL_ZSTD_CLNF_MIN_OFFSET}" AOCL_ZSTD_CLNF_REP_MATCH_D0 "${AOCL_ZSTD_CLNF_REP_MATCH_D0_TEMPLATE}")
 string(REPLACE "@AOCL_ZSTD_CLNF_MIN_OFFSET@" "${AOCL_ZSTD_CLNF_MIN_OFFSET}" AOCL_ZSTD_CLNF_REP_MATCH_D1 "${AOCL_ZSTD_CLNF_REP_MATCH_D1_TEMPLATE}")
@@ -101,14 +103,14 @@ string(REPLACE "@AOCL_ZSTD_CLNF_MIN_OFFSET@" "${AOCL_ZSTD_CLNF_MIN_OFFSET}" AOCL
 set(AOCL_ZSTD_CLNF_STORE_SEQ [[
 _storeSequence:
     assert((OFFBASE_IS_OFFSET(offBase) && (OFFBASE_TO_OFFSET(offBase) >= (WILDCOPY_VECLEN/2))) || (!OFFBASE_IS_OFFSET(offBase)));
-    AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength);
+    AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength, MINMATCH);
 ]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
-    ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_offset8.h
+    ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds3_offset8.h
 )
 
-set(AOCL_ZSTD_CLNF_FUNC "AOCL_ZSTD_compressBlock_lazy_fds2_analyze")
+set(AOCL_ZSTD_CLNF_FUNC "AOCL_ZSTD_compressBlock_lazy_fds3_base_with_trans")
 set(AOCL_ZSTD_CLNF_MIN_OFFSET "WILDCOPY_VECLEN")
 set(AOCL_ZSTD_CLNF_REP_MATCH_D0 "")
 set(AOCL_ZSTD_CLNF_REP_MATCH_D1 "")
@@ -133,12 +135,12 @@ _storeSequence:
     }
     else
     {
-        AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, (U32)offBase, matchLength);
+        AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, (U32)offBase, matchLength, MINMATCH);
     }
 ]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
-    ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_analyze.h
+    ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds3_analyze.h
 )
 
 set(AOCL_ZSTD_CLNF_FUNC "AOCL_ZSTD_compressBlock_lazy_fds3_base")
@@ -149,7 +151,7 @@ set(AOCL_ZSTD_CLNF_REP_MATCH_D2 "")
 set(AOCL_ZSTD_CLNF_LONG_MATCH "")
 set(AOCL_ZSTD_CLNF_STORE_SEQ [[
     assert((OFFBASE_IS_OFFSET(offBase) && (OFFBASE_TO_OFFSET(offBase) >= WILDCOPY_VECLEN)) || (!OFFBASE_IS_OFFSET(offBase)));
-    AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength);
+    AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength, MINMATCH);
 ]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
@@ -164,7 +166,7 @@ set(AOCL_ZSTD_CLNF_MIN_OFFSET "(WILDCOPY_VECLEN/2)")
 #set(AOCL_ZSTD_CLNF_LONG_MATCH same as above)
 set(AOCL_ZSTD_CLNF_STORE_SEQ [[
     assert((OFFBASE_IS_OFFSET(offBase) && (OFFBASE_TO_OFFSET(offBase) >= (WILDCOPY_VECLEN/2))) || (!OFFBASE_IS_OFFSET(offBase)));
-    AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength);
+    AOCL_ZSTD_storeSequences(seqStore, start, anchor, iend, offBase, matchLength, MINMATCH);
 ]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_lazy_aocl.h.in
@@ -196,7 +198,7 @@ set(AOCL_ZSTD_CDNGF_REP_MATCH [[
         mLength = AOCL_ZSTD_count(ip + 1 + 4, ip + 1 + 4 - offset_1, iend) + 4;
         ip++;
 
-        if (is_totalbits_limited_seq_possible(ip, anchor, mLength, 1 /* Repeated_Offset1 */)) 
+        if (is_totalbits_limited_seq_possible(ip, anchor, mLength, 1 /* Repeated_Offset1 */, MINMATCH)) 
         {
             ZSTD_STORE_SEQ(seqStore, (size_t)(ip - anchor), anchor, iend, REPCODE1_TO_OFFBASE, mLength);
             goto _match_stored;
@@ -216,7 +218,7 @@ set(AOCL_ZSTD_CDNGF_LONG_MATCH [[
         ipfwd = ip;
         while (((ip > anchor) & (matchl0 > prefixLowest)) && (ip[-1] == matchl0[-1])) { ip--; matchl0--; mLength++; } /* catch up */
 
-        if (is_totalbits_limited_seq_possible(ip, anchor, mLength, offset)) 
+        if (is_totalbits_limited_seq_possible(ip, anchor, mLength, offset, MINMATCH)) 
         {
             goto _match_found;
         }
@@ -236,7 +238,7 @@ set(AOCL_ZSTD_CDNGF_SHORT_MATCH [[
 ]])
 set(AOCL_ZSTD_CDNGF_STORE_SEQ [[
     assert((OFFBASE_IS_OFFSET(OFFSET_TO_OFFBASE(offset)) && (offset >= WILDCOPY_VECLEN)) || (!OFFBASE_IS_OFFSET(OFFSET_TO_OFFBASE(offset))));
-    AOCL_ZSTD_storeSequences(seqStore, ip, anchor, iend, OFFSET_TO_OFFBASE(offset), mLength);
+    AOCL_ZSTD_storeSequences(seqStore, ip, anchor, iend, OFFSET_TO_OFFBASE(offset), mLength, MINMATCH);
 ]])
 set(AOCL_ZSTD_CDNGF_MATCH_STORED "_match_stored:")
 configure_file(
@@ -253,7 +255,7 @@ set(AOCL_ZSTD_CDNGF_COMMENT [[
     * if encountered stop imposing constraints and mark state as FDS_NONE.
     */
 ]])
-set(AOCL_ZSTD_CDNGF_FUNC "AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds2_analyze")
+set(AOCL_ZSTD_CDNGF_FUNC "AOCL_ZSTD_compressBlock_doubleFast_noDict_generic_fds3_base_with_trans")
 set(AOCL_ZSTD_CDNGF_IS_LONG_MATCH [[
     #if AOCL_DECOMPRESS_FAST > 2
     /* Skipping long matches when enforcing constraints can significantly impact 
@@ -291,7 +293,7 @@ set(AOCL_ZSTD_CDNGF_LONG_MATCH [[
             ipfwd = ip;
             while (((ip > anchor) & (matchl0 > prefixLowest)) && (ip[-1] == matchl0[-1])) { ip--; matchl0--; mLength++; } /* catch up */
 
-            if (is_totalbits_limited_seq_possible(ip, anchor, mLength, offset)) 
+            if (is_totalbits_limited_seq_possible(ip, anchor, mLength, offset, MINMATCH)) 
             {
                 goto _match_found;
             }
@@ -349,7 +351,7 @@ set(AOCL_ZSTD_CDNGF_SHORT_MATCH [[
 set(AOCL_ZSTD_CDNGF_MATCH_STORED "_match_stored:")
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_double_fast_noDict_generic_fds_aocl.h.in
-    ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_doubleFast_noDict_generic_fds2_analyze.h
+    ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_doubleFast_noDict_generic_fds3_analyze.h
 )
 
 set(AOCL_ZSTD_CDNGF_COMMENT [[
@@ -376,7 +378,7 @@ set(AOCL_ZSTD_CDNGF_LONG_MATCH [[
             ipfwd = ip;
             while (((ip > anchor) & (matchl0 > prefixLowest)) && (ip[-1] == matchl0[-1])) { ip--; matchl0--; mLength++; } /* catch up */
 
-            if (is_totalbits_limited_seq_possible(ip, anchor, mLength, offset)) 
+            if (is_totalbits_limited_seq_possible(ip, anchor, mLength, offset, MINMATCH)) 
             {
                 goto _match_found;
             }
@@ -438,7 +440,7 @@ set(AOCL_ZSTD_CFNGF_REP_MATCH [[
 
        /* Count the forward length. */
        mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend);
-       if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) 
+       if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1, MINMATCH)) 
        {
             /* Write next hash table entry: it's already calculated.
             * This write is known to be safe because ip1 is before the
@@ -453,7 +455,7 @@ set(AOCL_ZSTD_CFNGF_MATCH [[
     { \
         /* Count the forward length. */ \
         mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend); \
-        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) { \
+        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1, MINMATCH)) { \
             /* write already calculated next hash table entry only if match is valid */ \
             if (safe) \
             { \
@@ -478,7 +480,7 @@ set(AOCL_ZSTD_CFNGF_MATCH [[
     } \]])
 set(AOCL_ZSTD_CFNGF_STORE_SEQ [[
     assert((OFFBASE_IS_OFFSET(offcode) && (OFFBASE_TO_OFFSET(offcode) >= WILDCOPY_VECLEN)) || (!OFFBASE_IS_OFFSET(offcode)));
-    AOCL_ZSTD_storeSequences(seqStore, ip0, anchor, iend, offcode, mLength);
+    AOCL_ZSTD_storeSequences(seqStore, ip0, anchor, iend, offcode, mLength, MINMATCH);
 ]])
 set(AOCL_ZSTD_CFNGF_MATCH_STORED "")
 configure_file(
@@ -495,7 +497,7 @@ set(AOCL_ZSTD_CFNGF_COMMENT [[
     * if encountered stop imposing constraints and mark state as FDS_NONE.
     */
 ]])
-set(AOCL_ZSTD_CFNGF_FUNC "AOCL_ZSTD_compressBlock_fast_noDict_generic_fds2_analyze")
+set(AOCL_ZSTD_CFNGF_FUNC "AOCL_ZSTD_compressBlock_fast_noDict_generic_fds3_base_with_trans")
 set(AOCL_ZSTD_CFNGF_IS_LONG_MATCH [[
     #if AOCL_DECOMPRESS_FAST > 2
     /* Skipping long matches when enforcing constraints can significantly impact 
@@ -525,7 +527,7 @@ set(AOCL_ZSTD_CFNGF_MATCH [[
     { \
         /* Count the forward length. */ \
         mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend); \
-        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) { \
+        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1, MINMATCH)) { \
             /* write already calculated next hash table entry only if match is valid */ \
             if (safe) \
             { \
@@ -574,7 +576,7 @@ set(AOCL_ZSTD_CFNGF_MATCH [[
 set(AOCL_ZSTD_CFNGF_MATCH_STORED "_match_stored:")
 configure_file(
     ${ALGOS_PATH}/zstd/lib/compress/zstd_fast_noDict_generic_fds_aocl.h.in
-    ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds2_analyze.h
+    ${ALGOS_PATH}/zstd/lib/compress/aocl_zstd_compressBlock_fast_noDict_generic_fds3_analyze.h
 )
 
 set(AOCL_ZSTD_CFNGF_COMMENT [[
@@ -591,7 +593,7 @@ set(AOCL_ZSTD_CFNGF_MATCH [[
     { \
         /* Count the forward length. */ \
         mLength += AOCL_ZSTD_count(ip0 + mLength, match0 + mLength, iend); \
-        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1)) { \
+        if (is_totalbits_limited_seq_possible(ip0, anchor, mLength, rep_offset1, MINMATCH)) { \
             /* write already calculated next hash table entry only if match is valid */ \
             if (safe) \
             { \

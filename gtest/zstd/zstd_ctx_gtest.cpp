@@ -1899,6 +1899,10 @@ TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_zstd_ZSTD_compress2_pass_common_1)
     compress_all_levels(ZSTD_Compress_API::compress2, getCtx());
 }
 
+#ifndef DEBUG_ASSERT_ENABLED
+/* Assertions get triggered:
+assert(input->size == 0)
+assert(output->size == 0) */
 TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_zstd_ZSTD_compress2_fail_common_2)
 {
     compress_src_null(ZSTD_Compress_API::compress2, getCtx(), ZSTD_CLEVEL_DEFAULT);
@@ -1908,6 +1912,7 @@ TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_zstd_ZSTD_compress2_fail_common_3)
 {
     compress_dst_null(ZSTD_Compress_API::compress2, getCtx(), ZSTD_CLEVEL_DEFAULT);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_compress2, AOCL_Compression_zstd_ZSTD_compress2_fail_common_4)
 {
@@ -2093,6 +2098,10 @@ TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences
     compress_all_levels(ZSTD_Compress_API::compress_sequence, getCtx());
 }
 
+#ifndef DEBUG_ASSERT_ENABLED
+/* Assertions get triggered:
+assert(input->size == 0)
+assert(output->size == 0) */
 TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_fail_common_2)
 {
     compress_src_null(ZSTD_Compress_API::compress_sequence, getCtx(), ZSTD_CLEVEL_DEFAULT);
@@ -2102,6 +2111,7 @@ TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences
 {
     compress_dst_null(ZSTD_Compress_API::compress_sequence, getCtx(), ZSTD_CLEVEL_DEFAULT);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_generateSequences, AOCL_Compression_zstd_ZSTD_generateSequences_fail_common_4)
 {

@@ -198,7 +198,7 @@ FORCE_INLINE_TEMPLATE size_t
 
         {
             U32 offset_t = OFFBASE_IS_OFFSET(offBase) ? (U32)OFFBASE_TO_OFFSET(offBase) : 1;
-            if (!is_totalbits_limited_seq_possible(start, anchor, matchLength, offset_t)) {
+            if (!is_totalbits_limited_seq_possible(start, anchor, matchLength, offset_t, MINMATCH)) {
                 offset_1 = prev_offset_1; //revert
 #ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
                 size_t const step = ((size_t)(ip - anchor) >> aocl_kSearchStrengthLazy) + 1;   /* jump faster over incompressible sections */;

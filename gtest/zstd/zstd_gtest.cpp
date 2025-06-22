@@ -337,10 +337,14 @@ size_t insert_frame(void* dst, size_t dstCapacity, const void* src, size_t srcSi
 }
 
 /* Insert a single zstd frame. Calls ZSTD_compress2 that does not have MT support.
- * Recommended for creation of zstd frame to test things like properties, etc */
+ * Recommended for creation of ZSTD frame to test things like properties, etc */
 size_t insert_frame_reference(void* dst, size_t dstCapacity, const void* src, size_t srcSize) {
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
     EXPECT_NE(cctx, nullptr);
+    
+    size_t disableFdsFrame = 1;
+    Test_ZSTD_CCtx_setFdsRuntimeParams(cctx, disableFdsFrame); // no additional FDS frames
+
     ZSTD_parameters zparams;
     zparams = Test_ZSTD_getParams(ZSTD_CLEVEL_DEFAULT, srcSize, 0);
     zparams.fParams.contentSizeFlag = 1;
@@ -360,7 +364,7 @@ size_t insert_skippable_frame(void* dst, size_t dstCapacity, const void* src, si
 size_t insert_frame_overwrite(char* dst, size_t dstCapacity, char* src, size_t srcSize)
 {
     size_t frameSize = srcSize - 32;
-    size_t cprLen = insert_frame(dst, dstCapacity, src, frameSize); // Compress frameSize bytes into zstd frame
+    size_t cprLen = insert_frame_reference(dst, dstCapacity, src, frameSize); // Compress frameSize bytes into zstd frame
 
     EXPECT_LE(cprLen, (dstCapacity - 32));
     if (cprLen < (dstCapacity - 32)) {
@@ -388,7 +392,7 @@ size_t insert_N_frames(char* dst, size_t dstCapacity, char* src, size_t srcSize,
     size_t cprLen;
     char* cur = src;
     for (; writtenN < N; ++writtenN) {
-        cprLen = insert_frame(dst, remCapacity, cur, frameSize); // Compress frameSize bytes into a zstd frame
+        cprLen = insert_frame_reference(dst, remCapacity, cur, frameSize); // Compress frameSize bytes into a zstd frame
         if (Test_ZSTD_isError(cprLen))
             break; // dstCapacity insufficient will also end up here
         dst += cprLen;
@@ -396,7 +400,7 @@ size_t insert_N_frames(char* dst, size_t dstCapacity, char* src, size_t srcSize,
         cur += frameSize;
     }
     if (!Test_ZSTD_isError(cprLen) && (remSize > 0)) { //write remaining bytes
-        cprLen = insert_frame(dst, remCapacity, cur, remSize); // Compress remSize bytes into a zstd frame
+        cprLen = insert_frame_reference(dst, remCapacity, cur, remSize); // Compress remSize bytes into a zstd frame
         if (!Test_ZSTD_isError(cprLen)) {
             writtenN++;
             dst += cprLen;
@@ -689,10 +693,6 @@ void ZSTD_frame_creator::create_frame_reference()
 {
     src = d->getCompressedBuff();
     srcLen = insert_frame_reference(src, d->getCompressedSize(), original, origLen);  // Compress data from `original` buffer to `src` buffer.
-#if AOCL_DECOMPRESS_FAST > 1
-    src += ZSTD_FDS_FRAME_SIZE; // Skip FDS frame
-    srcLen -= ZSTD_FDS_FRAME_SIZE;
-#endif
 }
 
 void ZSTD_frame_creator::create_frame_overwrite()
@@ -720,7 +720,7 @@ void ZSTD_frame_creator::create_frame_and_skippable()
 {
     src = d->getCompressedBuff();
     srcLen = insert_skippable_frame(src, d->getCompressedSize(), original, origLen / 2, rand() % 15); // 1 skippable frame
-    srcLen += insert_frame(src + srcLen, d->getCompressedSize() - srcLen, original + (origLen / 2), origLen / 2); // followed by 1 zstd frame
+    srcLen += insert_frame_reference(src + srcLen, d->getCompressedSize() - srcLen, original + (origLen / 2), origLen / 2); // followed by 1 zstd frame
 }
 
 void ZSTD_frame_creator::create_frame_with_no_decomp_size()
@@ -737,7 +737,7 @@ void ZSTD_frame_creator::create_frame_with_params(ZSTD_frameParameters fparams)
     params.fParams = fparams;
     CHECK_PASS_ZSTD(ZSTD_CCtx_setParams(cctx, params));
     src = d->getCompressedBuff();
-    srcLen = ZSTD_compress2(cctx, src, d->getCompressedSize(), original, origLen);
+    srcLen = Test_ZSTD_compress2(cctx, src, d->getCompressedSize(), original, origLen);
     CHECK_PASS_ZSTD(srcLen);
     CHECK_PASS_ZSTD(ZSTD_freeCCtx(cctx));
 }
@@ -764,7 +764,7 @@ void ZSTD_frame_creator::create_frame_invalid_data_block()
 void ZSTD_frame_creator::create_empty_frame()
 {
     src = d->getCompressedBuff();
-    srcLen = insert_frame(src, d->getCompressedSize(), NULL, 0);
+    srcLen = insert_frame_reference(src, d->getCompressedSize(), NULL, 0);
 }
 
 void ZSTD_frame_creator::create_stream_frame()
@@ -1245,7 +1245,6 @@ TEST_F(ZSTD_ZSTD_getframeContentSize, AOCL_Compression_zstd_ZSTD_getFrameContent
 TEST_F(ZSTD_ZSTD_getframeContentSize, AOCL_Compression_zstd_ZSTD_getFrameContentSize_fail_common_4) // decompressed size unknown
 {
     create_stream_frame(); // frame inserted via streaming api wont have decompressed size
-    skip_until_zstd_frame();
     unsigned long long val = Test_ZSTD_getFrameContentSize(src, srcLen);
     EXPECT_EQ(val, ZSTD_CONTENTSIZE_UNKNOWN);
 }
@@ -1253,7 +1252,6 @@ TEST_F(ZSTD_ZSTD_getframeContentSize, AOCL_Compression_zstd_ZSTD_getFrameContent
 TEST_F(ZSTD_ZSTD_getframeContentSize, AOCL_Compression_zstd_ZSTD_getFrameContentSize_pass_common_5) // empty frame
 {
     create_empty_frame();
-    skip_until_zstd_frame();
     unsigned long long val = Test_ZSTD_getFrameContentSize(src, srcLen);
     EXPECT_EQ(val, 0);
 }
@@ -1321,7 +1319,6 @@ TEST_F(ZSTD_ZSTD_getDecompressedSize, AOCL_Compression_zstd_ZSTD_getDecompressed
 TEST_F(ZSTD_ZSTD_getDecompressedSize, AOCL_Compression_zstd_ZSTD_getDecompressedSize_fail_common_5) // decompressed size unknown
 {
     create_stream_frame(); // frame inserted via streaming api wont have decompressed size
-    skip_until_zstd_frame();
     unsigned long long val = Test_ZSTD_getDecompressedSize(src, srcLen);
     EXPECT_EQ(val, 0);
 }
@@ -1329,7 +1326,6 @@ TEST_F(ZSTD_ZSTD_getDecompressedSize, AOCL_Compression_zstd_ZSTD_getDecompressed
 TEST_F(ZSTD_ZSTD_getDecompressedSize, AOCL_Compression_zstd_ZSTD_getDecompressedSize_pass_common_6) // empty frame
 {
     create_empty_frame();
-    skip_until_zstd_frame();
     unsigned long long val = Test_ZSTD_getDecompressedSize(src, srcLen);
     EXPECT_EQ(val, 0);
 }
@@ -1705,14 +1701,12 @@ TEST_F(ZSTD_ZSTD_findDecompressedSize, AOCL_Compression_zstd_ZSTD_findDecompress
 
 TEST_F(ZSTD_ZSTD_findDecompressedSize, AOCL_Compression_zstd_ZSTD_findDecompressedSize_fail_common_5) { // invalid src with data after frame boundary
     create_frame_overwrite();
-    skip_until_zstd_frame();
     size_t ret = Test_ZSTD_findDecompressedSize(src, srcLen);
     EXPECT_EQ(ret, ZSTD_CONTENTSIZE_ERROR);
 }
 
 TEST_F(ZSTD_ZSTD_findDecompressedSize, AOCL_Compression_zstd_ZSTD_findDecompressedSize_fail_common_6) { // decompressedSize field not set
     create_frame_with_no_decomp_size();
-    skip_until_zstd_frame();
     size_t ret = Test_ZSTD_findDecompressedSize(src, srcLen);
     EXPECT_EQ(ret, ZSTD_CONTENTSIZE_UNKNOWN);
 }
@@ -1750,8 +1744,7 @@ TEST_F(ZSTD_ZSTD_findDecompressedSize, AOCL_Compression_zstd_ZSTD_findDecompress
 class ZSTD_ZSTD_findFrameCompressedSize : public ZSTD_ZSTD_decompress_base {};
 
 TEST_F(ZSTD_ZSTD_findFrameCompressedSize, AOCL_Compression_zstd_ZSTD_findFrameCompressedSize_pass_common_1) { // single frame
-    create_frame();
-    skip_until_zstd_frame();
+    create_frame_reference();
     size_t ret = Test_ZSTD_findFrameCompressedSize(src, srcLen);
     EXPECT_EQ(ret, srcLen);
 }
@@ -1786,14 +1779,12 @@ TEST_F(ZSTD_ZSTD_findFrameCompressedSize, AOCL_Compression_zstd_ZSTD_findFrameCo
 
 TEST_F(ZSTD_ZSTD_findFrameCompressedSize, AOCL_Compression_zstd_ZSTD_findFrameCompressedSize_pass_common_5) { // invalid src with data after frame boundary
     create_frame_overwrite();
-    skip_until_zstd_frame();
     size_t ret = Test_ZSTD_findFrameCompressedSize(src, srcLen);
     EXPECT_LT(ret, srcLen); // bytes after 1st frame not read yet
 }
 
 TEST_F(ZSTD_ZSTD_findFrameCompressedSize, AOCL_Compression_zstd_ZSTD_findFrameCompressedSize_pass_common_6) { // decompressedSize field not set
     create_frame_with_no_decomp_size();
-    skip_until_zstd_frame();
     size_t ret = Test_ZSTD_findFrameCompressedSize(src, srcLen);
     EXPECT_EQ(ret, srcLen);
 }
@@ -2124,22 +2115,22 @@ TEST_F(ZSTD_ZSTD_isSkippableFrame, AOCL_Compression_zstd_ZSTD_isSkippableFrame_f
 }
 
 TEST_F(ZSTD_ZSTD_isSkippableFrame, AOCL_Compression_zstd_ZSTD_isSkippableFrame_fail_common_4) { // src is null
-    create_frame_reference();
+    create_frame_skippable(rand() % 15);
     EXPECT_FALSE(Test_ZSTD_isSkippableFrame(NULL, srcLen));
 }
 
 TEST_F(ZSTD_ZSTD_isSkippableFrame, AOCL_Compression_zstd_ZSTD_isSkippableFrame_fail_common_5) { // srcLen < magic number
-    create_frame_reference();
+    create_frame_skippable(rand() % 15);
     EXPECT_FALSE(Test_ZSTD_isSkippableFrame(src, 3));
 }
 
 TEST_F(ZSTD_ZSTD_isSkippableFrame, AOCL_Compression_zstd_ZSTD_isSkippableFrame_fail_common_6) { // srcLen = 0
-    create_frame_reference();
+    create_frame_skippable(rand() % 15);
     EXPECT_FALSE(Test_ZSTD_isSkippableFrame(src, 0));
 }
 
 TEST_F(ZSTD_ZSTD_isSkippableFrame, AOCL_Compression_zstd_ZSTD_isSkippableFrame_fail_common_7) { // src is null and srcLen = 0
-    create_frame_reference();
+    create_frame_skippable(rand() % 15);
     EXPECT_FALSE(Test_ZSTD_isSkippableFrame(NULL, 0));
 }
 /*********************************************
@@ -2333,7 +2324,6 @@ TEST_F(ZSTD_ZSTD_decompressBound, AOCL_Compression_zstd_ZSTD_decompressBound_pas
 
 TEST_F(ZSTD_ZSTD_decompressBound, AOCL_Compression_zstd_ZSTD_decompressBound_pass_common_5) { // frame with no decomp size
     create_frame_with_no_decomp_size();
-    skip_until_zstd_frame();
     size_t ret = Test_ZSTD_decompressBound(src, srcLen);
     EXPECT_GE(ret, ZSTD_BLOCKSIZE_MAX); // if unknown, estimate based on num_of_blocks * max_block_size
 }
@@ -2354,7 +2344,6 @@ TEST_F(ZSTD_ZSTD_decompressBound, AOCL_Compression_zstd_ZSTD_decompressBound_fai
 
 TEST_F(ZSTD_ZSTD_decompressBound, AOCL_Compression_zstd_ZSTD_decompressBound_pass_common_8) { // empty frame
     create_empty_frame();
-    skip_until_zstd_frame();
     size_t ret = Test_ZSTD_decompressBound(src, srcLen);
     EXPECT_EQ(ret, 0);
 }

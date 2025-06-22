@@ -182,16 +182,19 @@ static UNUSED_ATTR const U32 OF_defaultNormLog = OF_DEFAULTNORMLOG;
 */
 #if AOCL_DECOMPRESS_FAST > 1
 // Metadata flags currently supported
+#define FDS_UNSUPPORTED               (U64)(-1) // Unable to support FDS
 #define FDS_NONE                      (U64)0    // No constraints
-#define FDS_FAST2_ANALYZE             (U64)(-1) // Under analysis. Impose maximum constraints 
 #define FDS_FAST2_NOTB_SO4_NOEXT_REP3 (U64)0x67 // 1 100 1 11, no large total bits, no offsets < 16, no external dictionary, no rep3,2,1
 #define FDS_FAST2_NOTB_SO4_NOEXT_REP2 (U64)0x66 // 1 100 1 10, no large total bits, no offsets < 16, no external dictionary, no rep3,2
 #define FDS_FAST2_NOTB_SO3_NOEXT_REP3 (U64)0x5F // 1 011 1 11, no large total bits, no offsets < 8, no external dictionary, no rep3,2,1
 #define FDS_FAST2_NOTB_SO3_NOEXT_REP2 (U64)0x5E // 1 011 1 10, no large total bits, no offsets < 8, no external dictionary, no rep3,2
 
-#define FDS_DEFAULT_CONF FDS_NONE                    // No constraints
-#define FDS_ALL_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP3   // All constraints
-#define FDS_FAST2_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP2 // AOCL_DECOMPRESS_FAST==2 fixed constraint set
+#define FDS_DEFAULT_CONF FDS_NONE                   // No constraints
+#if AOCL_DECOMPRESS_FAST == 2
+#define FDS_ALL_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP2  // Fixed constraint set
+#else
+#define FDS_ALL_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP3  // All constraints
+#endif
 
 // Decompress fast settings
 /*

@@ -359,15 +359,15 @@ int UTIL_countLogicalCores(void);
 /* Macros to mark regions with test cases modified to suit certain library build modes
  * such as MT and FDS */
 #if AOCL_DECOMPRESS_FAST > 1 // FDS enabled
-#define AOCL_DFS_CORRECTION
+#define AOCL_FDS_CORRECTION
 #endif
 
 #if !defined (AOCL_DECOMPRESS_FAST) || AOCL_DECOMPRESS_FAST <= 1  // FDS disabled
-#define NO_AOCL_DFS
+#define AOCL_FDS_DISABLED
 #endif
 
 #if !defined (AOCL_ENABLE_THREADS) && (!defined (AOCL_DECOMPRESS_FAST) || AOCL_DECOMPRESS_FAST <= 1) // FDS disabled, MT disabled
-#define NO_THREADS_NO_AOCL_DFS
+#define AOCL_FDS_THREADS_DISABLED
 #endif
  
 #if defined (__cplusplus)

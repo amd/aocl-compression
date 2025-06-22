@@ -173,6 +173,9 @@ size_t insert_frame_via_stream(void* dst, size_t dstCapacity, const void* src, s
     memset(&p, 0, sizeof(ZSTD_parameters));    
     ZSTD_CStream* g_cstream = Test_ZSTD_createCStream();
     Test_ZSTD_initCStream_advanced(g_cstream, NULL, 0, p, ZSTD_CONTENTSIZE_UNKNOWN);
+        
+    size_t disableFdsFrame = 1;
+    Test_ZSTD_CCtx_setFdsRuntimeParams(g_cstream, disableFdsFrame); // no additional FDS frames
 
     //compress
     ZSTD_outBuffer buffOut;
@@ -931,6 +934,10 @@ TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_zstd_ZSTD_compressStream_pass_
     compress_one_shot(ZSTD_Compress_API::compress_stream_continue, ZSTD_Compress_API::compress_stream_end);
 }
 
+#ifndef DEBUG_ASSERT_ENABLED
+/* Assertions get triggered:
+assert(input->size == 0)
+assert(output->size == 0) */
 TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_zstd_ZSTD_compressStream_pass_common_2)
 {
     compress_src_null(ZSTD_Compress_API::compress_stream_continue);
@@ -940,6 +947,7 @@ TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_zstd_ZSTD_compressStream_pass_
 {
     compress_dst_null(ZSTD_Compress_API::compress_stream_continue);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_compressStream, AOCL_Compression_zstd_ZSTD_compressStream_pass_common_4)
 {
@@ -1074,6 +1082,46 @@ public:
         return ret;
     }
 
+    size_t compress_iter_flush_3(TestLoad_2& d, size_t srcStep, bool forceNonContiguous = false) { //compress iteratively using ZSTD_e_flush into multiple frames
+        size_t ret;
+        buffOut.dst = d.getCompressedBuff();
+        buffOut.size = d.getCompressedSize(); //provide large enough to hold all compressed data. This ensures forward progress on output in each iter.
+        buffOut.pos = 0;
+        buffIn.src = d.getOrigData();
+        buffIn.size = srcStep;
+        buffIn.pos = 0;
+    
+        size_t prev_in_pos = buffIn.pos;
+        size_t prev_out_pos = buffOut.pos;
+        srand(0);
+        const int frame_cnt = 5;
+        size_t frame_size = d.getOrigSize() / frame_cnt;
+        for (int i = 0; i < frame_cnt; ++i) {
+            do {
+                ret = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_flush);
+                if (Test_ZSTD_isError(ret))
+                    break;
+                EXPECT_GT(buffIn.pos, prev_in_pos); //ZSTD_e_flush is guaranteed to make some forward progress
+                EXPECT_GT(buffOut.pos, prev_out_pos); //flush whatever data that might remain stuck within internal buffer
+                prev_in_pos = buffIn.pos;
+                prev_out_pos = buffOut.pos;
+                buffIn.size += srcStep;
+                if (forceNonContiguous) g_cstream->blockState.matchState.forceNonContiguous = (rand() % 2);;
+            } while (buffIn.size <= frame_size);
+
+            if (!Test_ZSTD_isError(ret)) {
+                ret = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_end); // end current frame
+            }
+            frame_size += (d.getOrigSize() / frame_cnt);
+        }
+
+        if (buffIn.size < d.getOrigSize() && !Test_ZSTD_isError(ret)) {
+            buffIn.size = d.getOrigSize(); //remaining src bytes
+            ret = Test_ZSTD_compressStream2(g_cstream, &buffOut, &buffIn, ZSTD_e_end);
+        }
+        return ret;
+    }
+
     size_t compress_iter_flush_2(TestLoad_2& d, size_t dstStep) { //compress iteratively using ZSTD_e_flush. dst buffer insufficient.
         size_t ret;
         buffOut.dst = d.getCompressedBuff();
@@ -1112,6 +1160,10 @@ TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pas
     compress_one_shot(ZSTD_Compress_API::compress_stream2_continue, ZSTD_Compress_API::compress_stream2_end);
 }
 
+#ifndef DEBUG_ASSERT_ENABLED
+/* Assertions get triggered:
+assert(input->size == 0)
+assert(output->size == 0) */
 TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pass_common_2)
 {
     compress_src_null(ZSTD_Compress_API::compress_stream2_continue);
@@ -1131,6 +1183,7 @@ TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pas
 {
     compress_dst_null(ZSTD_Compress_API::compress_stream2_end);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pass_common_6)
 {
@@ -1279,9 +1332,18 @@ TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pas
     EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), buffOut.pos, ZSTD_decompressDCtx));
 }
 
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pass_common_26) //compress over multiple calls into multiple frames. small srcStep with flush.
+{
+    TestLoad_2 d(2 * 1024 * 1024); //> 128 KB
+    size_t srcStep = 32 * 1024; //small srcStep. Test_ZSTD_compressStream2 will just consume data without writing to output until it has sufficient data to compress in one go.
+    CHECK_PASS_ZSTD(compress_iter_flush_3(d, srcStep));
+    EXPECT_EQ(buffIn.pos, buffIn.size); // all bytes consumed
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), buffOut.pos, ZSTD_decompressDCtx));
+}
+
 #ifdef AOCL_ENABLE_THREADS
 /* Library must be built with ZSTD_MULTITHREAD flag defined for this test to take multithreaded code path in zstd reference */
-TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pass_common_26) //reference multi-threaded
+TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pass_common_27) //reference multi-threaded
 {
     TestLoad_2 d((512 * 1024) + 1); //ZSTDMT_JOBSIZE_MIN + 1 : minimum size for reference multi-threading to get activated
     int max_threads = omp_get_max_threads();
@@ -1312,10 +1374,14 @@ TEST_F(ZSTD_ZSTD_endStream, AOCL_Compression_zstd_ZSTD_endStream_pass_common_1)
     compress_pass(ZSTD_Compress_API::compress_stream_end, true);
 }
 
+#ifndef DEBUG_ASSERT_ENABLED
+/* Assertions get triggered:
+assert(output->size == 0) */
 TEST_F(ZSTD_ZSTD_endStream, AOCL_Compression_zstd_ZSTD_endStream_pass_common_2)
 {
     compress_dst_null(ZSTD_Compress_API::compress_stream_end);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_endStream, AOCL_Compression_zstd_ZSTD_endStream_pass_common_3)
 {
@@ -1419,10 +1485,14 @@ TEST_F(ZSTD_ZSTD_flushStream, AOCL_Compression_zstd_ZSTD_flushStream_pass_common
     compress_pass(ZSTD_Compress_API::compress_stream_flush, true);
 }
 
+#ifndef DEBUG_ASSERT_ENABLED
+/* Assertions get triggered:
+assert(output->size == 0) */
 TEST_F(ZSTD_ZSTD_flushStream, AOCL_Compression_zstd_ZSTD_flushStream_pass_common_2)
 {
     compress_dst_null(ZSTD_Compress_API::compress_stream_flush);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_flushStream, AOCL_Compression_zstd_ZSTD_flushStream_pass_common_3)
 {

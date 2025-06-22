@@ -3235,8 +3235,9 @@ ZSTDLIB_STATIC_API unsigned ZSTD_isSkippableFrame(const void* buffer, size_t siz
 ZSTDLIB_API int Test_ZSTD_selectBlockCompressor(int strat, int useRowMatchFinder, int dictMode, int _aoclOptFlag);
 ZSTDLIB_API size_t Test_ZSTD_decompressDCtxRef(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 ZSTDLIB_API ZSTD_compressionParameters Test_Get_ZSTD_defaultCParameters(size_t srcSize, int level, int opt_on);
+ZSTDLIB_API size_t Test_ZSTD_CCtx_setFdsRuntimeParams(ZSTD_CCtx* cctx, size_t disableFdsFrame);
 ZSTDLIB_API void Test_AOCL_ZSTD_storeSequences(void* seqStore, const unsigned char* ip, const unsigned char* anchor,
-                                               const unsigned char* const iend, unsigned offBase, size_t mLength);                                   
+                                               const unsigned char* const iend, unsigned offBase, size_t mLength, unsigned minMatch);
 #if AOCL_DECOMPRESS_FAST > 1
 ZSTDLIB_API void Test_AOCL_ZSTD_readFdsFrame(ZSTD_DCtx* dctx, void const* src, size_t srcSize);
 #endif /* AOCL_DECOMPRESS_FAST > 1 */

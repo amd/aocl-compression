@@ -834,7 +834,7 @@ FORCE_INLINE_TEMPLATE U32 ZSTD_row_nextIndex(BYTE* const tagRow, U32 const rowMa
  * Checks that a pointer is aligned to "align" bytes which must be a power of 2.
  */
 #if (DEBUGLEVEL>=1) //assert enabled
-MEM_STATIC int ZSTD_isAligned(void const* ptr, size_t align) {
+__attribute__((unused)) MEM_STATIC int ZSTD_isAligned(void const* ptr, size_t align) {
     assert((align & (align - 1)) == 0);
     return (((size_t)ptr) & (align - 1)) == 0;
 }
@@ -2703,17 +2703,16 @@ FORCE_INLINE_TEMPLATE size_t AOCL_ZSTD_searchMax(
 }
 
 /* AOCL_ZSTD_compressBlock_lazy_fds2 variants - start */
-#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_base.h"
-#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_offset8.h"
-
 #if AOCL_DECOMPRESS_FAST > 2
 /* Skipping long matches when enforcing constraints can significantly impact 
  * compression ratio and decompression speed. If such matches are encountered
  * while imposing constraints, stop enforcing constraints. */
 #define AOCL_LONG_MATCH_LIMIT_LAZY (16 * 1024)
-#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_analyze.h"
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds3_analyze.h"
 #include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds3_base.h"
 #include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds3_offset8.h"
+#elif AOCL_DECOMPRESS_FAST == 2
+#include "algos/zstd/lib/compress/aocl_zstd_compressBlock_lazy_fds2_base.h"
 #endif /* AOCL_DECOMPRESS_FAST > 2 */
 /* AOCL_ZSTD_compressBlock_lazy_fds2 variants - end */
 
@@ -2763,6 +2762,7 @@ size_t AOCL_ZSTD_compressBlock_lazy_generic(
         U32 const maxRep = curr - windowLow;
         if (offset_2 > maxRep) offsetSaved2 = offset_2, offset_2 = 0;
         if (offset_1 > maxRep) offsetSaved1 = offset_1, offset_1 = 0;
+        LOG_FORMATTED(DEBUG, logCtx, "ip-base = %zu ip-start = %zu\n", (size_t)(ip - base), (size_t)(ip - (base + windowLow)));
     }
     if (isDxS) {
         /* dictMatchState repCode checks don't currently handle repCode == 0
@@ -3003,67 +3003,84 @@ size_t AOCL_ZSTD_compressBlock_lazy_generic(
     return (size_t)(iend - anchor);
 }
 
-#define AOCL_STABILIZE_COUNT 4 /* Number of blocks to stabilize context. Analysis starts after this. */
-#define AOCL_RATIO_COUNT     4 /* Number of valid blocks used to collect stats. */
-#define AOCL_MIN_SRC_SIZE_PROCESSED 50 /* Minimum percentage of source size that must be processed for stats to be reliable */
-#define AOCL_RATIO_LOW 15 /* Lower bound of ratio groups. Below this disable FDS. */
-#define AOCL_RATIO_MID 45 /* Middle bound of ratio groups. Above this enable all FDS constraints. */
 
+#if AOCL_DECOMPRESS_FAST == 2
+#define AOCL_ZSTD_COMPRESSBLOCK_LAZY(seqStore, depth) \
+    return AOCL_ZSTD_compressBlock_lazy_fds2_base(ms, seqStore, rep, src, srcSize, search_rowHash, depth);
+#elif AOCL_DECOMPRESS_FAST > 2
+/* Runs FDS_ALL_CONF when FDS is supported. 
+ * Occurance of long match at short offset triggers switch to FDS_NONE mode as skipping these can significantly worsen
+ * decompression speed. Note: This switch is possible only in singlePass mode.
+ * Compression ratio is analyzed every 'minBytesPerFrame' bytes. If ratio is <= AOCL_RATIO_LOW or >= AOCL_RATIO_HIGH, 
+ * switch to FDS_NONE occurs from next block/frame. 
+ * < AOCL_RATIO_LOW  : Ratio compromise from FDS is high for low ratio inputs. Hence avoided. 
+ * > AOCL_RATIO_HIGH : FDS constraints in entropy coder provide better decompression speed benefits than here. 
+ *                     Hence avoided. */
+#define AOCL_RATIO_LOW 15 /* Lower bound of ratio. Below this disable FDS. */
+#define AOCL_RATIO_HIGH 85 /* Upper bound of ratio. Above this disable FDS. */
 /* Data aware compression. Constraints imposed selectively based on dynamic analysis. */
-#define AOCL_ZSTD_COMPRESSBLOCK_LAZY_FDS2(seqStore, depth) \
-switch(seqStore->fds_config.state) { \
-    case FDS_FAST2_ANALYZE: /* Apply maximum constraints */ \
-        { \
-            size_t ret = AOCL_ZSTD_compressBlock_lazy_fds2_analyze(ms, seqStore, rep, src, srcSize, search_rowHash, depth); \
-            if (!ZSTD_isError(ret) && seqStore->fds_config.count >= AOCL_STABILIZE_COUNT) { /* collect stats */ \
-                size_t litSize = (size_t)(seqStore->lit - seqStore->litStart); \
-                size_t processedSize = (size_t)(srcSize - ret); \
-                if (((processedSize * 100) / srcSize) >= AOCL_MIN_SRC_SIZE_PROCESSED) { /* stats are reliable */ \
-                    seqStore->fds_config.ratio += (litSize * 100) / processedSize; \
-                    if (seqStore->fds_config.count >= (AOCL_STABILIZE_COUNT + AOCL_RATIO_COUNT)) { /* decide constraints */ \
-                        seqStore->fds_config.ratio /= AOCL_RATIO_COUNT; \
-                        if (seqStore->fds_config.ratio < AOCL_RATIO_LOW) \
-                            seqStore->fds_config.state = FDS_NONE; \
-                        else if (seqStore->fds_config.ratio < AOCL_RATIO_MID) \
-                            seqStore->fds_config.state = FDS_FAST2_NOTB_SO3_NOEXT_REP2; \
-                        else \
-                            seqStore->fds_config.state = FDS_FAST2_NOTB_SO4_NOEXT_REP3; \
-                        LOG_FORMATTED(DEBUG, logCtx, "FDS = %zu, Block ratio = %u", seqStore->fds_config.state, seqStore->fds_config.ratio); \
-                        DEBUGLOG(4, "FDS = %zu, Block ratio = %u", seqStore->fds_config.state, seqStore->fds_config.ratio); \
-                        /* Reset for future frames */ \
-                        seqStore->fds_config.count = 0; \
-                        seqStore->fds_config.ratio = 0; \
-                    } \
-                } \
-                seqStore->fds_config.count++; \
-            } \
-            else { /* Wait until context is stable */ \
-                seqStore->fds_config.count++; \
-            } \
-            return ret; \
-        } \
-    case FDS_FAST2_NOTB_SO4_NOEXT_REP3: \
-        return AOCL_ZSTD_compressBlock_lazy_fds3_base(ms, seqStore, rep, src, srcSize, search_rowHash, depth); \
-    case FDS_FAST2_NOTB_SO3_NOEXT_REP2: \
-        return AOCL_ZSTD_compressBlock_lazy_fds2_offset8(ms, seqStore, rep, src, srcSize, search_rowHash, depth); \
-    default: \
-        return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, depth, ZSTD_noDict); \
+#define AOCL_ZSTD_COMPRESSBLOCK_LAZY(seqStore, depth) {                                                                 \
+if (seqStore->fds_config.state == FDS_UNSUPPORTED) /* No analysis or transitions. Run in non-FDS mode. */ {             \
+    return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, depth, ZSTD_noDict);   \
+}                                                                                                                       \
+/* Data aware compression */                                                                                            \
+seqStore->fds_config.transition = AOCL_ZSTD_fds_trans_none;                                                             \
+size_t ret = 0;                                                                                                         \
+/* Enforce constraints based on current state */                                                                        \
+U64 cur_state = seqStore->fds_config.state;                                                                             \
+if (seqStore->singlePass) {                                                                                             \
+    switch(cur_state) {                                                                                                 \
+        case FDS_ALL_CONF:                                                                                              \
+            ret = AOCL_ZSTD_compressBlock_lazy_fds3_base_with_trans(ms, seqStore, rep, src, srcSize, search_rowHash, depth); \
+            break;                                                                                                      \
+        case FDS_FAST2_NOTB_SO3_NOEXT_REP2:                                                                             \
+            ret = AOCL_ZSTD_compressBlock_lazy_fds3_offset8(ms, seqStore, rep, src, srcSize, search_rowHash, depth);    \
+            break;                                                                                                      \
+        default:                                                                                                        \
+            ret = AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, depth, ZSTD_noDict); \
+            break;                                                                                                      \
+    }                                                                                                                   \
+    if (cur_state != seqStore->fds_config.state) /* Transition occurred in Current block */                             \
+        seqStore->fds_config.transition = AOCL_ZSTD_fds_trans_curr;                                                     \
+} else {                                                                                                                \
+    switch(seqStore->fds_config.state) {                                                                                \
+        case FDS_ALL_CONF:                                                                                              \
+            ret = AOCL_ZSTD_compressBlock_lazy_fds3_base(ms, seqStore, rep, src, srcSize, search_rowHash, depth);       \
+            break;                                                                                                      \
+        case FDS_FAST2_NOTB_SO3_NOEXT_REP2:                                                                             \
+            ret = AOCL_ZSTD_compressBlock_lazy_fds3_offset8(ms, seqStore, rep, src, srcSize, search_rowHash, depth);    \
+            break;                                                                                                      \
+        default:                                                                                                        \
+            ret = AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, depth, ZSTD_noDict); \
+            break;                                                                                                      \
+    }                                                                                                                   \
+}                                                                                                                       \
+/* Collect and analyze stats */                                                                                         \
+if (!ZSTD_isError(ret)) {                                                                                               \
+    size_t ratio;                                                                                                       \
+    AOCL_DECOMPRESS_FAST_ANALYZE(seqStore, ratio) /* Analyze */                                                         \
+    if (ratio != (size_t)(-1)) { /* Consolidate */                                                                      \
+        if (ratio > AOCL_RATIO_LOW && ratio < AOCL_RATIO_HIGH)                                                          \
+            seqStore->fds_config.state = FDS_FAST2_NOTB_SO3_NOEXT_REP2;                                                 \
+        else                                                                                                            \
+            seqStore->fds_config.state = FDS_NONE;                                                                      \
+        if (cur_state != seqStore->fds_config.state)                                                                    \
+            seqStore->fds_config.transition = AOCL_ZSTD_fds_trans_next; /* recommend state transition in next block */  \
+    }                                                                                                                   \
+}                                                                                                                       \
+return ret;                                                                                                             \
 }
+#else /* AOCL_DECOMPRESS_FAST < 2*/
+#define AOCL_ZSTD_COMPRESSBLOCK_LAZY(seqStore, depth)                                                                   \
+    return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, depth, ZSTD_noDict);
+#endif /* AOCL_DECOMPRESS_FAST */
 
 #ifndef ZSTD_EXCLUDE_GREEDY_BLOCK_COMPRESSOR
 size_t AOCL_ZSTD_compressBlock_greedy_row(
     ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
     void const* src, size_t srcSize)
 {
-    #if AOCL_DECOMPRESS_FAST > 1
-        #if AOCL_DECOMPRESS_FAST == 2
-            return AOCL_ZSTD_compressBlock_lazy_fds2_base(ms, seqStore, rep, src, srcSize, search_rowHash, 0);
-        #else
-            AOCL_ZSTD_COMPRESSBLOCK_LAZY_FDS2(seqStore, 0)
-        #endif /* AOCL_DECOMPRESS_FAST == 2 */
-    #else
-    return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 0, ZSTD_noDict);
-    #endif /* AOCL_DECOMPRESS_FAST > 1 */
+    AOCL_ZSTD_COMPRESSBLOCK_LAZY(seqStore, 0)
 }
 
 size_t AOCL_ZSTD_compressBlock_greedy_dictMatchState_row(
@@ -3086,15 +3103,7 @@ size_t AOCL_ZSTD_compressBlock_lazy_row(
     ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
     void const* src, size_t srcSize)
 {
-    #if AOCL_DECOMPRESS_FAST > 1
-        #if AOCL_DECOMPRESS_FAST == 2
-            return AOCL_ZSTD_compressBlock_lazy_fds2_base(ms, seqStore, rep, src, srcSize, search_rowHash, 1);
-        #else
-            AOCL_ZSTD_COMPRESSBLOCK_LAZY_FDS2(seqStore, 1)
-        #endif /* AOCL_DECOMPRESS_FAST == 2 */ 
-    #else
-    return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 1, ZSTD_noDict);
-    #endif /* AOCL_DECOMPRESS_FAST > 1 */
+    AOCL_ZSTD_COMPRESSBLOCK_LAZY(seqStore, 1)
 }
 
 size_t AOCL_ZSTD_compressBlock_lazy_dictMatchState_row(
@@ -3118,15 +3127,7 @@ size_t AOCL_ZSTD_compressBlock_lazy2_row(
     ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
     void const* src, size_t srcSize)
 {
-    #if AOCL_DECOMPRESS_FAST > 1
-        #if AOCL_DECOMPRESS_FAST == 2
-            return AOCL_ZSTD_compressBlock_lazy_fds2_base(ms, seqStore, rep, src, srcSize, search_rowHash, 2);
-        #else
-            AOCL_ZSTD_COMPRESSBLOCK_LAZY_FDS2(seqStore, 2)
-        #endif /* AOCL_DECOMPRESS_FAST == 2 */
-    #else
-    return AOCL_ZSTD_compressBlock_lazy_generic(ms, seqStore, rep, src, srcSize, search_rowHash, 2, ZSTD_noDict);
-    #endif /* AOCL_DECOMPRESS_FAST > 1 */
+    AOCL_ZSTD_COMPRESSBLOCK_LAZY(seqStore, 2)
 }
 
 size_t AOCL_ZSTD_compressBlock_lazy2_dictMatchState_row(

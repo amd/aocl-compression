@@ -11,6 +11,7 @@
 
 /* AOCL changes:
  *  + local_defaultDecompress modified to allow processing skippable frame.
+ *  + MT settings placed under ZSTD_MULTITHREAD
 */
 
 /* **************************************
@@ -256,11 +257,13 @@ static void BMK_initCCtx(
         const BMK_advancedParams_t* adv)
 {
     ZSTD_CCtx_reset(ctx, ZSTD_reset_session_and_parameters);
+#ifdef ZSTD_MULTITHREAD
     if (adv->nbWorkers == 1) {
         CHECK_Z(ZSTD_CCtx_setParameter(ctx, ZSTD_c_nbWorkers, 0));
     } else {
         CHECK_Z(ZSTD_CCtx_setParameter(ctx, ZSTD_c_nbWorkers, adv->nbWorkers));
     }
+#endif
     CHECK_Z(ZSTD_CCtx_setParameter(ctx, ZSTD_c_compressionLevel, cLevel));
     CHECK_Z(ZSTD_CCtx_setParameter(
             ctx, ZSTD_c_useRowMatchFinder, adv->useRowMatchFinder));
@@ -350,8 +353,11 @@ static size_t local_defaultCompress(
 }
 
  /* `addArgs` is the context */
-/* AOCL: Modified to process zstd frame that follows a skippable frame 
- * TODO: Modify to process multiple frames if present in srcBuffer. */
+ /* AOCL: As multiple frames might be present, exiting on moreToFlush == 0 will return on 1st frame. 
+  * Instead call ZSTD_decompressStream multiple times. 
+  * If moreToFlush = 0 and input->pos < input->size : More frames exist in input. Continue to process.
+  * If moreToFlush = 0 and input->pos = input->size : All frames processed. Exit.
+  * If moreToFlush != 0 and input->pos = input->size : More input is needed. Exit. */
 static size_t local_defaultDecompress(
     const void* srcBuffer,
     size_t srcSize,
@@ -359,7 +365,7 @@ static size_t local_defaultDecompress(
     size_t dstCapacity,
     void* addArgs)
 {
-    size_t moreToFlush = 1;
+    size_t moreToFlush = 0;
     ZSTD_DCtx* const dctx = (ZSTD_DCtx*)addArgs;
     ZSTD_inBuffer in;
     ZSTD_outBuffer out;
@@ -369,7 +375,7 @@ static size_t local_defaultDecompress(
     out.dst  = dstBuffer;
     out.size = dstCapacity;
     out.pos  = 0;
-    while (moreToFlush) {
+    while (!moreToFlush && in.pos < in.size) {
         if (out.pos == out.size) {
             return (size_t)-ZSTD_error_dstSize_tooSmall;
         }
@@ -377,8 +383,11 @@ static size_t local_defaultDecompress(
         if (ZSTD_isError(moreToFlush)) {
             return moreToFlush;
         }
-        if(!moreToFlush && out.pos == 0 && in.size != 0) {
-            moreToFlush = 1;
+        if (!moreToFlush && in.pos < in.size && 
+            !ZSTD_isFrame((char*)in.src + in.pos, in.size - in.pos)) {
+            /* Subsequent data in in.pos is not a valid frame. Most likely all input
+             * has been consumed and remaining data in input is garbage. Return. */
+            return out.pos;
         }
     }
     return out.pos;

@@ -76,6 +76,10 @@ public:
         aocl_setup_zstd_encode(0, optLevel, 0, 0, 0);
         aocl_setup_zstd_decode(0, optLevel, 0, 0, 0);
     }
+    ~AOCL_setup_zstd() {
+        aocl_destroy_zstd_decode();
+        aocl_destroy_zstd_encode();
+    }
 };
 
 #define ZSTD_COMPRESS_HEAPMODE

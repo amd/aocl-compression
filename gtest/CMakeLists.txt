@@ -158,6 +158,9 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             if(AOCL_TEST_FUZZER_WITH_CORPUS)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_TEST_FUZZER_WITH_CORPUS")
             endif()
+            if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUG_ASSERT_ENABLED")
+            endif()
 
             # Non API function tests
             if (BUILD_STATIC_LIBS)

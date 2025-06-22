@@ -2557,7 +2557,7 @@ size_t AOCL_ZSTD_execSequence(BYTE* op,
 #if AOCL_DECOMPRESS_FAST > 1
     /*
     * For AOCL_ZSTD_decodeSequence_mem64_fast2, AOCL_ZSTD_decodeSequence_mem64_gcc_fast2, AOCL_ZSTD_execSequence_mem64_fast2
-    * Stream is expected to provide following guarentees:
+    * Stream is expected to provide following guarantees:
     *   totalBits < (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)
     *   no Repeated_Offset2 and Repeated_Offset3
     *   no offsets go into extDict (no offset beyond prefix)

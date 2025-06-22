@@ -38,6 +38,7 @@
 
 /* AOCL changes:
  *  + renamed main() to zstd_bigdict_main(). Cleanup for failed cases.
+ *  + MT settings placed under ZSTD_MULTITHREAD
 */
 
 #include <assert.h>
@@ -115,12 +116,14 @@ int zstd_bigdict_main(int argc, char** argv)
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_windowLog, 31))) {
         ret = 1; break;
     }
+#ifdef ZSTD_MULTITHREAD
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, 1))) {
         ret = 1; break;
     }
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_overlapLog, 9))) {
         ret = 1; break;
     }
+#endif
     if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 1))) {
         ret = 1; break;
     }

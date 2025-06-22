@@ -75,8 +75,6 @@ static unsigned char aoclOptFlag = 0;
 
 static size_t(*ZSTD_compressContinue_internal_fp)(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity,
     const void* src, size_t srcSize, U32 frame, U32 lastFrameChunk);
-static size_t(*ZSTD_compressBlock_internal_fp)(ZSTD_CCtx* zc,
-    void* dst, size_t dstCapacity, const void* src, size_t srcSize, U32 frame);
 
 #ifdef AOCL_COMPRESS_FAST
 #include "clevels.h"
@@ -97,16 +95,8 @@ size_t ZSTD_compressBound_mt(size_t srcSize);
 #endif /* AOCL_ENABLE_THREADS */
 
 #if AOCL_DECOMPRESS_FAST > 1
-void ZSTD_resetFdsConfig(ZSTD_CCtx* cctx);
-MEM_STATIC size_t AOCL_ZSTD_compressEnd_emptyBlock(ZSTD_CCtx* cctx,
-    void* dst, size_t dstCapacity, const void* src, size_t srcSize);
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
-
-#ifdef AOCL_ZSTD_OPT
-#ifndef AOCL_ZSTD_DYN_BLOCK_SIZE
-static size_t AOCL_ZSTD_optimalBlockSize(ZSTD_CCtx* cctx, const void* src, size_t srcSize, size_t blockSizeMax,
-    int splitLevel, ZSTD_strategy strat, S64 savings);
-#endif /* !AOCL_ZSTD_DYN_BLOCK_SIZE */
+MEM_STATIC void AOCL_ZSTD_resetFdsConfig(ZSTD_CCtx* cctx);
+MEM_STATIC void AOCL_ZSTD_resetFdsMetrics(ZSTD_CCtx* cctx);
 static size_t AOCL_ZSTD_compressContinue_internal(ZSTD_CCtx* cctx,
     void* dst, size_t dstCapacity,
     const void* src, size_t srcSize,
@@ -115,6 +105,13 @@ static size_t
 AOCL_ZSTD_compressBlock_internal(ZSTD_CCtx* zc,
     void* dst, size_t dstCapacity,
     const void* src, size_t srcSize, U32 frame);
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
+
+#ifdef AOCL_ZSTD_OPT
+#ifndef AOCL_ZSTD_DYN_BLOCK_SIZE
+static size_t AOCL_ZSTD_optimalBlockSize(ZSTD_CCtx* cctx, const void* src, size_t srcSize, size_t blockSizeMax,
+    int splitLevel, ZSTD_strategy strat, S64 savings);
+#endif /* !AOCL_ZSTD_DYN_BLOCK_SIZE */
 #endif /* AOCL_ZSTD_OPT */
 
 #define ZSTD_LOG_FORMATTED(level, logType, str, ...) \
@@ -251,6 +248,7 @@ ZSTD_CCtx* ZSTD_initStaticCCtx(void* workspace, size_t workspaceSize)
     cctx->tmpWorkspace = ZSTD_cwksp_reserve_object(&cctx->workspace, TMP_WORKSPACE_SIZE);
     cctx->tmpWkspSize = TMP_WORKSPACE_SIZE;
 #if AOCL_DECOMPRESS_FAST > 1
+    AOCL_ZSTD_resetFdsConfig(cctx);
     cctx->entropy_fds_config.ptrWorkspace = (void*)((char*)cctx->tmpWorkspace + TMP_WORKSPACE_SIZE - AOCL_FDS_WORKSPACE_SIZE);
 #endif
     cctx->bmi2 = ZSTD_cpuid_bmi2(ZSTD_cpuid());
@@ -1527,6 +1525,11 @@ size_t ZSTD_CCtx_reset(ZSTD_CCtx* cctx, ZSTD_ResetDirective reset)
         LOG_UNFORMATTED(ERR, logCtx, "Invalid cctx");
         return ERROR(GENERIC);
     }
+
+#if AOCL_DECOMPRESS_FAST > 1
+    AOCL_ZSTD_resetFdsConfig(cctx);
+#endif
+
     if ( (reset == ZSTD_reset_session_only)
       || (reset == ZSTD_reset_session_and_parameters) ) {
         cctx->streamStage = zcss_init;
@@ -1536,9 +1539,6 @@ size_t ZSTD_CCtx_reset(ZSTD_CCtx* cctx, ZSTD_ResetDirective reset)
       || (reset == ZSTD_reset_session_and_parameters) ) {
         RETURN_ERROR_IF(cctx->streamStage != zcss_init, stage_wrong,
                         "Reset parameters is only possible during init stage.");
-#if AOCL_DECOMPRESS_FAST > 1
-        ZSTD_resetFdsConfig(cctx);
-#endif
         ZSTD_clearAllDicts(cctx);
         return ZSTD_CCtxParams_reset(&cctx->requestedParams);
     }
@@ -2279,15 +2279,6 @@ static size_t ZSTD_resetCCtx_internal(ZSTD_CCtx* zc,
      * and point params at the applied params.
      */
     zc->appliedParams = *params;
-    #if AOCL_DECOMPRESS_FAST > 1
-    if (!zc->seqStore.fds_config.single_pass) {
-        /* In non-single pass mode, input might be passed in chunks and compressed into multiple frames. 
-         * Frame boundaries are determined dynamically. At the point where a frame is ended and a new frame is created,
-         * there is no guarantee that access to current frame's header is available to append Frame_Content_Size. 
-         * Hence size of uncompressed data is not written in this mode. */
-        zc->appliedParams.fParams.contentSizeFlag = 0;
-    }
-#endif
     params = &zc->appliedParams;
 
     assert(params->useRowMatchFinder != ZSTD_ps_auto);
@@ -2378,9 +2369,6 @@ static size_t ZSTD_resetCCtx_internal(ZSTD_CCtx* zc,
 
         XXH64_reset(&zc->xxhState, 0);
         zc->stage = ZSTDcs_init;
-#if AOCL_DECOMPRESS_FAST > 1
-        ZSTD_resetFdsConfig(zc);
-#endif
         zc->dictID = 0;
         zc->dictContentSize = 0;
 
@@ -3378,7 +3366,7 @@ ZSTD_BlockCompressor_f ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_Para
               AOCL_ZSTD_compressBlock_lazy2_dedicatedDictSearch_row
             }
         };
-        ZSTD_LOG_UNFORMATTED(4, DEBUG, "Selecting a row-based matchfinder");
+        DEBUGLOG(5, "Selecting a row-based matchfinder");
         assert(useRowMatchFinder != ZSTD_ps_auto);
         int select = (int)strat - (int)ZSTD_greedy; //select in range : [0, 2] as strat in range : [ZSTD_greedy, ZSTD_lazy2]
         select = (aoclOptFlag * 3) + select;
@@ -3421,7 +3409,7 @@ ZSTD_BlockCompressor_f ZSTD_selectBlockCompressor(ZSTD_strategy strat, ZSTD_Para
 #endif /* AOCL_ZSTD_OPT */
         LOG_FORMATTED(DEBUG, logCtx, "Selecting a block compressor. Id : [%d][%d]", (int)dictMode, (int)strat);
     }
-    assert(selectedCompressor != NULL);
+    // assert(selectedCompressor != NULL); some configs do not have a blockCompressor
     return selectedCompressor;
 }
 
@@ -3513,7 +3501,12 @@ static void ZSTD_validateSeqStore(const SeqStore_t* seqStore, const ZSTD_compres
 #if DEBUGLEVEL >= 1
     const SeqDef* seq = seqStore->sequencesStart;
     const SeqDef* const seqEnd = seqStore->sequences;
+#if AOCL_DECOMPRESS_FAST > 1
+    /* cParams->minMatch is not enforced when splitting sequences in FDS */
+    size_t const matchLenLowerBound = MINMATCH;
+#else
     size_t const matchLenLowerBound = cParams->minMatch == 3 ? 3 : 4;
+#endif
     for (; seq < seqEnd; ++seq) {
         const ZSTD_SequenceLength seqLength = ZSTD_getSequenceLength(seqStore, seq);
         assert(seqLength.matchLength >= matchLenLowerBound);
@@ -4935,7 +4928,7 @@ static size_t ZSTD_compress_frameChunk(ZSTD_CCtx* cctx,
                 FORWARD_IF_ERROR(cSize, "ZSTD_compressBlock_splitBlock failed");
                 assert(cSize > 0 || cctx->seqCollector.collectSequences == 1);
             } else {
-                cSize = ZSTD_compressBlock_internal_fp(cctx,
+                cSize = ZSTD_compressBlock_internal(cctx,
                                         op+ZSTD_blockHeaderSize, dstCapacity-ZSTD_blockHeaderSize,
                                         ip, blockSize, 1 /* frame */);
                 FORWARD_IF_ERROR(cSize, "ZSTD_compressBlock_internal failed");
@@ -5160,6 +5153,9 @@ size_t ZSTD_compressContinue(ZSTD_CCtx* cctx,
                        const void* src, size_t srcSize)
 {
     AOCL_SETUP_NATIVE();
+#if AOCL_DECOMPRESS_FAST > 1
+    cctx->seqStore.singlePass = 0;
+#endif
     return ZSTD_compressContinue_public(cctx, dst, dstCapacity, src, srcSize);
 }
 
@@ -5760,6 +5756,9 @@ size_t ZSTD_compressEnd(ZSTD_CCtx* cctx,
                   const void* src, size_t srcSize)
 {
     AOCL_SETUP_NATIVE();
+#if AOCL_DECOMPRESS_FAST > 1
+    cctx->seqStore.singlePass = 0;
+#endif
     return ZSTD_compressEnd_public(cctx, dst, dstCapacity, src, srcSize);
 }
 
@@ -5820,7 +5819,7 @@ size_t ZSTD_compress_advanced_internal(
 {
     ZSTD_LOG_FORMATTED(4, DEBUG, "ZSTD_compress_advanced_internal (srcSize:%u)", (unsigned)srcSize);
 #if AOCL_DECOMPRESS_FAST > 1
-    cctx->seqStore.fds_config.single_pass = 1;
+    cctx->seqStore.singlePass = 1;
 #endif
     FORWARD_IF_ERROR( ZSTD_compressBegin_internal(cctx,
                          dict, dictSize, ZSTD_dct_auto, ZSTD_dtlm_fast, NULL,
@@ -5843,7 +5842,7 @@ size_t ZSTD_compress_usingDict(ZSTD_CCtx* cctx,
         ZSTD_parameters const params = ZSTD_getParams_internal(compressionLevel, srcSize, dict ? dictSize : 0, ZSTD_cpm_noAttachDict);
         assert(params.fParams.contentSizeFlag == 1);
 #if AOCL_DECOMPRESS_FAST > 1
-        cctx->seqStore.fds_config.single_pass = 1;
+        cctx->seqStore.singlePass = 1;
 #endif
         ZSTD_CCtxParams_init_internal(&cctx->simpleApiParams, &params, (compressionLevel == 0) ? ZSTD_CLEVEL_DEFAULT: compressionLevel);
     }
@@ -6283,7 +6282,7 @@ static size_t ZSTD_compress_usingCDict_internal(ZSTD_CCtx* cctx,
         return ERROR(GENERIC);
     }
 #if AOCL_DECOMPRESS_FAST > 1
-        cctx->seqStore.fds_config.single_pass = 1;
+        cctx->seqStore.singlePass = 1;
 #endif
     FORWARD_IF_ERROR(ZSTD_compressBegin_usingCDict_internal(cctx, cdict, fParams, srcSize), ""); /* will check if cdict != NULL */
     return ZSTD_compressEnd_public(cctx, dst, dstCapacity, src, srcSize);
@@ -6840,14 +6839,11 @@ static size_t ZSTD_CCtx_init_compressStream2(ZSTD_CCtx* cctx,
     return 0;
 }
 
-/* @return provides a minimum amount of data remaining to be flushed from internal buffers
- */
-size_t ZSTD_compressStream2( ZSTD_CCtx* cctx,
+static size_t ZSTD_compressStream2_internal( ZSTD_CCtx* cctx,
                              ZSTD_outBuffer* output,
                              ZSTD_inBuffer* input,
                              ZSTD_EndDirective endOp)
 {
-    AOCL_SETUP_NATIVE();
     DEBUGLOG(5, "ZSTD_compressStream2, endOp=%u ", (unsigned)endOp);
     /* check conditions */
     RETURN_ERROR_IF(output->pos > output->size, dstSize_tooSmall, "invalid output buffer");
@@ -6943,7 +6939,21 @@ size_t ZSTD_compressStream2( ZSTD_CCtx* cctx,
     return cctx->outBuffContentSize - cctx->outBuffFlushedSize; /* remaining to flush */
 }
 
-size_t ZSTD_compressStream2_simpleArgs (
+/* @return provides a minimum amount of data remaining to be flushed from internal buffers
+ */
+size_t ZSTD_compressStream2(ZSTD_CCtx* cctx,
+    ZSTD_outBuffer* output,
+    ZSTD_inBuffer* input,
+    ZSTD_EndDirective endOp)
+{
+    AOCL_SETUP_NATIVE();
+#if AOCL_DECOMPRESS_FAST > 1
+    cctx->seqStore.singlePass = 0;
+#endif
+    return ZSTD_compressStream2_internal(cctx, output, input, endOp);
+}
+
+size_t ZSTD_compressStream2_simpleArgs_internal (
                             ZSTD_CCtx* cctx,
                             void* dst, size_t dstCapacity, size_t* dstPos,
                       const void* src, size_t srcSize, size_t* srcPos,
@@ -6957,12 +6967,27 @@ size_t ZSTD_compressStream2_simpleArgs (
     input.src = src;
     input.size = srcSize;
     input.pos = *srcPos;
-    /* ZSTD_compressStream2() will check validity of dstPos and srcPos */
-    {   size_t const cErr = ZSTD_compressStream2(cctx, &output, &input, endOp);
+    /* ZSTD_compressStream2_internal() will check validity of dstPos and srcPos */
+    {   size_t const cErr = ZSTD_compressStream2_internal(cctx, &output, &input, endOp);
         *dstPos = output.pos;
         *srcPos = input.pos;
         return cErr;
     }
+}
+
+size_t ZSTD_compressStream2_simpleArgs (
+                            ZSTD_CCtx* cctx,
+                            void* dst, size_t dstCapacity, size_t* dstPos,
+                      const void* src, size_t srcSize, size_t* srcPos,
+                            ZSTD_EndDirective endOp)
+{
+    AOCL_SETUP_NATIVE();
+#if AOCL_DECOMPRESS_FAST > 1
+    cctx->seqStore.singlePass = 0;
+#endif
+    return ZSTD_compressStream2_simpleArgs_internal(
+                            cctx, dst, dstCapacity, dstPos,
+                            src, srcSize, srcPos, endOp);
 }
 
 size_t ZSTD_compress2(ZSTD_CCtx* cctx,
@@ -6982,11 +7007,11 @@ size_t ZSTD_compress2(ZSTD_CCtx* cctx,
     cctx->requestedParams.inBufferMode = ZSTD_bm_stable;
     cctx->requestedParams.outBufferMode = ZSTD_bm_stable;
 #if AOCL_DECOMPRESS_FAST > 1
-    cctx->seqStore.fds_config.single_pass = 1;
+    cctx->seqStore.singlePass = 1;
 #endif
     {   size_t oPos = 0;
         size_t iPos = 0;
-        size_t const result = ZSTD_compressStream2_simpleArgs(cctx,
+        size_t const result = ZSTD_compressStream2_simpleArgs_internal(cctx,
                                         dst, dstCapacity, &oPos,
                                         src, srcSize, &iPos,
                                         ZSTD_e_end);
@@ -8292,8 +8317,6 @@ void ZSTD_CCtxParams_registerSequenceProducer(
 *****************************************************************/
 static size_t(*ZSTD_compressContinue_internal_fp)(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity,
     const void* src, size_t srcSize, U32 frame, U32 lastFrameChunk) = ZSTD_compressContinue_internal;
-static size_t(*ZSTD_compressBlock_internal_fp)(ZSTD_CCtx* zc,
-    void* dst, size_t dstCapacity, const void* src, size_t srcSize, U32 frame) = ZSTD_compressBlock_internal;
 
 /* Dynamic dispatcher that sets up the optimized AMD function variant */
 static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
@@ -8304,7 +8327,6 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
         aoclOptFlag = 0;
         AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
         ZSTD_compressContinue_internal_fp = ZSTD_compressContinue_internal;
-        ZSTD_compressBlock_internal_fp = ZSTD_compressBlock_internal;
         ZSTD_optimalBlockSize_fp = ZSTD_optimalBlockSize;
     }
     else
@@ -8319,8 +8341,11 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
 #ifdef AOCL_ZSTD_OPT
                 aoclOptFlag = 1;
                 AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
+#if AOCL_DECOMPRESS_FAST > 1
                 ZSTD_compressContinue_internal_fp = AOCL_ZSTD_compressContinue_internal;
-                ZSTD_compressBlock_internal_fp = AOCL_ZSTD_compressBlock_internal;
+#else
+                ZSTD_compressContinue_internal_fp = ZSTD_compressContinue_internal;
+#endif
 #ifdef AOCL_ZSTD_DYN_BLOCK_SIZE
                 ZSTD_optimalBlockSize_fp = ZSTD_optimalBlockSize;
 #else
@@ -8330,7 +8355,6 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
                 aoclOptFlag = 0;
                 AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
                 ZSTD_compressContinue_internal_fp = ZSTD_compressContinue_internal;
-                ZSTD_compressBlock_internal_fp = ZSTD_compressBlock_internal;
                 ZSTD_optimalBlockSize_fp = ZSTD_optimalBlockSize;
 #endif /* AOCL_ZSTD_OPT */
                 break;
@@ -8363,7 +8387,7 @@ static void aocl_setup_native(void) {
     }
     AOCL_EXIT_CRITICAL(setup_zstd_encode)
 }
-#endif
+#endif /* AOCL_ZSTD_OPT */
 
 void aocl_destroy_zstd_encode(void) {
     AOCL_ENTER_CRITICAL(setup_zstd_encode)
@@ -8625,124 +8649,84 @@ size_t AOCL_ZSTD_compressBound(size_t srcSize, ZSTD_parameters params) {
     #endif
 }
 
+#ifdef AOCL_ZSTD_OPT
+#ifndef AOCL_ZSTD_DYN_BLOCK_SIZE
+MEM_STATIC size_t AOCL_ZSTD_optimalBlockSize(ZSTD_CCtx* cctx, const void* src, size_t srcSize, size_t blockSizeMax,
+    int splitLevel, ZSTD_strategy strat, S64 savings)
+{
+    return MIN(srcSize, blockSizeMax); /* use fixed block size*/
+}
+#endif /* !AOCL_ZSTD_DYN_BLOCK_SIZE */
+#endif /* AOCL_ZSTD_OPT */
+
 #if AOCL_DECOMPRESS_FAST > 1
-/* Must be called before the beginning of a new frame.
- * As cctx->stage == ZSTDcs_init marks the start of a new frame,
- * it is recommended to call this function everytime cctx->stage is set to ZSTDcs_init.
- */
-void ZSTD_resetFdsConfig(ZSTD_CCtx* cctx) 
+/* Must be called during cctx init and reset. */
+MEM_STATIC void AOCL_ZSTD_resetFdsConfig(ZSTD_CCtx* cctx) 
 {
     memset(&cctx->seqStore.fds_config, 0, sizeof(cctx->seqStore.fds_config));
+    cctx->seqStore.fds_config.minBytesPerFrame = AOCL_FDS_MIN_BYTES_PER_FRAME;
+    cctx->seqStore.fds_config.state = FDS_UNSUPPORTED;
     cctx->entropy_fds_config.avgTableLogReduction=0.0;
 }
 
-/* Write FDS frame to dst.
- * return number of bytes written or a ZSTD error. */
-MEM_STATIC size_t AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity, U64 state) {
-    char src[FDS_FRAME_LENGTH];
-    *((U64*)src) = FDS_MAGIC_WORD;
-    *((U64*)(src + FDS_MAGIC_WORD_BYTES)) = state;
-    return ZSTD_writeSkippableFrame(dst, dstCapacity, src, FDS_FRAME_LENGTH, 0);
+/* Must be called before the beginning of a new FDS frame. */
+MEM_STATIC void AOCL_ZSTD_resetFdsMetrics(ZSTD_CCtx* cctx) 
+{
+    memset(&cctx->seqStore.fds_config.metrics, 0, sizeof(cctx->seqStore.fds_config.metrics));
 }
 
-/* If the block compressor that will be used supports fast decompression mode (FDS)
- * return 1, else return 0. */
-MEM_STATIC int AOCL_is_FdsSupported(int hasExtDict, ZSTD_CCtx* zc) {
+/* Check if conditions are favorable for FDS for the given context.
+ * In single-pass mode, FDS support is not yet available for certain block compressors and
+ * user params. If context is set to these settings, FDS is not favourable.
+ * In streaming mode, it is possible for context to modify between subsequent calls
+ * and take up settings which do not support FDS.
+ * return 1 if supported, else return 0. 
+ * Note: Pre-requisite: ZSTD_window_update for current src must have been called as this
+ * impacts dictMode. FDS supported in ZSTD_noDict only. */
+MEM_STATIC int AOCL_is_FdsSupported(ZSTD_CCtx* zc) {
     ZSTD_MatchState_t* const ms = &zc->blockState.matchState;
-    ZSTD_dictMode_e const dictMode = hasExtDict ? ZSTD_extDict : ms->dictMatchState != NULL ?
-        (ms->dictMatchState->dedicatedDictSearch ? ZSTD_dedicatedDictSearch : ZSTD_dictMatchState) :
-        ZSTD_noDict; // ZSTD_matchState_dictMode(ms);
+    ZSTD_dictMode_e const dictMode = ZSTD_matchState_dictMode(ms); //(cctx->dictContentSize > 0) || (cctx->cdict)
     ZSTD_strategy strat = zc->appliedParams.cParams.strategy;
-    return ((dictMode == ZSTD_noDict) && (
-            /* ZSTD_fast, ZSTD_dfast : AOCL_ZSTD_compressBlock_doubleFast_noDict_generic */
-            strat == ZSTD_fast || 
+    LOG_FORMATTED(DEBUG, logCtx, "FDS support check: format=%d, dictMode=%d, strat=%d, rmf=%d,"
+                  "nbWorkers=%d, enableLdm=%d, extSeqProd=%d, disableFdsFrame=%d",
+                  (int)zc->requestedParams.format,
+                  dictMode, strat, zc->appliedParams.useRowMatchFinder,
+                  zc->appliedParams.nbWorkers,
+                  zc->appliedParams.ldmParams.enableLdm,
+                  (zc->appliedParams.extSeqProdFunc != NULL),
+                  (int)zc->requestedParams.disableFdsFrame);
+    return (zc->requestedParams.format == ZSTD_f_zstd1 &&
+            dictMode == ZSTD_noDict &&
+            ( /* ZSTD_fast, ZSTD_dfast : AOCL_ZSTD_compressBlock_doubleFast_noDict_generic */
+            strat == ZSTD_fast ||
             strat == ZSTD_dfast ||
             /* ZSTD_greedy, ZSTD_lazy, ZSTD_lazy2 : AOCL_ZSTD_compressBlock_lazy_fds2_ */
-            (strat >= ZSTD_greedy && strat <= ZSTD_lazy2 && zc->appliedParams.useRowMatchFinder == ZSTD_ps_enable)
-           )
+            (strat >= ZSTD_greedy && strat <= ZSTD_lazy2 && zc->appliedParams.useRowMatchFinder == ZSTD_ps_enable)) &&
+            zc->appliedParams.nbWorkers <= 1 &&
+            zc->appliedParams.ldmParams.enableLdm != ZSTD_ps_enable /* long range mode */ &&
+            zc->appliedParams.extSeqProdFunc == NULL /* no external matchfinder */ &&
+            !zc->requestedParams.disableFdsFrame
            );
 }
 
-/* Derived from ZSTD_window_update. Does not modify window but checks if 
- * extDict will be needed based on whether [src, src + srcSize) is contiguous with 
- * data in the window. Return 1 if needed (window.lowLimit < window.dictLimit), else 0. */
-MEM_STATIC int AOCL_ZSTD_window_needsExtDict(const ZSTD_window_t* window,
-    void const* src, size_t srcSize,
-    int forceNonContiguous)
-{
-    BYTE const* const ip = (BYTE const*)src;
-    DEBUGLOG(5, "AOCL_ZSTD_window_needsExtDict");
-    if (srcSize == 0)
-        return 0;
-    assert(window->base != NULL);
-    assert(window->dictBase != NULL);
-    U32 lowLimit         = window->lowLimit;
-    U32 dictLimit        = window->dictLimit;
-    const BYTE* dictBase = window->dictBase;
-    /* Check if blocks follow each other */
-    if (src != window->nextSrc || forceNonContiguous) {
-        /* not contiguous */
-        size_t const distanceFromBase = (size_t)(window->nextSrc - window->base);
-        DEBUGLOG(5, "Non contiguous blocks, new segment starts at %u", dictLimit);
-        lowLimit = dictLimit;
-        assert(distanceFromBase == (size_t)(U32)distanceFromBase);  /* should never overflow */
-        dictLimit = (U32)distanceFromBase;
-        dictBase = window->base;
-        if (dictLimit - lowLimit < HASH_READ_SIZE) lowLimit = dictLimit;   /* too small extDict */
-    }
-    /* if input and dictionary overlap : reduce dictionary (area presumed modified by input) */
-    if ((ip + srcSize > dictBase + lowLimit)
-        & (ip < dictBase + dictLimit)) {
-        size_t const highInputIdx = (size_t)((ip + srcSize) - dictBase);
-        U32 const lowLimitMax = (highInputIdx > (size_t)dictLimit) ? dictLimit : (U32)highInputIdx;
-        assert(highInputIdx < UINT_MAX);
-        lowLimit = lowLimitMax;
-        DEBUGLOG(5, "Overlapping extDict and input : new lowLimit = %u", lowLimit);
-    }
-    return (lowLimit < dictLimit);
-}
-
-/* Write FDS frame to dst if support is available for the given context */
-MEM_STATIC size_t AOCL_ZSTD_writeFdsFrameIfSupported(ZSTD_CCtx* cctx,
-    void** dst, size_t* dstCapacity, const void* src, size_t srcSize) {
-    size_t fds = 0;
-    /* insert only if input exists and when frame format supports 4 byte magic number */
-    if (srcSize && cctx->requestedParams.format == ZSTD_f_zstd1) {
-        ZSTD_MatchState_t* const ms = &cctx->blockState.matchState;
-        int hasExtDict = AOCL_ZSTD_window_needsExtDict(&ms->window, src, srcSize, ms->forceNonContiguous);
-        /* Insert an FDS frame before writing the ZSTD frame, if FDS mode is supported for selected compressor */
-        if (AOCL_is_FdsSupported(hasExtDict, cctx))
-        {
-#if AOCL_DECOMPRESS_FAST == 2
-            fds = AOCL_ZSTD_writeFdsFrame(*dst, *dstCapacity, FDS_FAST2_CONF);
-#else
-            fds = AOCL_ZSTD_writeFdsFrame(*dst, *dstCapacity, FDS_DEFAULT_CONF);
-#endif
-            if (ZSTD_isError(fds)) {
-                return fds;
-            }
-            *dstCapacity -= fds;
-            *dst = (char*)(*dst) + fds;
-        }
-    }
+/* Write FDS frame to dst */
+MEM_STATIC size_t AOCL_ZSTD_writeFdsFrame(void** dst, size_t* dstCapacity, U64 state) {
+    char src[FDS_FRAME_LENGTH];
+    *((U64*)src) = FDS_MAGIC_WORD;
+    *((U64*)(src + FDS_MAGIC_WORD_BYTES)) = state;
+    size_t fds = ZSTD_writeSkippableFrame(*dst, *dstCapacity, src, FDS_FRAME_LENGTH, 0);
+    if (ZSTD_isError(fds)) 
+        return fds;
+    *dstCapacity -= fds;
+    *dst = (char*)(*dst) + fds;
     return fds;
-}
-
-/* Check if conditions favorable for FDS continue to exist for the given context.
- * In streaming mode, it is possible for context to change between subsequent calls
- * and take up settings which do not support FDS. */
-MEM_STATIC size_t AOCL_ZSTD_checkFdsIsFavorable(ZSTD_CCtx* cctx,
-    void** dst, size_t* dstCapacity, const void* src, size_t srcSize) {
-    ZSTD_MatchState_t* const ms = &cctx->blockState.matchState;
-    int hasExtDict = AOCL_ZSTD_window_needsExtDict(&ms->window, src, srcSize, ms->forceNonContiguous);
-    return AOCL_is_FdsSupported(hasExtDict, cctx);
 }
 
 /* Derived from ZSTD_compressEnd_public, but writes an empty block. 
  * Does not perform pledgedSrcSize checks as not all bytes might be consumed 
  * and empty block is being emitted without consuming them. */
 MEM_STATIC size_t AOCL_ZSTD_compressEnd_emptyBlock(ZSTD_CCtx* cctx,
-    void* dst, size_t dstCapacity, const void* src, size_t srcSize)
+    void* dst, size_t dstCapacity)
 {
     size_t endResult;
     endResult = ZSTD_writeEpilogue(cctx, (char*)dst, dstCapacity);
@@ -8750,130 +8734,353 @@ MEM_STATIC size_t AOCL_ZSTD_compressEnd_emptyBlock(ZSTD_CCtx* cctx,
     ZSTD_CCtx_trace(cctx, endResult);
     return endResult;
 }
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
 
-#ifdef AOCL_ZSTD_OPT
-#ifndef AOCL_ZSTD_DYN_BLOCK_SIZE
-static size_t AOCL_ZSTD_optimalBlockSize(ZSTD_CCtx* cctx, const void* src, size_t srcSize, size_t blockSizeMax,
-                                         int splitLevel, ZSTD_strategy strat, S64 savings)
-{
-    return MIN(srcSize, blockSizeMax); /* use fixed block size*/
+/* Update frame descriptors of an existing ZSTD frame.
+ * dst must point to start of a ZSTD frame in ZSTD_f_zstd1 format
+ * Derived from ZSTD_getFrameHeader_advanced 
+ * Parse Frame header and update Frame_Content_Size
+ * Recompute checksum */
+MEM_STATIC void AOCL_ZSTD_updateFrameDesc(ZSTD_CCtx* cctx, void* dst, const void* src, size_t frameContentSize) {
+    size_t const minInputSize = 5; /* dst has frame in ZSTD_f_zstd1 format */
+    BYTE* op = (BYTE*)dst;
+    BYTE const fhdByte = op[minInputSize-1];
+    size_t pos = minInputSize;
+    U32 const dictIDSizeCode = fhdByte&3;
+    U32 const checksumFlag = (fhdByte>>2)&1;
+    U32 const singleSegment = (fhdByte>>5)&1;
+    U32 const fcsID = fhdByte>>6;
+    assert(fcsID > 1); /* Guaranteed by AOCL_FDS_MIN_BYTES_PER_FRAME */
+
+    /* Locate Frame_Content_Size field */
+    if (!singleSegment) {
+        pos++;
+    }
+    switch(dictIDSizeCode)
+    {
+        default:
+            assert(0);  /* impossible */
+            ZSTD_FALLTHROUGH;
+        case 0 : break;
+        case 1 : pos++; break;
+        case 2 : pos+=2; break;
+        case 3 : pos+=4; break;
+    }
+    /* Update Frame_Content_Size field */
+    switch(fcsID)
+    {
+        default:
+            assert(0);  /* impossible */
+            ZSTD_FALLTHROUGH;
+        //case 0 : if (singleSegment) ip[pos] = frameContentSize; break;
+        //case 1 : MEM_write16(ip+pos, frameContentSize - 256); break;
+        case 2 : 
+            LOG_FORMATTED(INFO, logCtx, "FCS modified from %zu to %zu", (size_t)MEM_read32(op + pos), frameContentSize);
+            MEM_write32(op+pos, frameContentSize); 
+            break;
+        case 3 : 
+            LOG_FORMATTED(INFO, logCtx, "FCS modified from %zu to %zu", (size_t)MEM_read64(op + pos), frameContentSize);
+            MEM_write64(op+pos, frameContentSize); 
+            break;
+    }
+    /* Recompute checksum */
+    if (checksumFlag && frameContentSize) {
+        const BYTE* ip = (const BYTE*)src;
+        XXH64_update(&cctx->xxhState, ip, frameContentSize);
+    }
 }
-#endif /* !AOCL_ZSTD_DYN_BLOCK_SIZE */
 
-/*
-* Derived from ZSTD_compressContinue_internal. It writes FDS frame
-* if supported and frame parameter is not 0. During FDS frame generation,
-* FDS constraints are most restrictive to begin with. As more blocks
-* are analyzed constraints might be loosened.
-* @return : compressed size including FDS frame size, or an error code.
-*/
+/* A frame should not have any dependency on the previous frame.
+ * All items within ZSTD_CCtx which might indicate such dependency needs to be reset.
+ * 1. Fds frame metrics
+ * 2. Dictionaries
+ * 3. Previous block's entropy tables
+ * 4. Tables of block compressor : hashTable, chainTable, etc
+ * 5. Search window : needs to be updated to start from nextSrc */
+static size_t AOCL_ZSTD_resetCCtx_newFrame_internal(ZSTD_CCtx* zc, U64 const pledgedSrcSize) 
+{
+    /* Sizes of workspace sections do not change. Just need to reset appropriate sections where necessary. */
+    zc->pledgedSrcSizePlusOne = pledgedSrcSize+1;
+    zc->consumedSrcSize = 0;
+    zc->producedCSize = 0;
+    if (pledgedSrcSize == ZSTD_CONTENTSIZE_UNKNOWN)
+        zc->appliedParams.fParams.contentSizeFlag = 0;
+
+    XXH64_reset(&zc->xxhState, 0); // Is this needed?
+    AOCL_ZSTD_resetFdsMetrics(zc);
+
+    /* invalidate dictionaries. New frame made to drop any existing dictionary.*/
+    zc->dictID = 0;
+    zc->dictContentSize = 0;
+
+    ZSTD_reset_compressedBlockState(zc->blockState.prevCBlock); /* Reset previous blocks entropy table. 1st block in a new frame cant use previous block's tables */
+    /* How about nextCBlock? Is it auto set during processing? or should that be reset as well? */
+    ZSTD_cwksp_clean_tables(&zc->workspace); /* reset dictionary compressor tables */
+    ZSTD_invalidateMatchState(&zc->blockState.matchState); /* update search window. Note: nextSrc must be set properly before call */
+
+    /* in/out buffers stay as is */
+
+    /* set init states */
+    zc->isFirstBlock = 1;
+    zc->stage = ZSTDcs_init;
+    zc->initialized = 1;
+
+    return 0;
+}
+
+/* Enabling AOCL_DECOMPRESS_FAST_SINGLE_FRAME will ensure not more than 1 ZSTD frame is 
+ * produced between cctx init and end stages. This might be useful for applications where
+ * streaming APIs are not called iteratively to process multiple frames in the stream. 
+ * This option is not exposed via Cmake for now. If such a use case arises, it can be added. */
+// #define AOCL_DECOMPRESS_FAST_SINGLE_FRAME
+
+/* Derived from ZSTD_compress_frameChunk 
+ * However, Frame is supposed NOT already started (header NOT already produced)
+ * It can create 1 or more frames in dst, but guarantees all src is consumed. */
+static size_t AOCL_ZSTD_compress_frameChunk(ZSTD_CCtx* cctx,
+                                     void* dst, size_t dstCapacity,
+                               const void* src, size_t srcSize,
+                                     U32 lastFrameChunk)
+{
+    size_t fhSize = 0;
+    BYTE* fdsDst = NULL;
+
+    size_t blockSizeMax = cctx->blockSizeMax;
+    size_t remaining = srcSize;
+    const BYTE* ip = (const BYTE*)src;
+    const BYTE* ipFrame = ip;
+    BYTE* const ostart = (BYTE*)dst;
+    BYTE* op = ostart;
+    U32 const maxDist = (U32)1 << cctx->appliedParams.cParams.windowLog;
+    S64 savings = (S64)cctx->consumedSrcSize - (S64)cctx->producedCSize;
+
+    assert(cctx->appliedParams.cParams.windowLog <= ZSTD_WINDOWLOG_MAX);
+
+    DEBUGLOG(5, "ZSTD_compress_frameChunk (srcSize=%u, blockSizeMax=%u)", (unsigned)srcSize, (unsigned)blockSizeMax);
+
+    while (remaining) {
+        /* Write frame head and tail if needed */
+        if (cctx->seqStore.fds_config.restart) { /* End current frame */
+            if (fdsDst) {
+                /* If frame is terminated before all pledged source bytes are consumed,
+                 * update Frame_Content_Size in header with currently consumed source size.
+                 * Note : As new size will always be <= pledged source size, it will fit in Frame_Content_Size.
+                 * Also AOCL_FDS_MIN_BYTES_PER_FRAME ensures FCS_Field_Size < 4 bytes is not allowed.
+                 * E.g: Scenario where pledged source needs 4 Frame_Content_Size bytes and consumed source needs 2
+                 * bytes is not possible. 
+                 * Note : fdsDst must contain FDS_Frame + ZSTD_frame */
+                assert(AOCL_FDS_MIN_BYTES_PER_FRAME > 65791 /* FCS_Field_Size (2) Range (256 - 65791) */);
+                AOCL_ZSTD_updateFrameDesc(cctx, fdsDst + FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE /* Start of ZSTD Frame */,
+                                          ipFrame, (size_t)(ip - ipFrame));
+            }
+            /* Empty block is written before ending the frame as previously processed blocks 
+             * aren't marked as 'lastBlock' when processing */
+            size_t ftSize = AOCL_ZSTD_compressEnd_emptyBlock(cctx, op, dstCapacity);
+            FORWARD_IF_ERROR(ftSize, "AOCL_ZSTD_compressEnd_emptyBlock failed. Unable to restart new frame.");
+            op += ftSize;
+            assert(ftSize <= dstCapacity);
+            dstCapacity -= ftSize;
+
+            {
+            /* Reset context. New frame to have no dependency on past frame/s (invalidate matches in the match finder tables, etc).
+             * Note: Dictionary if present is dropped as dictionary might not
+             * be available in its original form after processing previous frames. */
+            /* Info in context is for Frame level. Use 'cctx->consumedSrcSize' and 'pledgedSrcSize' to indicate size. */
+            U64 pledgedSrcSize = cctx->pledgedSrcSizePlusOne ?
+                (cctx->pledgedSrcSizePlusOne - 1 - cctx->consumedSrcSize) /* pledge remaining src bytes */
+                : ZSTD_CONTENTSIZE_UNKNOWN;
+            ZSTD_MatchState_t* const ms = &cctx->blockState.matchState;
+            ms->window.nextSrc = ip; /* As not all input upto nextSrc has been consumed, adjust nextSrc to already consumed point */
+            FORWARD_IF_ERROR(AOCL_ZSTD_resetCCtx_newFrame_internal(cctx, pledgedSrcSize),
+                "AOCL_ZSTD_resetCCtx_newFrame_internal failed. Unable to restart new frame.");
+
+            /* New search window for next frame */
+            /* Info in window is for API-call level. Use 'remaining' to indicate size. */
+            if (!ZSTD_window_update(&ms->window, ip, remaining, ms->forceNonContiguous)) {
+                ms->forceNonContiguous = 0;
+                ms->nextToUpdate = ms->window.dictLimit;
+            }
+            if (cctx->appliedParams.ldmParams.enableLdm == ZSTD_ps_enable) {
+                ZSTD_window_update(&cctx->ldmState.window, ip, remaining, /* forceNonContiguous */ 0);
+            }
+            }
+
+            /* Note: FDS favourable status remains same across restarted frames within a AOCL_ZSTD_compressContinue_internal 
+             * call. Hence, those checks are not needed when a new frame is started here. */
+        }
+
+        if (cctx->stage == ZSTDcs_init || cctx->seqStore.fds_config.restart) { /* Start a new frame */
+            /* Initialize entropy FDS config */
+            cctx->entropy_fds_config.avgTableLogReduction = 0.0; // FIXME: Maybe not needed here as reset sets this for the first time?
+            if (cctx->seqStore.singlePass) {
+                fdsDst = op; /* Updating current frame's FDS setting is supported only for single pass APIs */
+            }
+            else {
+                /* In non-single pass mode, input might be passed in chunks and compressed into multiple frames. 
+                * Frame boundaries are determined dynamically. At the point where a frame is ended and a new frame is created,
+                * there is no guarantee that access to current frame's header is available to append Frame_Content_Size and
+                * update checksum. Hence these fields are not written in this mode. */
+                cctx->appliedParams.fParams.contentSizeFlag = 0;
+                cctx->appliedParams.fParams.checksumFlag = 0;
+            }
+
+            if (!cctx->requestedParams.disableFdsFrame) {
+                /* If FDS_UNSUPPORTED upon ZSTDcs_init, no FDS frame is written.
+                 * Switch from FDS_UNSUPPORTED to supported is possible. If this switch is allowed in the future, 
+                 * restart should account for it when updating frame headers. */
+                if (cctx->seqStore.fds_config.restart || cctx->seqStore.fds_config.state != FDS_UNSUPPORTED) {
+                    /* Write FDS frame before the start of a new ZSTD frame */
+                    size_t fds = AOCL_ZSTD_writeFdsFrame((void**)&op, &dstCapacity, cctx->seqStore.fds_config.state);
+                    FORWARD_IF_ERROR(fds, "AOCL_ZSTD_writeFdsFrame failed");
+                }
+            }
+
+            U64 pledgedSrcSize = cctx->pledgedSrcSizePlusOne ?
+                                 (cctx->pledgedSrcSizePlusOne - 1 - cctx->consumedSrcSize) /* pledge remaining src bytes */ 
+                                 : ZSTD_CONTENTSIZE_UNKNOWN;
+            fhSize = ZSTD_writeFrameHeader(op, dstCapacity, &cctx->appliedParams, pledgedSrcSize, cctx->dictID);
+            FORWARD_IF_ERROR(fhSize, "ZSTD_writeFrameHeader failed");
+            op += fhSize;
+            assert(fhSize <= dstCapacity);
+            dstCapacity -= fhSize;
+            ipFrame = ip;
+            cctx->stage = ZSTDcs_ongoing;
+
+            if (cctx->appliedParams.fParams.checksumFlag && remaining)
+                XXH64_update(&cctx->xxhState, ip, remaining);
+
+            cctx->seqStore.fds_config.restart = 0;
+        }
+
+        /* Match state updates */
+        ZSTD_MatchState_t* const ms = &cctx->blockState.matchState;
+#ifdef AOCL_ZSTD_OPT
+        size_t const blockSize = ZSTD_optimalBlockSize_fp(cctx,
+                                ip, remaining,
+                                blockSizeMax,
+                                cctx->appliedParams.preBlockSplitter_level,
+                                cctx->appliedParams.cParams.strategy,
+                                savings);
+#else
+        size_t const blockSize = ZSTD_optimalBlockSize(cctx,
+                                ip, remaining,
+                                blockSizeMax,
+                                cctx->appliedParams.preBlockSplitter_level,
+                                cctx->appliedParams.cParams.strategy,
+                                savings);
+#endif
+        U32 const lastBlock = lastFrameChunk & (blockSize == remaining);
+        assert(blockSize <= remaining);
+
+        /* TODO: See 3090. We reduced MIN_CBLOCK_SIZE from 3 to 2 so to compensate we are adding
+         * additional 1. We need to revisit and change this logic to be more consistent */
+        RETURN_ERROR_IF(dstCapacity < ZSTD_blockHeaderSize + MIN_CBLOCK_SIZE + 1,
+                        dstSize_tooSmall,
+                        "not enough space to store compressed block");
+
+        ZSTD_overflowCorrectIfNeeded(ms, &cctx->workspace, &cctx->appliedParams, ip, ip + blockSize);
+        ZSTD_checkDictValidity(&ms->window, ip + blockSize, maxDist, &ms->loadedDictEnd, &ms->dictMatchState);
+        ZSTD_window_enforceMaxDist(&ms->window, ip, maxDist, &ms->loadedDictEnd, &ms->dictMatchState);
+
+        /* Ensure hash/chain table insertion resumes no sooner than lowlimit */
+        if (ms->nextToUpdate < ms->window.lowLimit) ms->nextToUpdate = ms->window.lowLimit;
+
+        /* Process block */
+        {   size_t cSize;
+            if (ZSTD_useTargetCBlockSize(&cctx->appliedParams)) {
+                cSize = ZSTD_compressBlock_targetCBlockSize(cctx, op, dstCapacity, ip, blockSize, lastBlock);
+                FORWARD_IF_ERROR(cSize, "ZSTD_compressBlock_targetCBlockSize failed");
+                assert(cSize > 0);
+                assert(cSize <= blockSize + ZSTD_blockHeaderSize);
+            } else if (ZSTD_blockSplitterEnabled(&cctx->appliedParams)) {
+                cSize = ZSTD_compressBlock_splitBlock(cctx, op, dstCapacity, ip, blockSize, lastBlock);
+                FORWARD_IF_ERROR(cSize, "ZSTD_compressBlock_splitBlock failed");
+                assert(cSize > 0 || cctx->seqCollector.collectSequences == 1);
+            } else {
+                cSize = AOCL_ZSTD_compressBlock_internal(cctx,
+                                        op+ZSTD_blockHeaderSize, dstCapacity-ZSTD_blockHeaderSize,
+                                        ip, blockSize, 1 /* frame */);
+                FORWARD_IF_ERROR(cSize, "AOCL_ZSTD_compressBlock_internal failed");
+
+                if (cSize == 0) {  /* block is not compressible */
+                    cSize = ZSTD_noCompressBlock(op, dstCapacity, ip, blockSize, lastBlock);
+                    FORWARD_IF_ERROR(cSize, "ZSTD_noCompressBlock failed");
+                } else {
+                    U32 const cBlockHeader = cSize == 1 ?
+                        lastBlock + (((U32)bt_rle)<<1) + (U32)(blockSize << 3) :
+                        lastBlock + (((U32)bt_compressed)<<1) + (U32)(cSize << 3);
+                    MEM_writeLE24(op, cBlockHeader);
+                    cSize += ZSTD_blockHeaderSize;
+                }
+            }  /* if (ZSTD_useTargetCBlockSize(&cctx->appliedParams))*/
+
+            /* @savings is employed to ... */
+            savings += (S64)blockSize - (S64)cSize;
+
+            ip += blockSize;
+            assert(remaining >= blockSize);
+            remaining -= blockSize;
+            op += cSize;
+            assert(dstCapacity >= cSize);
+            dstCapacity -= cSize;
+
+            cctx->isFirstBlock = 0;
+            cctx->consumedSrcSize += blockSize;
+            cctx->producedCSize += cSize;
+            DEBUGLOG(5, "ZSTD_compress_frameChunk: adding a block of size %u",
+                        (unsigned)cSize);
+        }
+
+        /* Handle FDS state changes */
+        switch (cctx->seqStore.fds_config.transition) {
+            case AOCL_ZSTD_fds_trans_curr: /* State change in current block. Update current FDS frame. */
+                assert(cctx->seqStore.singlePass);
+                if (fdsDst) {
+                    AOCL_ZSTD_updateFdsConfig(fdsDst, cctx); /* If fdsDst contains FDS frame, update FDS settings */
+                }
+                break;
+            case AOCL_ZSTD_fds_trans_next: /* State change proposed for next block. End current FDS frame and start a new one. */
+                if (cctx->seqStore.singlePass) {
+#ifdef AOCL_DECOMPRESS_FAST_SINGLE_FRAME
+                    if (fdsDst) {
+                        AOCL_ZSTD_updateFdsConfig(fdsDst, cctx); /* If fdsDst contains FDS frame, update FDS settings */
+                    }
+                    cctx->seqStore.fds_config.minBytesPerFrame = (U64)(-1); /* INF. Disable creation of new frame */
+#else
+                    cctx->seqStore.fds_config.restart = 1; /* Start a new frame for next block */
+#endif
+                } else {
+                    cctx->seqStore.fds_config.restart = 1; /* Start a new frame for next block */
+                }
+                break;
+            default: /* AOCL_ZSTD_fds_trans_none : if no state change continue writing to current frame */
+                break;
+        }
+    }
+
+    if (lastFrameChunk && (op>ostart)) cctx->stage = ZSTDcs_ending;
+    return (size_t)(op-ostart);
+}
+
+/* Derived from ZSTD_compressContinue_internal for FDS support.
+ * It can create more than one frame in dst including FDS skip frames and ZSTD frames. */
 static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
                               void* dst, size_t dstCapacity,
                         const void* src, size_t srcSize,
                                U32 frame, U32 lastFrameChunk)
 {
-    ZSTD_MatchState_t* const ms = &cctx->blockState.matchState;
-    size_t fhSize = 0;
-#if AOCL_DECOMPRESS_FAST > 1
-    size_t fds = (U64)0;
-    BYTE* fdsDst = (BYTE*)dst;
-
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
+    if (!frame || cctx->requestedParams.format != ZSTD_f_zstd1 || !srcSize) {
+        /* If frame format is not supported, FDS is not possible */
+        return ZSTD_compressContinue_internal(cctx, dst, dstCapacity, src, srcSize, 
+                                              frame, lastFrameChunk);
+    }
 
     DEBUGLOG(5, "AOCL_ZSTD_compressContinue_internal, stage: %u, srcSize: %u",
                 cctx->stage, (unsigned)srcSize);
     RETURN_ERROR_IF(cctx->stage==ZSTDcs_created, stage_wrong,
                     "missing init (ZSTD_compressBegin)");
 
-    if (frame && (cctx->stage == ZSTDcs_init)) {
-#if AOCL_DECOMPRESS_FAST > 1
-        /* Initialize entropy FDS config */
-        cctx->entropy_fds_config.avgTableLogReduction = 0.0;
-        assert(cctx->seqStore.fds_config.written == 0); // no FDS frame written yet
-        /* FDS frame needs to be written before the start of every new ZSTD frame
-        * provided dst buffer with sufficient capacity is available. */
-        fds = AOCL_ZSTD_writeFdsFrameIfSupported(cctx, &dst, &dstCapacity, src, srcSize);
-        FORWARD_IF_ERROR(fds, "AOCL_ZSTD_writeFdsFrameIfSupported failed");
-        if (fds) {
-            cctx->seqStore.fds_config.written = 1;
-#if AOCL_DECOMPRESS_FAST == 2
-            cctx->seqStore.fds_config.state = FDS_FAST2_CONF;
-#else
-            cctx->seqStore.fds_config.state = FDS_FAST2_ANALYZE; // dynamic
-#endif
-        }
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
-
-        fhSize = ZSTD_writeFrameHeader(dst, dstCapacity, &cctx->appliedParams,
-                                       cctx->pledgedSrcSizePlusOne-1, cctx->dictID);
-        FORWARD_IF_ERROR(fhSize, "ZSTD_writeFrameHeader failed");
-        assert(fhSize <= dstCapacity);
-        dstCapacity -= fhSize;
-        dst = (char*)dst + fhSize;
-        cctx->stage = ZSTDcs_ongoing;
-    }
-#if AOCL_DECOMPRESS_FAST > 1
-    else if (UNLIKELY(cctx->seqStore.fds_config.written /* FDS frame was previously written */ && 
-            cctx->seqStore.fds_config.state != FDS_NONE /* FDS constraints were imposed */ &&
-            !AOCL_ZSTD_checkFdsIsFavorable(cctx, &dst, &dstCapacity, src, srcSize))) 
-    {
-        /* FDS frame is not favorable anymore. End current frame and start a new frame with FDS_NONE */
-
-        /* End current frame */
-        size_t ftSize = AOCL_ZSTD_compressEnd_emptyBlock(cctx, dst, dstCapacity, src, srcSize);
-        FORWARD_IF_ERROR(ftSize, "AOCL_ZSTD_compressEnd_emptyBlock failed. Unable to restart new frame.");
-        assert(ftSize <= dstCapacity);
-        dstCapacity -= ftSize;
-        dst = (char*)dst + ftSize;
-
-        /* Reset context. New frame to have no dependency on past frame/s. 
-         * Note: Dictionary if present is dropped as dictionary might not
-         * be available in its original form after processing previous frames. */
-        U64 pledgedSrcSize = cctx->pledgedSrcSizePlusOne ? 
-            (cctx->pledgedSrcSizePlusOne - 1 - cctx->consumedSrcSize) /* pledge remaining src bytes */ 
-            : ZSTD_CONTENTSIZE_UNKNOWN;
-        FORWARD_IF_ERROR(ZSTD_resetCCtx_internal(cctx, &cctx->appliedParams, pledgedSrcSize,
-            0, ZSTDcrp_makeClean, cctx->bufferedPolicy), "ZSTD_resetCCtx_internal failed. Unable to restart new frame.");
-
-        /* Write new FDS frame with FDS_NONE */
-        fdsDst = dst;
-        fds = AOCL_ZSTD_writeFdsFrame(dst, dstCapacity, FDS_NONE);
-        FORWARD_IF_ERROR(fds, "AOCL_ZSTD_writeFdsFrame failed. Unable to restart new frame.");
-        assert(fds <= dstCapacity);
-        dstCapacity -= fds;
-        dst = (char*)dst + fds;
-        cctx->seqStore.fds_config.written = 1;
-        cctx->seqStore.fds_config.state = FDS_NONE;
-
-        /* Start new frame. Write frame header */
-        fhSize = ZSTD_writeFrameHeader(dst, dstCapacity, &cctx->appliedParams,
-                                       cctx->pledgedSrcSizePlusOne-1, cctx->dictID);
-        FORWARD_IF_ERROR(fhSize, "ZSTD_writeFrameHeader failed. Unable to restart new frame.");
-        assert(fhSize <= dstCapacity);
-        dstCapacity -= fhSize;
-        dst = (char*)dst + fhSize;
-        cctx->stage = ZSTDcs_ongoing;
-
-        fhSize += ftSize; /* account for all extra frame bytes written */
-    }
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
-#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
-    else if (cctx->seqStore.fds_config.state == FDS_FAST2_ANALYZE) {
-        /* FDS state changes are possible in FDS_FAST2_ANALYZE state.
-         * This needs to be disabled as FDS frame update is not possible in subsequent !single_pass calls 
-         * as dst buffer where FDS frame was written is not available. */
-        cctx->seqStore.fds_config.state = FDS_ALL_CONF; // change to fixed constraint state
-    }
-#endif /* AOCL_DECOMPRESS_FAST > 2 */
-
-    if (!srcSize) 
-#if AOCL_DECOMPRESS_FAST > 1
-        return (fhSize + fds);  /* do not generate an empty block if no input */
-#else
-        return fhSize;  /* do not generate an empty block if no input */
-#endif
-
+    /* Search window updates */
+    ZSTD_MatchState_t* const ms = &cctx->blockState.matchState;
     if (!ZSTD_window_update(&ms->window, src, srcSize, ms->forceNonContiguous)) {
         ms->forceNonContiguous = 0;
         ms->nextToUpdate = ms->window.dictLimit;
@@ -8882,23 +9089,28 @@ static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
         ZSTD_window_update(&cctx->ldmState.window, src, srcSize, /* forceNonContiguous */ 0);
     }
 
-    if (!frame) {
-        /* overflow check and correction for block mode */
-        ZSTD_overflowCorrectIfNeeded(
-            ms, &cctx->workspace, &cctx->appliedParams,
-            src, (BYTE const*)src + srcSize);
+    /* Check if FDS is supported */
+    if (cctx->stage == ZSTDcs_init) {
+        if (AOCL_is_FdsSupported(cctx))
+            cctx->seqStore.fds_config.state = FDS_ALL_CONF;
+        else
+            cctx->seqStore.fds_config.state = FDS_UNSUPPORTED;
     }
+    else if (cctx->seqStore.fds_config.state != FDS_UNSUPPORTED &&
+        !AOCL_is_FdsSupported(cctx)) {
+        /* If FDS frame is being processed, but conditions are not favourable for FDS now,
+        * end current frame and start a new frame without FDS */
+        cctx->seqStore.fds_config.restart = 1;
+        cctx->seqStore.fds_config.state = FDS_UNSUPPORTED;
+    }
+    /* Switch from FDS_UNSUPPORTED to supported is a less likely scenario. 
+     * Supporting this will make FDS update logic complex. So, once FDS_UNSUPPORTED
+     * state is reached, we remain in this state until cctx is reset. */
 
     DEBUGLOG(5, "AOCL_ZSTD_compressContinue_internal (blockSize=%u)", (unsigned)cctx->blockSize);
-    {   size_t const cSize = frame ?
-                             ZSTD_compress_frameChunk (cctx, dst, dstCapacity, src, srcSize, lastFrameChunk) :
-                             ZSTD_compressBlock_internal (cctx, dst, dstCapacity, src, srcSize, 0 /* frame */);
-        FORWARD_IF_ERROR(cSize, "%s", frame ? "ZSTD_compress_frameChunk failed" : "ZSTD_compressBlock_internal failed");
-#if AOCL_DECOMPRESS_FAST > 1
-        fhSize += fds;
-#endif
-        cctx->consumedSrcSize += srcSize;
-        cctx->producedCSize += (cSize + fhSize);
+    {   
+        size_t const cSize = AOCL_ZSTD_compress_frameChunk (cctx, dst, dstCapacity, src, srcSize, lastFrameChunk);
+        FORWARD_IF_ERROR(cSize, "%s", "AOCL_ZSTD_compress_frameChunk failed");
         assert(!(cctx->appliedParams.fParams.contentSizeFlag && cctx->pledgedSrcSizePlusOne == 0));
         if (cctx->pledgedSrcSizePlusOne != 0) {  /* control src size */
             ZSTD_STATIC_ASSERT(ZSTD_CONTENTSIZE_UNKNOWN == (unsigned long long)-1);
@@ -8909,18 +9121,10 @@ static size_t AOCL_ZSTD_compressContinue_internal (ZSTD_CCtx* cctx,
                 (unsigned)cctx->pledgedSrcSizePlusOne-1,
                 (unsigned)cctx->consumedSrcSize);
         }
-#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
-        if (cctx->seqStore.fds_config.written) {
-            AOCL_ZSTD_updateFdsConfig(fdsDst, cctx); // If fdsDst contains FDS frame, update FDS settings
-        }
-#elif AOCL_DECOMPRESS_FAST > 1
-        (void)fdsDst;
-#endif /* AOCL_DECOMPRESS_FAST > 2 */
-        return cSize + fhSize;
+        return cSize;
     }
 }
 
-#if AOCL_DECOMPRESS_FAST > 1
 /**
  * Same as ZSTD_entropyCompressSeqStore_internal, but
  * - accepts additional parameter of type aocl_entropy_fds_t*,
@@ -9118,8 +9322,6 @@ AOCL_ZSTD_entropyCompressSeqStore(
                 bmi2);
 }
 
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
-
 /**
  * Same as ZSTD_compressBlock_internal, but
  * calls AOCL_ZSTD_entropyCompressSeqStore() with additional parameter of type aocl_entropy_fds_t* if AOCL_DECOMPRESS_FAST > 1.
@@ -9157,7 +9359,6 @@ AOCL_ZSTD_compressBlock_internal(ZSTD_CCtx* zc,
     }
 
     /* encode sequences and literals */
-#if AOCL_DECOMPRESS_FAST > 1
     cSize = AOCL_ZSTD_entropyCompressSeqStore(&zc->entropy_fds_config, &zc->seqStore,
             &zc->blockState.prevCBlock->entropy, &zc->blockState.nextCBlock->entropy,
             &zc->appliedParams,
@@ -9165,15 +9366,6 @@ AOCL_ZSTD_compressBlock_internal(ZSTD_CCtx* zc,
             srcSize,
             zc->tmpWorkspace, zc->tmpWkspSize /* statically allocated in resetCCtx */,
             zc->bmi2);
-#else
-    cSize = ZSTD_entropyCompressSeqStore(&zc->seqStore,
-            &zc->blockState.prevCBlock->entropy, &zc->blockState.nextCBlock->entropy,
-            &zc->appliedParams,
-            dst, dstCapacity,
-            srcSize,
-            zc->tmpWorkspace, zc->tmpWkspSize /* statically allocated in resetCCtx */,
-            zc->bmi2);
-#endif
 
     if (frame &&
         /* We don't want to emit our first block as a RLE even if it qualifies because
@@ -9201,12 +9393,12 @@ out:
 
     return cSize;
 }
-#endif /* AOCL_ZSTD_OPT */
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 
 #ifdef AOCL_UNIT_TEST
 #if AOCL_DECOMPRESS_FAST > 1
-int Test_is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset) {
-    return is_totalbits_limited_seq_possible(ip, anchor, mLength, offset);
+int Test_is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset, U32 minMatch) {
+    return is_totalbits_limited_seq_possible(ip, anchor, mLength, offset, minMatch);
 }
 
 int Test_get_lit_bits(size_t len) {
@@ -9242,17 +9434,21 @@ size_t Test_assert_get_mat_len(int bits, int max_len) {
 }
 
 void Test_AOCL_ZSTD_storeSequences(void* seqStore, const BYTE* ip, const BYTE* anchor,
-    const BYTE* const iend, U32 offBase, size_t mLength) {
-    AOCL_ZSTD_storeSequences(seqStore, ip, anchor, iend, offBase, mLength);
+    const BYTE* const iend, U32 offBase, size_t mLength, U32 minMatch) {
+    AOCL_ZSTD_storeSequences(seqStore, ip, anchor, iend, offBase, mLength, minMatch);
 }
 
 int Test_AOCL_is_FdsSupported(int hasExtDict, ZSTD_CCtx* zc) {
-    return AOCL_is_FdsSupported(hasExtDict, zc);
-}
-
-int Test_AOCL_ZSTD_window_needsExtDict(const ZSTD_window_t* window, void const* src,
-    size_t srcSize, int forceNonContiguous) {
-    return AOCL_ZSTD_window_needsExtDict(window, src, srcSize, forceNonContiguous);
+    if (hasExtDict) { // simulate hasExtDict settings to ensure ZSTD_window_update pre-requisite is met
+        // lowLimit < dictLimit
+        if (!zc->blockState.matchState.window.dictLimit)
+            zc->blockState.matchState.window.dictLimit = 1;
+        zc->blockState.matchState.window.lowLimit = zc->blockState.matchState.window.dictLimit - 1;
+    }
+    else {
+        zc->blockState.matchState.window.lowLimit = zc->blockState.matchState.window.dictLimit;
+    }
+    return AOCL_is_FdsSupported(zc);
 }
 
 U32 Test_ZSTD_window_update(ZSTD_window_t* window, void const* src,
@@ -9261,7 +9457,7 @@ U32 Test_ZSTD_window_update(ZSTD_window_t* window, void const* src,
 }
 
 size_t Test_AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity, U64 state) {
-    return AOCL_ZSTD_writeFdsFrame(dst, dstCapacity, state);
+    return AOCL_ZSTD_writeFdsFrame(&dst, &dstCapacity, state);
 }
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 
@@ -9466,6 +9662,22 @@ ZSTD_compressionParameters Test_Get_ZSTD_defaultCParameters(size_t srcSize, int 
     else {
         return ZSTD_defaultCParameters[tableId][level];
     }
+}
+
+/* When to disableFdsFrame?
+ + Set for unit tests that deal with parsing frame headers. In these, if FDS frame is written
+   you'll end up parsing it instead of the intended ZSTD frame that follows. 
+ - Do not set for tests that perform full compress/decompress operations. You would want to 
+   test full FDS functionality in those cases. 
+ - Do not set for tests that do not directly operate on the frame data, for example functions 
+   that only modify cctx. cctx changes might be different in FDS and non-FDS case and these
+   need to be accounted for and tested. */
+size_t Test_ZSTD_CCtx_setFdsRuntimeParams(ZSTD_CCtx* cctx, size_t disableFdsFrame) {
+    assert(cctx != NULL);
+#if AOCL_DECOMPRESS_FAST > 1
+    cctx->requestedParams.disableFdsFrame = disableFdsFrame;
+#endif
+    return 0;
 }
 
 #endif /* AOCL_UNIT_TEST */

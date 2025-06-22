@@ -35,14 +35,29 @@
 #ifndef AOCL_THIRDPARTY_ZSTD_TEST_H
 #define AOCL_THIRDPARTY_ZSTD_TEST_H
 
-#ifdef AOCL_DFS_CORRECTION
+#ifdef AOCL_FDS_CORRECTION
+static size_t cnt = 0;
 #define ZSTD_FDS_FRAME_SIZE (FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE)
-/* Decompress until all input is consumed. Multiple frames may be present. */
+/* Decompress multiple frames in input. */
 static size_t Test_decompressStreamMultiple(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input) {
+    /* As multiple frames might be present, exiting on ret == 0 will return on 1st frame. 
+     * Instead call ZSTD_decompressStream multiple times. 
+     * If ret = 0 and input->pos < input->size : More frames exist in input. Continue to process.
+     * If ret = 0 and input->pos = input->size : All frames processed. Exit.
+     * If ret != 0 and input->pos = input->size : More input is needed. Exit. */
     size_t ret = 0;
-    while (!ret && input->pos < input->size) { // as multiple frames are present, exiting on ret == 0 will return on 1st frame. Instead consume all input.
+    while (!ret && input->pos < input->size) {
         ret = ZSTD_decompressStream(zds, output, input);
-        if (ZSTD_isError(ret)) return ret;
+        if (ZSTD_isError(ret)) {
+            LOG_FORMATTED(ERR, logCtx, "%s",ZSTD_getErrorName(ret));
+            return ret;
+        }
+        if (!ret && input->pos < input->size && 
+            !ZSTD_isFrame(input->src + input->pos, input->size - input->pos)) {
+            /* Subsequent data in input->pos is not a valid frame. Most likely all input
+             * has been consumed and remaining data in input is garbage. Return. */
+            return ret;
+        }
     }
     return ret;
 }
@@ -59,13 +74,15 @@ static size_t Test_skipSkippableFrames(const BYTE* src, size_t srcSize) {
     return (size_t)(cur - src);
 }
 
-static size_t Test_ZSTD_compress2(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int cLevel) {
+static size_t Test_refCompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int cLevel) {
     ZSTD_CCtx* cctx_fds = ZSTD_createCCtx();
     ZSTD_CCtx_setParameter(cctx_fds, ZSTD_c_compressionLevel, cLevel);
+    size_t disableFdsFrame = 1;
+    Test_ZSTD_CCtx_setFdsRuntimeParams(cctx_fds, disableFdsFrame); // no additional FDS frames
     size_t g_cSize = ZSTD_compress2(cctx_fds, dst, dstCapacity, src, srcSize);
     ZSTD_freeCCtx(cctx_fds);
     return g_cSize;
 }
 
-#endif /* AOCL_DFS_CORRECTION */
+#endif /* AOCL_FDS_CORRECTION */
 #endif /* AOCL_THIRDPARTY_ZSTD_TEST_H */

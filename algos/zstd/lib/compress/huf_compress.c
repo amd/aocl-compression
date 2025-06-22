@@ -547,7 +547,7 @@ static void HUF_swapNodes(nodeElt* a, nodeElt* b) {
 
 #if (DEBUGLEVEL>=1) //assert enabled
 /* Returns 0 if the huffNode array is not sorted by descending count */
-MEM_STATIC int HUF_isSorted(nodeElt huffNode[], U32 const maxSymbolValue1) {
+__attribute__((unused)) MEM_STATIC int HUF_isSorted(nodeElt huffNode[], U32 const maxSymbolValue1) {
     U32 i;
     for (i = 1; i < maxSymbolValue1; ++i) {
         if (huffNode[i].count > huffNode[i-1].count) {
@@ -1497,13 +1497,17 @@ size_t AOCL_HUF_estimateCompressedSize(const nodeElt* huffNode, unsigned maxSymb
  *    - If multiple blocks satisfy the criteria for a reduced table log, decrease the threshold,
  *      making the ratio loss requirements more stringent.
  *    - Conversely, if fewer blocks meet the criteria, increase the threshold to relax the requirements.
- * 
- * @note: Dynamic threshold:  varies between T_MIN and T_MAX, determined by the moving average over a 
+ * 5. Apply tablelog changes:
+ *    - Apply only for high ratio inputs where impact from FDS changes in block compressor is low.
+ *      This ensures impact on ratio is balanced across inputs with varying degrees of compressibility.
+ *
+ * @note: Dynamic threshold:  varies between T_MIN and T_MAX, determined by the moving average over a
  *        specified window length, defined as `SLIDING_WINDOW`.
  *        This dynamic adjustment process ensures an adaptive approach toward optimizing the table log
  *        based on the current data conditions.
  */
-size_t
+#define AOCL_COMPRESSIBILITY_THRESH 0.7
+ size_t
 AOCL_HUF_tableLog(aocl_entropy_fds_t* entropy_fds_config, nodeElt* const huffNode, 
                 U32 maxSymbolValue, U32 maxNbBits, int nonNullRank)
 {
@@ -1531,7 +1535,8 @@ AOCL_HUF_tableLog(aocl_entropy_fds_t* entropy_fds_config, nodeElt* const huffNod
     U32 FDS_maxNbBits = HUF_setMaxHeight(huffNodeCopy, (U32)nonNullRank, AOCL_HUF_TABLELOG_MIN);
     double aocl_ratio = (double)AOCL_HUF_estimateCompressedSize(huffNodeCopy, maxSymbolValue) / sz;
     
-    if((maxNbBits > FDS_maxNbBits) && (aocl_ratio - default_ratio < RATIO_LOSS_THRESHOLD)){
+    if ((default_ratio > AOCL_COMPRESSIBILITY_THRESH) && 
+        (maxNbBits > FDS_maxNbBits) && (aocl_ratio - default_ratio < RATIO_LOSS_THRESHOLD)){
         reduced_this_block = 1;
         maxNbBits = FDS_maxNbBits;
         ZSTD_memcpy(huffNode, huffNodeCopy, sizeof(nodeElt) * (maxSymbolValue + 1));

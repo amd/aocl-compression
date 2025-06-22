@@ -37,12 +37,12 @@
 #ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
     #define aocl_kSearchStrengthFast            6
     #define aocl_kSearchStrengthDoubleFast      5
-#ifdef AOCL_COMPRESS_FAST
+#if AOCL_DECOMPRESS_FAST > 1
     #define aocl_kSearchStrengthLazy            7
 #else
     #define aocl_kSearchStrengthLazy            5
 #endif
-#endif
+#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
 #define kSearchStrength      8
 #define HASH_READ_SIZE       8
 #define ZSTD_DUBT_UNSORTED_MARK 1   /* For btlazy2 strategy, index ZSTD_DUBT_UNSORTED_MARK==1 means "unsorted".
@@ -128,7 +128,12 @@ typedef struct {
     ZSTD_longLengthType_e longLengthType;
     U32                   longLengthPos;  /* Index of the sequence to apply long length modification to */
 #if AOCL_DECOMPRESS_FAST > 1
-    aocl_fds_t fds_config; /* AOCL fast decompress settings */
+    aocl_fds_t fds_config; /* AOCL fast decompress settings . 
+                              TODO: Rename to fdsContext */
+    size_t singlePass;    /* Is input provided through a single-pass API? APIs like : ZSTD_compress(), 
+                           ZSTD_compress2(), ZSTD_compressCCtx(), ZSTD_compress_usingDict(), etc.
+                           This value must be set/reset at the start of any API call based on the API.
+                           Do not reset/modfiy it elsewhere. */
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
 #ifdef AOCL_COMPRESS_FAST
     unsigned lazyLimit;     /* Match length limit to allow lazy evaluation */
@@ -456,6 +461,14 @@ struct ZSTD_CCtx_params_s {
 
     /* Controls repcode search in external sequence parsing */
     ZSTD_ParamSwitch_e searchForExternalRepcodes;
+
+#if AOCL_DECOMPRESS_FAST > 1
+    /* FDS runtime controls.
+     * TODO: If there is a use case, make this user-configurable and allow setting
+     * through ZSTD_CCtx_setParameter(). E.g If you want partial FDS benefits but do not
+     * want multiple frames / FDS metadata frame to be created. */
+    size_t disableFdsFrame; /* Do not write FDS frame to compressed stream if set */
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 };  /* typedef'd to ZSTD_CCtx_params within "zstd.h" */
 
 #define COMPRESS_SEQUENCES_WORKSPACE_SIZE (sizeof(unsigned) * (MaxSeq + 2))
@@ -567,6 +580,7 @@ struct ZSTD_CCtx_s {
     /* Buffer for output from external sequence producer */
     ZSTD_Sequence* extSeqBuf;
     size_t extSeqBufCapacity;
+
 #if AOCL_DECOMPRESS_FAST > 1
     /* AOCL entropy fast decompress settings */
     aocl_entropy_fds_t entropy_fds_config;
@@ -1500,6 +1514,10 @@ MEM_STATIC int ZSTD_index_overlap_check(const U32 prefixLowestIndex, const U32 r
 
 #ifdef AOCL_ZSTD_OPT
 #if AOCL_DECOMPRESS_FAST > 1
+#define AOCL_FDS_DEFAULT_BLOCK_SIZE 128 KB
+#define AOCL_FDS_MIN_BLOCKS_PER_FRAME 8
+#define AOCL_FDS_MIN_BYTES_PER_FRAME (AOCL_FDS_MIN_BLOCKS_PER_FRAME * AOCL_FDS_DEFAULT_BLOCK_SIZE)
+
 #define MAX_TOTAL_BITS (STREAM_ACCUMULATOR_MIN_64 - (LLFSELog + MLFSELog + OffFSELog)) // value must match decompressor
 /* Functions based on mapping of lengths to number of bits based on zstd compression format:
  * max_len = Baseline + (2^Number_of_Bits - 1)
@@ -1587,6 +1605,7 @@ void ZSTD_storeSeq_withAssert(SeqStore_t* seqStorePtr,
     int ofbits = assert_get_off_bits(offset);
     int totalbits = llbits + mlbits + ofbits;
     assert(totalbits < MAX_TOTAL_BITS);
+    (void)totalbits;
     ZSTD_storeSeq(seqStorePtr, litLength, literals, litLimit, offBase, matchLength);
 }
 #define ZSTD_STORE_SEQ ZSTD_storeSeq_withAssert
@@ -1636,9 +1655,19 @@ size_t get_mat_len(int bits, int max_len) {
     return (ret > max_len) ? max_len : ret;
 }
 
-/* Return 1 if strategy exists to keep totalbits < MAX_TOTAL_BITS */
+/* Return 1 if strategy exists to keep totalbits < MAX_TOTAL_BITS 
+ * Note: minMatch can mean two things. MINMATCH as defined by ZSTD format, 
+ * and cParams.minMatch which the user can use to set it to 
+ * a number higher than MINMATCH. This is more of a tunable parameter to
+ * balance speed and ratio rather than a hard limit. 
+ * We can enforce that here, but it will complicate the logic and will limit
+ * sequences that can be produced. Hence, all calls to 
+ * is_totalbits_limited_seq_possible() and AOCL_ZSTD_storeSequences() 
+ * pass minMatch = MINMATCH. These can be modified to pass mls if need be. */
 FORCE_INLINE_TEMPLATE
-int is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset) {
+int is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset, U32 minMatch) {
+    assert(minMatch == MINMATCH);
+    assert(mLength >= minMatch);
     int llbits = get_lit_bits((size_t)(ip - anchor));
     int mlbits = get_mat_bits(mLength);
     int ofbits = get_off_bits(offset);
@@ -1646,15 +1675,16 @@ int is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t
     if (LIKELY(totalbits < MAX_TOTAL_BITS)) return 1; // totalbits can fit
 
     if ((llbits + ofbits) >= MAX_TOTAL_BITS) return 0; // unable to fit match
-    if (mLength < ((size_t)2 * MINMATCH)) return 0; // unable to split match as minimum match length is MINMATCH
+    if (mLength < ((size_t)2 * minMatch)) return 0; // unable to split match as minimum match length is MINMATCH
 
     return 1; // totalbits can fit by splitting sequences
 }
 
 FORCE_INLINE_TEMPLATE
 void AOCL_ZSTD_storeSequences(SeqStore_t* seqStore, const BYTE* ip, const BYTE* anchor, const BYTE* const iend,
-    U32 offBase, size_t mLength)
+    U32 offBase, size_t mLength, U32 minMatch)
 {
+    assert(minMatch == MINMATCH);
     //store sequences such that totalbits for each sequence is < MAX_TOTAL_BITS
     int llbits = get_lit_bits((size_t)(ip - anchor));
     int mlbits = get_mat_bits(mLength);
@@ -1663,12 +1693,12 @@ void AOCL_ZSTD_storeSequences(SeqStore_t* seqStore, const BYTE* ip, const BYTE* 
     int totalbits = llbits + mlbits + ofbits;
     if (UNLIKELY(totalbits >= MAX_TOTAL_BITS)) { //store as multiple sequences
         assert((llbits + ofbits) < MAX_TOTAL_BITS);
-        assert(mLength >= ((size_t)2 * MINMATCH));
+        assert(mLength >= ((size_t)2 * minMatch));
 
         //break into multiple sequences
         int balancebits = (MAX_TOTAL_BITS - 1) - (llbits + ofbits); //max bits allowed for mlbits
         size_t mlength1 = get_mat_len(balancebits, mLength); //max mLength that can fit
-        mlength1 = ((mLength == mlength1) || (mLength - mlength1) >= MINMATCH) ? mlength1 : (mLength - MINMATCH); // if balance remains, must leave at least MINMATCH for the next sequence
+        mlength1 = ((mLength == mlength1) || (mLength - mlength1) >= minMatch) ? mlength1 : (mLength - minMatch); // if balance remains, must leave at least minMatch for the next sequence
         assert(mLength >= mlength1);
         ZSTD_STORE_SEQ(seqStore, (size_t)(ip - anchor), anchor, iend, offBase, mlength1); // all literals go into first sequence
         mLength -= mlength1;
@@ -1677,7 +1707,7 @@ void AOCL_ZSTD_storeSequences(SeqStore_t* seqStore, const BYTE* ip, const BYTE* 
         while (mLength > 0) {
             int balancebits = (MAX_TOTAL_BITS - 1) - ofbits; //max bits allowed for mlbits. llbits is 0.
             mlength1 = get_mat_len(balancebits, mLength); //max mLength that can fit
-            mlength1 = ((mLength == mlength1) || (mLength - mlength1) >= MINMATCH) ? mlength1 : (mLength - MINMATCH); // if balance remains, must leave at least MINMATCH for the next sequence
+            mlength1 = ((mLength == mlength1) || (mLength - mlength1) >= minMatch) ? mlength1 : (mLength - minMatch); // if balance remains, must leave at least minMatch for the next sequence
             assert(mLength >= mlength1);
             ZSTD_STORE_SEQ(seqStore, 0, anchor, iend, offBase, mlength1);
             mLength -= mlength1;
@@ -1688,20 +1718,42 @@ void AOCL_ZSTD_storeSequences(SeqStore_t* seqStore, const BYTE* ip, const BYTE* 
     }
 }
 
-#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
 /* Helper function to update FDS config in the FDS frame header.
  * Update only if skippable FDS frame is present at dst */
 FORCE_INLINE_TEMPLATE
 void AOCL_ZSTD_updateFdsConfig(BYTE* dst, ZSTD_CCtx* cctx)
 {
+#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
     if ((MEM_readLE32(dst) & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START /* skippable frame */ &&
         MEM_read64(dst + ZSTD_SKIPPABLEHEADERSIZE) == FDS_MAGIC_WORD /* FDS frame */) {
-        U64 writeState = cctx->seqStore.fds_config.state == FDS_FAST2_ANALYZE ? FDS_ALL_CONF : cctx->seqStore.fds_config.state;
+        U64 writeState = cctx->seqStore.fds_config.state;
         MEM_writeLE64(dst + ZSTD_SKIPPABLEHEADERSIZE + FDS_MAGIC_WORD_BYTES, writeState);
     }
+#endif
 }
-#endif /* AOCL_DECOMPRESS_FAST > 2 */
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
+#if AOCL_DECOMPRESS_FAST > 2 /* dynamic FDS */
+#define AOCL_DECOMPRESS_FAST_ANALYZE(seqStore, ratio)                                                                   \
+    ratio = (size_t)(-1);                                                                                               \
+    /* Collect and analyze stats */                                                                                     \
+    size_t litSize = (size_t)(seqStore->lit - seqStore->litStart);                                                      \
+    size_t processedSize = (size_t)(srcSize - ret);                                                                     \
+    seqStore->fds_config.metrics.literalsSize += litSize;                                                               \
+    seqStore->fds_config.metrics.processedSize += processedSize;                                                        \
+    assert(seqStore->fds_config.minBytesPerFrame > 0);                                                                  \
+    if (seqStore->fds_config.transition != AOCL_ZSTD_fds_trans_none) {                                                  \
+        seqStore->fds_config.metrics.literalsSize = 0;                                                                  \
+        seqStore->fds_config.metrics.processedSize = 0;                                                                 \
+    }                                                                                                                   \
+    else if (seqStore->fds_config.metrics.processedSize >= seqStore->fds_config.minBytesPerFrame) { /* Consolidate */   \
+        /* Percentage of literals generated in processed bytes gives an estimate of compressibility of the input */     \
+        ratio = (seqStore->fds_config.metrics.literalsSize * 100) / seqStore->fds_config.metrics.processedSize;         \
+        LOG_FORMATTED(DEBUG, logCtx, "FDS = %zu, Block ratio = %zu", seqStore->fds_config.state, ratio);                \
+        DEBUGLOG(4, "FDS = %zu, Block ratio = %zu", seqStore->fds_config.state, ratio);                                 \
+        seqStore->fds_config.metrics.literalsSize = 0;                                                                  \
+        seqStore->fds_config.metrics.processedSize = 0;                                                                 \
+    }
+#endif /* AOCL_DECOMPRESS_FAST > 2 */
 #endif /* AOCL_ZSTD_OPT */
 
 /* debug functions */
@@ -1912,7 +1964,7 @@ size_t ZSTD_compressBlock_deprecated(ZSTD_CCtx* cctx, void* dst, size_t dstCapac
 extern "C" {
 #endif
 
-ZSTDLIB_API int Test_is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset);
+ZSTDLIB_API int Test_is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t mLength, U32 offset, U32 minMatch);
 ZSTDLIB_API int Test_get_lit_bits(size_t len);
 ZSTDLIB_API int Test_get_mat_bits(size_t len);
 ZSTDLIB_API int Test_get_off_bits(size_t len);
@@ -1922,8 +1974,6 @@ ZSTDLIB_API int Test_assert_get_mat_bits(size_t len);
 ZSTDLIB_API int Test_assert_get_off_bits(size_t len);
 ZSTDLIB_API size_t Test_assert_get_mat_len(int bits, int max_len);
 ZSTDLIB_API int Test_AOCL_is_FdsSupported(int hasExtDict, ZSTD_CCtx* zc);
-ZSTDLIB_API int Test_AOCL_ZSTD_window_needsExtDict(const ZSTD_window_t* window, void const* src,
-                                       size_t srcSize, int forceNonContiguous);
 ZSTDLIB_API U32 Test_ZSTD_window_update(ZSTD_window_t* window, void const* src,
                             size_t srcSize, int forceNonContiguous);
 ZSTDLIB_API size_t Test_AOCL_ZSTD_writeFdsFrame(void* dst, size_t dstCapacity, U64 state);

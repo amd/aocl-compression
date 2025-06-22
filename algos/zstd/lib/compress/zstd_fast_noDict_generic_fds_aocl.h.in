@@ -77,12 +77,8 @@ size_t
     const ZSTD_compressionParameters* const cParams = &ms->cParams;
     U32* const hashTable = ms->hashTable;
     U32 const hlog = cParams->hashLog;
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-    size_t const stepSize = 2;
-#else
     /* support stepSize of 0 */
     size_t const stepSize = cParams->targetLength + !(cParams->targetLength) + 1; /* min 2 */
-#endif
     const BYTE* const base = ms->window.base;
     const BYTE* const istart = (const BYTE*)src;
     const U32   endIndex = (U32)((size_t)(istart - base) + srcSize);
@@ -156,12 +152,7 @@ _start: /* Requires: ip0 */
     matchIdx = hashTable[hash0];
 
     do {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-        // Alternate between values 2 and 3 for step while searching for a match. In case
-        // the value of step exceeds 3 (this happens when the value of step is incremented
-        // when ip2 exceeds nextStep), we let step retain its value.
-        step = (step > 3) ? step : step ^ 1;
-#endif
+        // AOCL_ZSTD_SEARCH_SKIP_OPT : alternate step not used. Improves ratio.
         /* write back hash table entry */
         current0 = (U32)(ip0 - base);
         hashTable[hash0] = current0;
@@ -206,14 +197,10 @@ _start: /* Requires: ip0 */
         /* calculate step */
         if (ip2 >= nextStep) 
         {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-            step += 3;
-            LOG_FORMATTED(DEBUG, logCtx, "step = %zu", step);
-#else
+            // AOCL_ZSTD_SEARCH_SKIP_OPT : step += 3 not used
             step++;
             PREFETCH_L1(ip1 + 64);
             PREFETCH_L1(ip1 + 128);
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
             nextStep += kStepIncr;
         }
     } while (ip3 < ilimit);
