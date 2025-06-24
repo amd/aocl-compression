@@ -575,6 +575,10 @@ if (AOCL_ZSTD_WILDCOPY_LONG)
 endif()
 if (TEST_COVERAGE_THIRD_PARTY OR NATIVE_ENABLE_THREADS)
     set_property(SOURCE ${ZSTD_SRC_FILES}  APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_MULTITHREAD")
+    # Prefer -pthread flag
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
+    message(STATUS "Found Threads library for native multi-threading support")
 endif()
 if(AOCL_EXCLUDE_DEPRECATED_APIS)
     set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_DEPRECATED_APIS")
@@ -725,6 +729,12 @@ if (OPENMP_FOUND AND (WIN32 OR NOT OpenMP_libomp_LIBRARY))
 else()
     target_link_libraries(${lib_name} PUBLIC ${OpenMP_libomp_LIBRARY})
 endif ()
+
+# Link pthread library for native multi-threading 
+if (TEST_COVERAGE_THIRD_PARTY OR NATIVE_ENABLE_THREADS)
+    target_link_libraries(${lib_name} PUBLIC Threads::Threads)
+    message(STATUS "Linked Threads::Threads for native multi-threading support")
+endif()
 
 #add benchmarking application and tests
 add_subdirectory(test)
