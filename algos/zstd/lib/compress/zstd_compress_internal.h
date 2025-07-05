@@ -34,7 +34,11 @@
 #ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
     #define aocl_kSearchStrengthFast            6
     #define aocl_kSearchStrengthDoubleFast      5
+#ifdef AOCL_COMPRESS_FAST
+    #define aocl_kSearchStrengthLazy            7
+#else
     #define aocl_kSearchStrengthLazy            5
+#endif
 #endif
 #define kSearchStrength      8
 #define HASH_READ_SIZE       8
@@ -133,6 +137,9 @@ typedef struct {
 #if AOCL_DECOMPRESS_FAST > 1
     aocl_fds_t fds_config; /* AOCL fast decompress settings */
 #endif /* AOCL_DECOMPRESS_FAST > 1 */
+#ifdef AOCL_COMPRESS_FAST
+    unsigned lazyLimit;     /* Match length limit to allow lazy evaluation */
+#endif
 } SeqStore_t;
 
 typedef struct {

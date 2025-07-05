@@ -2778,6 +2778,10 @@ size_t AOCL_ZSTD_compressBlock_lazy_generic(
         ZSTD_row_fillHashCache(ms, base, rowLog, mls, ms->nextToUpdate, ilimit);
     }
 
+#ifdef AOCL_COMPRESS_FAST
+    unsigned lazyLimit = seqStore->lazyLimit;
+#endif
+
     /* Match Loop */
 #if defined(__GNUC__) && defined(__x86_64__)
     /* I've measured random a 5% speed loss on levels 5 & 6 (greedy) when the
@@ -2837,7 +2841,11 @@ size_t AOCL_ZSTD_compressBlock_lazy_generic(
         }
 
         /* let's try to find a better solution */
+#ifdef AOCL_COMPRESS_FAST
+        if (matchLength <= lazyLimit && depth >= 1) /* restrict lazy eval to short matches only */
+#else
         if (depth >= 1)
+#endif
             while (ip < ilimit) {
                 DEBUGLOG(7, "search depth 1");
                 ip++;

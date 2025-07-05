@@ -134,6 +134,14 @@ if(NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF")
     set(AOCL_LZ4_DECOMPRESS_FAST "ON")
 endif()
 
+# Faster compression settings for supported methods
+set(AOCL_COMPRESS_FAST "OFF" CACHE STRING "Enable fast compression modes that might compromise on compression ratio but compress faster. Supported values: {1,2} ZSTD." )
+set_property(
+    CACHE AOCL_COMPRESS_FAST
+    PROPERTY STRINGS
+    "OFF" "1" "2" # Higher values generally lead to faster compression with larger compromise on compression ratio
+)
+
 # Avoid enabling AOCL and native multi-threaded implementations simultaneously as it might lead to sub-optimal performance
 if (AOCL_ENABLE_THREADS AND NATIVE_ENABLE_THREADS)
     message(WARNING "Both AOCL_ENABLE_THREADS and NATIVE_ENABLE_THREADS are enabled. NATIVE_ENABLE_THREADS will be disabled.")
@@ -584,6 +592,9 @@ endif()
 if (AOCL_DECOMPRESS_FAST)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
     set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
+endif()
+if (AOCL_COMPRESS_FAST)
+    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_COMPRESS_FAST=${AOCL_COMPRESS_FAST}")
 endif()
 if (AOCL_ZSTD_WILDCOPY_LONG)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_WILDCOPY_LONG")

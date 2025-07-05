@@ -76,6 +76,10 @@ static unsigned char aoclOptFlag = 0;
 static size_t(*ZSTD_compressContinue_internal_fp)(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity,
     const void* src, size_t srcSize, U32 frame, U32 lastFrameChunk);
 
+#ifdef AOCL_COMPRESS_FAST
+#include "clevels.h"
+#endif
+
 #ifndef AOCL_ENABLE_THREADS
 static atomic_flag setup_zstd_encode = ATOMIC_FLAG_INIT;
 #endif
@@ -5532,6 +5536,14 @@ static size_t ZSTD_compressBegin_internal(ZSTD_CCtx* cctx,
     ZSTD_LOG_FORMATTED(4, DEBUG, "ZSTD_compressBegin_internal: wlog=%u", params->cParams.windowLog);
     /* params are supposed to be fully validated at this point */
     assert(!ZSTD_isError(ZSTD_checkCParams(params->cParams)));
+#ifdef AOCL_COMPRESS_FAST
+    int compressionLevel = (params->compressionLevel == 0) ? cctx->requestedParams.compressionLevel 
+                                                           : params->compressionLevel;
+    compressionLevel = MIN(MAX(0, compressionLevel), ZSTD_maxCLevel());
+    assert(compressionLevel >= 0 && compressionLevel <= ZSTD_MAX_CLEVEL);
+    cctx->seqStore.lazyLimit = AOCL_ZSTD_compressFastLazyLimit[compressionLevel];
+#endif
+
     assert(!((dict) && (cdict)));  /* either dict or cdict, not both */
     if ( (cdict)
       && (cdict->dictContentSize > 0)
