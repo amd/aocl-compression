@@ -674,7 +674,11 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
     endif()
 endif()
 
-
+#Disable strict warnings for Debug build
+if (NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
+    message(WARNING  "Do not treat warnings as errors for non Release build")
+    set(ENABLE_STRICT_WARNINGS OFF)
+endif()
 #Enabling strict warnings
 if(ENABLE_STRICT_WARNINGS)
     if (WIN32)
