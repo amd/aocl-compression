@@ -21,6 +21,12 @@ branches:
         onSynchronize: false
         jobs:
           - "[jenkins-psdb, AI-Code-review/ai-code-review-psdb, queryFiles:summary-issues-clarity-aocl_compression]"
+      - triggerName: "!coverity-fix"
+        description: "AI Coverity Fix"
+        onOpen: false
+        onSynchronize: false
+        jobs:
+          - "[jenkins-psdb, AI-Code-review/ai-coverity-fix-psdb, AIAssistantType:CoverityFixJSON, coverityKernelMode:false]"
   - branchName: "amd/dev/sraut/ai-code-review-test"
     triggers:
       - triggerName: "!ai-review"
