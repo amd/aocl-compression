@@ -452,6 +452,7 @@ void __msan_print_shadow(const volatile void *x, size_t size);
 #endif
 
 #if ZSTD_ADDRESS_SANITIZER && !defined(ZSTD_ASAN_DONT_POISON_WORKSPACE)
+#if 0
 /* Not all platforms that support asan provide sanitizers/asan_interface.h.
  * We therefore declare the functions we need ourselves, rather than trying to
  * include the header file... */
@@ -487,6 +488,12 @@ void __asan_poison_memory_region(void const volatile *addr, size_t size);
  * \param addr Start of memory region.
  * \param size Size of memory region. */
 void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
+#else
+/* custom declarations of these functions conflict with declarations in asan
+ * when library is built with gtest and fuzz test frameworks. Hence,
+ * using conventional header directly */
+#include <sanitizer/asan_interface.h>
 #endif
+#endif /* ZSTD_ADDRESS_SANITIZER */
 
 #endif /* ZSTD_COMPILER_H */
