@@ -790,75 +790,48 @@ unsigned LZ4_count(const BYTE* pIn, const BYTE* pMatch, const BYTE* pInLimit)
  
 #ifdef AOCL_ENABLE_THREADS_LZ4
 /**
- * AOCL_LZ4_postProcessing_mt(): Post processing in single-threaded mode.
+ * AOCL_LZ4_postProcessing_mt(): Post processing in multi-threaded mode.
  * Prepares RAP frame and joins the last sequences of the neighboring threads.
 */
 static inline
 int AOCL_LZ4_postProcessing_mt(aocl_thread_group_t *thread_group_handle, int rap_metadata_len, char* dest)
 {
-    int result;
-    aocl_thread_info_t cur_thread_info;
-    aocl_thread_info_t prev_thread_info;
+    int result = 0;
     AOCL_UINT32 thread_cnt = 0;
-    AOCL_UINT32 dst_offset = 0;
-
-    // <-- RAP Header -->
-    //Add at the start of the stream : Although it can be at the end or at any other point in the stream, but it is more easier for parsing at the start
-    AOCL_CHAR* dst_org = thread_group_handle->dst;
-    AOCL_CHAR* dst_ptr = dst_org;
-    AOCL_UINT32 prev_offset, prev_len;
     AOCL_UINT32 decomp_len;
+    aocl_thread_info_t dummy = {NULL, NULL, NULL, 0, 0, 0, 0, 0, 0, NULL};
+    aocl_thread_info_t *cur_thread_info, *prev_thread_info;
+    prev_thread_info = &dummy;
+
+    AOCL_CHAR* p_curr_thrd_mdata = thread_group_handle->dst + RAP_START_OF_PARTITIONS;
     thread_group_handle->dst += rap_metadata_len;
-    dst_ptr += RAP_START_OF_PARTITIONS;
-    // <-- RAP Header -->
+    AOCL_UINT32 curr_thrd_cmprdata_offset = rap_metadata_len;
+    AOCL_UINT32 curr_thrd_cmprdata_len = 0, curr_thrd_uncmprdata_len = 0;
 
-    // <-- RAP Metadata payload -->
-    //For the first thread:
-    prev_thread_info = thread_group_handle->threads_info_list[thread_cnt++];
-    //In case of any thread partitioning or alloc errors, exit the compression process with error
-    if (prev_thread_info.is_error || prev_thread_info.dst_trap_size < 0)
+    BYTE** threads_cmpr_offset = (BYTE**)malloc(thread_group_handle->num_threads * sizeof(BYTE*));
+    if(threads_cmpr_offset == NULL)
     {
-        result = 0;
-#ifdef AOCL_THREADS_LOG
-        printf("Compress Thread [id: %d] : Encountered ERROR\n", thread_cnt-1);
-#endif
-        LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt-1);
-        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        LOG_FORMATTED(ERR, logCtx, "Memory allocation failure");
         return result;
     }
-    //Copy first chunk as it is to the output final buffer
-    memcpy((thread_group_handle->dst + dst_offset), prev_thread_info.dst_trap, prev_thread_info.dst_trap_size);
-    *(AOCL_UINT32*)dst_ptr = rap_metadata_len; //For storing this thread's RAP offset
-    dst_ptr += RAP_OFFSET_BYTES;
-    *(AOCL_INT32*)dst_ptr = prev_thread_info.dst_trap_size; //For storing this thread's RAP length
-    dst_ptr += RAP_LEN_BYTES;
-    //For storing this thread's decompressed (src) length
-    decomp_len = prev_thread_info.partition_src_size - prev_thread_info.last_bytes_len;
-    if (((AOCL_UCHAR *)prev_thread_info.additional_state_info - (AOCL_UCHAR*)prev_thread_info.partition_src) !=
-        decomp_len)
+
+    size_t *cmpr_dest_offset =(size_t*)malloc(thread_group_handle->num_threads * sizeof(size_t));
+    if(cmpr_dest_offset == NULL)
     {
-#ifdef AOCL_THREADS_LOG
-        printf("Compress Thread [id: %d] : Error in last bytes position\n", thread_cnt);
-#endif
-        result = 0;
-        LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Error in last bytes position", thread_cnt);
-        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        LOG_FORMATTED(ERR, logCtx, "Memory allocation failure");
+        free(threads_cmpr_offset);
         return result;
     }
-    *(AOCL_INT32*)dst_ptr = decomp_len;
-    dst_ptr += DECOMP_LEN_BYTES;
-    thread_group_handle->dst += prev_thread_info.dst_trap_size;
 
-    prev_offset = rap_metadata_len;
-    prev_len = prev_thread_info.dst_trap_size;
-
-    //For next threads:
+    // ST Postprocessing: merging last sequences of the neighboring threads
     for (; thread_cnt < thread_group_handle->num_threads; thread_cnt++)
     {
-        size_t cur_token, new_token, cur_lit;
-        cur_thread_info = thread_group_handle->threads_info_list[thread_cnt];
-        //In case of any thread partitioning or alloc errors, exit the compression process with error
-        if (cur_thread_info.is_error || cur_thread_info.dst_trap_size < 0)
+        AOCL_UCHAR cur_token;
+        size_t cur_lit_len, merged_lit_len, lit_bytes_sz, cmpr_orig_sz;
+        cur_thread_info = &(thread_group_handle->threads_info_list[thread_cnt]);
+        curr_thrd_cmprdata_len = 0;
+
+        if (cur_thread_info->is_error || cur_thread_info->dst_trap_size < 0)
         {
             result = 0;
 #ifdef AOCL_THREADS_LOG
@@ -866,93 +839,75 @@ int AOCL_LZ4_postProcessing_mt(aocl_thread_group_t *thread_group_handle, int rap
 #endif
             LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Encountered ERROR", thread_cnt);
             LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+            free(threads_cmpr_offset);
+            free(cmpr_dest_offset);
             return result;
         }
-        dst_offset = 0;
-        //thread_group_handle->dst += dst_offset;
 
-        //post processing to join parallely decodable chunks into a contiguous stream to allow
-        //standard decoder to process it in ST mode as well
-        //If cur thread's dst_trap_size = 0 (all literals), then write it to output final buffer
-        //along with the previous chunk's left over bytes (literals)
-        if (cur_thread_info.dst_trap_size == 0 && cur_thread_info.last_bytes_len)
+        cmpr_orig_sz = cur_thread_info->dst_trap_size;
+        curr_thrd_cmprdata_len = cmpr_orig_sz;
+        if (cmpr_orig_sz == 0 && cur_thread_info->last_bytes_len) // Do no write to final buffer (thread_group_handle->dst)
         {
-            cur_thread_info.last_bytes_len = cur_thread_info.last_bytes_len + prev_thread_info.last_bytes_len;
-            cur_thread_info.additional_state_info = prev_thread_info.additional_state_info;
-            *(AOCL_UINT32*)dst_ptr = (prev_offset + prev_len); //For storing this thread's RAP offset
-            *(AOCL_INT32*)(dst_ptr + RAP_OFFSET_BYTES) = dst_offset; //For storing this thread's RAP length
-            dst_ptr += RAP_DATA_BYTES;
+            cur_thread_info->last_bytes_len = cur_thread_info->last_bytes_len + prev_thread_info->last_bytes_len;
+            if(prev_thread_info->additional_state_info != NULL)
+                cur_thread_info->additional_state_info = prev_thread_info->additional_state_info;
+            
+            *(AOCL_UINT32*)p_curr_thrd_mdata = curr_thrd_cmprdata_offset; //For storing this thread's RAP offset
+            *(AOCL_INT32*)(p_curr_thrd_mdata + RAP_OFFSET_BYTES) = curr_thrd_cmprdata_len; //For storing this thread's RAP length
+            p_curr_thrd_mdata += RAP_DATA_BYTES;
             //For storing this thread's decompressed (src) length
-            decomp_len = 0;
-            *(AOCL_INT32*)dst_ptr = decomp_len;
-            dst_ptr += DECOMP_LEN_BYTES;
-            prev_thread_info = cur_thread_info;
-            prev_offset = (prev_offset + prev_len);
-            prev_len = dst_offset;
+            curr_thrd_uncmprdata_len = 0;
+            *(AOCL_INT32*)p_curr_thrd_mdata = curr_thrd_uncmprdata_len;
+            p_curr_thrd_mdata += DECOMP_LEN_BYTES;
+            prev_thread_info->additional_state_info = NULL;
+            prev_thread_info->last_bytes_len = 0;
+            threads_cmpr_offset[thread_cnt] = NULL;
         }
-        else //Normal situation when cur thread's dst_trap_size > 0
+        else//Normal situation when cur thread's dst_trap_size > 0, write to final buffer
         {
-            cur_token = *(AOCL_UCHAR*)cur_thread_info.dst_trap;
-            cur_thread_info.dst_trap++;
-            cur_thread_info.dst_trap_size--;
-            cur_lit = (cur_token >> 4);
-            new_token = cur_lit + prev_thread_info.last_bytes_len;
-            if (new_token >= RUN_MASK)
+            cur_token = *(BYTE*)cur_thread_info->dst_trap;
+            cur_thread_info->dst_trap++;
+            cur_thread_info->dst_trap_size--;
+            cur_lit_len = (size_t)(cur_token >> 4);
+
+            if(cur_lit_len == RUN_MASK)
             {
-                size_t accumulator = new_token - RUN_MASK;
+                cur_lit_len = 0;
+                while(*(BYTE*)cur_thread_info->dst_trap == 255)
+                {
+                    cur_thread_info->dst_trap++;
+                    cur_lit_len += 255;
+                }
+                cur_lit_len += *(BYTE*)cur_thread_info->dst_trap;
+                lit_bytes_sz = (cur_lit_len / 255) + 1;
+                cur_thread_info->dst_trap++;
+                cur_thread_info->dst_trap_size -= lit_bytes_sz;
+                cur_lit_len += RUN_MASK;
+            }
+
+            merged_lit_len = cur_lit_len + prev_thread_info->last_bytes_len;
+
+            if(merged_lit_len >= RUN_MASK)
+            {
+                lit_bytes_sz = ((merged_lit_len - RUN_MASK) / 255) + 1;
                 *thread_group_handle->dst++ = (BYTE)((RUN_MASK << ML_BITS) | (cur_token & 0xF));
-                dst_offset++;
-                for (; accumulator >= 255; accumulator -= 255)
-                {
-                    *thread_group_handle->dst++ = (BYTE)255;
-                    dst_offset++;
-                }
-                if (cur_lit >= RUN_MASK)
-                {
-                    while (*(AOCL_UCHAR*)cur_thread_info.dst_trap == 255)
-                    {
-                        *thread_group_handle->dst++ = (BYTE)255;
-                        dst_offset++;
-                        cur_thread_info.dst_trap++;
-                        cur_thread_info.dst_trap_size--;
-                    }
-                    new_token = *(AOCL_UCHAR*)cur_thread_info.dst_trap;
-                    cur_thread_info.dst_trap++;
-                    cur_thread_info.dst_trap_size--;
-                    accumulator += new_token;
-                    if (accumulator >= 255)
-                    {
-                        *thread_group_handle->dst++ = (BYTE)255;
-                        dst_offset++;
-                        accumulator -= 255;
-                    }
-                }
-                *thread_group_handle->dst++ = (BYTE)accumulator;
-                dst_offset++;
+                memset(thread_group_handle->dst, 255, lit_bytes_sz - 1);
+                *(thread_group_handle->dst + (lit_bytes_sz - 1)) = ((merged_lit_len - RUN_MASK)% 255);
+                thread_group_handle->dst += lit_bytes_sz;
             }
             else
             {
-                *thread_group_handle->dst++ = (BYTE)((new_token << ML_BITS) | (cur_token & 0xF));
-                dst_offset++;
+                lit_bytes_sz = 0;
+                *thread_group_handle->dst++ = (BYTE)((merged_lit_len << ML_BITS) | (cur_token & 0xF));
             }
 
-            //Copy prev thread's last literal bytes to the output final buffer
-            memcpy(thread_group_handle->dst, prev_thread_info.additional_state_info, prev_thread_info.last_bytes_len);
-            dst_offset += prev_thread_info.last_bytes_len;
-            thread_group_handle->dst += prev_thread_info.last_bytes_len;
-
-            //Copy this thread's chunk to the output final buffer
-            memcpy(thread_group_handle->dst, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
-            dst_offset += cur_thread_info.dst_trap_size;
-            thread_group_handle->dst += cur_thread_info.dst_trap_size;
-
-            *(AOCL_UINT32*)dst_ptr = (prev_offset + prev_len); //For storing this thread's RAP offset
-            *(AOCL_INT32*)(dst_ptr + RAP_OFFSET_BYTES) = dst_offset; //For storing this thread's RAP length
-            dst_ptr += RAP_DATA_BYTES;
-            //For storing this thread's decompressed (src) length
-            decomp_len = cur_thread_info.partition_src_size - cur_thread_info.last_bytes_len;
+            curr_thrd_cmprdata_len = cur_thread_info->dst_trap_size + lit_bytes_sz + 1 + prev_thread_info->last_bytes_len;
+            *(AOCL_UINT32*)p_curr_thrd_mdata = curr_thrd_cmprdata_offset;
+            *(AOCL_INT32*)(p_curr_thrd_mdata + RAP_OFFSET_BYTES) = curr_thrd_cmprdata_len;
+            p_curr_thrd_mdata += RAP_DATA_BYTES;
+            decomp_len = cur_thread_info->partition_src_size - cur_thread_info->last_bytes_len;
             if ((thread_cnt != (thread_group_handle->num_threads - 1)) &&
-                ((AOCL_UCHAR*)cur_thread_info.additional_state_info - (AOCL_UCHAR*)cur_thread_info.partition_src) !=
+                ((AOCL_UCHAR*)cur_thread_info->additional_state_info - (AOCL_UCHAR*)cur_thread_info->partition_src) !=
                 decomp_len)
             {
 #ifdef AOCL_THREADS_LOG
@@ -961,19 +916,43 @@ int AOCL_LZ4_postProcessing_mt(aocl_thread_group_t *thread_group_handle, int rap
                 result = 0;
                 LOG_FORMATTED(ERR, logCtx, "Compress Thread [id: %d] : Error in last bytes position", thread_cnt);
                 LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+                free(threads_cmpr_offset);
+                free(cmpr_dest_offset);
                 return result;
             }
-            *(AOCL_INT32*)dst_ptr = decomp_len + prev_thread_info.last_bytes_len;
-            dst_ptr += DECOMP_LEN_BYTES;
+            *(AOCL_INT32*)p_curr_thrd_mdata = decomp_len + prev_thread_info->last_bytes_len;
+            p_curr_thrd_mdata += DECOMP_LEN_BYTES;
+            prev_thread_info->partition_src = thread_group_handle->dst; // point to final dest for copying literal bytes (safe operation)
+            threads_cmpr_offset[thread_cnt] = (BYTE*)(thread_group_handle->dst + prev_thread_info->last_bytes_len);
+            thread_group_handle->dst += (prev_thread_info->last_bytes_len + cur_thread_info->dst_trap_size);
+        }
+        cmpr_dest_offset[thread_cnt] = cmpr_orig_sz - cur_thread_info->dst_trap_size;
+        cur_thread_info->dst_trap -= cmpr_dest_offset[thread_cnt];
+        prev_thread_info = cur_thread_info;
+        curr_thrd_cmprdata_offset += curr_thrd_cmprdata_len;
+    }
 
-            prev_thread_info = cur_thread_info;
-            prev_offset = (prev_offset + prev_len);
-            prev_len = dst_offset;
+    aocl_thread_info_t thread_info;
+    // MT data copying
+    #pragma omp parallel private(thread_info) shared(thread_group_handle, threads_cmpr_offset, cmpr_dest_offset) num_threads(thread_group_handle->num_threads)
+    {
+        AOCL_UINT32 thread_id = omp_get_thread_num();
+        thread_info = thread_group_handle->threads_info_list[thread_id];
+        // copy additional_state_info (literal bytes) to next thread compressed sequence
+        if(thread_info.additional_state_info != NULL && thread_id != thread_group_handle->num_threads-1)
+        {
+            memcpy(thread_info.partition_src, thread_info.additional_state_info, thread_info.last_bytes_len);
+        }
+        // copy current thread compressed bytes to threads_cmpr_offset (offset in final buffer)
+        if(threads_cmpr_offset[thread_id] != NULL)
+        {
+            memcpy(threads_cmpr_offset[thread_id], thread_info.dst_trap + cmpr_dest_offset[thread_id], thread_info.dst_trap_size);
         }
     }
-    // <-- RAP Metadata payload -->
-    
+
     result = thread_group_handle->dst - dest;
+    free(threads_cmpr_offset);
+    free(cmpr_dest_offset);
     return result;
 }
 #endif /* AOCL_ENABLE_THREADS_LZ4 */
