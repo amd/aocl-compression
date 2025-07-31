@@ -1,5 +1,6 @@
 /* inflate.h -- internal inflate state definition
  * Copyright (C) 1995-2019 Mark Adler
+ * Modifications Copyright (C) 2025, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -95,6 +96,7 @@ struct inflate_state {
         /* sliding window */
     unsigned wbits;             /* log base 2 of requested window size */
     unsigned wsize;             /* window size or zero if not using window */
+    unsigned wbufsize;          /* real size of the allocated window buffer, including padding */
     unsigned whave;             /* valid bytes in the window */
     unsigned wnext;             /* window write index */
     unsigned char FAR *window;  /* allocated sliding window, if needed */

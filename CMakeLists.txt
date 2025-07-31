@@ -314,7 +314,6 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/gzwrite.c
                     ${ALGOS_PATH}/zlib/infback.c
                     ${ALGOS_PATH}/zlib/inffast.c
-                    ${ALGOS_PATH}/zlib/inffast_chunk.c
                     ${ALGOS_PATH}/zlib/inflate.c
                     ${ALGOS_PATH}/zlib/inftrees.c
                     ${ALGOS_PATH}/zlib/longest_match_x86.c
@@ -324,6 +323,12 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/zutil.c
                     ${ALGOS_PATH}/zlib/zlib.h
                     ${ALGOS_PATH}/zlib/aocl_zlib_utils.c)
+set (ZLIBNG_SRC_FILES        ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
+                             ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_sse2.c
+                             ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
+set_property(SOURCE ${ZLIBNG_SRC_FILES} APPEND PROPERTY INCLUDE_DIRECTORIES 
+                    "${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/zlib/zlib-ng/;${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/zlib/")
+set_property(SOURCE ${ZLIBNG_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DHAVE_ATTRIBUTE_ALIGNED=1;-DHAVE_HIDDEN=1")
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()
@@ -373,7 +378,8 @@ set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.cpp
 						utils/utils.h)
 # Source files utilizing AVX-512 and higher ISA extensions
-set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c)
+set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
+                      ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
 
 if (AOCL_ENABLE_THREADS)
     set (THREADS_SRC_FILES threads/code_alignment.c
@@ -650,6 +656,7 @@ set(SRC_FILES
         ${LZMA_SRC_FILES}
         ${SNAPPY_SRC_FILES}
         ${ZLIB_SRC_FILES}
+        ${ZLIBNG_SRC_FILES}
         ${ZSTD_SRC_FILES}
         ${COMMON_SRC_FILES}
         ${THREADS_SRC_FILES}

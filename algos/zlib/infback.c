@@ -1,6 +1,6 @@
 /* infback.c -- inflate using a call-back interface
  * Copyright (C) 1995-2022 Mark Adler
- * Modifications Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -58,6 +58,7 @@ int ZEXPORT inflateBackInit_(z_streamp strm, int windowBits,
     state->dmax = 32768U;
     state->wbits = (uInt)windowBits;
     state->wsize = 1U << windowBits;
+    state->wbufsize = 1U << windowBits;
     state->window = window;
     state->wnext = 0;
     state->whave = 0;

@@ -1,6 +1,6 @@
 /* inflate.c -- zlib decompression
  * Copyright (C) 1995-2022 Mark Adler
- * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -87,8 +87,9 @@
 #include "inflate.h"
 
 #ifdef AOCL_ZLIB_SSE2_OPT
-#include "inffast_chunk.h"
+#include "inffast.h"
 #include "chunkcopy.h"
+#include "zlib-ng/zlib_ng_include.h"
 #else
 #include "inffast.h"
 #endif
@@ -241,6 +242,7 @@ int ZEXPORT inflateInit2_(z_streamp strm, int windowBits,
     strm->state = (struct internal_state FAR *)state;
     state->strm = strm;
     state->window = Z_NULL;
+    state->wbufsize = INFLATE_ADJUST_WINDOW_SIZE((1 << MAX_WBITS) + 64);
     state->mode = HEAD;     /* to pass state test in inflateReset2() */
     ret = inflateReset2(strm, windowBits);
     if (ret != Z_OK) {
@@ -1162,8 +1164,8 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
                 /* fallthrough */
         case LEN:
 #ifdef AOCL_ZLIB_SSE2_OPT
-            if (have >= INFLATE_FAST_MIN_INPUT &&
-                left >= INFLATE_FAST_MIN_OUTPUT) {
+            if (have >= INFLATE_FAST_MIN_HAVE &&
+                left >= INFLATE_FAST_MIN_LEFT) {
                 RESTORE();
                 inflate_fast_fp(strm, out);
         
@@ -1818,10 +1820,20 @@ static void aocl_setup_inflate_fmv(int optOff, int optLevel)
             case 1://SSE version
             case 2://AVX version
             case 3://AVX2 version
-            default://AVX512 and other versions
 #ifdef AOCL_ZLIB_SSE2_OPT
                 updatewindow_fp = aocl_updatewindow;
-                inflate_fast_fp = inflate_fast_chunk_;
+                inflate_fast_fp = inflate_fast_sse2;
+#else
+                updatewindow_fp = updatewindow;
+                inflate_fast_fp = inflate_fast;
+#endif /* AOCL_ZLIB_SSE2_OPT */
+            default://AVX512 and other versions
+#ifdef AOCL_ZLIB_AVX512_OPT
+                updatewindow_fp = aocl_updatewindow;
+                inflate_fast_fp = inflate_fast_avx512;
+#elif defined (AOCL_ZLIB_SSE2_OPT)
+                updatewindow_fp = aocl_updatewindow;
+                inflate_fast_fp = inflate_fast_sse2;
 #else
                 updatewindow_fp = updatewindow;
                 inflate_fast_fp = inflate_fast;
