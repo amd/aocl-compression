@@ -3801,8 +3801,16 @@ void BuffToBuffCompress_fuzz(std::vector<char> source, size_t dest_sz,
     vector<char> dest(destLen, 0);
 
     // Verbosity is set to 0 to avoid extensive logs
-    BZIP2_API::BuffToBuffCompress(dest.data(), &destLen, source.data(), source.size(), level, 0, workFactor);
-
+    int ret = BZIP2_API::BuffToBuffCompress(dest.data(), &destLen, source.data(), source.size(), level, 0, workFactor);
+    if(ret == BZ_OK)
+    {
+        vector<char> decompressed(source.size());
+        unsigned origlen = decompressed.size();
+        int ret2 = BZIP2_API::BuffToBuffDecompress(decompressed.data(), &origlen, dest.data(), destLen, 0, 0);
+        EXPECT_EQ(ret2, BZ_OK);
+        if(ret2 == BZ_OK)
+            EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), origlen));
+    }
     aocl_destroy_bzip2();
 }
 FUZZ_TEST(AOCL_Compression_bzip2, BuffToBuffCompress_fuzz)
@@ -3881,8 +3889,17 @@ void BZ2_bzCompress_fuzz(std::vector<char> input, int out_len, int action, int b
     if(action==2)
         strm->setMode(BZ_FINISH); 
      
-    BZIP2_API::Compress(strm->getStrm(), action);
+    int ret = BZIP2_API::Compress(strm->getStrm(), action);
     BZIP2_API::CompressEnd(strm->getStrm());
+    if(ret == BZ_OK)
+    {
+        vector<char> decompressed(input.size());
+        unsigned origlen = decompressed.size();
+        int ret2 = BZIP2_API::BuffToBuffDecompress(decompressed.data(), &origlen, output.data(), strm->getAvailOut(), 0, 0);
+        EXPECT_EQ(ret2, BZ_OK);
+        if(ret2 == BZ_OK)
+            EXPECT_EQ(0,memcmp(decompressed.data(),input.data(), origlen));
+    }
     delete strm;
 }
  
@@ -3928,18 +3945,42 @@ void BZ2_bzWrite_fuzz(std::vector<char> inputbuffer, int block_size, int verbosi
 
     BZFILE * bzf = BZIP2_API::WriteOpen(&bzerror, pFile, block_size, verbosity, work_factor);
     EXPECT_EQ(bzerror, BZ_OK);
+    EXPECT_NE(bzf, nullptr);
 
-    BZIP2_API::Write(&bzerror, bzf, inputbuffer.data(), inputbuffer.size());
-   
+    BZIP2_API::Write(&bzerror, bzf, inputbuffer.data(), inputbuffer.size()); 
+    int bzerror_write = bzerror;
+
     if(writetype == 0)
         BZIP2_API::WriteClose(&bzerror, bzf, abandon, &in, &out);
 
     if(writetype == 1)
         BZIP2_API::WriteClose64(&bzerror, bzf, abandon, &in_low, &in_high, &out_low, &out_high);
-    EXPECT_EQ(bzerror, BZ_OK);
+    
+    fclose(pFile);    
+    if(bzerror_write == BZ_OK && bzerror == BZ_OK && abandon == 0)
+    {
+        //Decompress
+        pFile = fopen(file_name.c_str(), "rb");
+        EXPECT_NE(pFile, nullptr);
 
-    fclose(pFile);
-    EXPECT_EQ(remove(file_name.c_str()), 0);
+        bzf = BZIP2_API::ReadOpen(&bzerror, pFile, verbosity, 1, NULL, 0);
+        EXPECT_EQ(bzerror, BZ_OK);
+        EXPECT_NE(bzf, nullptr);
+
+        size_t origlen = inputbuffer.size();
+        vector<char> outputbuffer(origlen);        
+        int ret2 = BZIP2_API::Read(&bzerror, bzf, outputbuffer.data(), origlen);
+        EXPECT_EQ(bzerror, BZ_STREAM_END);
+        EXPECT_GT(ret2 , 0);
+        if(ret2 > 0)
+            EXPECT_EQ(0,memcmp(inputbuffer.data(),outputbuffer.data(), origlen));
+
+        BZIP2_API::ReadClose(&bzerror, bzf);
+        EXPECT_EQ(bzerror, BZ_OK);
+
+        fclose(pFile);
+    }
+    EXPECT_EQ(remove(file_name.c_str()), 0); 
 }
 
 FUZZ_TEST(AOCL_Compression_bzip2, BZ2_bzWrite_fuzz)
@@ -3972,7 +4013,7 @@ void BZ2_bzRead_fuzz(std::vector<char> inputbuffer,int block_size, int verbosity
     EXPECT_EQ(bzerror, BZ_OK);
     ASSERT_NE(bzf, nullptr);
 
-    vector<char> outputbuffer(out_len);        
+    vector<char> outputbuffer(out_len);
     BZIP2_API::Read(&bzerror, bzf, outputbuffer.data(), out_len);
 
     BZIP2_API::ReadClose(&bzerror, bzf);

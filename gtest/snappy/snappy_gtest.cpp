@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -2676,6 +2676,22 @@ void RawCompress_fuzz(vector<char> source, size_t dest_sz,
     // destLen stores the size of the compressed data
     size_t destLen;
     RawCompress(source.data(), source.size(), dest.data(), &destLen);
+    if(destLen > 0)
+    {        
+        size_t result = 0;
+        #ifdef AOCL_ENABLE_THREADS
+            if(!GetUncompressedLengthFromMTCompressedBuffer(dest.data(), destLen, &result))
+                return;
+        #else
+            if(!GetUncompressedLength(dest.data(), destLen, &result))
+                return;
+        #endif        
+        vector<char> decompressed(result);
+        int ret = RawUncompress(dest.data(), destLen, decompressed.data());
+        EXPECT_EQ(ret, true);
+        if(ret)       
+          EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+    }   
 
     aocl_destroy_snappy();
 }
@@ -2703,8 +2719,13 @@ void RawUncompress_fuzz(vector<char> source, size_t dest_sz,
     aocl_setup_snappy(optOff, optLevel, 0, 0, 0);
 
     size_t result = 0;
-    if(!GetUncompressedLength(source.data(), source.size(), &result))
-        return;
+    #ifdef AOCL_ENABLE_THREADS
+        if(!GetUncompressedLengthFromMTCompressedBuffer(source.data(), source.size(), &result))
+            return;
+    #else
+        if(!GetUncompressedLength(source.data(), source.size(), &result))
+            return;
+    #endif
     // dest should be at least the size of the uncompressed length, or else out of bound memory access error occurs.
     vector<char> dest(result);
     RawUncompress(source.data(), source.size(), dest.data());
@@ -2727,7 +2748,15 @@ FUZZ_TEST(AOCL_Compression_snappy, RawUncompress_fuzz)
 void Compress_fuzz(vector<char> input)
 {
     std::string compressed = "";
-    Compress(input.data(), input.size(), &compressed);
+    int ret = Compress(input.data(), input.size(), &compressed);
+    if(ret)
+    {
+        std::string decompressed = "";
+        int ret2 = Uncompress(compressed.data(), compressed.size(), &decompressed);
+        EXPECT_EQ(ret2, true);
+        if(ret2)
+            EXPECT_EQ(0,memcmp(decompressed.data(),input.data(), input.size()));
+    }
 }
 FUZZ_TEST(AOCL_Compression_snappy, Compress_fuzz);
 
@@ -2756,15 +2785,32 @@ FUZZ_TEST(AOCL_Compression_snappy, Uncompress_source_sink_fuzz)
 
 void Compress_source_sink_fuzz(vector<char> input)
 {
+    if(input.size() == 0)
+        return;
     string result;
     result.resize(MaxCompressedLength(input.size()));
 
     Source *source = SNAPPY_Gtest_Util::ByteArraySource_ext(input.data(), input.size());
     Sink *sink = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&result));
 
-    Compress(source, sink);
+    int ret = Compress(source, sink);
+    if(ret > 0)
+    {        
+        string orig;
+        orig.resize(input.size());       
+        Sink *decompressed = SNAPPY_Gtest_Util::UncheckedByteArraySink_ext(string_as_array(&orig));
+        Source *compressed = SNAPPY_Gtest_Util::ByteArraySource_ext(string_as_array(&result), ret);
+        int ret2 = Uncompress(compressed, decompressed);
+        EXPECT_EQ(ret2, true);
+        if(ret2)
+        { 
+            EXPECT_EQ(0,memcmp(string_as_array(&orig),input.data(), input.size()));
+        }
+        delete decompressed;
+        delete compressed;
+    }
     delete source;
-    delete sink;
+    delete sink;    
 }
 FUZZ_TEST(AOCL_Compression_snappy, Compress_source_sink_fuzz)
     .WithDomains(fuzztest::Arbitrary<std::vector<char>>()

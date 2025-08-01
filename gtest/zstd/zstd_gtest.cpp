@@ -2465,7 +2465,22 @@ void ZSTD_compress_advanced_fuzz(vector<char> source, size_t dest_sz,
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
     ZSTD_parameters zparams = ZSTD_getParams(level, srcLen, dictLen);
     zparams.fParams.contentSizeFlag = 1;
-    ZSTD_compress_advanced(cctx, dest.data(), destLen, source.data(), srcLen, dict.data(), dictLen, zparams);
+    int ret = ZSTD_compress_advanced(cctx, dest.data(), destLen, source.data(), srcLen, dict.data(), dictLen, zparams);
+    if(!ZSTD_isError(ret))
+    {
+        aocl_setup_zstd_decode(optOff, optLevel, 0, 0, 0);
+        size_t origlen = source.size();
+        vector<char> decompressed(origlen);        
+
+        ZSTD_DCtx* dctx = ZSTD_createDCtx();
+        int ret2 = ZSTD_decompressDCtx(dctx, decompressed.data(), origlen, dest.data(), ret);
+        EXPECT_EQ(ZSTD_isError(ret2), false);
+        if (!ZSTD_isError(ret2))       
+            ASSERT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+        if (dctx) ZSTD_freeDCtx(dctx);
+
+        aocl_destroy_zstd_decode();     
+    }
     if (cctx) ZSTD_freeCCtx(cctx);
 
     aocl_destroy_zstd_encode();
@@ -2529,6 +2544,9 @@ void ZSTD_compress2_fuzz(int dest_len, std::vector<char> source, std::vector<cha
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
     EXPECT_NE(cctx, nullptr);
 
+    ZSTD_outBuffer buffOut;
+    ZSTD_inBuffer buffIn;
+
     ZSTD_parameters zparams = ZSTD_getParams(compressionLevel, source.size(), dict.size());
     zparams.fParams.contentSizeFlag = contentSizeFlag; 
     zparams.fParams.checksumFlag = checksumFlag; 
@@ -2537,7 +2555,23 @@ void ZSTD_compress2_fuzz(int dest_len, std::vector<char> source, std::vector<cha
     ZSTD_CCtx_loadDictionary(cctx, dict.data(), dict.size());
 
     std::vector<char> dest(dest_len);
-    ZSTD_compress2(cctx, dest.data(),dest_len, source.data(), source.size());
+    int ret = ZSTD_compress2(cctx, dest.data(),dest_len, source.data(), source.size());
+    if(!ZSTD_isError(ret))
+    {
+        ZSTD_DCtx* dctx =  ZSTD_createDCtx();
+        size_t origlen = source.size();
+        std::vector<char> decompressed(origlen);
+        size_t ret2 = ZSTD_decompress_usingDict(dctx, decompressed.data(), origlen,
+                            dest.data(), ret,
+                            dict.data(), dict.size());
+        EXPECT_EQ(ZSTD_isError(ret2), false);
+        if(!ZSTD_isError(ret2))
+        {
+            ASSERT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+        }
+
+        if (dctx) ZSTD_freeDCtx(dctx);
+    }
     
     if (cctx) ZSTD_freeCCtx(cctx);
 }
@@ -2582,7 +2616,25 @@ void ZSTD_compressStream2_fuzz(std::vector<char> source, unsigned int endop, std
     buffOut.size = dest_len;    
     buffOut.dst = output.data();
     buffIn.src = source.data();
-    ZSTD_compressStream2(cctx, &buffOut, &buffIn, directive);
+    ret = ZSTD_compressStream2(cctx, &buffOut, &buffIn, directive);
+    if(!ZSTD_isError(ret))
+    {
+        ZSTD_DStream* zds = ZSTD_createDStream();
+        EXPECT_NE(zds, nullptr);
+
+        std::vector<char> decompressed(dest_len);
+        buffOut.dst = decompressed.data();
+        buffIn.src = output.data();
+        buffOut.size = decompressed.size();
+        buffIn.size = buffOut.pos;
+        int ret2 = ZSTD_decompressStream(zds, &buffOut, &buffIn);
+        EXPECT_EQ(ZSTD_isError(ret2), false);
+        if(!ZSTD_isError(ret2))
+        {
+            ASSERT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+        }
+        if(zds) ZSTD_freeDStream(zds);
+    }
     if (cctx) ZSTD_freeCCtx(cctx);
 }
 
@@ -2623,9 +2675,25 @@ void ZSTD_compress_usingDict_fuzz(std::vector<char> input, int out_len, std::vec
 {
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
     std::vector<char> output(out_len);
-    ZSTD_compress_usingDict(cctx,output.data(), out_len,
+    int ret = ZSTD_compress_usingDict(cctx,output.data(), out_len,
                            input.data(), input.size(),
                            dict.data(), dict.size(), compressionLevel);
+    if(!ZSTD_isError(ret))
+    {
+        ZSTD_DCtx* dctx =  ZSTD_createDCtx();
+        size_t origlen = input.size();
+        std::vector<char> decompressed(origlen);
+        size_t ret2 = ZSTD_decompress_usingDict(dctx, decompressed.data(), origlen,
+                            output.data(), ret,
+                            dict.data(), dict.size());
+        EXPECT_EQ(ZSTD_isError(ret2), false);
+        if(!ZSTD_isError(ret2))
+        {
+            ASSERT_EQ(0,memcmp(decompressed.data(),input.data(), input.size()));
+        }
+
+        if (dctx) ZSTD_freeDCtx(dctx);
+    }
     if (cctx) ZSTD_freeCCtx(cctx);
 }
 FUZZ_TEST(AOCL_Compression_zstd, ZSTD_compress_usingDict_fuzz)

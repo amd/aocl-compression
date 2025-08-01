@@ -2511,10 +2511,19 @@ void LZ4_compress_HC_fuzz(vector<char> source, size_t dest_sz,
 
   int destLen = dest_sz > INT_MAX ? INT_MAX : dest_sz;
   int srcLen = source.size();
-  vector<char> dest(destLen, 0);
-
-  LZ4_compress_HC((const char*)source.data(), dest.data(), srcLen, destLen, level);
-
+  vector<char> dest(destLen);
+  
+  int OrigLen = source.size();
+  vector<char> decompressed(OrigLen);
+  int ret = LZ4_compress_HC((const char*)source.data(), dest.data(), srcLen, destLen, level);
+  //When source size is zero , compress function generates empty block which cannot be decompressed.
+  if(ret > 0 && source.size() != 0 )
+  {
+      int ret2 = LZ4_decompress_safe(dest.data(), decompressed.data(), ret, OrigLen);
+      EXPECT_GT(ret2, 0);
+      if(ret2 > 0 )       
+          EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+  }
   aocl_destroy_lz4hc();
 }
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_fuzz)
@@ -2557,8 +2566,19 @@ static void destroy_LZ4HC_stream(void* stream, int optOff, int compressionLevel)
 void LZ4_compress_HC_continue_fuzz(vector<char> src, int out_len)
 {
     vector<char> dst(out_len);
-    LZ4_streamHC_t* stream = LZ4_createStreamHC();   
-    LZ4_compress_HC_continue (stream, src.data(), dst.data(), src.size(), out_len);
+    LZ4_streamHC_t* stream = LZ4_createStreamHC();
+
+    int OrigLen = src.size();
+    vector<char> decompressed(OrigLen);
+    int ret = LZ4_compress_HC_continue (stream, src.data(), dst.data(), src.size(), out_len);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.
+    if(ret > 0 && src.size() != 0 )
+    {
+      int ret2 = LZ4_decompress_safe(dst.data(), decompressed.data(), ret, OrigLen);
+      EXPECT_GT(ret2, 0); 
+      if(ret2 > 0)       
+          EXPECT_EQ(0,memcmp(decompressed.data(),src.data(), src.size()));
+    }
     LZ4_freeStreamHC(stream);
 }
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_continue_fuzz)
@@ -2569,8 +2589,18 @@ void LZ4_compress_HC_continue_destSize_fuzz(vector<char> src, int out_len)
 {
     int src_size = src.size();     
     vector<char> dst(out_len);
-    LZ4_streamHC_t* stream = LZ4_createStreamHC();    
-    LZ4_compress_HC_continue_destSize(stream,  src.data(), dst.data(),&src_size, out_len);
+    LZ4_streamHC_t* stream = LZ4_createStreamHC(); 
+    int OrigLen = src.size();
+    vector<char> decompressed(OrigLen);   
+    int ret = LZ4_compress_HC_continue_destSize(stream,  src.data(), dst.data(),&src_size, out_len);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.
+    if(ret > 0 && src_size != 0 )
+    {
+      int ret2 = LZ4_decompress_safe(dst.data(), decompressed.data(), ret, OrigLen);
+      EXPECT_GT(ret2, 0); 
+      if(ret2 > 0)       
+          EXPECT_EQ(0,memcmp(decompressed.data(),src.data(), src_size));
+    }
     LZ4_freeStreamHC(stream);
 }
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_continue_destSize_fuzz)
@@ -2581,7 +2611,17 @@ void LZ4_compress_HC_extStateHC_fuzz(vector<char> src, int out_len, int compress
 {
     vector<char> dst(out_len);
     void *stream = setup_LZ4HC_stream(optOff, compressionLevel, optLevel);
-    LZ4_compress_HC_extStateHC(stream, src.data(), dst.data(), src.size(), out_len, compressionLevel);
+    int OrigLen = src.size();
+    vector<char> decompressed(OrigLen);
+    int ret = LZ4_compress_HC_extStateHC(stream, src.data(), dst.data(), src.size(), out_len, compressionLevel);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.
+    if(ret > 0 && src.size() != 0 )
+    {
+      int ret2 = LZ4_decompress_safe(dst.data(), decompressed.data(), ret, OrigLen);
+      EXPECT_GT(ret2, 0); 
+      if(ret2 > 0)       
+          EXPECT_EQ(0,memcmp(decompressed.data(),src.data(), src.size()));
+    }
     destroy_LZ4HC_stream(stream, optOff,compressionLevel);
 }
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_extStateHC_fuzz)
@@ -2596,7 +2636,17 @@ void LZ4_compress_HC_destSize_fuzz(vector<char> src, int out_len, int compressio
     int srcSize = src.size();
     vector<char> dst(out_len);
     void *stream = setup_LZ4HC_stream(optOff, compressionLevel, optLevel);
-    LZ4_compress_HC_destSize(stream, src.data(), dst.data(), &srcSize, out_len, compressionLevel);
+    int OrigLen = src.size();
+    vector<char> decompressed(OrigLen);
+    int ret = LZ4_compress_HC_destSize(stream, src.data(), dst.data(), &srcSize, out_len, compressionLevel);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.  
+    if(ret > 0 && srcSize != 0 )
+    {
+      int ret2 = LZ4_decompress_safe(dst.data(), decompressed.data(), ret, OrigLen);
+      EXPECT_GT(ret2, 0);  
+      if(ret2 > 0)       
+          EXPECT_EQ(0,memcmp(decompressed.data(),src.data(), srcSize));
+    }
     destroy_LZ4HC_stream(stream, optOff,compressionLevel);
 }
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_destSize_fuzz)
