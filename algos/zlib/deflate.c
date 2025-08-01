@@ -198,9 +198,9 @@ local const config configuration_table_quick[10] = {
 
 /* 1 */ {0,    0,  0,    0, deflate_quick}, /* max speed, no lazy matches */
 
-/* 2 */ {16,    4,    32,   3, deflate_fast},
-/* 3 */ {16,    4,   128,   3, deflate_fast},
-/* 4 */ {32,    16,   32,   48, deflate_fast},
+/* 2 */ {16,    4,    32,   3, deflate_fast}, /* To match zlib-ng: {4,4,32,3,deflate_fast},*/
+/* 3 */ {16,    4,   128,   3, deflate_fast}, /* To match zlib-ng:  {8,16,32,6,deflate_fast},*/
+/* 4 */ {32,   16,    32,  48, deflate_fast}, /* To match zlib-ng: {16,32,32,32,deflate_fast},*/
 
 /* 5 */ {8,    16,   32,  28, deflate_medium},
 /* 6 */ {8,    16,  256, 128, deflate_medium},

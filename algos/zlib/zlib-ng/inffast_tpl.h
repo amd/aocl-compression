@@ -158,13 +158,16 @@ void ZLIB_INTERNAL INFLATE_FAST(z_streamp strm, unsigned start) {
         REFILL();
         here = lcode + (hold & lmask);
         if (here->op == 0) {
-            *out++ = (unsigned char)(here->val);
+            uint16_t litout = (unsigned char)(here->val);
             DROPBITS(here->bits);
             here = lcode + (hold & lmask);
             if (here->op == 0) {
-                *out++ = (unsigned char)(here->val);
+                litout |= ((uint16_t)((unsigned char)(here->val)) << 8);
+                *((uint16_t*)out) = litout; out += 2;
                 DROPBITS(here->bits);
                 here = lcode + (hold & lmask);
+            } else {
+                *out++ = (unsigned char)litout;
             }
         }
       dolen:
@@ -273,6 +276,7 @@ void ZLIB_INTERNAL INFLATE_FAST(z_streamp strm, unsigned start) {
                         out = chunkcopy_safe(out, out - dist, len, safe);
 #endif
                 } else {
+                    PREFETCH_L1(out - dist);
                     /* Whole reference is in range of current output.  No range checks are
                        necessary because we start with room for at least 258 bytes of output,
                        so unroll and roundoff operations can write beyond `out+len` so long
