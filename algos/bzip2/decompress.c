@@ -1022,19 +1022,11 @@ Int32 AOCL_BZ2_decompress ( DState* s )
 
       for (i = 0; i <= 255; i++) s->unzftab[i] = 0;
 
-      /*-- MTF init --*/
-      {
-         Int32 ii, jj, kk;
-         kk = MTFA_SIZE-1;
-         for (ii = 256 / MTFL_SIZE - 1; ii >= 0; ii--) {
-            for (jj = MTFL_SIZE-1; jj >= 0; jj--) {
-               s->mtfa[kk] = (UChar)(ii * MTFL_SIZE + jj);
-               kk--;
-            }
-            s->mtfbase[ii] = kk + 1;
-         }
-      }
-      /*-- end MTF init --*/
+      /*
+         This pre-populates mtfa with the actual character values, eliminating the need
+         for seqToUnseq lookups during decompression and simplifying the MTF decode operation.
+      */
+      memcpy(s->mtfa, s->seqToUnseq, s->nInUse);
 
       nblock = 0;
       GET_MTF_VAL(BZ_X_MTF_1, BZ_X_MTF_2, nextSym);
@@ -1065,7 +1057,12 @@ Int32 AOCL_BZ2_decompress ( DState* s )
             }
                while (nextSym == BZ_RUNA || nextSym == BZ_RUNB);
             es++;
-            uc = s->seqToUnseq[ s->mtfa[s->mtfbase[0]] ];
+            /*
+               Direct access to first MTF element: Since mtfa now contains actual character
+               values (not indices), we can directly access mtfa[0] instead of performing
+               the indirect lookup s->seqToUnseq[s->mtfa[s->mtfbase[0]]]
+            */
+            uc = s->mtfa[0];
             s->unzftab[uc] += es;
 
             if (s->smallDecompress)
@@ -1091,55 +1088,23 @@ Int32 AOCL_BZ2_decompress ( DState* s )
 
             /*-- uc = MTF ( nextSym-1 ) --*/
             {
-               Int32 ii, kk, pp, lno, off;
                UInt32 nn;
                nn = (UInt32)(nextSym - 1);
-
-               if (nn < AOCL_MTFL_FAST_PATH_LIMIT) {
-                  /* avoid general-case expense */
-                  pp = s->mtfbase[0];
-                  uc = s->mtfa[pp+nn];
-
-                  memmove(&(s->mtfa[pp+1]),&(s->mtfa[pp]),nn);
-                  nn=0;
-
-                  s->mtfa[pp] = uc;
-               } else { 
-                  /* general case */
-                  lno = nn / MTFL_SIZE;
-                  off = nn % MTFL_SIZE;
-                  pp = s->mtfbase[lno] + off;
-                  uc = s->mtfa[pp];
-
-                  memmove(&(s->mtfa[s->mtfbase[lno]+1]),&(s->mtfa[s->mtfbase[lno]]),off);
-
-                  s->mtfbase[lno]++;
-                  while (lno > 0) {
-                     s->mtfbase[lno]--;
-                     s->mtfa[s->mtfbase[lno]] 
-                        = s->mtfa[s->mtfbase[lno-1] + MTFL_SIZE - 1];
-                     lno--;
-                  }
-                  s->mtfbase[0]--;
-                  s->mtfa[s->mtfbase[0]] = uc;
-                  if (s->mtfbase[0] == 0) {
-                     kk = MTFA_SIZE-1;
-                     for (ii = 256 / MTFL_SIZE-1; ii >= 0; ii--) {
-
-                        memmove(&(s->mtfa[kk-MTFL_SIZE+1]),&(s->mtfa[s->mtfbase[ii]]),MTFL_SIZE);
-                        kk-=MTFL_SIZE;
-
-                        s->mtfbase[ii] = kk + 1;
-                     }
-                  }
-               }
+               /*
+                  Move elements [0..nn-1] one position right,
+                  then place the accessed character at position 0. This replaces
+                  the complex multi-level array management with mtfbase pointers.
+               */
+               uc = s->mtfa[nn];
+               memmove(&(s->mtfa[1]), &(s->mtfa[0]), nn * sizeof(*s->mtfa));
+               s->mtfa[0] = uc;
             }
             /*-- end uc = MTF ( nextSym-1 ) --*/
 
-            s->unzftab[s->seqToUnseq[uc]]++;
+            s->unzftab[uc]++;
             if (s->smallDecompress)
-               s->ll16[nblock] = (UInt16)(s->seqToUnseq[uc]); else
-               s->tt[nblock]   = (UInt32)(s->seqToUnseq[uc]);
+               s->ll16[nblock] = (UInt16)(uc); else
+               s->tt[nblock]   = (UInt32)(uc);
             nblock++;
             
             /* This while loop loads as many bytes as it can into
@@ -1191,7 +1156,7 @@ Int32 AOCL_BZ2_decompress ( DState* s )
                while (nextSym == BZ_RUNA || nextSym == BZ_RUNB);
 
             es++;
-            uc = s->seqToUnseq[ s->mtfa[s->mtfbase[0]] ];
+            uc = s->mtfa[0];
             s->unzftab[uc] += es;
 
             if (s->smallDecompress)
@@ -1215,64 +1180,18 @@ Int32 AOCL_BZ2_decompress ( DState* s )
 
             if (nblock >= nblockMAX) RETURN(BZ_DATA_ERROR);
 
-            /*-- uc = MTF ( nextSym-1 ) --*/
             {
-               Int32 ii, jj, kk, pp, lno, off;
                UInt32 nn;
                nn = (UInt32)(nextSym - 1);
-
-               if (nn < MTFL_SIZE) {
-                  /* avoid general-case expense */
-                  pp = s->mtfbase[0];
-                  uc = s->mtfa[pp+nn];
-                  while (nn > 3) {
-                     Int32 z = pp+nn;
-                     s->mtfa[(z)  ] = s->mtfa[(z)-1];
-                     s->mtfa[(z)-1] = s->mtfa[(z)-2];
-                     s->mtfa[(z)-2] = s->mtfa[(z)-3];
-                     s->mtfa[(z)-3] = s->mtfa[(z)-4];
-                     nn -= 4;
-                  }
-                  while (nn > 0) { 
-                     s->mtfa[(pp+nn)] = s->mtfa[(pp+nn)-1]; nn--; 
-                  };
-                  s->mtfa[pp] = uc;
-               } else { 
-                  /* general case */
-                  lno = nn / MTFL_SIZE;
-                  off = nn % MTFL_SIZE;
-                  pp = s->mtfbase[lno] + off;
-                  uc = s->mtfa[pp];
-                  while (pp > s->mtfbase[lno]) { 
-                     s->mtfa[pp] = s->mtfa[pp-1]; pp--; 
-                  };
-                  s->mtfbase[lno]++;
-                  while (lno > 0) {
-                     s->mtfbase[lno]--;
-                     s->mtfa[s->mtfbase[lno]] 
-                        = s->mtfa[s->mtfbase[lno-1] + MTFL_SIZE - 1];
-                     lno--;
-                  }
-                  s->mtfbase[0]--;
-                  s->mtfa[s->mtfbase[0]] = uc;
-                  if (s->mtfbase[0] == 0) {
-                     kk = MTFA_SIZE-1;
-                     for (ii = 256 / MTFL_SIZE-1; ii >= 0; ii--) {
-                        for (jj = MTFL_SIZE-1; jj >= 0; jj--) {
-                           s->mtfa[kk] = s->mtfa[s->mtfbase[ii] + jj];
-                           kk--;
-                        }
-                        s->mtfbase[ii] = kk + 1;
-                     }
-                  }
-               }
+               uc = s->mtfa[nn];
+               memmove(&(s->mtfa[1]), &(s->mtfa[0]), nn * sizeof(*s->mtfa));
+               s->mtfa[0] = uc;
             }
-            /*-- end uc = MTF ( nextSym-1 ) --*/
 
-            s->unzftab[s->seqToUnseq[uc]]++;
+            s->unzftab[uc]++;
             if (s->smallDecompress)
-               s->ll16[nblock] = (UInt16)(s->seqToUnseq[uc]); else
-               s->tt[nblock]   = (UInt32)(s->seqToUnseq[uc]);
+               s->ll16[nblock] = (UInt16)(uc); else
+               s->tt[nblock]   = (UInt32)(uc);
             nblock++;
 
             GET_MTF_VAL(BZ_X_MTF_5, BZ_X_MTF_6, nextSym);
