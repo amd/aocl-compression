@@ -56,6 +56,10 @@
 #include <limits.h>
 /* the following LzmaEnc_* declarations is internal LZMA interface for LZMA2 encoder */
 
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif
+
 SRes LzmaEnc_PrepareForLzma2(CLzmaEncHandle pp, ISeqInStream *inStream, UInt32 keepWindowSize,
     ISzAllocPtr alloc, ISzAllocPtr allocBig);
 SRes LzmaEnc_MemPrepare(CLzmaEncHandle pp, const Byte *src, SizeT srcLen,
@@ -561,6 +565,9 @@ typedef struct
   ISeqOutStream *outStream;
   UInt64 processed;
   SRes res;
+  #ifdef AOCL_ENABLE_THREADS
+  BoolInt flushData;
+  #endif
 } CRangeEnc;
 
 
@@ -830,6 +837,10 @@ SRes LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps *props2)
   p->lp = (unsigned)props.lp;
   p->pb = (unsigned)props.pb;
   p->fastMode = (props.algo == 0);
+
+  #ifdef AOCL_ENABLE_THREADS
+  p->rc.flushData = True;
+  #endif
   // p->_maxMode = True;
   MFB.btMode = (Byte)(props.btMode ? 1 : 0);
   {
@@ -918,6 +929,9 @@ SRes AOCL_LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps* props2)
     p->lp = (unsigned)props.lp;
     p->pb = (unsigned)props.pb;
     p->fastMode = (props.algo == 0);
+    #ifdef AOCL_ENABLE_THREADS
+    p->rc.flushData = True;
+    #endif
     // p->_maxMode = True;
     MFB.btMode = (Byte)(props.btMode ? 1 : 0);
     {
@@ -1030,7 +1044,11 @@ static void RangeEnc_Init(CRangeEnc *p)
 MY_NO_INLINE static void RangeEnc_FlushStream(CRangeEnc *p)
 {
   const size_t num = (size_t)(p->buf - p->bufBase);
-  if (p->res == SZ_OK)
+  if (p->res == SZ_OK
+#ifdef AOCL_ENABLE_THREADS
+    && p->flushData
+#endif /* AOCL_ENABLE_THREADS */
+  )
   {
     if (num != ISeqOutStream_Write(p->outStream, p->bufBase, num))
       p->res = SZ_ERROR_WRITE;
@@ -1041,6 +1059,9 @@ MY_NO_INLINE static void RangeEnc_FlushStream(CRangeEnc *p)
 
 MY_NO_INLINE static void MY_FAST_CALL RangeEnc_ShiftLow(CRangeEnc *p)
 {
+#ifdef AOCL_ENABLE_THREADS
+  if (p->flushData){
+#endif
   UInt32 low = (UInt32)p->low;
   unsigned high = (unsigned)(p->low >> 32);
   p->low = (UInt32)(low << 8);
@@ -1069,6 +1090,9 @@ MY_NO_INLINE static void MY_FAST_CALL RangeEnc_ShiftLow(CRangeEnc *p)
     }
   }
   p->cacheSize++;
+#ifdef AOCL_ENABLE_THREADS
+  }
+#endif
 }
 
 static void RangeEnc_FlushData(CRangeEnc *p)
@@ -2529,6 +2553,13 @@ static unsigned AOCL_GetOptimum(CLzmaEnc* p, UInt32 position)
             unsigned len;
             const Byte* data2;
             reps[i] = p->reps[i];
+#ifdef AOCL_ENABLE_THREADS
+            if(p->reps[i] == -1)
+            {
+              repLens[i] = 0;
+              continue;
+            }
+#endif /* AOCL_ENABLE_THREADS */
             data2 = data - reps[i];
             if (GetUi16(data) != GetUi16(data2)) //(data[0] != data2[0] || data[1] != data2[1])
             {
@@ -2568,12 +2599,19 @@ static unsigned AOCL_GetOptimum(CLzmaEnc* p, UInt32 position)
                 return mainLen;
         }
 
-        curByte = *data;
-        matchByte = *(data - reps[0]);
-
         last = repLens[repMaxIndex]; // last = longest matched length among reps and mainLen
         if (last <= mainLen)
             last = mainLen;
+#ifdef AOCL_ENABLE_THREADS
+        if(reps[0] == -1)
+        {
+          p->backRes = MARK_LIT;
+          return 1;
+        }
+#endif /* AOCL_ENABLE_THREADS */
+        
+        curByte = *data;
+        matchByte = *(data - reps[0]); 
 
         if (last < 2 && curByte != matchByte)
         {
@@ -2987,7 +3025,11 @@ static unsigned AOCL_GetOptimum(CLzmaEnc* p, UInt32 position)
         if (!nextIsLit
             && litPrice != 0 // 18.new
             && matchByte != curByte
-            && numAvailFull > 2)
+            && numAvailFull > 2
+#ifdef AOCL_ENABLE_THREADS
+            && reps[0] != -1
+#endif /* AOCL_ENABLE_THREADS */
+            )
         {
             const Byte* data2 = data - reps[0];
             if (GetUi16(data + 1) == GetUi16(data2 + 1)) // if (data[1] == data2[1] && data[2] == data2[2])
@@ -3039,37 +3081,42 @@ static unsigned AOCL_GetOptimum(CLzmaEnc* p, UInt32 position)
             // ---------- REP 0 ----------
             unsigned len;
             UInt32 price;
-            const Byte* data2 = data - reps[0];
-            if (GetUi16(data) == GetUi16(data2)) //if (data[0] == data2[0] && data[1] == data2[1]) {
+#ifdef AOCL_ENABLE_THREADS
+            if(reps[0] != -1)
+#endif /* AOCL_ENABLE_THREADS */
             {
-                len = 2;
-                AOCL_FIND_MATCHING_BYTES_LEN(len, numAvail, data, data2) // for (len = 2; len < numAvail && data[len] == data2[len]; len++) {}
-                // if (len < startLen) continue; // 18.new: speed optimization
-                {
-                    unsigned offset = cur + len;
-                    if (last < offset)
-                        last = offset;
-                }
-                {
-                    unsigned len2 = len;
-                    price = repMatchPrice + AOCL_GetPrice_PureRep_0(p, state, posState);
-                    do
-                    {
-                        UInt32 price2 = price + GET_PRICE_LEN(&p->repLenEnc, posState, len2);
-                        COptimal* opt = &p->opt[cur + len2];
-                        if (price2 < opt->price)
-                        {
-                            opt->price = price2;
-                            opt->len = (UInt32)len2;
-                            opt->dist = (UInt32)0;
-                            opt->extra = 0;
-                        }
-                    } while (--len2 >= 2);
-                }
+              const Byte* data2 = data - reps[0];
+              if (GetUi16(data) == GetUi16(data2)) //if (data[0] == data2[0] && data[1] == data2[1]) {
+              {
+                  len = 2;
+                  AOCL_FIND_MATCHING_BYTES_LEN(len, numAvail, data, data2) // for (len = 2; len < numAvail && data[len] == data2[len]; len++) {}
+                  // if (len < startLen) continue; // 18.new: speed optimization
+                  {
+                      unsigned offset = cur + len;
+                      if (last < offset)
+                          last = offset;
+                  }
+                  {
+                      unsigned len2 = len;
+                      price = repMatchPrice + AOCL_GetPrice_PureRep_0(p, state, posState);
+                      do
+                      {
+                          UInt32 price2 = price + GET_PRICE_LEN(&p->repLenEnc, posState, len2);
+                          COptimal* opt = &p->opt[cur + len2];
+                          if (price2 < opt->price)
+                          {
+                              opt->price = price2;
+                              opt->len = (UInt32)len2;
+                              opt->dist = (UInt32)0;
+                              opt->extra = 0;
+                          }
+                      } while (--len2 >= 2);
+                  }
 
-                startLen = len + 1;  // 17.old
+                  startLen = len + 1;  // 17.old
 
-                AOCL_OPT_PARSE_REP(0)
+                  AOCL_OPT_PARSE_REP(0)
+              }
             }
         }
 
@@ -3080,6 +3127,9 @@ static unsigned AOCL_GetOptimum(CLzmaEnc* p, UInt32 position)
             {
                 unsigned len;
                 UInt32 price;
+#ifdef AOCL_ENABLE_THREADS
+                if(reps[repIndex] == -1) continue;
+#endif /* AOCL_ENABLE_THREADS */
                 const Byte* data2 = data - reps[repIndex];
                 if (GetUi16(data) != GetUi16(data2)) //if (data[0] != data2[0] || data[1] != data2[1])
                     continue;
@@ -4489,7 +4539,7 @@ size_t Lzma_compressBound(size_t insize)
     return outSize;
 }
 
-SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
+SRes LzmaEncode_ST(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
@@ -4542,6 +4592,1344 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
   return res;
 }
 
+static SRes (*LzmaEncode_mt_fp) (Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
+    const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
+    ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig) = LzmaEncode_ST;
+
+SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
+    const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
+    ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
+{
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    AOCL_SETUP_NATIVE();
+    SRes res;
+#ifdef AOCL_ENABLE_THREADS
+    res = LzmaEncode_mt_fp(dest, destLen, src, srcLen, props, propsEncoded, propsSize, writeEndMark, progress, alloc, allocBig);
+#else
+    res = LzmaEncode_ST(dest, destLen, src, srcLen, props, propsEncoded, propsSize, writeEndMark, progress, alloc, allocBig);
+#endif /* AOCL_ENABLE_THREADS */
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    return res;
+}
+
+#ifdef AOCL_ENABLE_THREADS
+
+/**************************************
+ * Helper functions for MT - Start
+ *************************************/
+#define LZMA_GET_WINDOW_FACTOR 1
+
+typedef struct SequenceEntry {
+  unsigned match_len;          // length of match (or 1 if no match)
+  unsigned dist;               // distance (MARK_LIT if no match, else it represents the offset of match)
+  unsigned additionalOffset;   // 
+  struct SequenceEntry *next;
+} SequenceEntry;
+
+int addEntry(SequenceEntry **head, SequenceEntry **tail, unsigned len, unsigned dist, unsigned additionalOffset)
+{
+  SequenceEntry *entry = (SequenceEntry *)malloc(sizeof(SequenceEntry));
+  if (!entry){
+    return -1; // memory allocation failed
+  }
+  entry->match_len = len;
+  entry->dist = dist;
+  entry->additionalOffset=additionalOffset;
+  entry->next = NULL;
+
+  if (*head == NULL)
+    *head = *tail = entry;
+  else
+  {
+    (*tail)->next = entry;
+    *tail = entry;
+  }
+  return 0;
+}
+
+void freeSequenceEntry(SequenceEntry *head)
+{
+  SequenceEntry *current = head;
+  while (current != NULL)
+  {
+    SequenceEntry *next = current->next;
+    free(current);
+    current = next;
+  } 
+}
+
+/**************************************
+ * Helper functions for MT - End
+ *************************************/
+
+/**************************************
+ * Init functions for MT - Start
+ *************************************/
+/**
+ * LzmaEnc_Init_mt(): Same as LzmaEnc_Init(), but for MT mode.
+ * Initializes p->reps[i] (i = 0..3) to -1 instead of 1.
+ */
+static void LzmaEnc_Init_mt(CLzmaEnc *p)
+{
+  unsigned i;
+  p->state = 0;
+  p->reps[0] =
+  p->reps[1] =
+  p->reps[2] =
+  p->reps[3] = -1; // Modified for MT implementation
+
+  RangeEnc_Init(&p->rc);
+
+  for (i = 0; i < (1 << kNumAlignBits); i++)
+    p->posAlignEncoder[i] = kProbInitValue;
+
+  for (i = 0; i < kNumStates; i++)
+  {
+    unsigned j;
+    for (j = 0; j < LZMA_NUM_PB_STATES_MAX; j++)
+    {
+      p->isMatch[i][j] = kProbInitValue;
+      p->isRep0Long[i][j] = kProbInitValue;
+    }
+    p->isRep[i] = kProbInitValue;
+    p->isRepG0[i] = kProbInitValue;
+    p->isRepG1[i] = kProbInitValue;
+    p->isRepG2[i] = kProbInitValue;
+  }
+
+  {
+    for (i = 0; i < kNumLenToPosStates; i++)
+    {
+      CLzmaProb *probs = p->posSlotEncoder[i];
+      unsigned j;
+      for (j = 0; j < (1 << kNumPosSlotBits); j++)
+        probs[j] = kProbInitValue;
+    }
+  }
+  {
+    for (i = 0; i < kNumFullDistances; i++)
+      p->posEncoders[i] = kProbInitValue;
+  }
+
+  {
+    UInt32 num = (UInt32)0x300 << (p->lp + p->lc);
+    UInt32 k;
+    CLzmaProb *probs = p->litProbs;
+    for (k = 0; k < num; k++)
+      probs[k] = kProbInitValue;
+  }
+
+
+  LenEnc_Init(&p->lenProbs);
+  LenEnc_Init(&p->repLenProbs);
+
+  p->optEnd = 0;
+  p->optCur = 0;
+
+  {
+    for (i = 0; i < kNumOpts; i++)
+      p->opt[i].price = kInfinityPrice;
+  }
+
+  p->additionalOffset = 0;
+
+  p->pbMask = ((unsigned)1 << p->pb) - 1;
+  p->lpMask = ((UInt32)0x100 << p->lp) - ((unsigned)0x100 >> p->lc);
+
+  // p->mf_Failure = False;
+}
+
+/**
+ * LzmaEnc_AllocAndInit_mt(): Same as LzmaEnc_AllocAndInit(), but for MT mode.
+ * Calls LzmaEnc_Init_mt() instead of LzmaEnc_Init().
+ */
+static SRes LzmaEnc_AllocAndInit_mt(CLzmaEnc *p, UInt32 keepWindowSize, ISzAllocPtr alloc, ISzAllocPtr allocBig)
+{
+  unsigned i;
+  for (i = kEndPosModelIndex / 2; i < kDicLogSizeMax; i++)
+    if (p->dictSize <= ((UInt32)1 << i))
+      break;
+  p->distTableSize = i * 2;
+
+  p->finished = False;
+  p->result = SZ_OK;
+  RINOK(LzmaEnc_Alloc(p, keepWindowSize, alloc, allocBig));
+  LzmaEnc_Init_mt(p);
+  LzmaEnc_InitPrices(p);
+  p->nowPos64 = 0;
+  return SZ_OK;
+}
+
+/**
+ * LzmaEnc_MemPrepare_mt(): Same as LzmaEnc_MemPrepare(), but for MT mode.
+ * Calls LzmaEnc_AllocAndInit_mt instead of LzmaEnc_AllocAndInit().
+ */
+SRes LzmaEnc_MemPrepare_mt(CLzmaEncHandle pp, const Byte *src, SizeT srcLen,
+  UInt32 keepWindowSize, ISzAllocPtr alloc, ISzAllocPtr allocBig)
+{
+  CLzmaEnc *p = (CLzmaEnc *)pp;
+  LzmaEnc_SetInputBuf(p, src, srcLen);
+  p->needInit = 1;
+
+  LzmaEnc_SetDataSize(pp, srcLen);
+  return LzmaEnc_AllocAndInit_mt(p, keepWindowSize, alloc, allocBig);
+}
+
+/**************************************
+ * Init functions for MT - End
+ *************************************/
+/**************************************
+ * MT 1st Pass functions - Start
+ *************************************/
+
+/* Hack on optimal parsing strategy with some heuristics to provide
+* faster matches albeit not optimal */ 
+/**
+ * AOCL_GetOptimumFast_mt():
+ * Same as GetOptimumFast() but for multi-threaded implementation
+ * where p->reps[i] is not checked if it is -1.
+ */
+static unsigned AOCL_GetOptimumFast_mt(CLzmaEnc *p)
+{
+  UInt32 numAvail, mainDist;
+  unsigned mainLen, numPairs, repIndex, repLen, i;
+  const Byte *data;
+
+  /* if additionalOffset is > 0, parsing for cur byte has already been completed 
+  * in one of the previous ReadMatchDistances() calls used to check matches for
+  * future sequences. Results are already available in p-> and can be used 
+  * without having to find matches again. */
+  if (p->additionalOffset == 0)
+    mainLen = ReadMatchDistances(p, &numPairs); // find matches in dictionary. Return longest matched length.
+  else
+  {
+    mainLen = p->longestMatchLen;
+    numPairs = p->numPairs;
+  }
+
+  numAvail = p->numAvail;
+  p->backRes = MARK_LIT;
+  if (numAvail < 2)
+    return 1;
+  // if (mainLen < 2 && p->state == 0) return 1; // 18.06.notused
+  if (numAvail > LZMA_MATCH_LEN_MAX)
+    numAvail = LZMA_MATCH_LEN_MAX; // max len allowed by lzma format
+  data = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - 1;
+  repLen = repIndex = 0;
+  
+  /* Find longest match at distances in any of the reps for 'data'.
+  * If long enough match is found at any of the reps, it can be used
+  * instead of <mainLen, mainDist> as we save on encoding mainDist */
+  for (i = 0; i < LZMA_NUM_REPS; i++)
+  {
+    unsigned len;
+    if(p->reps[i] == -1) /* Modified for MT implementation */
+      continue;
+    const Byte *data2 = data - p->reps[i];
+    if (data[0] != data2[0] || data[1] != data2[1])
+      continue;
+    for (len = 2; len < numAvail && data[len] == data2[len]; len++)
+    {}
+    if (len >= p->numFastBytes)
+    {
+      p->backRes = (UInt32)i;
+      MOVE_POS(p, len - 1)
+      return len;
+    }
+    if (len > repLen)
+    {
+      repIndex = i; // rep with longest match
+      repLen = len; // longest match len
+    }
+  }
+
+  if (mainLen >= p->numFastBytes) //if len long enough, just choose this
+  {
+    p->backRes = p->matches[(size_t)numPairs - 1] + LZMA_NUM_REPS;
+    MOVE_POS(p, mainLen - 1)
+    return mainLen; // choose mainLen as final match
+  }
+
+  mainDist = 0; /* for GCC */
+  
+  if (mainLen >= 2)
+  {
+    /* mainLen and mainDist are the last 2 of the valid elements in p->matches
+    * mainLen: p->matches[numPairs - 2], mainDist: p->matches[numPairs - 1]
+    * As we go up the list, we will have matches with lesser len (which will also
+    * have smaller distances). Start comparing with previous entries in matches.
+    * LZ77 always chooses the largest 'len' match irrespective of the distance.
+    * In lzma, choosing a smaller <len, distance> pair can be justified if a smaller 
+    * 'len' match is available at a shorter distance.
+    * Heuristic of difference of len being > 1 or difference in distance not being
+    * large enough is used to justify which pair to choose. */
+    mainDist = p->matches[(size_t)numPairs - 1];
+    while (numPairs > 2)
+    {
+      UInt32 dist2;
+      if (mainLen != p->matches[(size_t)numPairs - 4] + 1) // compare with previous matches len
+        break; // difference in len > 1 break
+      dist2 = p->matches[(size_t)numPairs - 3];
+      if (!ChangePair(dist2, mainDist))  // compare with previous matches distance
+        break; // distance not large enough : dist2 > mainDist/7 break
+      numPairs -= 2;
+      mainLen--;
+      mainDist = dist2;
+    }
+    if (mainLen == 2 && mainDist >= 0x80)
+      mainLen = 1;
+  }
+
+  /* If any of the rep matches has repLen close to or larger than
+  * the new mainLen, then it is better to stick to that repLen as
+  * you will save on encoding distance */
+  if (repLen >= 2)
+    if (    repLen + 1 >= mainLen
+        || (repLen + 2 >= mainLen && mainDist >= (1 << 9))
+        || (repLen + 3 >= mainLen && mainDist >= (1 << 15)))
+  {
+    p->backRes = (UInt32)repIndex;
+    MOVE_POS(p, repLen - 1)
+    return repLen; // choose repLen as final match
+  }
+  
+  if (mainLen < 2 || numAvail <= 2)
+    return 1;
+
+  /* Check if skipping a byte and coding it as a literal is worth it, i.e.
+  * if match for sequence starting at next byte is better overall */
+  {
+    unsigned len1 = ReadMatchDistances(p, &p->numPairs); // Find matches by skipping a byte
+    p->longestMatchLen = len1;
+  
+    if (len1 >= 2)
+    {
+      UInt32 newDist = p->matches[(size_t)p->numPairs - 1];
+      // Criterion used to justify if we can skip current byte
+      if (   (len1 >= mainLen && newDist < mainDist)
+          || (len1 == mainLen + 1 && !ChangePair(mainDist, newDist))
+          || (len1 >  mainLen + 1)
+          || (len1 + 1 >= mainLen && mainLen >= 3 && ChangePair(newDist, mainDist)))
+        return 1; // code current byte as literal
+    }
+  }
+  
+  data = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - 1;
+  
+  /* Compare with reps for new sequence. This might still justify skipping
+  * a byte, even if criterion above is not satisfied */
+  for (i = 0; i < LZMA_NUM_REPS; i++)
+  {
+    unsigned len, limit;
+    if(p->reps[i] == -1) /* Modified for MT implementation */
+      continue;
+    const Byte *data2 = data - p->reps[i];
+    if (data[0] != data2[0] || data[1] != data2[1])
+      continue;
+    limit = mainLen - 1;
+    for (len = 2;; len++)
+    {
+      if (len >= limit)
+        return 1; // new sequence provides long enough match at this rep. Worth skipping a byte.
+      if (data[len] != data2[len])
+        break;
+    }
+  }
+  
+  /* Not worth skipping byte. Return longest mainLen and mainDist from
+  * the first ReadMatchDistances call */
+  p->backRes = mainDist + LZMA_NUM_REPS;
+  if (mainLen != 2)
+  {
+    MOVE_POS(p, mainLen - 2)
+  }
+  return mainLen;
+}
+
+/**
+ * LzmaEnc_CodeOneBlock_mt_1st_pass(): Same as LzmaEnc_CodeOneBlock(), but for MT mode.
+ * Uses SequenceEntry list to store the sequence of matches and literals.
+ * This is used to encode the data in the 2nd pass.
+ * Does not flush the data to the output stream.
+ */
+MY_NO_INLINE
+static SRes LzmaEnc_CodeOneBlock_mt_1st_pass(CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpackSize, SequenceEntry** head, SequenceEntry** tail)
+{
+  UInt32 nowPos32, startPos32;
+  if (p->needInit)
+  {
+    p->matchFinder.Init(p->matchFinderObj);
+    p->needInit = 0;
+  }
+
+  if (p->finished)
+    return p->result;
+  RINOK(CheckErrors(p));
+
+  nowPos32 = (UInt32)p->nowPos64;
+  startPos32 = nowPos32;
+
+
+  if (p->nowPos64 == 0) // first byte in stream
+  {
+    unsigned numPairs;
+    Byte curByte;
+    if (p->matchFinder.GetNumAvailableBytes(p->matchFinderObj) == 0)
+      return Flush(p, nowPos32);
+    ReadMatchDistances(p, &numPairs);
+    RangeEnc_EncodeBit_0(&p->rc, &p->isMatch[kState_Start][0]);
+    // p->state = kLiteralNextStates[p->state];
+    curByte = *(p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - p->additionalOffset);
+    LitEnc_Encode(&p->rc, p->litProbs, curByte);
+
+    // Modified for MT implementation
+    addEntry(head, tail, 1 /* len */, MARK_LIT /* dist */, p->additionalOffset);
+
+    p->additionalOffset--;
+    nowPos32++;
+  }
+
+  if (p->matchFinder.GetNumAvailableBytes(p->matchFinderObj) != 0)
+  
+  for (;;)
+  {
+    UInt32 dist;
+    unsigned len, posState;
+    UInt32 range, ttt, newBound;
+    CLzmaProb *probs;
+  
+    if (p->fastMode) // hash-chain algo
+      len = AOCL_GetOptimumFast_mt(p);
+    else // bin-tree algo
+    {
+      unsigned oci = p->optCur;
+      if (p->optEnd == oci)
+        len = AOCL_GetOptimum(p, nowPos32);
+      else
+      {
+        const COptimal *opt = &p->opt[oci];
+        len = opt->len;
+        p->backRes = opt->dist;
+        p->optCur = oci + 1;
+      }
+    }
+
+    posState = (unsigned)nowPos32 & p->pbMask;
+    range = p->rc.range;
+    probs = &p->isMatch[p->state][posState];
+    
+    RC_BIT_PRE(&p->rc, probs)
+    
+    dist = p->backRes;
+
+    #ifdef SHOW_STAT2
+    printf("\n pos = %6X, len = %3u  pos = %6u", nowPos32, len, dist);
+    #endif
+
+    /* Depending on the type of data to be saved: literal, srep, 
+    * rep or match, corresponding code is encoded. This is followed by 
+    * optionally encoding len and/or distance values */
+    if (dist == MARK_LIT) // literal
+    {
+      Byte curByte;
+      const Byte *data;
+      unsigned state;
+
+      RC_BIT_0(&p->rc, probs); // code:0+*
+      p->rc.range = range;
+      data = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - p->additionalOffset;
+      probs = LIT_PROBS(nowPos32, *(data - 1)); // get appropriate context model for literal encoding 
+      curByte = *data;
+      state = p->state;
+      p->state = kLiteralNextStates[state];
+
+      // Modified for MT implementation
+      addEntry(head, tail, 1 /* len */, MARK_LIT /* dist */, p->additionalOffset);
+
+      if (IsLitState(state))
+        LitEnc_Encode(&p->rc, probs, curByte);
+      else
+        LitEnc_EncodeMatched(&p->rc, probs, curByte, *(data - p->reps[0]));
+
+    }
+    else // rep, srep or match
+    {
+      // Modified for MT implementation
+      unsigned match_len = len;
+      unsigned match_offset = dist;
+
+      RC_BIT_1(&p->rc, probs); // code:1+*
+      probs = &p->isRep[p->state];
+      RC_BIT_PRE(&p->rc, probs)
+      
+      if (dist < LZMA_NUM_REPS) // rep or srep
+      {
+        RC_BIT_1(&p->rc, probs); // code:11+*
+        probs = &p->isRepG0[p->state];
+        RC_BIT_PRE(&p->rc, probs)
+        if (dist == 0) // srep or rep0
+        {
+          RC_BIT_0(&p->rc, probs); // code:110+*
+          probs = &p->isRep0Long[p->state][posState];
+          RC_BIT_PRE(&p->rc, probs)
+          if (len != 1)
+          {
+            RC_BIT_1_BASE(&p->rc, probs); //code:1101
+          }
+          else // srep
+          {
+            RC_BIT_0_BASE(&p->rc, probs); // code:1100
+            p->state = kShortRepNextStates[p->state];
+          }
+        }
+        else // rep1-3
+        {
+          RC_BIT_1(&p->rc, probs); // code:111+*
+          probs = &p->isRepG1[p->state];
+          RC_BIT_PRE(&p->rc, probs)
+          if (dist == 1) // rep1
+          {
+            RC_BIT_0_BASE(&p->rc, probs); // code:1110
+            dist = p->reps[1];
+          }
+          else // rep2-3
+          {
+            RC_BIT_1(&p->rc, probs); // code:1111+*
+            probs = &p->isRepG2[p->state];
+            RC_BIT_PRE(&p->rc, probs)
+            if (dist == 2) // rep2
+            {
+              RC_BIT_0_BASE(&p->rc, probs); // code:11110
+              dist = p->reps[2];
+            }
+            else // rep3
+            {
+              RC_BIT_1_BASE(&p->rc, probs); // code:11111
+              dist = p->reps[3];
+              p->reps[3] = p->reps[2]; // move reps queue dist->0->1->2->3
+            }
+            p->reps[2] = p->reps[1]; // move reps queue dist->0->1->2->3
+          }
+          p->reps[1] = p->reps[0]; // move reps queue dist->0->1->2->3
+          p->reps[0] = dist; // move reps queue dist->0->1->2->3
+        }
+
+        RC_NORM(&p->rc)
+
+        p->rc.range = range;
+
+        if (len != 1) // code saved, now encode len
+        {
+          LenEnc_Encode(&p->repLenProbs, &p->rc, len - LZMA_MATCH_LEN_MIN, posState);
+          --p->repLenEncCounter;
+          p->state = kRepNextStates[p->state];
+        }
+      }
+      else // match
+      {
+        unsigned posSlot;
+        RC_BIT_0(&p->rc, probs);
+        p->rc.range = range;
+        p->state = kMatchNextStates[p->state];
+
+        LenEnc_Encode(&p->lenProbs, &p->rc, len - LZMA_MATCH_LEN_MIN, posState); // encode len
+        // --p->lenEnc.counter;
+
+        dist -= LZMA_NUM_REPS;
+        p->reps[3] = p->reps[2];
+        p->reps[2] = p->reps[1];
+        p->reps[1] = p->reps[0];
+        p->reps[0] = dist + 1;
+        
+        p->matchPriceCount++;
+        GetPosSlot(dist, posSlot);
+        // RcTree_Encode_PosSlot(&p->rc, p->posSlotEncoder[GetLenToPosState(len)], posSlot);
+        {
+          UInt32 sym = (UInt32)posSlot + (1 << kNumPosSlotBits);
+          range = p->rc.range;
+          probs = p->posSlotEncoder[GetLenToPosState(len)];
+          do // Range code 'slot' bitwise
+          {
+            CLzmaProb *prob = probs + (sym >> kNumPosSlotBits);
+            UInt32 bit = (sym >> (kNumPosSlotBits - 1)) & 1;
+            sym <<= 1;
+            RC_BIT(&p->rc, prob, bit);
+          }
+          while (sym < (1 << kNumPosSlotBits * 2));
+          p->rc.range = range;
+        }
+        
+        if (dist >= kStartPosModelIndex) // dist > 3 (dist 0:3 no direct_bits)
+        {
+          unsigned footerBits = ((posSlot >> 1) - 1);
+
+          if (dist < kNumFullDistances) // dis: 4-127, 
+          {
+            unsigned base = ((2 | (posSlot & 1)) << footerBits);
+            RcTree_ReverseEncode(&p->rc, p->posEncoders + base, footerBits, (unsigned)(dist /* - base */));
+          }
+          else // dist >= 128
+          {
+            UInt32 pos2 = (dist | 0xF) << (32 - footerBits); // direct_bits-4 part
+            range = p->rc.range;
+            // RangeEnc_EncodeDirectBits(&p->rc, posReduced >> kNumAlignBits, footerBits - kNumAlignBits);
+            /*
+            do
+            {
+              range >>= 1;
+              p->rc.low += range & (0 - ((dist >> --footerBits) & 1));
+              RC_NORM(&p->rc)
+            }
+            while (footerBits > kNumAlignBits);
+            */
+            do // fixed 0.5 prob model
+            {
+              range >>= 1;
+              p->rc.low += range & (0 - (pos2 >> 31));
+              pos2 += pos2;
+              RC_NORM(&p->rc)
+            }
+            while (pos2 != 0xF0000000);
+
+
+            // RcTree_ReverseEncode(&p->rc, p->posAlignEncoder, kNumAlignBits, posReduced & kAlignMask);
+
+            { // remaining 4 align bits LSB to MSB
+              unsigned m = 1;
+              unsigned bit;
+              bit = dist & 1; dist >>= 1; RC_BIT(&p->rc, p->posAlignEncoder + m, bit); m = (m << 1) + bit;
+              bit = dist & 1; dist >>= 1; RC_BIT(&p->rc, p->posAlignEncoder + m, bit); m = (m << 1) + bit;
+              bit = dist & 1; dist >>= 1; RC_BIT(&p->rc, p->posAlignEncoder + m, bit); m = (m << 1) + bit;
+              bit = dist & 1;             RC_BIT(&p->rc, p->posAlignEncoder + m, bit);
+              p->rc.range = range;
+              // p->alignPriceCount++;
+            }
+          }
+        }
+      }
+      // Modified for MT implementation
+      addEntry(head, tail, match_len /* len */, match_offset /* dist */, p->additionalOffset);
+    }
+
+    nowPos32 += (UInt32)len;
+    p->additionalOffset -= len;
+        
+    if (p->additionalOffset == 0)
+    {
+      UInt32 processed;
+
+      if (!p->fastMode)
+      {
+        /*
+        if (p->alignPriceCount >= 16) // kAlignTableSize
+          FillAlignPrices(p);
+        if (p->matchPriceCount >= 128)
+          FillDistancesPrices(p);
+        if (p->lenEnc.counter <= 0)
+          LenPriceEnc_UpdateTables(&p->lenEnc, 1 << p->pb, &p->lenProbs, p->ProbPrices);
+        */
+        if (p->matchPriceCount >= 64)
+        {
+          FillAlignPrices(p);
+          // { int y; for (y = 0; y < 100; y++) {
+          FillDistancesPrices(p);
+          // }}
+          LenPriceEnc_UpdateTables(&p->lenEnc, (unsigned)1 << p->pb, &p->lenProbs, p->ProbPrices);
+        }
+        if (p->repLenEncCounter <= 0)
+        {
+          p->repLenEncCounter = REP_LEN_COUNT;
+          LenPriceEnc_UpdateTables(&p->repLenEnc, (unsigned)1 << p->pb, &p->repLenProbs, p->ProbPrices);
+        }
+      }
+    
+      if (p->matchFinder.GetNumAvailableBytes(p->matchFinderObj) == 0)
+        break;
+      processed = nowPos32 - startPos32;
+      
+      if (maxPackSize)
+      {
+        if (processed + kNumOpts + 300 >= maxUnpackSize
+            || RangeEnc_GetProcessed_sizet(&p->rc) + kPackReserve >= maxPackSize)
+          break;
+      }
+      else if (processed >= (1 << 17))
+      {
+        p->nowPos64 += nowPos32 - startPos32;
+        return CheckErrors(p);
+      }
+    }
+  }
+
+  p->nowPos64 += nowPos32 - startPos32;
+  return Flush(p, nowPos32);
+}
+
+/**
+ * LzmaEnc_Encode2_mt_1st_pass(): Same as LzmaEnc_Encode2(), but for MT mode.
+ * Calls LzmaEnc_CodeOneBlock_mt_1st_pass() in place of LzmaEnc_CodeOneBlock()
+ * in a loop until all data is processed.
+ */
+MY_NO_INLINE
+static SRes LzmaEnc_Encode2_mt_1st_pass(CLzmaEnc *p, ICompressProgress *progress, SequenceEntry** head, SequenceEntry** tail)
+{
+  SRes res = SZ_OK;
+
+  #ifndef _7ZIP_ST
+  Byte allocaDummy[0x300];
+  allocaDummy[0] = 0;
+  allocaDummy[1] = allocaDummy[0];
+  #endif
+
+  for (;;)
+  {
+    res = LzmaEnc_CodeOneBlock_mt_1st_pass(p, 0, 0, head, tail);
+    if (res != SZ_OK || p->finished)
+      break;
+    if (progress)
+    {
+      res = ICompressProgress_Progress(progress, p->nowPos64, RangeEnc_GetProcessed(&p->rc));
+      if (res != SZ_OK)
+      {
+        res = SZ_ERROR_PROGRESS;
+        break;
+      }
+    }
+  }
+  
+  LzmaEnc_Finish(p);
+
+  /*
+  if (res == SZ_OK && !Inline_MatchFinder_IsFinishedOK(&MFB))
+    res = SZ_ERROR_FAIL;
+  }
+  */
+
+  return res;
+}
+
+/**
+ * LzmaEnc_MemEncode_mt_1st_pass(): Same as LzmaEnc_MemEncode(), but for MT mode.
+ * calls LzmaEnc_MemPrepare_mt() to prepare the encoder and LzmaEnc_Encode2_mt_1st_pass() to encode
+ * in place of LzmaEnc_MemPrepare() and LzmaEnc_Encode2() respectively.
+ */
+SRes LzmaEnc_MemEncode_mt_1st_pass(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
+    int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig, SequenceEntry** head, SequenceEntry** tail)
+{
+  AOCL_SETUP_NATIVE();
+  if (pp == NULL || src == NULL || srcLen == 0 || dest == NULL || destLen == NULL || alloc == NULL || allocBig == NULL) {
+      LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+      return SZ_ERROR_PARAM;
+  }
+
+  SRes res;
+  CLzmaEnc *p = (CLzmaEnc *)pp;
+
+  CLzmaEnc_SeqOutStreamBuf outStream;
+
+  outStream.vt.Write = SeqOutStreamBuf_Write;
+  outStream.data = dest;
+  outStream.rem = *destLen;
+  outStream.overflow = False;
+
+  p->writeEndMark = writeEndMark;
+  p->rc.outStream = &outStream.vt;
+
+  res = LzmaEnc_MemPrepare_mt(pp, src, srcLen, 0, alloc, allocBig);
+ 
+  if (res == SZ_OK)
+  {
+    res = LzmaEnc_Encode2_mt_1st_pass(p, progress, head, tail);
+    if (res == SZ_OK && p->nowPos64 != srcLen) {
+        LOG_UNFORMATTED(ERR, logCtx, "Not all src bytes processed");
+        res = SZ_ERROR_FAIL;
+    }
+  }
+
+  *destLen -= outStream.rem;
+  if (outStream.overflow) {
+      LOG_UNFORMATTED(ERR, logCtx, "Out stream overflow");
+      return SZ_ERROR_OUTPUT_EOF;
+  }
+  return res;
+}
+/**************************************
+ * MT 1st Pass functions - End
+ *************************************/
+/**************************************
+ * MT 2nd Pass functions - Start
+ *************************************/
+/**
+ * LzmaEnc_CodeOneBlock_st_2nd_pass(): Same as LzmaEnc_CodeOneBlock(), but used in MT mode 
+ * for the second pass that operates in ST mode. Iterates through the SequenceEntry list
+ * and encodes each entry as a literal, match or rep.
+ * Calls Flush() at the end to flush the encoded data to the output stream only if it is
+ * the last thread.
+ */
+MY_NO_INLINE
+static SRes LzmaEnc_CodeOneBlock_st_2nd_pass(SequenceEntry **head, CLzmaEnc *p, UInt32 maxPackSize, UInt32 maxUnpackSize, int last_thread)
+{
+  SequenceEntry *current = *head;
+  UInt32 nowPos32, startPos32;
+  if (p->needInit)
+  {
+    p->matchFinder.Init(p->matchFinderObj);
+    p->needInit = 0;
+  }
+
+  if (p->finished)
+    return p->result;
+  RINOK(CheckErrors(p));
+
+  nowPos32 = (UInt32)p->nowPos64;
+  startPos32 = nowPos32;
+
+  if (p->nowPos64 == 0) // first byte in  stream
+  {
+    // unsigned numPairs;   // edit - commented
+    Byte curByte;
+    if (p->matchFinder.GetNumAvailableBytes(p->matchFinderObj) == 0)
+      return Flush(p, nowPos32);
+    // ReadMatchDistances(p, &numPairs);     // edit - commented
+    RangeEnc_EncodeBit_0(&p->rc, &p->isMatch[kState_Start][0]);
+    // p->state = kLiteralNextStates[p->state];
+    // curByte = *(p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - p->additionalOffset); // edit - commented
+
+    /* Modified for MT implementation - Start */
+    curByte = *(p->matchFinderBase.bufferBase + nowPos32); 
+    p->additionalOffset = current->additionalOffset;
+    current = current->next;
+    /* Modified for MT implementation - End */
+
+    LitEnc_Encode(&p->rc, p->litProbs, curByte);
+    p->additionalOffset--;
+    nowPos32++;
+
+  }
+
+  // if (p->matchFinder.GetNumAvailableBytes(p->matchFinderObj) != 0) // edit - commented
+  
+  /* Modified for MT implementation - Start */
+  while(current != NULL)
+  {
+    UInt32 dist;
+    unsigned len, posState;
+    UInt32 range, ttt, newBound;
+    CLzmaProb *probs;
+    Byte* data;
+    
+    if(current->dist == MARK_LIT){
+      data = (p->matchFinderBase.bufferBase + nowPos32); // literal data
+    }
+    len = current->match_len;                         // match length; 1 if it is literal
+    dist = current->dist;                             // distance
+    p->additionalOffset = current->additionalOffset;  // additional offset
+
+    current = current->next;                          // move to next entry
+    
+    p->backRes = dist;
+
+    /* Modified for MT implementation - End */
+
+    posState = (unsigned)nowPos32 & p->pbMask;
+    range = p->rc.range;
+    probs = &p->isMatch[p->state][posState];
+    
+    RC_BIT_PRE(&p->rc, probs)
+    
+
+    #ifdef SHOW_STAT2
+    printf("\n pos = %6X, len = %3u  pos = %6u", nowPos32, len, dist);
+    #endif
+    
+    /* Depending on the type of data to be saved: literal, srep, 
+    * rep or match, corresponding code is encoded. This is followed by 
+    * optionally encoding len and/or distance values */
+    if (dist == MARK_LIT) // literal
+    {
+      Byte curByte;
+      // const Byte *data;  // edit - commented
+      unsigned state;
+
+      RC_BIT_0(&p->rc, probs); // code:0+*
+      p->rc.range = range;
+      // data = p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - p->additionalOffset; // edit - commented
+      probs = LIT_PROBS(nowPos32, *(data - 1)); // get appropriate context model for literal encoding 
+      curByte = *data;
+      state = p->state;
+      p->state = kLiteralNextStates[state];
+      if (IsLitState(state))
+        LitEnc_Encode(&p->rc, probs, curByte);
+      else
+        LitEnc_EncodeMatched(&p->rc, probs, curByte, *(data - p->reps[0]));
+    }
+    else // rep, srep or match
+    {
+      RC_BIT_1(&p->rc, probs); // code:1+*
+      probs = &p->isRep[p->state];
+      RC_BIT_PRE(&p->rc, probs)
+      
+      if (dist < LZMA_NUM_REPS) // rep or srep
+      {
+        RC_BIT_1(&p->rc, probs); // code:11+*
+        probs = &p->isRepG0[p->state];
+        RC_BIT_PRE(&p->rc, probs)
+        if (dist == 0) // srep or rep0
+        {
+          RC_BIT_0(&p->rc, probs); // code:110+*
+          probs = &p->isRep0Long[p->state][posState];
+          RC_BIT_PRE(&p->rc, probs)
+          if (len != 1)
+          {
+            RC_BIT_1_BASE(&p->rc, probs); //code:1101
+          }
+          else // srep
+          {
+            RC_BIT_0_BASE(&p->rc, probs); // code:1100
+            p->state = kShortRepNextStates[p->state];
+          }
+        }
+        else // rep1-3
+        {
+          RC_BIT_1(&p->rc, probs); // code:111+*
+          probs = &p->isRepG1[p->state];
+          RC_BIT_PRE(&p->rc, probs)
+          if (dist == 1) // rep1
+          {
+            RC_BIT_0_BASE(&p->rc, probs); // code:1110
+            dist = p->reps[1];
+          }
+          else // rep2-3
+          {
+            RC_BIT_1(&p->rc, probs); // code:1111+*
+            probs = &p->isRepG2[p->state];
+            RC_BIT_PRE(&p->rc, probs)
+            if (dist == 2) // rep2
+            {
+              RC_BIT_0_BASE(&p->rc, probs); // code:11110
+              dist = p->reps[2];
+            }
+            else // rep3
+            {
+              RC_BIT_1_BASE(&p->rc, probs); // code:11111
+              dist = p->reps[3];
+              p->reps[3] = p->reps[2]; // move reps queue dist->0->1->2->3
+            }
+            p->reps[2] = p->reps[1]; // move reps queue dist->0->1->2->3
+          }
+          p->reps[1] = p->reps[0]; // move reps queue dist->0->1->2->3
+          p->reps[0] = dist; // move reps queue dist->0->1->2->3
+        }
+
+        RC_NORM(&p->rc)
+
+        p->rc.range = range;
+
+        if (len != 1) // code saved, now encode len
+        {
+          LenEnc_Encode(&p->repLenProbs, &p->rc, len - LZMA_MATCH_LEN_MIN, posState);
+          --p->repLenEncCounter;
+          p->state = kRepNextStates[p->state];
+        }
+      }
+      else // match
+      {
+        unsigned posSlot;
+        RC_BIT_0(&p->rc, probs);
+        p->rc.range = range;
+        p->state = kMatchNextStates[p->state];
+
+        LenEnc_Encode(&p->lenProbs, &p->rc, len - LZMA_MATCH_LEN_MIN, posState); // encode len
+        // --p->lenEnc.counter;
+
+        dist -= LZMA_NUM_REPS;
+        p->reps[3] = p->reps[2];
+        p->reps[2] = p->reps[1];
+        p->reps[1] = p->reps[0];
+        p->reps[0] = dist + 1;
+        
+        p->matchPriceCount++;
+        GetPosSlot(dist, posSlot);
+        // RcTree_Encode_PosSlot(&p->rc, p->posSlotEncoder[GetLenToPosState(len)], posSlot);
+        {
+          UInt32 sym = (UInt32)posSlot + (1 << kNumPosSlotBits);
+          range = p->rc.range;
+          probs = p->posSlotEncoder[GetLenToPosState(len)];
+          do // Range code 'slot' bitwise
+          {
+            CLzmaProb *prob = probs + (sym >> kNumPosSlotBits);
+            UInt32 bit = (sym >> (kNumPosSlotBits - 1)) & 1;
+            sym <<= 1;
+            RC_BIT(&p->rc, prob, bit);
+          }
+          while (sym < (1 << kNumPosSlotBits * 2));
+          p->rc.range = range;
+        }
+        
+        if (dist >= kStartPosModelIndex) // dist > 3 (dist 0:3 no direct_bits)
+        {
+          unsigned footerBits = ((posSlot >> 1) - 1);
+
+          if (dist < kNumFullDistances) // dis: 4-127, 
+          {
+            unsigned base = ((2 | (posSlot & 1)) << footerBits);
+            RcTree_ReverseEncode(&p->rc, p->posEncoders + base, footerBits, (unsigned)(dist /* - base */));
+          }
+          else // dist >= 128
+          {
+            UInt32 pos2 = (dist | 0xF) << (32 - footerBits); // direct_bits-4 part
+            range = p->rc.range;
+            // RangeEnc_EncodeDirectBits(&p->rc, posReduced >> kNumAlignBits, footerBits - kNumAlignBits);
+            /*
+            do
+            {
+              range >>= 1;
+              p->rc.low += range & (0 - ((dist >> --footerBits) & 1));
+              RC_NORM(&p->rc)
+            }
+            while (footerBits > kNumAlignBits);
+            */
+            do // fixed 0.5 prob model
+            {
+              range >>= 1;
+              p->rc.low += range & (0 - (pos2 >> 31));
+              pos2 += pos2;
+              RC_NORM(&p->rc)
+            }
+            while (pos2 != 0xF0000000);
+
+
+            // RcTree_ReverseEncode(&p->rc, p->posAlignEncoder, kNumAlignBits, posReduced & kAlignMask);
+
+            { // remaining 4 align bits LSB to MSB
+              unsigned m = 1;
+              unsigned bit;
+              bit = dist & 1; dist >>= 1; RC_BIT(&p->rc, p->posAlignEncoder + m, bit); m = (m << 1) + bit;
+              bit = dist & 1; dist >>= 1; RC_BIT(&p->rc, p->posAlignEncoder + m, bit); m = (m << 1) + bit;
+              bit = dist & 1; dist >>= 1; RC_BIT(&p->rc, p->posAlignEncoder + m, bit); m = (m << 1) + bit;
+              bit = dist & 1;             RC_BIT(&p->rc, p->posAlignEncoder + m, bit);
+              p->rc.range = range;
+              // p->alignPriceCount++;
+            }
+          }
+        }
+      }
+    }
+
+    nowPos32 += (UInt32)len;
+    p->additionalOffset -= len;
+    
+    if (p->additionalOffset == 0)
+    {
+      UInt32 processed;
+
+      if (!p->fastMode)
+      {
+        /*
+        if (p->alignPriceCount >= 16) // kAlignTableSize
+          FillAlignPrices(p);
+        if (p->matchPriceCount >= 128)
+          FillDistancesPrices(p);
+        if (p->lenEnc.counter <= 0)
+          LenPriceEnc_UpdateTables(&p->lenEnc, 1 << p->pb, &p->lenProbs, p->ProbPrices);
+        */
+        if (p->matchPriceCount >= 64)
+        {
+          FillAlignPrices(p);
+          // { int y; for (y = 0; y < 100; y++) {
+          FillDistancesPrices(p);
+          // }}
+          LenPriceEnc_UpdateTables(&p->lenEnc, (unsigned)1 << p->pb, &p->lenProbs, p->ProbPrices);
+        }
+        if (p->repLenEncCounter <= 0)
+        {
+          p->repLenEncCounter = REP_LEN_COUNT;
+          LenPriceEnc_UpdateTables(&p->repLenEnc, (unsigned)1 << p->pb, &p->repLenProbs, p->ProbPrices);
+        }
+      }
+    
+      // edit - commented
+      // if (p->matchFinder.GetNumAvailableBytes(p->matchFinderObj) == 0)
+      //   break;
+      processed = nowPos32 - startPos32;
+      
+      if (maxPackSize)
+      {
+        if (processed + kNumOpts + 300 >= maxUnpackSize
+            || RangeEnc_GetProcessed_sizet(&p->rc) + kPackReserve >= maxPackSize)
+          break;
+      }
+      else if (processed >= (1 << 17))      
+      {
+        p->nowPos64 += nowPos32 - startPos32;
+        *head = current; // Modified for MT implementation
+        return CheckErrors(p);
+      }
+    }
+  }
+
+  /* Modified for MT implementation - Start */
+  p->nowPos64 += nowPos32 - startPos32;
+  if (last_thread) {
+    return Flush(p, nowPos32);
+  }
+
+  p->finished = True;
+  return CheckErrors(p);
+  /* Modified for MT implementation - End */
+}
+
+/**
+ * LzmaEnc_Encode2_st_2nd_pass(): Same as LzmaEnc_Encode2(), but used in MT mode 
+ * for the second pass that operates in ST mode. Calls LzmaEnc_CodeOneBlock_st_2nd_pass()
+ * in place of LzmaEnc_CodeOneBlock() in a loop until all data is processed.
+ */
+MY_NO_INLINE
+static SRes LzmaEnc_Encode2_st_2nd_pass(CLzmaEnc *p, ICompressProgress *progress, SequenceEntry** head, int last_thread)
+{
+  SRes res = SZ_OK;
+
+  #ifndef _7ZIP_ST
+  Byte allocaDummy[0x300];
+  allocaDummy[0] = 0;
+  allocaDummy[1] = allocaDummy[0];
+  #endif
+
+  for (;;)
+  {
+    res = LzmaEnc_CodeOneBlock_st_2nd_pass(head, p, 0, 0, last_thread);
+    if (res != SZ_OK || p->finished)
+      break;
+    if (progress)
+    {
+      res = ICompressProgress_Progress(progress, p->nowPos64, RangeEnc_GetProcessed(&p->rc));
+      if (res != SZ_OK)
+      {
+        res = SZ_ERROR_PROGRESS;
+        break;
+      }
+    }
+  }
+  
+  LzmaEnc_Finish(p);
+
+  /*
+  if (res == SZ_OK && !Inline_MatchFinder_IsFinishedOK(&MFB))
+    res = SZ_ERROR_FAIL;
+  }
+  */
+
+  return res;
+}
+
+/**
+ * LzmaEnc_MemEncode_st_2nd_pass(): Same as LzmaEnc_MemEncode(), but used in MT mode
+ * for second pass that operates in ST mode. Calls LzmaEnc_MemPrepare_mt() to prepare the encoder and
+ * LzmaEnc_Encode2_st_2nd_pass() in a loop for each thread to encode the data.
+ * Frees the SequenceEntry list for each thread after encoding is done.
+ */
+SRes LzmaEnc_MemEncode_st_2nd_pass(CLzmaEncHandle pp, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
+    int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig, aocl_thread_group_t thread_group_handle)
+{
+  AOCL_SETUP_NATIVE();
+  if (pp == NULL || src == NULL || srcLen == 0 || dest == NULL || destLen == NULL)
+      return SZ_ERROR_PARAM;
+
+  SRes res;
+  CLzmaEnc *p = (CLzmaEnc *)pp;
+
+  CLzmaEnc_SeqOutStreamBuf outStream;
+
+  outStream.vt.Write = SeqOutStreamBuf_Write;
+  outStream.data = dest;
+  outStream.rem = *destLen;
+  outStream.overflow = False;
+
+  p->writeEndMark = writeEndMark;
+  p->rc.outStream = &outStream.vt;
+
+  res = LzmaEnc_MemPrepare_mt(pp, src, srcLen, 0, alloc, allocBig);
+
+  aocl_thread_info_t cur_thread_info;
+  AOCL_UINT32 thread_cnt = 0;
+  if (res == SZ_OK)
+  {
+    /* Modified for MT implementation - Start */
+    for (thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+    {
+      cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+      p->finished =  0; // reset finished state for next thread
+      SequenceEntry *seqEntryList = cur_thread_info.additional_state_info;
+
+      res = LzmaEnc_Encode2_st_2nd_pass(p, progress, (SequenceEntry **) &cur_thread_info.additional_state_info, thread_cnt==(thread_group_handle.num_threads - 1) ? 1 : 0);
+
+      // free SequenceEntry list for this thread
+      freeSequenceEntry(seqEntryList);
+    }
+    /* Modified for MT implementation - End */
+    if (res == SZ_OK && p->nowPos64 != srcLen)
+      res = SZ_ERROR_FAIL;
+  }
+
+  *destLen -= outStream.rem;
+  if (outStream.overflow)
+    return SZ_ERROR_OUTPUT_EOF;
+  return res;
+}
+
+/**************************************
+ * MT Pass 2 functions - End
+ *************************************/
+
+ SRes AOCL_LzmaEncode_MT(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
+  const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
+  ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig)
+{
+  if (src == NULL || srcLen == 0 || dest == NULL || propsEncoded == NULL ||
+    props == NULL || propsSize == NULL || destLen == NULL ||
+    *destLen > (ULLONG_MAX - LZMA_PROPS_SIZE)) // handles case when dest size is < LZMA_PROPS_SIZE, resulting in destLen rolling over in calling APIs
+  {
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    return SZ_ERROR_PARAM;
+  }
+
+  if (ValidateParams(props) != SZ_OK)
+  {
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    return SZ_ERROR_PARAM;
+  }
+  aocl_thread_group_t thread_group_handle;
+  aocl_thread_info_t cur_thread_info;
+  AOCL_INT32 rap_frame_len = -1;
+  AOCL_UINT32 dst_offset = 0;
+  SRes result;
+
+  size_t window_len = 0;
+  {
+    // write header
+    CLzmaEnc* p = (CLzmaEnc*)LzmaEnc_Create(alloc);
+    SRes res;
+    if (!p)
+    {
+        return SZ_ERROR_MEM;
+    }
+
+    CLzmaEncProps props_cur = *props;
+    props_cur.srcLen = srcLen; //same srcLen value must be set here and passed to LzmaEnc_MemEncode()
+    res = LzmaEnc_SetProps_fp(p, &props_cur);
+    window_len = p->dictSize;
+    if (res != SZ_OK) return res;
+    
+    res = LzmaEnc_WriteProperties(p, propsEncoded, propsSize);
+    if (res != SZ_OK) return res;
+
+    LzmaEnc_Destroy(p, alloc, allocBig);
+  }
+
+  AOCL_UINT32 window_factor = LZMA_GET_WINDOW_FACTOR;
+  rap_frame_len = aocl_setup_parallel_compress_mt(&thread_group_handle, (char*)src,
+                        (char*)dest, srcLen, *destLen, window_len, window_factor);
+
+  if (rap_frame_len < 0) {
+    return SZ_ERROR_PARAM;
+  }
+
+  if (thread_group_handle.num_threads == 1)
+  {
+    LOG_UNFORMATTED(INFO, logCtx, "Running single threaded compress");
+    result = LzmaEncode_ST(dest, destLen, src, srcLen, props, propsEncoded, propsSize, writeEndMark,
+                            progress, alloc, allocBig);
+  }
+  else
+  {
+#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
+    {
+      // size_t maxSrcSize = thread_group_handle.common_part_src_size + thread_group_handle.leftover_part_src_bytes;
+      AOCL_UINT32 cmpr_bound_pad = 0; //Number of additional bytes beyond srcSize that could be written
+      AOCL_UINT32 is_error = 1;
+      AOCL_UINT32 thread_id = omp_get_thread_num();
+      SizeT local_result = 0;
+      SequenceEntry* head = NULL;
+      SequenceEntry* tail = NULL;
+
+      if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
+      {
+        /* Copying cctx directly to cur_cctx might result in data associated with
+        * pointer members being shared between threads. Hence create new cur_cctx
+        * objects for each thread and set necessary parameters here */
+        CLzmaEnc* p = (CLzmaEnc*)LzmaEnc_Create(alloc);
+        SRes res;
+        if (p)
+        {
+          ICompressProgress* curProgress = NULL;
+          CLzmaEncProps props_cur = *props;
+          props_cur.srcLen = cur_thread_info.partition_src_size; // same srcLen value must be set here and passed to LzmaEnc_MemEncode()
+          res = LzmaEnc_SetProps_fp(p, &props_cur);
+          if (res == SZ_OK)
+          {
+            local_result = cur_thread_info.dst_trap_size;
+            p->rc.flushData = False; // do not flush data in 1st pass
+            res = LzmaEnc_MemEncode_mt_1st_pass(p, (Byte*)cur_thread_info.dst_trap, &local_result,
+                (const Byte*)cur_thread_info.partition_src, cur_thread_info.partition_src_size,
+                writeEndMark, curProgress, alloc, allocBig, &head, &tail);
+            is_error = res;
+          }
+        }
+        LzmaEnc_Destroy(p, alloc, allocBig);
+      }//aocl_do_partition_compress_mt
+
+      thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+      thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+      thread_group_handle.threads_info_list[thread_id].additional_state_info = head;
+      thread_group_handle.threads_info_list[thread_id].dst_trap_size = local_result;
+      thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+      thread_group_handle.threads_info_list[thread_id].last_bytes_len = 0;
+      thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+      thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+    }//#pragma omp parallel
+
+    /* Post processing in single - threaded mode : */
+
+    for (AOCL_UINT32 thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
+    {
+        cur_thread_info = thread_group_handle.threads_info_list[thread_cnt];
+        //In case of any thread partitioning or alloc errors, exit the compression process with error
+        if (cur_thread_info.is_error != SZ_OK)
+        {
+          aocl_destroy_parallel_compress_mt(&thread_group_handle);
+          return cur_thread_info.is_error;
+        }
+      }
+
+    // TODO: Add RAP frame to the destination buffer to support MT decompression
+
+    // 2nd pass: Extract LZ77 output from each thread and run entropy coder on it
+    CLzmaEnc* p = (CLzmaEnc*)LzmaEnc_Create(alloc);
+    SRes res;
+    if (!p)
+    {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
+      return SZ_ERROR_MEM;
+    }
+    CLzmaEncProps props_cur = *props;
+    props_cur.srcLen = srcLen; //same srcLen value must be set here and passed to LzmaEnc_MemEncode()
+    res = LzmaEnc_SetProps_fp(p, &props_cur);
+
+    if (res == SZ_OK){
+      res = LzmaEnc_MemEncode_st_2nd_pass(p, (Byte *)thread_group_handle.dst, destLen, src, srcLen,
+        writeEndMark, progress, alloc, allocBig, thread_group_handle);
+    }
+    
+    LzmaEnc_Destroy(p, alloc, allocBig);
+    aocl_destroy_parallel_compress_mt(&thread_group_handle);
+
+    result = SZ_OK;
+  }
+  return result;
+}
+#endif /* AOCL_ENABLE_THREADS */
+
 static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
 {
     if (optOff)
@@ -4553,6 +5941,7 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
         GetOptimum_fp               = GetOptimum;
         LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
         LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
+        LzmaEncode_mt_fp            = LzmaEncode_ST;
     }
     else
     {
@@ -4566,6 +5955,9 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
             GetOptimum_fp               = AOCL_GetOptimum;
             LzmaEncProps_Normalize_fp   = AOCL_LzmaEncProps_Normalize;
             LzmaEnc_SetProps_fp         = AOCL_LzmaEnc_SetProps;
+#ifdef AOCL_ENABLE_THREADS
+            LzmaEncode_mt_fp            = AOCL_LzmaEncode_MT;
+#endif
 #else
             MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
             MatchFinder_Create_fp       = MatchFinder_Create;
@@ -4573,6 +5965,9 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
             GetOptimum_fp               = GetOptimum;
             LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
             LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
+#ifdef AOCL_ENABLE_THREADS
+            LzmaEncode_mt_fp            = LzmaEncode_ST;
+#endif
 #endif
             break;
 #ifdef AOCL_LZMA_OPT
@@ -4587,6 +5982,9 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
             GetOptimum_fp               = AOCL_GetOptimum;
             LzmaEncProps_Normalize_fp   = AOCL_LzmaEncProps_Normalize;
             LzmaEnc_SetProps_fp         = AOCL_LzmaEnc_SetProps;
+#ifdef AOCL_ENABLE_THREADS
+            LzmaEncode_mt_fp            = AOCL_LzmaEncode_MT;
+#endif
             break;
 #else
         default:
@@ -4596,6 +5994,9 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
             GetOptimum_fp               = GetOptimum;
             LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
             LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
+#ifdef AOCL_ENABLE_THREADS
+            LzmaEncode_mt_fp            = LzmaEncode_ST;
+#endif
             break;
 #endif
         }
