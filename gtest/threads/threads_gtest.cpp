@@ -340,7 +340,7 @@ public:
     int64_t run_compress(int num_threads_compr)
     {
         omp_set_num_threads(num_threads_compr);
-        uint64_t csize = compress();
+        int64_t csize = compress();
         return csize;
     }
 

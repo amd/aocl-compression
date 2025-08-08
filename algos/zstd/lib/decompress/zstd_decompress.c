@@ -2734,14 +2734,20 @@ size_t AOCL_ZSTD_decompressDCtx_mt(ZSTD_DCtx* dctx, void* dst, size_t dstCapacit
             if (thread_parallel_res == 0)
             {
                 ZSTD_DCtx* cur_dctx = ZSTD_createDCtx();
-                local_result = ZSTD_decompress_usingDDict(cur_dctx, cur_thread_info.dst_trap,
-                    cur_thread_info.dst_trap_size, cur_thread_info.partition_src,
-                    cur_thread_info.partition_src_size, ZSTD_getDDict(cur_dctx));
-                if (!ERR_isError(local_result))
-                    is_error = 0;
+                if(cur_dctx)
+                {
+                    local_result = ZSTD_decompress_usingDDict(cur_dctx, cur_thread_info.dst_trap,
+                        cur_thread_info.dst_trap_size, cur_thread_info.partition_src,
+                        cur_thread_info.partition_src_size, ZSTD_getDDict(cur_dctx));
+                    if (!ERR_isError(local_result))
+                        is_error = 0;
 
-                if (cur_dctx)
                     ZSTD_freeDCtx(cur_dctx);
+                }
+                else
+                {
+                    LOG_UNFORMATTED(ERR, logCtx, "Failed to create ZSTD_DCtx");
+                }
             }
             else if (thread_parallel_res == 1)
             {

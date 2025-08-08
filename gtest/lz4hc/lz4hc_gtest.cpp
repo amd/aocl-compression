@@ -444,9 +444,40 @@ TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common
     }
 }
 
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_11) // Test case for `m2 = nomatch;  /* do not search further */`
+{
+    const int test_level = 6;
+    
+    // Create specific data pattern that can trigger the edge case:
+    // - A pattern that creates matches near the end of input
+    // - This increases chances of hitting mflimit conditions where start2 stays NULL
+    const int test_size = 200;
+    char test_data[test_size];
+    char compressed_buf[test_size * 2];
+    
+    // Create a pattern with repeating sequences that will create matches near the boundary conditions
+    for (int i = 0; i < test_size; i++) {
+            test_data[i] = (char)('A');
+    }
+    
+    int compressed_size = LZ4_compress_HC(test_data, compressed_buf, test_size, test_size * 2, test_level);
+    
+    EXPECT_GT(compressed_size, 0);  // Should not crash and return a valid result
+    
+    // If compression was successful, verify decompression works
+    if (compressed_size > 0) {
+        char decompressed_buf[test_size];
+        int decompressed_size = LZ4_decompress_safe(compressed_buf, decompressed_buf, compressed_size, test_size);
+        EXPECT_EQ(decompressed_size, test_size);
+        if (decompressed_size == test_size) {
+            EXPECT_EQ(memcmp(test_data, decompressed_buf, test_size), 0);
+        }
+    }
+}
+
 #ifdef AOCL_ENABLE_THREADS
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_11) // pass_case_mt
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_12) // pass_case_mt
 {
     for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
     {
@@ -458,7 +489,7 @@ TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common
     }
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common_12) // dstCapacity_inadequate_mt
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common_13) // dstCapacity_inadequate_mt
 {
     for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
     {
@@ -470,7 +501,7 @@ TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common
     }
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_13) // mt_compression_st_decompression
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_14) // mt_compression_st_decompression
 {
     for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
     {

@@ -771,7 +771,7 @@ int MY_FAST_CALL LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* bufLimit
           }
 
           curLen = ((rem < len) ? (unsigned)rem : len);
-          pos = dicPos - rep0 + (dicPos < rep0 ? dicBufSize : 0);
+          pos = (dicPos < rep0 ? dicBufSize : 0) + dicPos - rep0;
 
           processedPos += (UInt32)curLen;
 

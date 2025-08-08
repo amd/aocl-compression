@@ -100,7 +100,7 @@ int zstd_bigdict_main(int argc, char** argv)
     ZSTD_DCtx* dctx = ZSTD_createDCtx();
     const size_t dataSize = (size_t)1 << 30;
     const size_t outSize = ZSTD_compressBound(dataSize);
-    const size_t bufferSize = (size_t)1 << 31;
+    const size_t bufferSize = ((size_t)1) << 31;
     char* buffer = (char*)malloc(bufferSize);
     void* out = malloc(outSize);
     void* roundtrip = malloc(dataSize);

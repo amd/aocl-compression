@@ -8559,20 +8559,26 @@ static size_t AOCL_ZSTD_compress_advanced_internal_mt(ZSTD_CCtx* cctx,
                 * pointer members being shared between threads. Hence create new cur_cctx
                 * objects for each thread and set necessary parameters here */
                 ZSTD_CCtx* cur_cctx = ZSTD_createCCtx();
-                ZSTD_CCtx_setParameter(cur_cctx, ZSTD_c_compressionLevel, cur_cctx->requestedParams.compressionLevel);
-                ZSTD_CCtxParams_init_internal(&cur_cctx->simpleApiParams, &params, ZSTD_NO_CLEVEL);
-
-                local_result = ZSTD_compress_advanced_internal(cur_cctx,
-                    cur_thread_info.dst_trap, cur_thread_info.dst_trap_size,
-                    cur_thread_info.partition_src, cur_thread_info.partition_src_size,
-                    dict, dictSize,
-                    &cur_cctx->simpleApiParams);
-
-                if (!ERR_isError(local_result))
-                    is_error = 0;
-
                 if (cur_cctx)
+                {
+                    ZSTD_CCtx_setParameter(cur_cctx, ZSTD_c_compressionLevel, cur_cctx->requestedParams.compressionLevel);
+                    ZSTD_CCtxParams_init_internal(&cur_cctx->simpleApiParams, &params, ZSTD_NO_CLEVEL);
+
+                    local_result = ZSTD_compress_advanced_internal(cur_cctx,
+                        cur_thread_info.dst_trap, cur_thread_info.dst_trap_size,
+                        cur_thread_info.partition_src, cur_thread_info.partition_src_size,
+                        dict, dictSize,
+                        &cur_cctx->simpleApiParams);
+
+                    if (!ERR_isError(local_result))
+                        is_error = 0;
+
                     ZSTD_freeCCtx(cur_cctx);
+                }
+                else
+                {
+                    LOG_UNFORMATTED(ERR, logCtx, "Failed to create ZSTD_CCtx");
+                }
             }//aocl_do_partition_compress_mt
 
             thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
