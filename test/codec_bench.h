@@ -101,7 +101,7 @@ static const codec_list_t codec_list[AOCL_COMPRESSOR_ALGOS_NUM] =
     {"LZ4",    0, 0,  0, 0, 1, 0, 1, 1, 0, INT_MAX  , ".lz4"},
     {"LZ4HC",  1, 12, 0, 0, 1, 0, 1, 1, 0, INT_MAX  , ".lz4"},
     {"LZMA",   0, 9,  0, 0, 1, 0, 1, 0, 0, SIZE_MAX , ".lzma"},
-    {"BZIP2",  1, 9,  0, 0, 1, 0, 1, 0, 0, SIZE_MAX , ".bz2"},
+    {"BZIP2",  1, 9,  0, 0, 1, 0, 1, 1, 0, SIZE_MAX , ".bz2"},
     {"SNAPPY", 0, 0,  0, 0, 1, 0, 1, 1, 0, SIZE_MAX , ".snappy"},
     {"ZLIB",   1, 9,  0, 0, 1, 0, 1, 1, 0, ULONG_MAX, ".zlib"},
     {"ZSTD",   1, 22, 0, 0, 1, 1, 1, 1, 1, SIZE_MAX , ".zst"}

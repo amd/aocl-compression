@@ -101,7 +101,11 @@ extern "C"
     RAP_MAIN_THREAD_COUNT_BYTES + RAP_CHILD_THREAD_COUNT_BYTES + \
     (mainThreads * (RAP_OFFSET_BYTES + RAP_LEN_BYTES + DECOMP_LEN_BYTES)) + \
     (childThreads * mainThreads * (RAP_OFFSET_BYTES + RAP_LEN_BYTES)) )
-//#define APPROX_PADDED_DST_CHUNK //Keep this disabled as it is more accurate to send the actual dest decompressed len bytes
+
+
+#define AOCL_MT_DECOMP_PARTITION_SUCCESS 0
+#define AOCL_MT_DECOMP_PARTITION_EMPTY_SRC 1
+#define AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE -1
 
 #define RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(error) { \
                         LOG_UNFORMATTED(ERR, logCtx, "Destination buffer is too small/ insufficient."); \
@@ -346,7 +350,6 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_grou
  * |:-----------------------|:-----------:|:------------|
  * | \b thread_grp          | in          | Holds list of thread info, pointers to input and output streams and other information needed for multi-threaded decompression. |
  * | \b cur_thread_info     | out         | Current thread info. |
- * | \b cmpr_bound_pad      | in          | Number of additional padding bytes if needed for the allocated destination buffer. |
  * | \b thread_id           | in          | Current thread id. |
  *
  * return
@@ -357,9 +360,8 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_grou
  * | Fail       | `ERR_MEMORY_ALLOC`                                   |
  *
  */
-EXPORT_SYM_THREADS AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
-                                     aocl_thread_info_t* cur_thread_info,
-                                     AOCL_UINTP cmpr_bound_pad, AOCL_UINT32 thread_id);
+EXPORT_SYM_THREADS AOCL_INT32 aocl_do_partition_decompress_mt(const aocl_thread_group_t* thread_grp,
+                                     aocl_thread_info_t* cur_thread_info, AOCL_UINT32 thread_id);
 
 /**
  * Function to free memory associated with the multi-threaded decompressor.

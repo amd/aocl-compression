@@ -5199,14 +5199,15 @@ aocl_thread_group_t thread_group_handle;
 
       AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
       thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, 
-          &cur_thread_info, 0 /*cmpr_bound_pad*/, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur));
-      if (thread_parallel_res == 0)
+          &cur_thread_info, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur));
+      if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_SUCCESS || 
+          thread_parallel_res == AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE /* Expected error due to unspecified destination size. */)
       {
         local_result = SNAPPY_SAW_raw_uncompress_direct_fp(cur_thread_info.partition_src, 
             cur_thread_info.partition_src_size, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
         is_error = local_result ? 0 : 1;
       } // aocl_do_partition_decompress_mt
-      else if (thread_parallel_res == 1)
+      else if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_EMPTY_SRC)
       {
         local_result = 0;
         is_error = 0;
@@ -5224,11 +5225,8 @@ aocl_thread_group_t thread_group_handle;
 #ifdef AOCL_THREADS_LOG
     printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
 #endif
-  
-    /* compute cumulative dst_trap_size and save in unsued member partition_src_size
-     * This is used as offset to indicate starting points of decompressed data blocks in dst */
-    uint32_t dst_offset = 0;
-    aocl_thread_info_t* ti_prev = NULL;
+
+    /* Check all threads for errors. If any failed, cleanup and return false. */
     for (uint32_t thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
     {
       AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_cnt)
@@ -5242,23 +5240,10 @@ aocl_thread_group_t thread_group_handle;
         LOG_FORMATTED(ERR, logCtx, "Decompress Thread [id: %d] : Encountered ERROR", thread_cnt);
         return false;
       }
-        
-      if (ti_prev != NULL) {
-        dst_offset = ti_prev->partition_src_size + ti_prev->dst_trap_size; // cumulative dst_trap_size
-      }
-      ti_cur->partition_src_size = dst_offset;
-      ti_prev = ti_cur;
+
       AOCL_MT_PROCESS_PARTITION_END(ti_cur)
     }
-/* copy decompressed data from threads to dst multi-threaded */
-#pragma omp parallel shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
-  {
-    uint32_t thread_cnt = omp_get_thread_num();
-    AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_cnt)
-    memcpy(thread_group_handle.dst + ti_cur->partition_src_size, // dst_offset = ti_cur->partition_src_size
-        ti_cur->dst_trap, ti_cur->dst_trap_size);
-    AOCL_MT_PROCESS_PARTITION_END(ti_cur)
-  }
+
     // free the memory allocated for the the thread_info_list and/or for each thread's dst_trap
     aocl_destroy_parallel_decompress_mt(&thread_group_handle);
     return true;

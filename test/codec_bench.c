@@ -968,7 +968,10 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             if (error != 0) goto exit_with_error;
         }
     }
-    for (AOCL_INTP k = 0; k < codec_bench_handle->iterations; k++)
+
+    memset(codec_bench_handle->outPtr, 0, codec_bench_handle->outSize);
+
+    for (AOCL_INTP iteration_count = 0; iteration_count < codec_bench_handle->iterations; iteration_count++)
     {
         AOCL_UINT64 temp_cTime = 0;
         AOCL_UINT64 temp_dTime = 0;
@@ -999,7 +1002,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     break;
                 }
 
-                if (dumpEnabled && k == 0 /* dump only during 1st iteration */) 
+                if (dumpEnabled && iteration_count == 0 /* dump only during 1st iteration */) 
                 {
                     if(folder_created){
                         error = dump_to_file(codec_bench_handle, codec, level, chunk_cnt, aocl_codec_handle->outBuf, resultComp);
@@ -1036,7 +1039,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                         break;
                     }
 
-                    if (codec_bench_handle->verify) // verification supported only if decompress is enabled
+                    if (codec_bench_handle->verify && iteration_count == codec_bench_handle->iterations - 1 /* verify only during last iteration */) // verification supported only if decompress is enabled
                     {
                         if (memcmp(codec_bench_handle->inPtr,
                             codec_bench_handle->decompPtr, inSize) != 0)
@@ -1109,7 +1112,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     break;
                 }
 
-                if (dumpEnabled && k == 0 /* dump only during 1st iteration */)
+                if (dumpEnabled && iteration_count == 0 /* dump only during 1st iteration */)
                 {
                     // dump decompressed data to file
                     AOCL_UINTP written = fwrite(aocl_codec_handle->outBuf, sizeof(AOCL_CHAR), resultDecomp,
@@ -1122,7 +1125,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     }
                 }
 
-                if (codec_bench_handle->verify)
+                if (codec_bench_handle->verify && iteration_count == codec_bench_handle->iterations - 1 /* verify only during last iteration */)
                 {
                     if (valFp == NULL) 
                     {
@@ -1168,7 +1171,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
             } while (1);
 
-            if (isFolder && (k < codec_bench_handle->iterations - 1))
+            if (isFolder && (iteration_count < codec_bench_handle->iterations - 1))
             {
                 close_file_in_folder(codec_bench_handle); //close prev file if open
                 // codec_bench_handle->fp is made to point to first file in the folder for next iteration

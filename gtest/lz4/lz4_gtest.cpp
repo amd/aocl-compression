@@ -139,7 +139,7 @@ public:
 */
 bool check_uncompressed_equal_to_original(char *src, unsigned srcSize, char *compressed, unsigned compressedLen)
 {
-    int uncompressedLen = srcSize + 10;
+    int uncompressedLen = srcSize;
     char* uncompressed = (char*)malloc(uncompressedLen * sizeof(char));
 
     int uncompressedLenRes = LZ4_decompress_safe(compressed, uncompressed, compressedLen, uncompressedLen);

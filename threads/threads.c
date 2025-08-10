@@ -88,7 +88,7 @@ AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp,
         AOCL_UINTP leftover_size = thread_grp->src_size % chunk_size;
         
         //Sufficiently large leftover bytes adds another thread for processing
-        if (leftover_size >= chunk_size >> 2)
+        if (leftover_size >= chunk_size >> 1)
             num_parallel_partitions++;
 
         //Find number of threads to process the number of parallel partitions
@@ -384,9 +384,21 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
     return rap_metadata_len;
 }
 
-AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
-                                      aocl_thread_info_t* cur_thread_info,
-                                      AOCL_UINTP cmpr_bound_pad, AOCL_UINT32 thread_id)
+// Returns the destination buffer offset for a thread by summing the decompressed sizes of previous threads
+static AOCL_UINTP aocl_calculate_dst_offset_internal(AOCL_CHAR const *source, AOCL_INT32 thread_id)
+{
+   source = source + RAP_START_OF_PARTITIONS;
+   AOCL_UINTP len = 0;
+   for(AOCL_INT32 i = 0; i < thread_id; i++)
+   {
+      len += *(AOCL_UINT32 *)(source + RAP_DATA_BYTES);
+      source += RAP_DATA_BYTES_WITH_DECOMP_LEN;
+   }
+   return len;
+}
+
+AOCL_INT32 aocl_do_partition_decompress_mt(const aocl_thread_group_t* thread_grp,
+                                      aocl_thread_info_t* cur_thread_info, AOCL_UINT32 thread_id)
 {
     assert(thread_grp != NULL);
     assert(cur_thread_info != NULL);
@@ -404,33 +416,28 @@ AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
     {
         LOG_FORMATTED(DEBUG, logCtx, "Partition size 0 for thread %u", thread_id);
         cur_thread_info->dst_trap = NULL;
-        return 1;
+        return AOCL_MT_DECOMP_PARTITION_EMPTY_SRC;
     }
 
-#ifdef APPROX_PADDED_DST_CHUNK //DO NOT ENABLE/USE THIS UNLESS YOU KNOW THE PAD SIZE
-    cur_thread_info->dst_trap_size = 
-        (thread_grp->dst_size / thread_grp->num_threads) + 
-        (thread_grp->dst_size % thread_grp->num_threads) + cmpr_bound_pad;
-    cur_thread_info->dst_trap = (AOCL_CHAR*)malloc(cur_thread_info->dst_trap_size);
-#else
     cur_thread_info->dst_trap_size = (*(AOCL_UINT32*)(thread_grp->src +
-                                        cur_rap_pos + RAP_DATA_BYTES)) +
-                                        cmpr_bound_pad;
-    cur_thread_info->dst_trap = (AOCL_CHAR*)malloc(cur_thread_info->dst_trap_size);
-#endif
+                                        cur_rap_pos + RAP_DATA_BYTES));
+    AOCL_UINTP dst_offset = aocl_calculate_dst_offset_internal(thread_grp->src, thread_id);
+
+    cur_thread_info->dst_trap = thread_grp->dst + dst_offset;
 
 #ifdef AOCL_THREADS_LOG
     printf("aocl_do_partition_decompress_mt(): thread id: [%d]\n",
         cur_thread_info->thread_id);
 #endif
 
-    if (cur_thread_info->dst_trap == NULL) 
+    // Check if sufficent space is there in destination buffer.
+    if(dst_offset + cur_thread_info->dst_trap_size > thread_grp->dst_size)
     {
-        LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
-        return ERR_MEMORY_ALLOC;
+        LOG_FORMATTED(ERR, logCtx, "Thread %u: Decompression failed, destination buffer too small.", thread_id);
+        return AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE;
     }
 
-    return 0;
+    return AOCL_MT_DECOMP_PARTITION_SUCCESS;
 }
 
 void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp)
@@ -439,20 +446,6 @@ void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp)
 
     if (thread_grp->threads_info_list)
     {
-        AOCL_UINT32 thread_cnt;
-        for (thread_cnt = 0; thread_cnt < thread_grp->num_threads; thread_cnt++)
-        {
-            aocl_thread_info_t* ti_cur = &thread_grp->threads_info_list[thread_cnt];
-            while (ti_cur) 
-            {
-                if (ti_cur->dst_trap)
-                {
-                    free(ti_cur->dst_trap);
-                    ti_cur->dst_trap = NULL;
-                }
-                ti_cur = ti_cur->next;
-            }
-        }
         free(thread_grp->threads_info_list);
         thread_grp->threads_info_list = NULL;
     }

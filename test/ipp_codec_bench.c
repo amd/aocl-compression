@@ -321,7 +321,7 @@ AOCL_INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
     AOCL_INT64 resultComp = 0;
     AOCL_INT64 resultDecomp = 0;
     AOCL_UINTP inSize, file_size;
-    AOCL_INTP k;
+    AOCL_INTP iteration_count;
 #ifdef WINDOWS_
     timer clkTick;
 #endif
@@ -344,7 +344,7 @@ AOCL_INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
 #ifdef WINDOWS_
     initTimer(clkTick);
 #endif
-    for (k = 0; k < codec_bench_handle->iterations; k++)
+    for (iteration_count = 0; iteration_count < codec_bench_handle->iterations; iteration_count++)
     {
         AOCL_UINT64 temp_cBestTime = 0;
         AOCL_UINT64 temp_dBestTime = 0;
@@ -398,7 +398,7 @@ AOCL_INT64 ipp_lz4_run(aocl_codec_bench_info *codec_bench_handle,
                 return ERR_CODEC_BENCH_ARGS;
             }
 
-            if (codec_bench_handle->verify)
+            if (codec_bench_handle->verify && iteration_count == codec_bench_handle->iterations - 1)
             {
                 *verifyRes = memcmp(codec_bench_handle->inPtr,
                                     codec_bench_handle->decompPtr, inSize);
@@ -448,7 +448,7 @@ AOCL_INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
     AOCL_INT64 resultComp = 0;
     AOCL_INT64 resultDecomp = 0;
     AOCL_UINTP inSize, file_size;
-    AOCL_INTP k;
+    AOCL_INTP iteration_count;
 #ifdef WINDOWS_
     timer clkTick;
 #endif
@@ -471,7 +471,7 @@ AOCL_INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
 #ifdef WINDOWS_
     initTimer(clkTick);
 #endif
-    for (k = 0; k < codec_bench_handle->iterations; k++)
+    for (iteration_count = 0; iteration_count < codec_bench_handle->iterations; iteration_count++)
     {
         AOCL_UINT64 temp_cBestTime = 0;
         AOCL_UINT64 temp_dBestTime = 0;
@@ -526,7 +526,7 @@ AOCL_INT64 ipp_lz4hc_run(aocl_codec_bench_info *codec_bench_handle,
                 return ERR_CODEC_BENCH_ARGS;
             }
 
-            if (codec_bench_handle->verify)
+            if (codec_bench_handle->verify && iteration_count == codec_bench_handle->iterations - 1)
             {
                 *verifyRes = memcmp(codec_bench_handle->inPtr,
                                     codec_bench_handle->decompPtr, inSize);
@@ -576,7 +576,7 @@ AOCL_INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
     AOCL_INT64 resultComp = 0;
     AOCL_INT64 resultDecomp = 0;
     AOCL_UINTP inSize, file_size;
-    AOCL_INTP k, ret;
+    AOCL_INTP iteration_count, ret;
 #ifdef WINDOWS_
     timer clkTick;
 #endif
@@ -599,7 +599,7 @@ AOCL_INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
 #ifdef WINDOWS_
     initTimer(clkTick);
 #endif
-    for (k = 0; k < codec_bench_handle->iterations; k++)
+    for (iteration_count = 0; iteration_count < codec_bench_handle->iterations; iteration_count++)
     {    
         AOCL_UINT64 temp_cBestTime = 0;
         AOCL_UINT64 temp_dBestTime = 0;
@@ -651,7 +651,7 @@ AOCL_INT64 ipp_zlib_run(aocl_codec_bench_info *codec_bench_handle,
             if (ret != Z_OK)
                 return ERR_CODEC_BENCH_ARGS;
 
-            if (codec_bench_handle->verify)
+            if (codec_bench_handle->verify && iteration_count == codec_bench_handle->iterations - 1)
             {
                 *verifyRes = memcmp(codec_bench_handle->inPtr,
                                     codec_bench_handle->decompPtr, inSize);
@@ -701,7 +701,7 @@ AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
     AOCL_INT64 resultComp = 0;
     AOCL_INT64 resultDecomp = 0;
     AOCL_UINTP inSize, file_size;
-    AOCL_INTP k, ret;
+    AOCL_INTP iteration_count, ret;
 #ifdef WINDOWS_
     timer clkTick;
 #endif
@@ -724,7 +724,7 @@ AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
 #ifdef WINDOWS_
     initTimer(clkTick);
 #endif
-    for (k = 0; k < codec_bench_handle->iterations; k++)
+    for (iteration_count = 0; iteration_count < codec_bench_handle->iterations; iteration_count++)
     {
         AOCL_UINT64 temp_cBestTime = 0;
         AOCL_UINT64 temp_dBestTime = 0;
@@ -779,7 +779,7 @@ AOCL_INT64 ipp_bzip2_run(aocl_codec_bench_info *codec_bench_handle,
                 return ERR_CODEC_BENCH_ARGS;
             }
 
-            if (codec_bench_handle->verify)
+            if (codec_bench_handle->verify && iteration_count == codec_bench_handle->iterations - 1)
             {
                 *verifyRes = memcmp(codec_bench_handle->inPtr,
                                     codec_bench_handle->decompPtr, inSize);

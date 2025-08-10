@@ -460,10 +460,9 @@ AOCL_INT32 Test_aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_gr
 }
 
 AOCL_INT32 Test_aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
-    aocl_thread_info_t* cur_thread_info,
-    AOCL_UINT32 cmpr_bound_pad, AOCL_UINT32 thread_id) {
+    aocl_thread_info_t* cur_thread_info, AOCL_UINT32 thread_id) {
     return aocl_do_partition_decompress_mt(thread_grp,
-        cur_thread_info, cmpr_bound_pad, thread_id);
+        cur_thread_info, thread_id);
 }
 
 void Test_aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp) {
@@ -810,7 +809,6 @@ TEST_F(API_do_partition_compress_MT, AOCL_Compression_api_aocl_do_partition_comp
         thread_grp.threads_info_list[thread_id].thread_id             = cur_thread_info.thread_id;
         thread_grp.threads_info_list[thread_id].next                  = cur_thread_info.next;
     } // #pragma omp parallel
-    validate(cmpr_bound_pad);
 }
 
 /*********************************************
@@ -1097,29 +1095,6 @@ public:
         if (dst) free(dst);
     }
 
-    void validate(AOCL_UINT32 cmpr_bound_pad) {
-        AOCL_UINT32 num_threads = thread_grp.num_threads;
-        if (num_threads > 1) { //sufficient num of threads exists on decompressor side to process compressed chunks in parallel
-            AOCL_INT32 dst_offset = RAP_START_OF_PARTITIONS;
-            for (AOCL_UINT32 thread_id = 0; thread_id < num_threads; ++thread_id) {
-                // partition_src non-NULL and are pointing to start of each chunk
-                EXPECT_NE(thread_grp.threads_info_list[thread_id].partition_src, nullptr);
-                EXPECT_EQ(thread_grp.threads_info_list[thread_id].partition_src, thread_grp.src + dst_offset);
-
-                // partition_src_size
-                EXPECT_EQ(thread_grp.threads_info_list[thread_id].partition_src_size, cpr_chunk_len[thread_id]);
-
-                // dst buffer allocated
-                EXPECT_NE(thread_grp.threads_info_list[thread_id].dst_trap, nullptr);
-
-                // dst buffer size set properly
-                EXPECT_EQ(thread_grp.threads_info_list[thread_id].dst_trap_size, dpr_chunk_len[thread_id] + cmpr_bound_pad);
-
-                dst_offset += cpr_chunk_len[thread_id];
-            }
-        }
-    }
-
     aocl_thread_group_t thread_grp;
     AOCL_CHAR* src, * dst;
     AOCL_INT32 in_size, out_size;
@@ -1131,13 +1106,12 @@ public:
 
 TEST_F(API_do_partition_decompress_MT, AOCL_Compression_api_aocl_do_partition_decompress_mt_common_1) { // partition the problem
     aocl_thread_info_t cur_thread_info;
-    const AOCL_UINT32 cmpr_bound_pad = 16;
 #pragma omp parallel private(cur_thread_info) shared(thread_grp) num_threads(thread_grp.num_threads)
     {
         AOCL_UINT32 thread_id = omp_get_thread_num();
         AOCL_MT_PROCESS_PARTITION_START(thread_grp, ti_cur, thread_id)
         EXPECT_EQ(Test_aocl_do_partition_decompress_mt(&thread_grp,
-            &cur_thread_info, cmpr_bound_pad, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur)), 0);
+            &cur_thread_info, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur)), 0);
 
         ti_cur->partition_src         = cur_thread_info.partition_src;
         ti_cur->dst_trap              = cur_thread_info.dst_trap;
@@ -1151,7 +1125,6 @@ TEST_F(API_do_partition_decompress_MT, AOCL_Compression_api_aocl_do_partition_de
         ti_cur->next                  = cur_thread_info.next;
         AOCL_MT_PROCESS_PARTITION_END(ti_cur)
     } // #pragma omp parallel
-    validate(cmpr_bound_pad);
 }
 
 /*********************************************
@@ -1165,9 +1138,6 @@ TEST(API_destroy_parallel_decompress_MT, AOCL_Compression_api_aocl_destroy_paral
     aocl_thread_group_t thread_grp;
     thread_grp.num_threads = 16;
     thread_grp.threads_info_list = (aocl_thread_info_t*)calloc(thread_grp.num_threads, sizeof(aocl_thread_info_t));
-    for (AOCL_INT32 thread_cnt = 0; thread_cnt < thread_grp.num_threads; thread_cnt++) {
-        thread_grp.threads_info_list[thread_cnt].dst_trap = (AOCL_CHAR*)malloc(4);
-    }
 
     Test_aocl_destroy_parallel_decompress_mt(&thread_grp);
 

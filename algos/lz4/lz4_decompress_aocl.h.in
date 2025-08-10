@@ -462,24 +462,11 @@ LZ4_FORCE_INLINE int
                 continue;
             }
 
-            if (unlikely(offset<8)) {
-                LZ4_write32(op, 0);   /* silence msan warning when offset==0 */
-                op[0] = match[0];
-                op[1] = match[1];
-                op[2] = match[2];
-                op[3] = match[3];
-                match += inc32table[offset];
-                LZ4_memcpy(op+4, match, 4);
-                match -= dec64table[offset];
-            } else {
-                LZ4_memcpy(op, match, 8);
-                match += 8;
-            }
-            op += 8;
+            @AOCL_LZ4_DGV_MATCH_COPY@
 
             if (unlikely(cpy > oend-MATCH_SAFEGUARD_DISTANCE)) {
                 BYTE* const oCopyLimit = oend - (WILDCOPYLENGTH-1);
-                if (cpy > oend-LASTLITERALS) { 
+                if (cpy > oend-LASTLITERALS @AOCL_LZ4_DGV_CHECK_LAST_THREAD@) { 
                     AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Last LASTLITERALS bytes must be uncompressed literals.");
                     goto _output_error; 
                 } /* Error : last LASTLITERALS bytes must be literals (uncompressed) */

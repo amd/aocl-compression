@@ -2302,20 +2302,6 @@ int BZ_API(BZ2_bzBuffToBuffDecompress_internal)
 }
 
 #ifdef AOCL_ENABLE_THREADS
-// It reads the RAP (Random Access Partition) metadata to determine the starting position
-// for each thread's output in the final decompressed buffer.
-int mt_calculate_dst_offset(char const *source, int thread_id)
-{
-   source = source + RAP_START_OF_PARTITIONS;
-   int len = 0;
-   for(int i = 0; i < thread_id; i++)
-   {
-      len += *(AOCL_UINT32 *)(source + RAP_DATA_BYTES);
-      source += RAP_DATA_BYTES_WITH_DECOMP_LEN;
-   }
-   return len;
-}
-
 // Multi-threaded version of the BZ2_bzBuffToBuffDecompress function.
 int BZ_API(BZ2_bzBuffToBuffDecompress)(char *dest,
                                        unsigned int *destLen,
@@ -2360,9 +2346,9 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)(char *dest,
       AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
 
       Int32 current_thread_id = AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur);
-      dst_offset = mt_calculate_dst_offset(source, current_thread_id);
       state = current_thread_id ? BZ_X_BLKHDR_1 : BZ_X_MAGIC_1;
-      thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, &cur_thread_info, 0 /*cmpr_bound_pad*/, current_thread_id);
+      thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, &cur_thread_info, current_thread_id);
+      dst_offset = cur_thread_info.dst_trap - thread_group_handle.dst;
       
       // If partition setup was successful
       if (thread_parallel_res == 0)
