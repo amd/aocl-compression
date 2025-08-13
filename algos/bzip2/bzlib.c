@@ -1180,6 +1180,9 @@ int BZ_API(BZ2_bzDecompressInit)
 #ifdef AOCL_ENABLE_THREADS
    s->mt_head_node = NULL;
 #endif /* AOCL_ENABLE_THREADS */
+#ifdef AOCL_BZIP2_OPT
+   s->temp_tt = NULL;
+#endif /* AOCL_BZIP2_OPT */
 
    return BZ_OK;
 }
@@ -1338,7 +1341,236 @@ Bool unRLE_obuf_to_output_FAST ( DState* s )
    return False;
 }
 
+#ifdef AOCL_BZIP2_OPT
 
+/*
+   Size of the intermediate lookup table for fast character retrieval optimization.
+   The BWT block is divided into this many chunks for the chunk-based character lookup.
+   Larger values provide finer granularity but use more memory.
+*/
+ #define AOCL_INTERMEDIATE_TABLE_SIZE (2048)
+
+/*
+   This function creates an intermediate mapping table that divides the block
+   into equal-sized chunks and tries to determine if each chunk contains data
+   from only one character. If a chunk maps to a single character, we store
+   that character's value for fast lookup. If a chunk spans multiple characters
+   or boundaries, we store -1 to indicate that a slower, precise lookup is needed.
+
+   Returns the size of each chunk when the block is divided into
+   `AOCL_INTERMEDIATE_TABLE_SIZE` equal pieces.
+*/
+static Int32 AOCL_init_index_to_char_table (Int32 *char_boundaries, UChar *seqToUnseq, Int32 nblock, Int32 *index_to_char, Int32 nInUse)
+{
+   /* Initialize all entries to -1 (unknown/mixed). Also set a sentinel. */
+   for (Int32 i = 0; i < AOCL_INTERMEDIATE_TABLE_SIZE + 1; i++) {
+      index_to_char[i] = -1;
+   }
+
+   /* Size of each chunk when dividing the block into AOCL_INTERMEDIATE_TABLE_SIZE pieces */
+   const Int32 chunk_size = (nblock / AOCL_INTERMEDIATE_TABLE_SIZE) + (nblock % AOCL_INTERMEDIATE_TABLE_SIZE != 0);
+   Int32 index = 0;
+   Int32 i = 0;
+   while (i < AOCL_INTERMEDIATE_TABLE_SIZE && index < nInUse) {
+      Int32 start_index = i * chunk_size;
+      Int32 end_index = (i + 1) * chunk_size - 1;
+      /*
+         Cases:
+         - Entire chunk inside a single symbol range -> record that symbol.
+         - Chunk crosses a boundary -> mark -1.
+      */
+      if (start_index >= char_boundaries[index] && end_index < char_boundaries[index + 1]) {
+         index_to_char[i] = seqToUnseq[index];
+         i++;
+      } else if (start_index < char_boundaries[index]) {
+         index_to_char[i] = -1;
+         i++;
+      } else {
+         index_to_char[i] = -1;
+         index++;
+      }
+   }
+
+   /* Sentinel for safety on out-of-range access. */
+   index_to_char[AOCL_INTERMEDIATE_TABLE_SIZE] = -1;
+
+   return chunk_size;
+}
+
+static
+Bool AOCL_unRLE_obuf_to_output_FAST ( DState* s )
+{
+   Int32 *char_boundaries = s->cftab;
+   Int32 nblock = s->save_nblock;
+   
+   /* Lookup table to optimize character retrieval by dividing block into chunks */
+   Int32 index_to_char[AOCL_INTERMEDIATE_TABLE_SIZE + 1];
+   
+   /* Initialize the intermediate character lookup table for fast access */
+   const Int32 chunk_size = AOCL_init_index_to_char_table(char_boundaries, s->seqToUnseq, nblock, index_to_char, s->nInUse);
+
+   Int32 index = s->tt[s->origPtr] >> 8;
+   Int32 prev = s->origPtr;
+
+   /* Switch flag to alternate between two different character retrieval methods */
+   Int32 sw = 0;
+
+   /* 
+      Binary search to find character at position x in BWT block
+      Uses char_boundaries[] table which contains cumulative frequencies for active characters.
+   */
+   #define AOCL_CHAR_AT(x, ans)                                         \
+   {                                                                    \
+      Int32 start_index = 0, end_index = s->nInUse - 1, mid;            \
+      while (start_index <= end_index) {                                \
+         mid = (start_index + end_index) / 2;                           \
+         if (x >= char_boundaries[mid]) {                               \
+            if (mid == s->nInUse - 1 || x < char_boundaries[mid + 1]) { \
+               ans = s->seqToUnseq[mid];                                \
+               break;                                                   \
+            }                                                           \
+            start_index = mid + 1;                                      \
+         } else {                                                       \
+            end_index = mid - 1;                                        \
+         }                                                              \
+      }                                                                 \
+   }
+
+   /*
+      Fast character retrieval during BWT reconstruction
+      Alternates between fast chunk lookup and precise LF-mapping traversal
+   */
+   #define AOCL_GET_NEXT_CHAR(ans)                       \
+   if (sw == 0) {                                        \
+      /* Fast path: use chunk-level lookup table */      \
+      Int32 temp_ans = index_to_char[prev / chunk_size]; \
+      if (temp_ans == -1) {                              \
+         /* Fallback to precise binary search */         \
+         AOCL_CHAR_AT(prev, temp_ans);                   \
+      }                                                  \
+      ans = temp_ans;                                    \
+      sw = 1;                                            \
+   } else {                                              \
+      /* Follow LF-mapping through transform table */    \
+      prev = index;                                      \
+      ans = s->tt[index] & 0xff;                         \
+      index = s->tt[index] >> 8;                         \
+      sw = 0;                                            \
+   }
+
+   AOCL_GET_NEXT_CHAR(s->k0);
+   s->nblock_used++;
+
+   /* restore */
+   UInt32         c_calculatedBlockCRC   = s->calculatedBlockCRC;
+   UChar          c_state_out_ch         = s->state_out_ch;
+   Int32          c_state_out_len        = s->state_out_len;
+   Int32          c_nblock_used          = s->nblock_used;
+   Int32          c_k0                   = s->k0;
+   UInt32         c_tPos                 = s->tPos;
+   char*          cs_next_out            = s->strm->next_out;
+   unsigned int   cs_avail_out           = s->strm->avail_out;
+   /* end restore */
+
+   UInt32         avail_out_INIT = cs_avail_out;
+   Int32          s_save_nblockPP = s->save_nblock + 1;
+   unsigned int   total_out_lo32_old;
+   UChar          k1;
+
+   while (True) {
+      /* try to finish existing run */
+      if (c_state_out_len > 0) {
+         while (True) {
+            if (cs_avail_out == 0)
+               goto return_notr;
+            if (c_state_out_len == 1)
+               break;
+            *((UChar *)(cs_next_out)) = c_state_out_ch;
+            BZ_UPDATE_CRC(c_calculatedBlockCRC, c_state_out_ch);
+            c_state_out_len--;
+            cs_next_out++;
+            cs_avail_out--;
+         }
+         s_state_out_len_eq_one:
+         {
+            if (cs_avail_out == 0) {
+               c_state_out_len = 1;
+               goto return_notr;
+            };
+            *((UChar *)(cs_next_out)) = c_state_out_ch;
+            BZ_UPDATE_CRC(c_calculatedBlockCRC, c_state_out_ch);
+            cs_next_out++;
+            cs_avail_out--;
+         }
+      }
+      /* Only caused by corrupt data stream? */
+      if (c_nblock_used > s_save_nblockPP)
+         return True;
+
+      /* can a new run be started? */
+      if (c_nblock_used == s_save_nblockPP) {
+         c_state_out_len = 0;
+         goto return_notr;
+      };
+      c_state_out_ch = c_k0;
+      AOCL_GET_NEXT_CHAR(k1);
+      c_nblock_used++;
+      if (k1 != c_k0) {
+         c_k0 = k1;
+         goto s_state_out_len_eq_one;
+      }
+      if (c_nblock_used == s_save_nblockPP)
+         goto s_state_out_len_eq_one;
+
+      c_state_out_len = 2;
+      AOCL_GET_NEXT_CHAR(k1);
+      c_nblock_used++;
+      if (c_nblock_used == s_save_nblockPP)
+         continue;
+      if (k1 != c_k0) {
+         c_k0 = k1;
+         continue;
+      };
+
+      c_state_out_len = 3;
+      AOCL_GET_NEXT_CHAR(k1);
+      c_nblock_used++;
+      if (c_nblock_used == s_save_nblockPP)
+         continue;
+      if (k1 != c_k0) {
+         c_k0 = k1;
+         continue;
+      };
+
+      AOCL_GET_NEXT_CHAR(k1);
+      c_nblock_used++;
+      c_state_out_len = ((Int32)k1) + 4;
+      AOCL_GET_NEXT_CHAR(c_k0);
+      c_nblock_used++;
+   }
+
+   return_notr:
+   total_out_lo32_old = s->strm->total_out_lo32;
+   s->strm->total_out_lo32 += (avail_out_INIT - cs_avail_out);
+   if (s->strm->total_out_lo32 < total_out_lo32_old)
+      s->strm->total_out_hi32++;
+
+   /* save */
+   s->calculatedBlockCRC = c_calculatedBlockCRC;
+   s->state_out_ch = c_state_out_ch;
+   s->state_out_len = c_state_out_len;
+   s->nblock_used = c_nblock_used;
+   s->k0 = c_k0;
+   s->tPos = c_tPos;
+   s->strm->next_out = cs_next_out;
+   s->strm->avail_out = cs_avail_out;
+   /* end save */
+
+   #undef AOCL_CHAR_AT
+   #undef AOCL_GET_NEXT_CHAR
+   return False;
+}
+#endif
 
 /*---------------------------------------------------*/
 __inline__ Int32 BZ2_indexIntoF ( Int32 indx, Int32 *cftab )
@@ -1477,6 +1709,11 @@ int BZ_API(BZ2_bzDecompress) ( bz_stream *strm )
       if (s->state == BZ_X_OUTPUT) {
          if (s->smallDecompress)
             corrupt = unRLE_obuf_to_output_SMALL ( s ); else
+#ifdef AOCL_BZIP2_OPT
+            if(s->blockRandomised == 0 && s->save_nblock >= (AOCL_RANGE_THRESHOLD) && AOCL_use_libsais)
+               corrupt = AOCL_unRLE_obuf_to_output_FAST ( s );
+            else
+#endif
             corrupt = unRLE_obuf_to_output_FAST  ( s );
          if (corrupt) return BZ_DATA_ERROR;
          if (s->nblock_used == s->save_nblock+1 && s->state_out_len == 0) {
@@ -1535,6 +1772,10 @@ int BZ_API(BZ2_bzDecompressEnd)  ( bz_stream *strm )
    if (s->ll16 != NULL) BZFREE(s->ll16);
    if (s->ll4  != NULL) BZFREE(s->ll4);
 
+#ifdef AOCL_BZIP2_OPT
+   if (s->temp_tt != NULL) BZFREE(s->temp_tt);
+#endif
+   
    BZFREE(strm->state);
    strm->state = NULL;
 

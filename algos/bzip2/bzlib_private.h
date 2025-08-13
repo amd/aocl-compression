@@ -366,7 +366,24 @@ BZ2_hbMakeCodeLengths ( UChar*, Int32*, Int32, Int32 );
 #define BZ_X_CCRC_3      49
 #define BZ_X_CCRC_4      50
 
+#ifdef AOCL_BZIP2_OPT
+/*
+  Defines the bit width of the primary lookup table used in the two-tier Huffman 
+  decoding optimization. The primary table directly decodes Huffman codes of 
+  length <= AOCL_BS_BUFF_BITS, while longer codes use secondary tables.
+  
+  Value: 10 bits = 2^10 = 1024 entries in the primary lookup table
+*/
+#define AOCL_BS_BUFF_BITS 10
 
+/*
+   Threshold for switching between different decompression algorithms (level 3).
+   Blocks which are:
+      - larger than this size use optimized algorithms, two-pass BWT reconstruction.
+      - smaller than this size use simpler, single-pass algorithms.
+*/
+#define AOCL_RANGE_THRESHOLD (3 * 100000 - 19)
+#endif /* AOCL_BZIP2_OPT */
 
 /*-- Constants for the fast MTF decoder. --*/
 
@@ -392,7 +409,16 @@ typedef
       BZ_RAND_DECLS;
 
       /* the buffer for bit stream reading */
+#ifdef AOCL_BZIP2_OPT
+      ULong64   bsBuff;
+      /* buffers for creating huffman decoding tables */
+      Int32 huffman_lookup_table[6][1<<AOCL_BS_BUFF_BITS];  // Primary lookup table for fast huffman decoding
+      Int32 * secondary_tables[6];                          // Secondary tables for codes longer than AOCL_BS_BUFF_BITS
+      Int32 secondary_table_size[6];                        // Size of each secondary table (2^remaining_bits)
+      Int32 secondary_shift_bits[6];                        // Number of bits for secondary table indexing
+#else
       UInt32   bsBuff;
+#endif /* AOCL_BZIP2_OPT */
       Int32    bsLive;
 
       /* misc administratium */
@@ -412,6 +438,9 @@ typedef
 
       /* for undoing the Burrows-Wheeler transform (FAST) */
       UInt32   *tt;
+#ifdef AOCL_BZIP2_OPT
+      UInt32   *temp_tt;
+#endif /* AOCL_BZIP2_OPT */
 
       /* for undoing the Burrows-Wheeler transform (SMALL) */
       UInt16   *ll16;
@@ -578,9 +607,11 @@ do { \
 } while (0)
 #else
 #define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC)
-#endif
+#endif /* AOCL_ENABLE_THREADS */
+#else
+#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC)
+#endif /* AOCL_BZIP2_OPT */
 
-#endif
 extern void aocl_register_mainSimpleSort_fmv (int optOff, int optLevel);
 
 /*-------------------------------------------------------------*/

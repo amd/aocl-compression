@@ -659,67 +659,92 @@ Int32 BZ2_decompress ( DState* s )
    N is incremented by power of 2 which means the loop will not run
    more than 21 times, in worst case it reads no more than 20bits
    (refer to GET_MTF_VAL macro), so in single iteration worst case 
-   it reads 20*21=420 bits , 420 bits=52.5 bytes , 52.5 bytes≈53 bytes
+   it reads 20*21=420 bits , 420 bits=52.5 bytes , 52.5 bytes≈53 bytes.
+
+   In addition to bytes consumed for Huffman decoding, the 64-bit bsBuff
+   can hold up to 8 extra bytes for future operations, which must be accounted for
+   in buffer size calculations.
 */
-#define AOCL_WHILE_LIMIT 53
+#define AOCL_MTF_MAX_BYTES 53      /* Maximum bytes needed for MTF decoding (see explanation above) */
+#define AOCL_BSBUFF_ULONGLONG_BYTES 8  /* ULong64 buffer size in bytes */
+#define AOCL_WHILE_LIMIT (AOCL_MTF_MAX_BYTES + AOCL_BSBUFF_ULONGLONG_BYTES)
 #define AOCL_MTFL_FAST_PATH_LIMIT 128
 
-#define AOCL_GET_BITS1(lll,vvv,nnn)               \
-   s->state = lll;                                \
-   while (True) {                                 \
-      if (s->bsLive >= nnn) {                     \
-         UInt32 v;                                \
-         v = (s->bsBuff >>                        \
-             (s->bsLive-nnn)) & ((1 << nnn)-1);   \
-         s->bsLive -= nnn;                        \
-         vvv = v;                                 \
-         break;                                   \
-      }                                           \
-      while(s->bsLive+8<=32){                     \
-      s->bsBuff                                   \
-         = (s->bsBuff << 8) |                     \
-           ((UInt32)                              \
-              (*((UChar*)(s->strm->next_in))));   \
-      s->bsLive += 8;                             \
-      s->strm->next_in++;                         \
-      s->strm->avail_in--;                        \
-      s->strm->total_in_lo32++;                   \
-      if (s->strm->total_in_lo32 == 0)            \
-         s->strm->total_in_hi32++;                \
-      }                                           \
+/* This represents the maximum length of Huffman codes that can be encountered
+   in bzip2 streams. We extract this many bits at once for fast decoding.
+ */
+#define AOCL_HUFFMAN_MAX_CODE_BITS 17
+
+/* Bit mask to extract code length from packed Huffman table data [symbol << 8 | code_length].
+   Extracts lower 5 bits containing code length (max 31, fits in 5 bits). */
+#define AOCL_HUFFMAN_CODE_LENGTH_MASK 0x1f
+
+/* Macro for direct lookup in primary Huffman table.
+   Used for fast decoding of codes <= AOCL_BS_BUFF_BITS length.
+   Returns packed value: [symbol << 8 | code_length] or negative secondary table index.
+ */
+#define AOCL_HUFFMAN_DECODE_DIRECT s->huffman_lookup_table[gSel][raw_huffman_bits >> (AOCL_HUFFMAN_MAX_CODE_BITS - AOCL_BS_BUFF_BITS)]
+
+/* Macro for secondary table lookup for long codes
+   Used when primary table returns negative value (indicating long code that overflows primary table)
+   Returns packed value: [symbol << 8 | code_length]
+ */
+#define AOCL_HUFFMAN_DECODE_SECONDARY s->secondary_tables[gSel][s->secondary_table_size[gSel]*index + (raw_huffman_bits >> ((AOCL_HUFFMAN_MAX_CODE_BITS - AOCL_BS_BUFF_BITS) - s->secondary_shift_bits[gSel]))]
+
+#define AOCL_GET_BITS1(lll, vvv, nnn)                                            \
+   s->state = lll;                                                               \
+   /* Keep filling buffer while it can hold >= 8 bits (bsBuff is 64-bit) */      \
+   while (s->bsLive + 8 <= 64) {                                                 \
+      s->bsBuff = (s->bsBuff << 8) | ((UInt32)(*((UChar *)(s->strm->next_in)))); \
+      s->bsLive += 8;                                                            \
+      s->strm->next_in++;                                                        \
+      s->strm->avail_in--;                                                       \
+      s->strm->total_in_lo32++;                                                  \
+      if (s->strm->total_in_lo32 == 0)                                           \
+         s->strm->total_in_hi32++;                                               \
+   }                                                                             \
+   while (True) {                                                                \
+      if (s->bsLive >= nnn) {                                                    \
+         UInt32 v;                                                               \
+         v = (s->bsBuff >> (s->bsLive - nnn)) & ((1 << nnn) - 1);                \
+         s->bsLive -= nnn;                                                       \
+         vvv = v;                                                                \
+         break;                                                                  \
+      }                                                                          \
    }
 
 #define AOCL_GET_BIT1(lll,uuu)                    \
    AOCL_GET_BITS1(lll,uuu,1)
 
-#define AOCL_GET_MTF_VAL1(label1,label2,lval)     \
-{                                                 \
-   if (groupPos == 0) {                           \
-      groupNo++;                                  \
-      if (groupNo >= nSelectors)                  \
-         RETURN(BZ_DATA_ERROR);                   \
-      groupPos = BZ_G_SIZE;                       \
-      gSel = s->selector[groupNo];                \
-      gMinlen = s->minLens[gSel];                 \
-      gLimit = &(s->limit[gSel][0]);              \
-      gPerm = &(s->perm[gSel][0]);                \
-      gBase = &(s->base[gSel][0]);                \
-   }                                              \
-   groupPos--;                                    \
-   zn = gMinlen;                                  \
-   AOCL_GET_BITS1(label1, zvec, zn);              \
-   while (1) {                                    \
-      if (zn > 20 /* the longest code */)         \
-         RETURN(BZ_DATA_ERROR);                   \
-      if (zvec <= gLimit[zn]) break;              \
-      zn++;                                       \
-      AOCL_GET_BIT1(label2, zj);                  \
-      zvec = (zvec << 1) | zj;                    \
-   };                                             \
-   if (zvec - gBase[zn] < 0                       \
-       || zvec - gBase[zn] >= BZ_MAX_ALPHA_SIZE)  \
-      RETURN(BZ_DATA_ERROR);                      \
-   lval = gPerm[zvec - gBase[zn]];                \
+/* AOCL_GET_MTF_VAL1: Fast MTF decode via two-tier Huffman lookup (primary + secondary).
+   Manages group selection/position, extracts symbol and code length, then consumes bits from the stream. */
+#define AOCL_GET_MTF_VAL1(label1, label2, lval)                                        \
+{                                                                                      \
+   if (groupPos == 0) {                                                                \
+      groupNo++;                                                                       \
+      if (groupNo >= nSelectors)                                                       \
+         RETURN(BZ_DATA_ERROR);                                                        \
+      groupPos = BZ_G_SIZE;                                                            \
+      gSel = s->selector[groupNo];                                                     \
+   }                                                                                   \
+   groupPos--;                                                                         \
+   /* Extract raw Huffman bits from bit stream */                                      \
+   int raw_huffman_bits = (s->bsBuff >> (s->bsLive - AOCL_HUFFMAN_MAX_CODE_BITS))      \
+                           & ((1 << AOCL_HUFFMAN_MAX_CODE_BITS) - 1);                  \
+   /* Primary table lookup for fast decoding */                                        \
+   zn = AOCL_HUFFMAN_DECODE_DIRECT;                                                    \
+   if (zn < 0) {                                                                       \
+      /* Long code: use secondary table */                                             \
+      int index = -1 * (zn + 1);                                                       \
+      /* Mask to remaining bits for secondary table indexing */                        \
+      raw_huffman_bits &= (1 << (AOCL_HUFFMAN_MAX_CODE_BITS - AOCL_BS_BUFF_BITS)) - 1; \
+      zn = AOCL_HUFFMAN_DECODE_SECONDARY;                                              \
+   }                                                                                   \
+   /* Extract symbol and code length from packed data */                               \
+   lval = zn >> 8;                                                                     \
+   zn = (zn & AOCL_HUFFMAN_CODE_LENGTH_MASK);                                          \
+   /* Consume the decoded number of bits */                                            \
+   AOCL_GET_BITS1(label1, zvec, zn);                                                   \
 }
 
 #define AOCL_GET_BITS2(lll,vvv,nnn)               \
@@ -731,36 +756,168 @@ Int32 BZ2_decompress ( DState* s )
    vvv = v;                                 
 
 #define AOCL_GET_BIT2(lll,uuu)                    \
-   AOCL_GET_BITS2(lll,uuu,1)
+  AOCL_GET_BITS2(lll,uuu,1)
 
-#define AOCL_GET_MTF_VAL2(label1,label2,lval)     \
-{                                                 \
-   if (groupPos == 0) {                           \
-      groupNo++;                                  \
-      if (groupNo >= nSelectors)                  \
-         RETURN(BZ_DATA_ERROR);                   \
-      groupPos = BZ_G_SIZE;                       \
-      gSel = s->selector[groupNo];                \
-      gMinlen = s->minLens[gSel];                 \
-      gLimit = &(s->limit[gSel][0]);              \
-      gPerm = &(s->perm[gSel][0]);                \
-      gBase = &(s->base[gSel][0]);                \
-   }                                              \
-   groupPos--;                                    \
-   zn = gMinlen;                                  \
-   AOCL_GET_BITS2(label1, zvec, zn);              \
-   while (1) {                                    \
-      if (zn > 20 /* the longest code */)         \
-         RETURN(BZ_DATA_ERROR);                   \
-      if (zvec <= gLimit[zn]) break;              \
-      zn++;                                       \
-      AOCL_GET_BIT2(label2, zj);                  \
-      zvec = (zvec << 1) | zj;                    \
-   };                                             \
-   if (zvec - gBase[zn] < 0                       \
-       || zvec - gBase[zn] >= BZ_MAX_ALPHA_SIZE)  \
-      RETURN(BZ_DATA_ERROR);                      \
-   lval = gPerm[zvec - gBase[zn]];                \
+/* AOCL_GET_MTF_VAL2: Same as AOCL_GET_MTF_VAL1,
+   but uses AOCL_GET_BITS2 for bit consumption. */
+#define AOCL_GET_MTF_VAL2(label1, label2, lval)                                        \
+{                                                                                      \
+   if (groupPos == 0) {                                                                \
+      groupNo++;                                                                       \
+      if (groupNo >= nSelectors)                                                       \
+         RETURN(BZ_DATA_ERROR);                                                        \
+      groupPos = BZ_G_SIZE;                                                            \
+      gSel = s->selector[groupNo];                                                     \
+   }                                                                                   \
+   groupPos--;                                                                         \
+   /* Extract raw Huffman bits from bit stream */                                      \
+   int raw_huffman_bits = (s->bsBuff >> (s->bsLive - AOCL_HUFFMAN_MAX_CODE_BITS))      \
+                           & ((1 << AOCL_HUFFMAN_MAX_CODE_BITS) - 1);                  \
+   /* Primary table lookup for fast decoding */                                        \
+   zn = AOCL_HUFFMAN_DECODE_DIRECT;                                                    \
+   if (zn < 0) {                                                                       \
+      /* Long code: use secondary table */                                             \
+      int index = -1 * (zn + 1);                                                       \
+      /* Mask to remaining bits for secondary table indexing */                        \
+      raw_huffman_bits &= (1 << (AOCL_HUFFMAN_MAX_CODE_BITS - AOCL_BS_BUFF_BITS)) - 1; \
+      zn = AOCL_HUFFMAN_DECODE_SECONDARY;                                              \
+   }                                                                                   \
+   /* Extract symbol and code length from packed data */                               \
+   lval = zn >> 8;                                                                     \
+   zn = (zn & AOCL_HUFFMAN_CODE_LENGTH_MASK);                                          \
+   /* Consume the decoded number of bits */                                            \
+   AOCL_GET_BITS2(label1, zvec, zn);                                                   \
+}
+
+/*
+   Build optimized Huffman code lookup table for fast decoding.
+
+   This function constructs a lookup table that enables fast Huffman decoding 
+   by pre-computing decode results for all possible bit patterns. It uses a 
+   two-tier approach to handle both short and long Huffman codes efficiently.
+
+   For codes <= AOCL_BS_BUFF_BITS length:
+     - Direct lookup table where each entry contains the code length and 
+       symbol value packed together
+     - Enables single table access for decoding
+
+   For codes > AOCL_BS_BUFF_BITS length:
+     - Uses indirect lookup with secondary tables
+     - First AOCL_BS_BUFF_BITS bits index into main table to get secondary table index
+     - Remaining bits index into the secondary table for final decode
+ */
+void AOCL_build_huffman_lookup_table( DState* s,
+                                 Int32 minLen,
+                                 Int32 maxLen,
+                                 Int32 alphaSize,
+                                 Int32 gSel)
+{
+   Int32 n, vec, i;
+   bz_stream* strm = s->strm;
+   
+   // Create temporary reference pointers to avoid repetitive s-> accesses
+   Int32 *huffman_lookup_table = s->huffman_lookup_table[gSel];
+   UChar *length = s->len[gSel];
+   Int32 *perm = s->perm[gSel];
+   Int32 *base = s->base[gSel];
+   Int32 *secondary_table_size = s->secondary_table_size;
+   Int32 *secondary_shift_bits = s->secondary_shift_bits;
+   Int32 **secondary_tables = s->secondary_tables;
+
+   vec = 0;  // Current canonical Huffman code value
+   
+   // Phase 1: Build direct lookup table for short codes (length <= AOCL_BS_BUFF_BITS)
+   // Each table entry packs: [symbol_value << 8 | code_length]
+   for (n = minLen; n <= maxLen && n <= AOCL_BS_BUFF_BITS; n++) {
+      for (i = 0; i < alphaSize; i++)
+         if (length[i] == n) {
+            int len = length[i];
+            // Calculate how many table entries this code should fill
+            // (replicating the code across all possible suffixes)
+            int limit = 1 << (AOCL_BS_BUFF_BITS-len);
+            // Left-align the code in the table index space
+            int temp_vec = vec << (AOCL_BS_BUFF_BITS-len);
+            
+            // Fill all table entries for this code (with different suffixes)
+            for(int k = 0; k < limit; k++)
+            {
+               huffman_lookup_table[temp_vec] = len;  // Initialize entry with code length (or -1 for invalid codes)
+               if(len != -1)
+               {
+                  // Extract original code bits and decode symbol
+                  int zvec = temp_vec >> (AOCL_BS_BUFF_BITS - len);
+                  int lval = perm[zvec - base[len]];  // Look up symbol
+                  huffman_lookup_table[temp_vec] |= (lval << 8);     // Store symbol in upper bits
+               }
+               temp_vec++;
+            }
+            vec++;  // Move to next code of this length
+         }
+      vec <<= 1;  // Codes of next length start at vec*2
+   }
+   
+   // Phase 2: Handle long codes (length > AOCL_BS_BUFF_BITS) using secondary tables
+   if(maxLen > AOCL_BS_BUFF_BITS)
+   {
+      // Count how many main table entries need secondary tables (marked as -1)
+      int cnt = 0;
+      for(int j = 0; j < (1 << AOCL_BS_BUFF_BITS); j++)
+      {
+        if(huffman_lookup_table[j] == -1)
+          cnt++;
+      }
+      
+      // Setup secondary table parameters
+      secondary_table_size[gSel] = 1 << (maxLen - AOCL_BS_BUFF_BITS);  // Secondary table size
+      secondary_shift_bits[gSel] = maxLen - AOCL_BS_BUFF_BITS;    // Shift bits for secondary table indexing
+      
+      // Allocate secondary tables for all main table entries that need them
+      secondary_tables[gSel] = (int *)BZALLOC(sizeof(int)*secondary_table_size[gSel]*cnt);
+      memset(secondary_tables[gSel], 0, sizeof(int)*secondary_table_size[gSel]*cnt);
+      
+      int index = -1;    // Current secondary table index
+      int prev = 0;      // Previous main table index
+      // Process remaining long codes
+      while(n <= maxLen)
+      {
+         for (i = 0; i < alphaSize; i++)
+            if (length[i] == n) {
+               int len = length[i];
+               // Replicate this code across all possible suffixes
+               int limit = 1 << (maxLen-n);
+               int temp_vec = vec << (maxLen-n);
+               
+               for(int k=0;k<limit;k++)
+               {
+                  // Extract main table index from upper bits
+                  int current = temp_vec >> (maxLen - AOCL_BS_BUFF_BITS);
+                  
+                  // Assign new secondary table when main table index changes
+                  if(prev != current)
+                     index++;
+                  prev = current;
+                  
+                  // Mark main table entry to point to secondary table
+                  huffman_lookup_table[current] = -1*(index+1);  // Negative value = secondary table index
+                  
+                  // Calculate position in secondary table
+                  int table_index = secondary_table_size[gSel]*index + ((temp_vec) & (secondary_table_size[gSel]-1));
+                  
+                  // Store code length and symbol in secondary table
+                  secondary_tables[gSel][table_index] = n;  // Code length
+                  if(len != -1)
+                  {
+                     int lval = perm[vec - base[len]];           // Decode symbol
+                     secondary_tables[gSel][table_index] |= (lval << 8);   // Pack symbol in upper bits
+                  }
+                  temp_vec++;
+               }
+               vec++;
+            }
+         vec <<= 1;
+         n++;
+      }
+   }
 }
 
 /*---------------------------------------------------*/
@@ -1010,6 +1167,10 @@ Int32 AOCL_BZ2_decompress ( DState* s )
             &(s->len[t][0]),
             minLen, maxLen, alphaSize
          );
+         for (int i = 0; i < 1 << AOCL_BS_BUFF_BITS; i++)
+           s->huffman_lookup_table[t][i] = -1;
+         s->secondary_tables[t] = NULL;
+         AOCL_build_huffman_lookup_table(s, minLen, maxLen, alphaSize, t);
          s->minLens[t] = minLen;
       }
 
@@ -1030,7 +1191,6 @@ Int32 AOCL_BZ2_decompress ( DState* s )
 
       nblock = 0;
       GET_MTF_VAL(BZ_X_MTF_1, BZ_X_MTF_2, nextSym);
-
       while (s->strm->avail_in > AOCL_WHILE_LIMIT) {
 
          if (nextSym == EOB) break;
@@ -1064,21 +1224,38 @@ Int32 AOCL_BZ2_decompress ( DState* s )
             */
             uc = s->mtfa[0];
             s->unzftab[uc] += es;
-
+            if((nblock+es)>=nblockMAX)
+               RETURN(BZ_DATA_ERROR);
             if (s->smallDecompress)
                while (es > 0) {
-                  if (nblock >= nblockMAX) RETURN(BZ_DATA_ERROR);
                   s->ll16[nblock] = (UInt16)uc;
                   nblock++;
                   es--;
                }
             else
-               while (es > 0) {
-                  if (nblock >= nblockMAX) RETURN(BZ_DATA_ERROR);
+            {
+               do {
                   s->tt[nblock] = (UInt32)uc;
-                  nblock++;
-                  es--;
-               };
+                  s->tt[nblock+1] = (UInt32)uc;
+                  s->tt[nblock+2] = (UInt32)uc;
+                  s->tt[nblock+3] = (UInt32)uc;
+                  s->tt[nblock+4] = (UInt32)uc;
+                  s->tt[nblock+5] = (UInt32)uc;
+                  s->tt[nblock+6] = (UInt32)uc;
+                  s->tt[nblock+7] = (UInt32)uc;
+                  s->tt[nblock+8] = (UInt32)uc;
+                  s->tt[nblock+9] = (UInt32)uc;
+                  s->tt[nblock+10] = (UInt32)uc;
+                  s->tt[nblock+11] = (UInt32)uc;
+                  s->tt[nblock+12] = (UInt32)uc;
+                  s->tt[nblock+13] = (UInt32)uc;
+                  s->tt[nblock+14] = (UInt32)uc;
+                  s->tt[nblock+15] = (UInt32)uc;
+                  nblock += 16;
+                  es -= 16;
+               } while(es > 0);
+               nblock += es;
+            }
 
             continue;
 
@@ -1107,9 +1284,8 @@ Int32 AOCL_BZ2_decompress ( DState* s )
                s->tt[nblock]   = (UInt32)(uc);
             nblock++;
             
-            /* This while loop loads as many bytes as it can into
-               s->bsBuff.*/
-            while(s->bsLive+8<=32) {
+            /* This while loop loads as many bytes as it can into s->bsBuff.*/
+            while(s->bsLive+8<=64) {
                s->bsBuff                                   
                   = (s->bsBuff << 8) |                     
                   ((UInt32)                              
@@ -1123,7 +1299,7 @@ Int32 AOCL_BZ2_decompress ( DState* s )
             }
 
             /* Modified GET_MTF_VAL macro so that the above while loop
-               loads enough number of bits into bsBuff so as to eliminate
+               loads enough number of bits into s->bsBuff so as to eliminate
                the need to check if enough number of bits are available
                inside GET_BITS macro which is called 20 times in worst case
                inside GET_MTF_VAL macro.*/
@@ -1131,6 +1307,11 @@ Int32 AOCL_BZ2_decompress ( DState* s )
             continue;
          }
       }
+      
+      gMinlen = s->minLens[gSel];
+      gLimit = &(s->limit[gSel][0]);
+      gPerm = &(s->perm[gSel][0]);
+      gBase = &(s->base[gSel][0]);
 
       while (True) {
 
@@ -1215,6 +1396,29 @@ Int32 AOCL_BZ2_decompress ( DState* s )
       s->cftab[0] = 0;
       for (i = 1; i <= 256; i++) s->cftab[i] = s->unzftab[i-1];
       for (i = 1; i <= 256; i++) s->cftab[i] += s->cftab[i-1];
+      
+      /*
+         Create a compacted cumulative frequency table for active characters only.
+         This table maps sequence indices (0 to nInUse-1) to cumulative frequencies,
+         enabling efficient character lookup during BWT reconstruction.
+
+         The algorithm works as follows:
+         1. Use either "Fast path" or "Fallback to precise binary search" to find the character at position x.
+         2. If x falls between char_boundaries[i] and char_boundaries[i+1], 
+            then the character at position x is seqToUnseq[i]
+   
+         Example: char_boundaries = [0, 100, 250, 400, 500]
+                  If x = 275, it falls in range [250, 400) at index 2
+                  So character = seqToUnseq[2]
+       */
+      Int32 char_boundaries[257] = {0};  // Compacted character boundary lookup table
+      for(i = 0; i < s->nInUse; i++)
+      {
+         // Map sequence index to cumulative frequency of actual character
+         char_boundaries[i] = s->cftab[s->seqToUnseq[i]];
+      }
+      char_boundaries[s->nInUse] = s->cftab[256];  // End boundary for range checks
+
       /* Check: cftab entries in range. */
       for (i = 0; i <= 256; i++) {
          if (s->cftab[i] < 0 || s->cftab[i] > nblock) {
@@ -1269,21 +1473,82 @@ Int32 AOCL_BZ2_decompress ( DState* s )
          }
 
       } else {
+         /*-- Compute the T^(-1) vector (inverse BWT transform table) --*/
+         if(nblock >= (AOCL_RANGE_THRESHOLD) && s->blockRandomised == 0)
+         {
+            /*
+               Optimized path for large, non-randomized blocks
+               Uses two-pass algorithm to avoid memory conflicts and improve cache locality
+             */
+            
+            /* Allocate temporary buffer if not already available */
+            if(s->temp_tt == NULL)
+            {
+               s->temp_tt  = BZALLOC( s->blockSize100k * 100000 * sizeof(UInt32) );
+               if (s->temp_tt == NULL) RETURN(BZ_MEM_ERROR);
+            }
+            UInt32 * temp_tt = s->temp_tt;
 
-         /*-- compute the T^(-1) vector --*/
-         for (i = 0; i < nblock; i++) {
-            uc = (UChar)(s->tt[i] & 0xff);
-            s->tt[s->cftab[uc]++] |= (i << 8);
+            /*
+               First pass: Build temporary table with original positions
+               For each character in the BWT, store its original position (i << 8)
+               at the location determined by the cumulative frequency table
+             */
+            for (i = 0; i < nblock; i++) {
+               uc = (UChar)(s->tt[i]);    /* Extract character */
+               temp_tt[s->cftab[uc]++] = (i << 8);   /* Store char + position link */
+            }
+            
+            /* Rebuild cumulative frequency table from character frequencies */
+            s->cftab[0] = 0;
+            for (i = 1; i <= 256; i++) s->cftab[i] = s->unzftab[i-1];
+            for (i = 1; i <= 256; i++) s->cftab[i] += s->cftab[i-1];
+            
+            /*
+               Second pass: Combine character data with position data
+               Build final transform table where each entry contains:
+               - Lower 8 bits: the character value at current position
+               - Upper 24 bits: pointer to next-to-next position in sequence
+               Note: Character at next position can be determined from current index using temp_cftab
+             */
+            for (i = 0; i < nblock; i++) {
+               uc = (UChar)(s->tt[i]);
+               s->tt[s->cftab[uc]++] |= s->temp_tt[i];
+            }
+
+            /* Restore original cumulative frequency table for later use */
+            for (i = 0; i <= s->nInUse; i++) {
+               s->cftab[i] = char_boundaries[i];
+            }
+            s->tPos = 0;
+            s->nblock_used = 0;
          }
-
-         s->tPos = s->tt[s->origPtr] >> 8;
-         s->nblock_used = 0;
+         else {
+            /*
+               Standard single-pass algorithm for smaller blocks or randomized data
+               Directly builds the inverse transform table by combining character
+               and position information in one step
+             */
+            for (i = 0; i < nblock; i++) {
+               uc = (UChar)(s->tt[i] & 0xff);  /* Extract character */
+               s->tt[s->cftab[uc]++] |= (i << 8);  /* Store char + position link */
+            }
+   
+            /* Set initial position for BWT reconstruction */
+            s->tPos = s->tt[s->origPtr] >> 8;
+            s->nblock_used = 0;
+         }
          if (s->blockRandomised) {
             BZ_RAND_INIT_MASK;
-            BZ_GET_FAST(s->k0); s->nblock_used++;
-            BZ_RAND_UPD_MASK; s->k0 ^= BZ_RAND_MASK; 
+            BZ_GET_FAST(s->k0);
+            s->nblock_used++;
+            BZ_RAND_UPD_MASK;
+            s->k0 ^= BZ_RAND_MASK;
          } else {
-            BZ_GET_FAST(s->k0); s->nblock_used++;
+            if(!(nblock >= (AOCL_RANGE_THRESHOLD)))
+            {
+               BZ_GET_FAST(s->k0); s->nblock_used++;
+            }
          }
 
       }
@@ -1324,6 +1589,15 @@ Int32 AOCL_BZ2_decompress ( DState* s )
    AssertH ( False, 4002 );
 
    save_state_and_return:
+
+   for(int i=0;i<6;i++)
+   {
+      if(s->secondary_tables[i])
+      {
+         BZFREE(s->secondary_tables[i]);
+         s->secondary_tables[i] = NULL;
+      }
+   }
 
    s->save_i           = i;
    s->save_j           = j;
