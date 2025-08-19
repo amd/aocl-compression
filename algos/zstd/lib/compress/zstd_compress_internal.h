@@ -1675,7 +1675,9 @@ int is_totalbits_limited_seq_possible(const BYTE* ip, const BYTE* anchor, size_t
     if (LIKELY(totalbits < MAX_TOTAL_BITS)) return 1; // totalbits can fit
 
     if ((llbits + ofbits) >= MAX_TOTAL_BITS) return 0; // unable to fit match
-    if (mLength < ((size_t)2 * minMatch)) return 0; // unable to split match as minimum match length is MINMATCH
+    assert(minMatch < (31 + 3) /*max Match_Length_Code with mlbits=0. Beyond this mlbits needs to be accounted as well.*/);
+    const U32 minMatchWithLit = minMatch + 1; // (match of minimum match length + 1 literal) per sequence
+    if (mLength < ((size_t)2 * minMatchWithLit)) return 0; // unable to split match as minimum match length per sequence is minMatchWithLit
 
     return 1; // totalbits can fit by splitting sequences
 }
@@ -1685,6 +1687,7 @@ void AOCL_ZSTD_storeSequences(SeqStore_t* seqStore, const BYTE* ip, const BYTE* 
     U32 offBase, size_t mLength, U32 minMatch)
 {
     assert(minMatch == MINMATCH);
+    U32 minMatchWithLit = minMatch + 1; //(match of minimum match length + 1 literal) per sequence
     //store sequences such that totalbits for each sequence is < MAX_TOTAL_BITS
     int llbits = get_lit_bits((size_t)(ip - anchor));
     int mlbits = get_mat_bits(mLength);
@@ -1693,24 +1696,39 @@ void AOCL_ZSTD_storeSequences(SeqStore_t* seqStore, const BYTE* ip, const BYTE* 
     int totalbits = llbits + mlbits + ofbits;
     if (UNLIKELY(totalbits >= MAX_TOTAL_BITS)) { //store as multiple sequences
         assert((llbits + ofbits) < MAX_TOTAL_BITS);
-        assert(mLength >= ((size_t)2 * minMatch));
+        assert(mLength >= ((size_t)2 * minMatchWithLit)); //1 minMatchWithLit for current sequence and 1 or more for subsequent ones
 
         //break into multiple sequences
         int balancebits = (MAX_TOTAL_BITS - 1) - (llbits + ofbits); //max bits allowed for mlbits
         size_t mlength1 = get_mat_len(balancebits, mLength); //max mLength that can fit
-        mlength1 = ((mLength == mlength1) || (mLength - mlength1) >= minMatch) ? mlength1 : (mLength - minMatch); // if balance remains, must leave at least minMatch for the next sequence
+        mlength1 = ((mLength == mlength1) || (mLength - mlength1) >= minMatchWithLit) ? mlength1 :
+                   (mLength - minMatchWithLit); // if balance remains, must leave at least minMatchWithLit for the next sequence
         assert(mLength >= mlength1);
         ZSTD_STORE_SEQ(seqStore, (size_t)(ip - anchor), anchor, iend, offBase, mlength1); // all literals go into first sequence
         mLength -= mlength1;
+        anchor = ip + mlength1;
 
-        //remaining matches go into separate sequences with no literals
+        //remaining matches go into separate sequences with 1 literal each
+        /* Excerpt from format specification : As seen in Sequence Execution, the first 3 values define a 
+         * repeated offset and we will call them Repeated_Offset1, Repeated_Offset2, and Repeated_Offset3.
+         * They are sorted in recency order, with Repeated_Offset1 meaning "most recent one". 
+         * If offset_value == 1, then the offset used is Repeated_Offset1, etc.
+         * There is an exception though, when current sequence's literals_length = 0. In this case, 
+         * repeated offsets are shifted by one, so an offset_value of 1 means Repeated_Offset2, 
+         * an offset_value of 2 means Repeated_Offset3, and an offset_value of 3 means Repeated_Offset1 - 1.
+         * Note : Performing this shift logic might not be possible in certain FDS restricted cases,
+         *        as not all rep codes are actively maintained.
+         * To avoid this exception case, we ensure sequences have 1 literal length when splitting. */
         while (mLength > 0) {
-            int balancebits = (MAX_TOTAL_BITS - 1) - ofbits; //max bits allowed for mlbits. llbits is 0.
+            assert(mLength >= minMatchWithLit);
+            int balancebits = (MAX_TOTAL_BITS - 1) - ofbits; //max bits allowed for mlbits. llbits is 0 (for lengths 0-15).
             mlength1 = get_mat_len(balancebits, mLength); //max mLength that can fit
-            mlength1 = ((mLength == mlength1) || (mLength - mlength1) >= minMatch) ? mlength1 : (mLength - minMatch); // if balance remains, must leave at least minMatch for the next sequence
+            mlength1 = ((mLength == mlength1) || (mLength - mlength1) >= minMatchWithLit) ? mlength1 :
+                (mLength - minMatchWithLit); // if balance remains, must leave at least minMatchWithLit for the next sequence
             assert(mLength >= mlength1);
-            ZSTD_STORE_SEQ(seqStore, 0, anchor, iend, offBase, mlength1);
+            ZSTD_STORE_SEQ(seqStore, 1 /*single literal*/, anchor, iend, offBase, (mlength1 - 1));
             mLength -= mlength1;
+            anchor += mlength1;
         }
     }
     else { //store as single sequence

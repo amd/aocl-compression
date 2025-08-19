@@ -1827,6 +1827,7 @@ static void aocl_setup_inflate_fmv(int optOff, int optLevel)
                 updatewindow_fp = updatewindow;
                 inflate_fast_fp = inflate_fast;
 #endif /* AOCL_ZLIB_SSE2_OPT */
+            break;
             default://AVX512 and other versions
 #ifdef AOCL_ZLIB_AVX512_OPT
                 updatewindow_fp = aocl_updatewindow;
