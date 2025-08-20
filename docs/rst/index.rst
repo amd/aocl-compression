@@ -57,7 +57,8 @@ of the supported compression and decompression methods. This suite also
 supports the benchmarking of IPP compression methods, such as, lz4, lz4hc, zlib and bzip2.
 The library build framework offers CTest-based testing of the test cases
 implemented using GTest and the library test suite. Starting from AOCL-Compression 4.2,
-the library offers openMP based multi-threaded compression for a few methods.
+the library offers openMP based multi-threaded compression for all the methods
+(for LZMA, only multi-threaded compression is supported).
 
 
 Unified APIs
@@ -143,6 +144,17 @@ LZ4HC
 .....
 
 - :ref:`int LZ4_compress_HC(const char *src, char *dst, int srcSize, int dstCapacity, int compressionLevel) <LZ4_compress_HC>`
+
+BZIP2
+.....
+
+- :ref:`int BZ2_bzBuffToBuffCompress(char* dest, unsigned int* destLen, char* source, unsigned int sourceLen, int blockSize100k, int verbosity, int workFactor) <BZ2_bzBuffToBuffCompress>`
+- :ref:`int BZ2_bzBuffToBuffDecompress(char* dest, unsigned int* destLen, char* source, unsigned int sourceLen, int small, int verbosity) <BZ2_bzBuffToBuffDecompress>`
+
+LZMA
+....
+
+- :ref:`SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen, const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig) <LzmaEncode>`
 
 Examples
 ``````````

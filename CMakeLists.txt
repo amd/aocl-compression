@@ -88,7 +88,7 @@ option (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL "Build with xz utils lzma APIs. Expe
 option (AOCL_ENABLE_LOG_FEATURE "Enable logging support in library, for which log level is determined by environement variable AOCL_ENABLE_LOG (go through README.md) (Disabled by default)" OFF)
 option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression using SMP openMP threads (Disabled by default)" OFF)
 option (TEST_COVERAGE_THIRD_PARTY "Enable third party test bench based CTest suite (Disabled by default)" OFF)
-option (BUILD_UTILITY "Enable third party utility build: zstd (Disabled by default)" OFF)
+option (BUILD_UTILITY "Enable third party utility build: minigzip(zlib), zstd_utility(zstd) (Disabled by default)" OFF)
 option (NATIVE_ENABLE_THREADS "Enable native multi-threaded compression for supported methods (Disabled by default)" OFF)
 option (AOCL_TEST_FUZZER "Enable AOCL Compression fuzzer (only on Linux with Clang compiler)" OFF)
 option (AOCL_TEST_FUZZER_WITH_CORPUS "Run fuzzer tests with corpus (only on Linux with Clang compiler)" OFF)

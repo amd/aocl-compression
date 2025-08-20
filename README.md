@@ -8,8 +8,8 @@ compression and decompression methods which facilitate the applications to
 easily integrate and use them.
 AOCL-Compression supports lz4, zlib/deflate, lzma, zstd, bzip2, snappy, and lz4hc
 based compression and decompression methods along with their native APIs.
-The library offers openMP based multi-threaded implementation of lz4, zlib, 
-zstd and snappy compression methods.
+The library offers openMP based multi-threaded implementation for all the methods
+(for LZMA, only multi-threaded compression is supported).
 It supports the dynamic dispatcher feature that executes the most optimal
 function variant implemented using Function Multi-versioning thereby offering
 a single optimized library portable across different x86 CPU architectures.
@@ -26,8 +26,8 @@ Installation
 
 1. Download the latest stable release from the Github repository:<br>
 https://github.com/amd/aocl-compression
-2. Install CMake on the machine where the sources are to be compiled.
-3. Make any one of the compilers GCC or Clang available on the machine.
+2. Install CMake (version 3.26.0+) on the machine where the sources are to be compiled.
+3. Make any one of the supported compilers (GCC 8.5+ or Clang 11.0+) available on the machine.
 4. Then, use the cmake based build system to compile and generate AOCL-Compression <br>
 library and testsuite binary as explained below for Linux® and Windows® platforms.
 
@@ -143,11 +143,17 @@ AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only s
 AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
 ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
 BUILD_UTILITY                       |  Enable third party utility build: minigzip(zlib), zstd_utility(zstd) (Disabled by default)
+AOCL_BZIP2_HUFFMAN_ITERATIONS       |  Control number of BZIP2 Huffman tables refinement iterations (1-4). Lower values are faster but reduce compression ratio. (Default: 3)
 
 * NOTE: <br>
    1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by
    setting environment variable AOCL_ZLIB_QUICK_MODE=ON. It also improves performance for levels 2, 3 and 5
    while trading off compression ratio. <br>
+   2. **Threading Options Conflict**: If both `AOCL_ENABLE_THREADS` and `NATIVE_ENABLE_THREADS` are enabled, 
+   `NATIVE_ENABLE_THREADS` will be automatically disabled to avoid conflicts. <br>
+   3. **BUILD_UTILITY Forces Static Build**: When `BUILD_UTILITY=ON`, the build system automatically forces 
+   `BUILD_STATIC_LIBS=ON` as some utilities cannot link to shared libraries. <br>
+
 
 Running AOCL-Compression Test Bench On Linux
 --------------------------------------------
@@ -430,10 +436,12 @@ Enabling specific instructions (ISA)
 
 Multi-threaded Compression and Decompression
 --------------------------------------------
-- Parallel compression and decompression of lz4, lz4hc, zlib (zlib, deflate and gzip formats), zstd and snappy 
-  is implemented using openMP multi-threading. A RAP (random access point) frame is introduced in AOCL-Compression
-  to support parallel decompression of the compressed streams/files. Use AOCL_ENABLE_THREADS
-  config option to enable the multi-threading.
+- AOCL-Compression provides parallel compression and decompression capabilities for multiple formats:
+  lz4, lz4hc, zlib (including zlib, deflate, and gzip formats), zstd, snappy, bzip2, and lzma.
+  Note: For lzma, only multi-threaded compression is currently supported.
+- The parallel processing is implemented using OpenMP multi-threading. To enable parallel decompression
+  of compressed streams and files, AOCL-Compression introduces a RAP (Random Access Point) frame format.
+- Enable multi-threading support by using the `AOCL_ENABLE_THREADS` configuration option.
 - A stream compressed with multi-threaded AOCL-Compression library can be decompressed using any
   single-threaded standard decompressor by simply skipping the initial block of bytes containing
   the RAP frame present at the start of the stream.
