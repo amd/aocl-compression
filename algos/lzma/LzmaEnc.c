@@ -2,7 +2,7 @@
 2022-07-15: Igor Pavlov : Public domain */
 
 /**
-* Modifications Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+* Modifications Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -5802,7 +5802,6 @@ SRes LzmaEnc_MemEncode_st_2nd_pass(CLzmaEncHandle pp, Byte *dest, SizeT *destLen
   aocl_thread_group_t thread_group_handle;
   aocl_thread_info_t cur_thread_info;
   AOCL_INT32 rap_frame_len = -1;
-  AOCL_UINT32 dst_offset = 0;
   SRes result;
 
   size_t window_len = 0;
