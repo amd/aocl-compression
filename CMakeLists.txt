@@ -73,8 +73,8 @@ option (AOCL_ZSTD_SEARCH_SKIP_OPT "Enable ZSTD match skipping optimization that 
 option (AOCL_ZSTD_DYN_BLOCK_SIZE "Enable ZSTD dynamic block size determination  (Disabled by default)" OFF)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option (AOCL_TEST_COVERAGE "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" OFF)
+option (CODE_COVERAGE "Enable code coverage (GCC/gcov for Linux and Clang/llvm-cov for both Linux and Windows)" OFF)
 if(UNIX)
-    option (CODE_COVERAGE "Enable source code coverage (only on Linux with GCC compiler)" OFF)
     option (ASAN "Enable Address Sanitizer checks (only on Linux/Debug build)" OFF)
     option (VALGRIND "Enable Valgrind checks (only on Linux/Debug. Incompatible with ASAN=ON)" OFF)
 endif()
@@ -165,14 +165,20 @@ if (AOCL_EXCLUDE_BZIP2 AND AOCL_EXCLUDE_LZ4 AND AOCL_EXCLUDE_LZ4HC AND AOCL_EXCL
     message(FATAL_ERROR "All compression methods are excluded. Unable to build library.")
 endif()
 
-# setup to get source code coverage(GCOV)
+# setup to get source code coverage
 if (CODE_COVERAGE)
-    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${CMAKE_C_COMPILER_ID} STREQUAL "GNU"))
-        # Switch off GCOV: target not supported
+    if (${CMAKE_C_COMPILER_ID} STREQUAL "GNU" AND ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        set(GCOV_COVERAGE ON)
+        message(STATUS "Code coverage: enabling GCOV coverage tool (Linux + GCC)")
+    elseif (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
+        set(LLVM_COVERAGE ON)
+	message(STATUS "Code coverage: enabling LLVM-COV coverage tool")
+    else()
         set(CODE_COVERAGE OFF)
-        message(WARNING "Target not supported. Code coverage is only supported on Linux OS with GCC compiler")
+        message(WARNING "Target not supported for coverage. Supported: Linux gcc with gcov or Clang (Linux/Windows) with llvm-cov.")
     endif()
 endif()
+
 
 # setup to run memory check using AddressSanitizer 
 if (ASAN)
@@ -741,10 +747,16 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ROOT_DIR}/lib
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${lib_name}> ${ROOT_DIR}/lib
         )
+
 # add the compiler and linker flags for code coverage
 if (CODE_COVERAGE)
-    target_compile_options(${lib_name} PUBLIC --coverage -fprofile-abs-path)
-    target_link_options(${lib_name} PUBLIC --coverage)        
+    if (GCOV_COVERAGE)
+        target_compile_options(${lib_name} PUBLIC --coverage -fprofile-abs-path)
+        target_link_options(${lib_name} PUBLIC --coverage)
+    elseif (LLVM_COVERAGE)
+        target_compile_options(${lib_name} PUBLIC -fprofile-instr-generate -fcoverage-mapping)
+        target_link_options(${lib_name} PUBLIC -fprofile-instr-generate -fcoverage-mapping)
+    endif()
 endif()
 
 # add the compiler and linker flags for AddressSanitizer 

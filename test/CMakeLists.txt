@@ -163,28 +163,63 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
 
     # only run if code coverage is enabled
     if (CODE_COVERAGE)
-        find_program(GCOV gcov)
-        find_program(LCOV lcov)
-        find_program(GENHTML genhtml)
-    
-        if (NOT (GCOV AND LCOV AND GENHTML))
-            message(WARNING "Required tools not found: gcov,lcov,genhtml. Code coverage can not be performed")
-        endif()  
-    
-        # set lcov variable to exclude paths during code coverage
-        set(LCOV_FILTERS "'/usr/*';'/*/_deps/*'")
-    
-        # add custom target for running ctest and generating code coverage report
-        add_custom_target(code-coverage
-            COMMAND ${CMAKE_COMMAND} -E make_directory coverage/
-            COMMAND ctest -j
-            COMMAND ${LCOV} --rc lcov_branch_coverage=1 --capture --directory . --output-file coverage/coverage.info
-            COMMAND ${LCOV} --rc lcov_branch_coverage=1 --remove  coverage/coverage.info ${LCOV_FILTERS} --output-file coverage/coverage_filtered.info 
-            COMMAND ${LCOV} --list coverage/coverage_filtered.info
-            COMMAND ${GENHTML} --rc genhtml_branch_coverage=1 coverage/coverage_filtered.info --output-directory coverage/html_report
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-            COMMENT "Generating Code Coverage Report (LCOV) after tests.."
-        )
+        if (LLVM_COVERAGE)
+            find_program(LLVM_PROFDATA llvm-profdata)
+            find_program(LLVM_COV llvm-cov)
+            if (NOT (LLVM_PROFDATA AND LLVM_COV))
+                message(WARNING "Required tools not found: llvm-profdata, llvm-cov. LLVM code coverage cannot be performed.")
+            else()
+                # Clang source-based coverage flow
+                if (BUILD_STATIC_LIBS)
+			set(LLVM_COV_OBJ_SHARED_LIB)
+                else()
+                    set(LLVM_COV_OBJ_SHARED_LIB -object $<TARGET_FILE:aocl_compression>)
+                endif()
+                
+                set(PROFILE_DIR "coverage")
+                if (WIN32)
+                    #Used double %% to prevent CMake variable expansion
+                    set(PROFILE_PATTERN "coverage/%%5m.profraw")
+                else()
+                    set(PROFILE_PATTERN "coverage/%5m.profraw")
+                endif()
+                set(PROFILE_MERGE_PATTERN "coverage/*.profraw")            
+		# add custom target for running ctest and generating code coverage report(llvm-cov)
+                add_custom_target(code-coverage
+                    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROFILE_DIR}
+                    COMMAND ${CMAKE_COMMAND} -E remove -f ${PROFILE_MERGE_PATTERN} || ${CMAKE_COMMAND} -E echo "No existing profiles to clean"
+                    COMMAND ${CMAKE_COMMAND} -E env LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/${PROFILE_PATTERN} ctest -j
+                    COMMAND ${LLVM_PROFDATA} merge -sparse ${CMAKE_BINARY_DIR}/${PROFILE_MERGE_PATTERN} -o coverage/coverage.profdata
+                    COMMAND ${LLVM_COV} report $<TARGET_FILE:aocl_compression_bench> -instr-profile=coverage/coverage.profdata ${LLVM_COV_OBJ_SHARED_LIB}
+                    COMMAND ${LLVM_COV} show $<TARGET_FILE:aocl_compression_bench> -instr-profile=coverage/coverage.profdata ${LLVM_COV_OBJ_SHARED_LIB} -format=html -output-dir coverage/html_report --show-line-counts-or-regions --show-branches=count
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                    COMMENT "Generating Code Coverage Report (llvm-cov) after tests.."
+                )
+            endif()
+        elseif (GCOV_COVERAGE)
+            find_program(GCOV NAMES gcov)
+            find_program(LCOV lcov)
+            find_program(GENHTML genhtml)
+            if (NOT (GCOV AND LCOV AND GENHTML))
+                message(WARNING "Required tools not found: gcov, lcov, genhtml. GCOV code coverage cannot be performed.")
+            else()
+                # set lcov variable to exclude paths during code coverage
+                set(LCOV_FILTERS "'/usr/*';'/*/_deps/*'")
+		# add custom target for running ctest and generating code coverage report(gcov)
+                add_custom_target(code-coverage
+                    COMMAND ${CMAKE_COMMAND} -E make_directory coverage/
+                    COMMAND ctest -j
+                    COMMAND ${LCOV} --gcov-tool ${GCOV} --rc lcov_branch_coverage=1 --capture --directory . --output-file coverage/coverage.info
+                    COMMAND ${LCOV} --rc lcov_branch_coverage=1 --remove  coverage/coverage.info ${LCOV_FILTERS} --output-file coverage/coverage_filtered.info 
+                    COMMAND ${LCOV} --list coverage/coverage_filtered.info
+                    COMMAND ${GENHTML} --rc genhtml_branch_coverage=1 coverage/coverage_filtered.info --output-directory coverage/html_report
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                    COMMENT "Generating Code Coverage Report (LCOV) after tests.."
+                )
+            endif()
+        else()
+            message(WARNING "CODE_COVERAGE is ON but LLVM_COVERAGE or GCOV_COVERAGE is not enabled. Skipping coverage target.")
+        endif()
     endif()
 
     if (VALGRIND)

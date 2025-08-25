@@ -118,7 +118,7 @@ AOCL_DECOMPRESS_FAST                |  Enable fast decompression modes that migh
 AOCL_COMPRESS_FAST                  |  Enable fast compression modes that might compromise on compression ratio but compress faster. Supported values: {1,2} ZSTD. (Disabled by default)
 AOCL_TEST_COVERAGE                  |  Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)
 AOCL_ENABLE_LOG_FEATURE             |  Enables logging through environment variable `AOCL_ENABLE_LOG` (Disabled by default)
-CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
+CODE_COVERAGE                       |  Enable code coverage (GCC/gcov for Linux and Clang/llvm-cov for both Linux and Windows) (Disabled by default)
 ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
 VALGRIND                            |  Enable Valgrind checks. Only supported on Linux/Debug and incompatible with ASAN=ON (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Disabled by default)
@@ -356,10 +356,11 @@ Fuzzer test can be run in two modes:
    *  AOCL_FUZZ_SIZE_MAX : Max size in bytes to use for i/o buffers used in fuzz testing.
    *  AOCL_FUZZ_CPR_RATIO : Compression ratio estimate of compressed files used for decompress API fuzz tests.
 
-Running source code coverage using GCOV
+Running source code coverage
 ---------------------------------------
 
 To measure source code coverage, use CODE_COVERAGE option while configuring the CMake build. Run CMake with the custom target option 'code-coverage' to execute tests and generate code coverage data. The code coverage reports are generated in the build directory under subdirectory called 'coverage/html_report'. Open the HTML files in browser to view the coverage information.
+Supports Linux (GCC/Clang) and Windows (ClangCL). The build system automatically detects the compiler type and uses the appropriate coverage tool.
 
 Following is the sample command usage to run code coverage:
 `cmake -B <build directory> <directory containing CMakeList.txt> 
