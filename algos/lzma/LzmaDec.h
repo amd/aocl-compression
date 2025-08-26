@@ -157,8 +157,8 @@ typedef struct
                                 = kMatchSpecLen_Error_Data + [0 ... 273]  : LZMA Data Error */
 
     UInt32 numProbs;       /**< number of items in probs table */
-    unsigned tempBufSize;
-    Byte tempBuf[LZMA_REQUIRED_INPUT_MAX];
+    unsigned tempBufSize;  /**< size of temporary buffer used */
+    Byte tempBuf[LZMA_REQUIRED_INPUT_MAX]; /**< temporary workspace buffer */
 } CLzmaDec;
 
 /*! @brief First operation to call before setting up CLzmaDec

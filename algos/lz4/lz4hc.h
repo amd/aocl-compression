@@ -554,7 +554,6 @@ LZ4_attach_HC_dictionary(LZ4_streamHC_t* working_stream,
  * Declare or allocate an LZ4_streamHC_t instead.
 **/
 typedef struct LZ4HC_CCtx_internal LZ4HC_CCtx_internal;
-/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 struct LZ4HC_CCtx_internal
 {
     LZ4_u32 hashTable[LZ4HC_HASHTABLESIZE];
@@ -572,7 +571,6 @@ struct LZ4HC_CCtx_internal
     const LZ4HC_CCtx_internal* dictCtx; /**< Current context of dictionary */
 };
 
-/// @cond DOXYGEN_SHOULD_SKIP_THIS
 /* Macros to be used in cache efficient hashchain implementation */
 #define CHAIN_TYPE LZ4_u32
 
