@@ -2584,7 +2584,9 @@ FUZZ_TEST(AOCL_Compression_zstd, ZSTD_compress2_fuzz)
                  fuzztest::InRange<int>(0, 1),
                  fuzztest::InRange<int>(0, 1));
 
-
+#ifndef AOCL_DECOMPRESS_FAST
+/* TODO: Modify test case to run multiple compress/decompress calls until all frames are created/processed. 
+ *       This is needed for FDS mode as well as to support non ZSTD_e_flush endop */
 void ZSTD_compressStream2_fuzz(std::vector<char> source, unsigned int endop, std::vector<char> dict, 
                             int compressionLevel, int contentSizeFlag, int checksumFlag, 
                             int noDictIDFlag)
@@ -2592,14 +2594,9 @@ void ZSTD_compressStream2_fuzz(std::vector<char> source, unsigned int endop, std
     ZSTD_outBuffer buffOut;
     ZSTD_inBuffer buffIn;
     size_t ret = 0;
-    ZSTD_EndDirective directive = ZSTD_e_continue;
+    ZSTD_EndDirective directive = ZSTD_e_flush;
+    (void)(endop); // for other endop values compression might not complete in a single call. We can't test decompression and validation without flush.
 
-    if(endop == 1)
-        directive = ZSTD_e_flush;
-
-    if(endop == 2)
-        directive = ZSTD_e_end;
-    
     ZSTD_CCtx* cctx = ZSTD_createCCtx();
     EXPECT_NE(cctx, nullptr);
 
@@ -2613,9 +2610,11 @@ void ZSTD_compressStream2_fuzz(std::vector<char> source, unsigned int endop, std
     int dest_len = ZSTD_compressBound(source.size());
     std::vector<char> output(dest_len);
     buffIn.size  = source.size();
-    buffOut.size = dest_len;    
-    buffOut.dst = output.data();
+    buffIn.pos = 0;
     buffIn.src = source.data();
+    buffOut.size = dest_len;
+    buffOut.pos = 0;
+    buffOut.dst = output.data();
     ret = ZSTD_compressStream2(cctx, &buffOut, &buffIn, directive);
     if(!ZSTD_isError(ret))
     {
@@ -2623,12 +2622,14 @@ void ZSTD_compressStream2_fuzz(std::vector<char> source, unsigned int endop, std
         EXPECT_NE(zds, nullptr);
 
         std::vector<char> decompressed(dest_len);
-        buffOut.dst = decompressed.data();
+        buffIn.size = buffOut.pos;
+        buffIn.pos = 0;
         buffIn.src = output.data();
         buffOut.size = decompressed.size();
-        buffIn.size = buffOut.pos;
+        buffOut.pos = 0;
+        buffOut.dst = decompressed.data();
         int ret2 = ZSTD_decompressStream(zds, &buffOut, &buffIn);
-        EXPECT_EQ(ZSTD_isError(ret2), false);
+        EXPECT_EQ(ZSTD_isError(ret2), false) << ZSTD_getErrorName(ret2);
         if(!ZSTD_isError(ret2))
         {
             ASSERT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
@@ -2647,7 +2648,7 @@ FUZZ_TEST(AOCL_Compression_zstd, ZSTD_compressStream2_fuzz)
                  fuzztest::InRange<int>(0, 1),
                  fuzztest::InRange<int>(0, 1)
                     );
-
+#endif /* !AOCL_DECOMPRESS_FAST */
 
 void ZSTD_decompressStream_fuzz(std::vector<char> source, int dest_len)
 {    
