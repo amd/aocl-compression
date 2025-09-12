@@ -320,6 +320,7 @@ public:
     //decompress data in desc and match it with src
     void decompress_and_validate(TestLoadBase* src) {
         int64_t dSize = aocl_llc_decompress(&desc, atp.algo);
+        ASSERT_GT(dSize, 0);
         EXPECT_EQ(dSize, src->getInpSize()); //is decompressed data size == src size?
         EXPECT_EQ(memcmp(src->getInpData(), desc.outBuf, dSize), 0);
     }
@@ -344,7 +345,7 @@ public:
         return csize;
     }
 
-    uint64_t run_decompress(int num_threads_decompr)
+    int64_t run_decompress(int num_threads_decompr)
     {
         omp_set_num_threads(num_threads_decompr);
         int64_t dSize = aocl_llc_decompress(&desc, atp.algo);
@@ -361,8 +362,9 @@ public:
 
         TestLoadSingle dpr(cSize, cpr->getOutData(), cpr->getInpSize());
         set_ACD_io_bufs(&desc, (TestLoadBase*)(&dpr));  //set desc. inp=compressed data, out=empty output buffer.
-        uint64_t dSize = run_decompress(num_threads_decompr);
+        int64_t dSize = run_decompress(num_threads_decompr);
 
+        ASSERT_GT(dSize, 0);
         // validating
         EXPECT_EQ(dSize, cpr->getInpSize()); //is decompressed data size == src size?
         EXPECT_EQ(memcmp(cpr->getInpData(), desc.outBuf, dSize), 0);

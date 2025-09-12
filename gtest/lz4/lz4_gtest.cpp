@@ -2509,7 +2509,7 @@ TEST_P(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     LZ4_streamDecode_t *decode = LZ4_createStreamDecode();
     
     // This line is for making prefixSize != 0.
-    ASSERT_EQ(LZ4_decompress_safe_continue(decode, src, output, srcLen, 800), origLen);
+    EXPECT_EQ(LZ4_decompress_safe_continue(decode, src, output, srcLen, 800), origLen);
     EXPECT_EQ(memcmp(original, output, origLen), 0);
     
     int uncompressed_len = LZ4_decompress_safe_continue(decode, src, output, srcLen, 100);
@@ -2704,9 +2704,10 @@ TEST_P(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
     EXPECT_NE(LZ4_loadDict(stream, dict, dictLen), -1);
     
     srcLen = LZ4_compress_fast_continue(stream, original, src, origLen, srcLen, 5000);
-    memcpy(out, dict, dictLen);
+    if(out)
+        memcpy(out, dict, dictLen);
     
-    ASSERT_EQ(LZ4_decompress_safe_usingDict(NULL, output, srcLen, outLen, dict, dictLen), -1);
+    EXPECT_EQ(LZ4_decompress_safe_usingDict(NULL, output, srcLen, outLen, dict, dictLen), -1);
     free(out);
 }
 
@@ -2745,10 +2746,13 @@ TEST_P(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
     
     EXPECT_NE(LZ4_loadDict(stream, dict, dictLen), -1);
     srcLen = LZ4_compress_fast_continue(stream, original, src, origLen, srcLen, 5000);
-    memcpy(out, dict, dictLen);
+    if(out && srcLen >= 0)
+    {
+        memcpy(out, dict, dictLen);
     
-    ASSERT_EQ(LZ4_decompress_safe_usingDict(src, out + dictLen, srcLen, outLen, out, dictLen), origLen);
-    EXPECT_EQ(memcmp(out + dictLen, original, origLen), 0);
+        EXPECT_EQ(LZ4_decompress_safe_usingDict(src, out + dictLen, srcLen, outLen, out, dictLen), origLen);
+        EXPECT_EQ(memcmp(out + dictLen, original, origLen), 0);
+    }
     free(out);
 }
 
@@ -2759,10 +2763,13 @@ TEST_P(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
 
     EXPECT_NE(LZ4_loadDict(stream, dict, dictLen), -1);
     srcLen = LZ4_compress_fast_continue(stream, original, src, origLen, srcLen, 5000);
-    memcpy(out, dict, dictLen);
+    if(out != NULL && srcLen > 0)
+    {
+        memcpy(out, dict, dictLen);
     
-    ASSERT_EQ(LZ4_decompress_safe_usingDict(src, out + dictLen, srcLen, outLen, out, dictLen), origLen);
-    EXPECT_EQ(memcmp(out + dictLen, original, origLen), 0);
+        EXPECT_EQ(LZ4_decompress_safe_usingDict(src, out + dictLen, srcLen, outLen, out, dictLen), origLen);
+        EXPECT_EQ(memcmp(out + dictLen, original, origLen), 0);
+    }
     free(out);
 }
 

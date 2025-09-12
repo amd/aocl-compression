@@ -1968,6 +1968,7 @@ public:
         cPar.searchLog = get_cparam_above_upper(ZSTD_c_searchLog);
         cPar.minMatch = get_cparam_above_upper(ZSTD_c_minMatch);
         cPar.targetLength = get_cparam_above_upper(ZSTD_c_targetLength);
+        cPar.strategy = (ZSTD_strategy)get_cparam_above_upper(ZSTD_c_strategy);
         zparams.cParams = cPar;
 
         size_t outLen = Test_ZSTD_compress_advanced(cctx, d.getCompressedBuff(), d.getCompressedSize(),

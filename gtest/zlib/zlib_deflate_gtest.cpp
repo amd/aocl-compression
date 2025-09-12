@@ -449,12 +449,29 @@ TEST_P(AOCL_Compression_zlib, deflateBound_common)
   gz_headerp gz = (gz_headerp)malloc(sizeof(gz_header));
   state->gzhead = gz;
   string extra = "extra";
-  gz->extra = (Bytef *)extra.c_str();
-  gz->extra_len = extra.size();
   string name = "name";
-  gz->name = (Bytef *)name.c_str();
   string comment = "comment";
-  gz->comment = (Bytef *)comment.c_str();
+
+  gz->extra_len = extra.size();
+
+  gz->extra = (Bytef*)malloc(extra.length() + 1);
+  gz->name = (Bytef*)malloc(name.length() + 1);
+  gz->comment = (Bytef*)malloc(comment.length() + 1);
+
+  if(gz->extra == NULL || gz->name == NULL || gz->comment == NULL)
+  {
+    free(gz->extra);
+    free(gz->name);
+    free(gz->comment);
+    free(gz);
+    FAIL() << "Memory allocation failure.";
+  }
+
+  strcpy((char*)gz->extra, extra.c_str());
+
+  strcpy((char*)gz->name, name.c_str());
+
+  strcpy((char*)gz->comment, comment.c_str());
   gz->hcrc = 1;
 
   state->wrap = 2;
@@ -468,6 +485,9 @@ TEST_P(AOCL_Compression_zlib, deflateBound_common)
   else
     EXPECT_EQ(deflateBound(deflateObj.get_stream(), 0), 44); // AOCL_Compression_zlib_deflateBound_common_7
 
+  free(gz->extra);
+  free(gz->name);
+  free(gz->comment);
   free(gz);
   gz = nullptr;
 }
@@ -710,9 +730,14 @@ void deflate_large_buffers_(int level)
     memset(&d_strm, 0, sizeof(d_strm));
 
     compr = (uint8_t *)calloc(1, COMPR_BUFFER_SIZE);
-    ASSERT_TRUE(compr != NULL);
     uncompr = (uint8_t *)calloc(1, UNCOMPR_BUFFER_SIZE);
-    ASSERT_TRUE(uncompr != NULL);
+
+    // Check allocations (without assertions that could exit function)
+    if (compr == NULL || uncompr == NULL) {
+        free(compr);
+        free(uncompr);
+        FAIL() << "Memory allocation failed";
+    }
 
     compr_len = COMPR_BUFFER_SIZE;
     uncompr_len = UNCOMPR_BUFFER_SIZE;
@@ -912,8 +937,8 @@ void simulate_gzip_read_write(unsigned want, unsigned len) {
     ASSERT_LE(len, GZIP_UNCOMPR_BUFFER_SIZE);
 
     z_stream c_strm, d_strm;
-    uint8_t* compr, * uncompr, *validate;
-    uint32_t compr_len, uncompr_len;
+    uint8_t *compr = NULL, *uncompr = NULL, *validate = NULL;
+    uint32_t compr_len = 0, uncompr_len;
     int32_t i;
     time_t now;
     int err;
@@ -922,14 +947,19 @@ void simulate_gzip_read_write(unsigned want, unsigned len) {
     memset(&c_strm, 0, sizeof(c_strm));
     memset(&d_strm, 0, sizeof(d_strm));
 
+    // Allocate memory
     compr = (uint8_t*)calloc(1, GZIP_COMPR_BUFFER_SIZE);
-    ASSERT_TRUE(compr != NULL);
     uncompr = (uint8_t*)calloc(1, GZIP_UNCOMPR_BUFFER_SIZE);
-    ASSERT_TRUE(uncompr != NULL);
     validate = (uint8_t*)calloc(1, GZIP_UNCOMPR_BUFFER_SIZE);
-    ASSERT_TRUE(validate != NULL);
 
-    compr_len = 0;
+    // Check allocations (without assertions that could exit function)
+    if (compr == NULL || uncompr == NULL || validate == NULL) {
+        free(compr);
+        free(uncompr);
+        free(validate);
+        FAIL() << "Memory allocation failed";
+    }
+
     uncompr_len = len;
 
     srand((unsigned)time(&now));
@@ -937,19 +967,22 @@ void simulate_gzip_read_write(unsigned want, unsigned len) {
         uncompr[i] = (uint8_t)(rand() % 256);
     memcpy(validate, uncompr, len);
 
-    //Run
+    // Run tests with EXPECT instead of ASSERT to allow cleanup
     compr_len = simulate_gz_write(&c_strm, compr, uncompr, want, len);
     EXPECT_GT(compr_len, 0);
     
-    //Validate
-    memset(uncompr, 0, GZIP_UNCOMPR_BUFFER_SIZE);
-    d_strm.next_in = compr;
-    d_strm.avail_in = compr_len;
-    d_strm.next_out = uncompr;
-    d_strm.avail_out = uncompr_len;
-    EXPECT_EQ(simulate_gz_read(&d_strm), uncompr_len);
-    EXPECT_EQ(memcmp(validate, uncompr, uncompr_len), 0);
+    // Validate
+    if(compr_len > 0) {
+        memset(uncompr, 0, GZIP_UNCOMPR_BUFFER_SIZE);
+        d_strm.next_in = compr;
+        d_strm.avail_in = compr_len;
+        d_strm.next_out = uncompr;
+        d_strm.avail_out = uncompr_len;
+        EXPECT_EQ(simulate_gz_read(&d_strm), uncompr_len);
+        EXPECT_EQ(memcmp(validate, uncompr, uncompr_len), 0);
+    }
 
+    // Cleanup
     free(compr);
     free(uncompr);
     free(validate);
