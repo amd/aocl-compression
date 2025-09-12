@@ -95,7 +95,7 @@ TEST_P(AOCL_Compression_zlib, compress_common)
 
   EXPECT_EQ(compress(dest, &destLen, src, srcLen), Z_OK); // AOCL_Compression_zlib_compress_common_6
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompressLen, srcLen);
+  EXPECT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
   free(dest);
   dest = nullptr;
@@ -114,7 +114,7 @@ TEST_P(AOCL_Compression_zlib, compress_boundary)
 
   EXPECT_EQ(compress(dest, &destLen, src, srcLen), Z_OK); // AOCL_Compression_zlib_compress_common_7
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompressLen, srcLen);
+  EXPECT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
   free(dest);
   dest = nullptr;
@@ -162,7 +162,7 @@ TEST_P(AOCL_Compression_zlib, compress2_common)
 
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, 6), Z_OK); // AOCL_Compression_zlib_compress2_common_8
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompressLen, srcLen);
+  EXPECT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
   free(dest);
   dest = nullptr;
@@ -181,7 +181,7 @@ TEST_P(AOCL_Compression_zlib, compress2_boundary)
 
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, 6), Z_OK); // AOCL_Compression_zlib_compress2_common_9
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompressLen, srcLen);
+  EXPECT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
   free(dest);
   dest = nullptr;

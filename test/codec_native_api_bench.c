@@ -719,6 +719,7 @@ AOCL_VOID native_destroy(aocl_codec_bench_info *codec_bench_handle)
     if (codec_bench_handle->dictPtr)
         free(codec_bench_handle->dictPtr);
 
+    codec_bench_handle->inPtr = codec_bench_handle->outPtr = codec_bench_handle->decompPtr = codec_bench_handle->dictPtr = NULL;
     LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
 }
 

@@ -320,7 +320,7 @@ LZ4_FORCE_INLINE int
         assert(ip > anchor); /* this is always true as ip has been advanced before entering the main loop */
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
         prevOffset--;
-        if ((match > lowLimit) && (ipPrevData.c[prevOffset] == match[-1])) {
+        if ((tableType != byPtr) && ((match > lowLimit) && (ipPrevData.c[prevOffset] == match[-1]))) {
             do {
                 ip--; match--; prevOffset--;
             } while ((prevOffset > -1) && ((ip>anchor) & (match > lowLimit)) && (unlikely(ipPrevData.c[prevOffset]==match[-1])));
@@ -329,11 +329,13 @@ LZ4_FORCE_INLINE int
             {
                 ip--; match--; 
             }    
-        }
-#else
+        }   else {
+#endif
         if ((match > lowLimit) && unlikely(ip[-1] == match[-1])) {
             do { ip--; match--; } while (((ip > anchor) & (match > lowLimit)) && (unlikely(ip[-1] == match[-1])));
         }
+#ifdef AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
+    }
 #endif
 
         /* Encode Literals */

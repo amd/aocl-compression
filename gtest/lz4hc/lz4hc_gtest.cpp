@@ -771,7 +771,7 @@ public:
     {
         free_stream();
         compression_level = _compression_level;
-        create_stream();
+        is_stream_created = create_stream();
     }
 
     int get_compression_level()
@@ -952,7 +952,8 @@ class LZ4HC_LZ4_compress_HC_extStateHC_fastReset : public LZ4HC_LZ4_compress_HC_
 
     bool initialize_stream()
     {
-        memset(strm, 0, sizeof(strm));
+        if(strm != nullptr)
+            memset(strm, 0, sizeof(*((LZ4_streamHC_t*)strm)));
 #ifdef AOCL_LZ4HC_OPT
         if (use_AOCL_LZ4_streamHC(opt_off, compression_level))
         {

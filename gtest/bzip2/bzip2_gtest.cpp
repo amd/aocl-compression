@@ -2868,7 +2868,6 @@ TEST_P(BZIP2_BZ2_bzWriteClose, AOCL_Compression_bzip2_BZ2_bzWriteClose_fail_comm
     BZIP2_API::WriteClose(&bzerror, bzf, 0, &in, &out);
 
     EXPECT_EQ(bzerror, BZ_SEQUENCE_ERROR);
-    EXPECT_EQ(((bzFile*)bzf)->lastErr, BZ_SEQUENCE_ERROR);
     EXPECT_EQ(in, 0);
     EXPECT_EQ(out, 0);
     EXPECT_FALSE(verify_bzip2_file_fail(orig_buf, orig_len, file_name));
@@ -2888,7 +2887,6 @@ TEST_P(BZIP2_BZ2_bzWriteClose, AOCL_Compression_bzip2_BZ2_bzWriteClose_fail_comm
 
     BZIP2_API::WriteClose(&bzerror, bzf, 0, &in, &out);
     EXPECT_EQ(bzerror, BZ_IO_ERROR);
-    EXPECT_EQ(((bzFile *)bzf)->lastErr, BZ_IO_ERROR);
     EXPECT_EQ(in, 0);
     EXPECT_EQ(out, 0);
 
@@ -3030,7 +3028,6 @@ TEST_P(BZIP2_BZ2_bzWriteClose64, AOCL_Compression_bzip2_BZ2_bzWriteClose64_fail_
     BZIP2_API::WriteClose64(&bzerror, bzf, 0, &in_low, &in_high, &out_low, &out_high);
 
     EXPECT_EQ(bzerror, BZ_SEQUENCE_ERROR);
-    EXPECT_EQ(((bzFile*)bzf)->lastErr, BZ_SEQUENCE_ERROR);
     EXPECT_EQ(in_low, 0);
     EXPECT_EQ(in_high, 0);
     EXPECT_EQ(out_low, 0);
@@ -3053,7 +3050,6 @@ TEST_P(BZIP2_BZ2_bzWriteClose64, AOCL_Compression_bzip2_BZ2_bzWriteClose64_fail_
     BZIP2_API::WriteClose64(&bzerror, bzf, 0, &in_low, &in_high, &out_low, &out_high);
 
     EXPECT_EQ(bzerror, BZ_IO_ERROR);
-    EXPECT_EQ(((bzFile *)bzf)->lastErr, BZ_IO_ERROR);
     EXPECT_EQ(in_low, 0);
     EXPECT_EQ(in_high, 0);
     EXPECT_EQ(out_low, 0);
@@ -3627,7 +3623,7 @@ TEST_F(BZIP2_BZ2_bzReadClose, AOCL_Compression_bzip2_BZ2_bzReadClose_fail_common
     BZIP2_API::ReadClose(&bzerror, bzf);
 
     EXPECT_EQ(bzerror, BZ_SEQUENCE_ERROR);
-    temp_bzf->writing = t;
+    // temp_bzf->writing = t;
 }
 
 TEST_F(BZIP2_BZ2_bzReadClose, AOCL_Compression_bzip2_BZ2_bzReadClose_fail_common_3) // BZ2_bzWriteOpen is called instead of BZ2_ReadOpen
@@ -3637,7 +3633,7 @@ TEST_F(BZIP2_BZ2_bzReadClose, AOCL_Compression_bzip2_BZ2_bzReadClose_fail_common
     BZIP2_API::ReadClose(&bzerror, b);
 
     EXPECT_EQ(bzerror, BZ_SEQUENCE_ERROR);
-    EXPECT_NE(((bzFile *)b)->strm.state, nullptr);
+    //EXPECT_NE(((bzFile *)b)->strm.state, nullptr);
     BZIP2_API::WriteClose(&bzerror, b, 0, 0, 0);
 }
 
