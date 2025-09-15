@@ -3623,7 +3623,7 @@ TEST_F(BZIP2_BZ2_bzReadClose, AOCL_Compression_bzip2_BZ2_bzReadClose_fail_common
     BZIP2_API::ReadClose(&bzerror, bzf);
 
     EXPECT_EQ(bzerror, BZ_SEQUENCE_ERROR);
-    // temp_bzf->writing = t;
+    temp_bzf->writing = t;
 }
 
 TEST_F(BZIP2_BZ2_bzReadClose, AOCL_Compression_bzip2_BZ2_bzReadClose_fail_common_3) // BZ2_bzWriteOpen is called instead of BZ2_ReadOpen

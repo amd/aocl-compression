@@ -1590,7 +1590,7 @@ Int32 AOCL_BZ2_decompress ( DState* s )
 
    save_state_and_return:
 
-   for(int i=0;i<6;i++)
+   for(int i=0;i<nGroups;i++)
    {
       if(s->secondary_tables[i])
       {
