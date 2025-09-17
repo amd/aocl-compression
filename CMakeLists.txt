@@ -53,7 +53,7 @@ if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 elseif ("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
     if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 11.0)
         message(FATAL_ERROR "Minimum Clang version supported is 11.0! In case of AOCC, use version 2.3 and above!")
-endif ()
+    endif ()
 else ()
     message(FATAL_ERROR "Compiler not supported! Library has only been tested with Clang and GCC.")
 endif ()
@@ -772,12 +772,13 @@ target_include_directories(${lib_name}
                             PRIVATE ${PROJECT_BINARY_DIR} # required for files generated from .in templates
                             PRIVATE ${ALGOS_PATH}/common
                             PRIVATE api)
-
-if (OPENMP_FOUND AND (WIN32 OR NOT OpenMP_libomp_LIBRARY))
-    target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
-else()
-    target_link_libraries(${lib_name} PUBLIC ${OpenMP_libomp_LIBRARY})
-endif ()
+if (AOCL_ENABLE_THREADS)
+    if (OPENMP_FOUND AND (WIN32 OR NOT OpenMP_libomp_LIBRARY))
+        target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+    else()
+        target_link_libraries(${lib_name} PUBLIC ${OpenMP_libomp_LIBRARY})
+    endif ()
+endif()
 
 # Link pthread library for native multi-threading 
 if (NATIVE_ENABLE_THREADS)
