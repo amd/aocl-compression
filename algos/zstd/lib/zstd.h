@@ -216,9 +216,6 @@ ZSTDLIB_API unsigned ZSTD_versionNumber(void);
 
 ZSTDLIB_API const char* ZSTD_versionString(void);
 
-/**
- * @}
- */
 
 /* *************************************
  *  Default constant
@@ -526,10 +523,10 @@ ZSTDLIB_API void aocl_destroy_zstd_decode(void);
 /*! ZSTD_compressBound() :
  * maximum compressed size in worst case single-pass scenario.
  * When invoking `ZSTD_compress()`, or any other one-pass compression function,
- * it's recommended to provide @dstCapacity >= ZSTD_compressBound(srcSize)
+ * it's recommended to provide \b dstCapacity >= ZSTD_compressBound(srcSize)
  * as it eliminates one potential failure scenario,
  * aka not enough room in dst buffer to write the compressed frame.
- * Note : ZSTD_compressBound() itself can fail, if @srcSize >= ZSTD_MAX_INPUT_SIZE .
+ * Note : ZSTD_compressBound() itself can fail, if \b srcSize >= ZSTD_MAX_INPUT_SIZE .
  *        In which case, ZSTD_compressBound() will return an error code
  *        which can be tested using ZSTD_isError().
  *
@@ -1323,13 +1320,20 @@ ZSTDLIB_API size_t ZSTD_DCtx_reset(ZSTD_DCtx* dctx, ZSTD_ResetDirective reset);
 /****************************
 *  Streaming
 ****************************/
-
+/**
+ * @struct ZSTD_inBuffer_s
+ * @brief Input buffer structure for ZSTD operations
+ */
 typedef struct ZSTD_inBuffer_s {
   const void* src;    /**< start of input buffer */
   size_t size;        /**< size of input buffer */
   size_t pos;         /**< position where reading stopped. Will be updated. Necessarily 0 <= pos <= size */
 } ZSTD_inBuffer;
 
+/**
+ * @struct ZSTD_outBuffer_s
+ * @brief Output buffer structure for ZSTD operations
+ */
 typedef struct ZSTD_outBuffer_s {
   void*  dst;         /**< start of output buffer */
   size_t size;        /**< size of output buffer */
@@ -1457,7 +1461,7 @@ typedef enum {
  *            only ZSTD_e_end or ZSTD_e_flush operations are allowed.
  *            Before starting a new compression job, or changing compression parameters,
  *            it is required to fully flush internal buffers.
-  *  - note: if an operation ends with an error, it may leave @cctx in an undefined state.
+  *  - note: if an operation ends with an error, it may leave \b cctx in an undefined state.
  *          Therefore, it's UB to invoke ZSTD_compressStream2() of ZSTD_compressStream() on such a state.
  *          In order to be re-employed after an error, a state must be reset,
  *          which can be done explicitly (ZSTD_CCtx_reset()),
@@ -2518,7 +2522,6 @@ ZSTDLIB_API size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 #if defined (__cplusplus)
 }
 #endif
-
 #endif  /* ZSTD_H_235446 */
 
 
@@ -4691,12 +4694,12 @@ ZSTDLIB_STATIC_API size_t ZSTD_decompressBlock(ZSTD_DCtx* dctx, void* dst, size_
 ZSTD_DEPRECATED("The block API is deprecated in favor of the normal compression API. See docs.")
 ZSTDLIB_STATIC_API size_t ZSTD_insertBlock    (ZSTD_DCtx* dctx, const void* blockStart, size_t blockSize);  /**< insert uncompressed block into `dctx` history. Useful for multi-blocks decompression. */
 
-/** 
- * @} 
- */
 
 #if defined (__cplusplus)
 }
 #endif
 
 #endif   /* ZSTD_H_ZSTD_STATIC_LINKING_ONLY */
+/**
+ * @}
+ */
