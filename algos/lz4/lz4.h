@@ -1198,7 +1198,6 @@ union LZ4_stream_u {
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /**
- * \addtogroup LZ4_API
  * @{
  */
 

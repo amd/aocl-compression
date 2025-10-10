@@ -1,5 +1,5 @@
 // Copyright 2005 and onwards Google Inc.
-// Modifications Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+// Modifications Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
 // 
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -225,10 +225,6 @@ namespace snappy {
   SNAPPYLIB_API bool GetUncompressedLength(Source* source, uint32_t* result);
 
 /**
- * @}
- */
-
-/**
  * @name Higher-level string based routines.
  * @brief Higher-level string based routines (should be sufficient for most users)
  * @{
@@ -372,7 +368,7 @@ namespace snappy {
 
 /**
  * @name Generic compression/decompression routines.
- * 
+ * @{
  */
 
   /**
