@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -93,6 +93,7 @@ option (NATIVE_ENABLE_THREADS "Enable native multi-threaded compression for supp
 option (AOCL_TEST_FUZZER "Enable AOCL Compression fuzzer (only on Linux with Clang compiler)" OFF)
 option (AOCL_TEST_FUZZER_WITH_CORPUS "Run fuzzer tests with corpus (only on Linux with Clang compiler)" OFF)
 option (ENABLE_FAST_MATH "Enable fast-math optimizations (Disabled by default)" OFF)
+option (AOCL_LLC_PREFIX "Prefix library symbols (Disabled by default)" OFF)
 
 option (AOCL_EXCLUDE_BZIP2 "Exclude BZIP2 compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_LZ4 "Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)" OFF)
@@ -379,7 +380,8 @@ set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXC
 endif ()
 set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h
                       ${ALGOS_PATH}/common/aoclAlgoOpt.h
-                      ${ALGOS_PATH}/common/aoclFds.h)
+                      ${ALGOS_PATH}/common/aoclFds.h
+                      ${ALGOS_PATH}/common/aoclPrefix.h)
 set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.cpp
 						utils/utils.h)
@@ -405,7 +407,8 @@ set(DEST_EXAMPLES_PATH examples)
 
 set(INC_FILES api/aocl_compression.h
               ${ALGOS_PATH}/common/aoclAlgoOpt.h
-              ${ALGOS_PATH}/common/aoclFds.h)
+              ${ALGOS_PATH}/common/aoclFds.h
+              ${ALGOS_PATH}/common/aoclPrefix.h)
 if (NOT AOCL_EXCLUDE_BZIP2)
     set(INC_FILES ${INC_FILES} ${ALGOS_PATH}/bzip2/bzlib.h)
 endif ()
@@ -682,6 +685,10 @@ if (AOCL_ENABLE_THREADS)
     set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
 endif()
 
+if (AOCL_LLC_PREFIX)
+    add_compile_definitions(AOCL_LLC_PREFIX)
+endif()
+
 #setup CTest for GoogleTest and aocl_compression_bench test
 if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
     # enabling ctest
@@ -866,7 +873,11 @@ if(NOT BUILD_STATIC_LIBS)
         create_sym_link_to_lib(libbz2)
     endif()
     if (NOT AOCL_EXCLUDE_ZLIB)
-        create_sym_link_to_lib(libz)
+        if(WIN32)
+            create_sym_link_to_lib(zlib1)
+        else()
+            create_sym_link_to_lib(libz)
+        endif()
     endif()
     if (NOT AOCL_EXCLUDE_LZ4)
         create_sym_link_to_lib(liblz4)
