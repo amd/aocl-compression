@@ -153,7 +153,11 @@ ATTRIBUTE_AVX512
 static inline chunk_t halfchunk2whole(halfchunk_t *chunk) {
     /* We zero extend mostly to appease some memory sanitizers. These bytes are ultimately
      * unlikely to be actually written or read from */
+#if defined(__GNUC__) && (__GNUC__ < 10) && !defined(__clang__)
+    return _mm256_inserti128_si256(_mm256_setzero_si256(), *chunk, 0);
+#else
     return _mm256_zextsi128_si256(*chunk);
+#endif
 }
 
 ATTRIBUTE_AVX512
