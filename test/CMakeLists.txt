@@ -103,7 +103,7 @@ list(TRANSFORM INTERNAL_INC_FILES PREPEND ${CMAKE_SOURCE_DIR}/)
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/include/types.h
     COMMENT "Copy interface headers to build path"
-    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/include
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/include
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/include
     COMMAND ${CMAKE_COMMAND} -E copy ${INTERNAL_INC_FILES} ${CMAKE_BINARY_DIR}/include 
     DEPENDS ${TESTBENCH_SRC_FILES} ${INTERNAL_INC_FILES})
@@ -142,7 +142,8 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
         message(STATUS "Downloading Calgary dataset ...")
         file(DOWNLOAD http://corpus.canterbury.ac.nz/resources/calgary.zip ${CMAKE_BINARY_DIR}/datasets/calgary.zip SHOW_PROGRESS)
         message(STATUS "Extracting Calgary dataset ...")
-        file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/datasets/calgary.zip DESTINATION ${CMAKE_BINARY_DIR}/calgary)
+        file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/calgary)
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_BINARY_DIR}/datasets/calgary.zip WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/calgary)
     endif()
 
     set(CANTERBURY "${CMAKE_BINARY_DIR}/datasets/cantrbry.zip")
@@ -150,7 +151,8 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
         message(STATUS "Downloading Canterbury dataset ...")
         file(DOWNLOAD http://corpus.canterbury.ac.nz/resources/cantrbry.zip ${CMAKE_BINARY_DIR}/datasets/cantrbry.zip SHOW_PROGRESS)
         message(STATUS "Extracting Canterbury dataset ...")
-        file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/datasets/cantrbry.zip DESTINATION ${CMAKE_BINARY_DIR}/canterbury)
+        file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/canterbury)
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_BINARY_DIR}/datasets/cantrbry.zip WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/canterbury)
     endif()
 
     set(SILESIA "${CMAKE_BINARY_DIR}/datasets/silesia.zip")
@@ -158,7 +160,8 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
         message(STATUS "Downloading Silesia dataset ...")
         file(DOWNLOAD http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip ${CMAKE_BINARY_DIR}/datasets/silesia.zip SHOW_PROGRESS)
         message(STATUS "Extracting Silesia dataset ...")
-        file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/datasets/silesia.zip DESTINATION ${CMAKE_BINARY_DIR}/silesia)
+        file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/silesia)
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_BINARY_DIR}/datasets/silesia.zip WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/silesia)
     endif()
 
     # only run if code coverage is enabled
@@ -231,7 +234,7 @@ endif ()
 
 # add test cases
 if (AOCL_TEST_COVERAGE)
-    cmake_minimum_required(VERSION 3.26.0)
+    cmake_minimum_required(VERSION 3.13.0)
     enable_testing()
 
     file(GLOB calgary_dataset ${CMAKE_BINARY_DIR}/calgary/*)

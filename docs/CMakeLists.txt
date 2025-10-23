@@ -30,7 +30,7 @@
 #
 # @author Niranjan, Reddy
 
-cmake_minimum_required(VERSION 3.26.0)
+cmake_minimum_required(VERSION 3.13.0)
 
 project(aoclcompression-doc)
 
