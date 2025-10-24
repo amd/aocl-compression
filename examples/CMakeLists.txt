@@ -73,7 +73,7 @@ else()
     add_custom_command(
         OUTPUT ${AOCL_COMPRESSION_INC_DIR}
         COMMENT "Copy interface headers to build path"
-        COMMAND ${CMAKE_COMMAND} -E rm -rf ${AOCL_COMPRESSION_INC_DIR}
+        COMMAND ${CMAKE_COMMAND} -E remove_directory ${AOCL_COMPRESSION_INC_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${AOCL_COMPRESSION_INC_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${EXAMPLE_INC_FILES} ${AOCL_COMPRESSION_INC_DIR} 
         DEPENDS ${EXAMPLE_INC_FILES})

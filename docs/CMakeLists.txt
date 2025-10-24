@@ -42,8 +42,7 @@ if(NOT (DOXYGEN_FOUND))
     message(STATUS "Doxygen not found please install doxygen and try again.")
 else()
     execute_process(COMMAND ${DOXYGEN_EXECUTABLE} Doxyfile
-            WORKING_DIRECTORY ${W_DIR}
-            COMMAND_ECHO STDOUT)
+            WORKING_DIRECTORY ${W_DIR})
 endif()
 
 
