@@ -144,7 +144,6 @@ AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supporte
 ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
 BUILD_UTILITY                       |  Enable third party utility build: minigzip(zlib), zstd_utility(zstd) (Disabled by default)
 AOCL_BZIP2_HUFFMAN_ITERATIONS       |  Control number of BZIP2 Huffman tables refinement iterations (1-4). Lower values are faster but reduce compression ratio. (Default: 3)
-BUILD_WITH_INTEGRITYCHECK           | Enforce digital signature verification for Windows builds at runtime (Disabled by default)
 
 * NOTE: <br>
    1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by
