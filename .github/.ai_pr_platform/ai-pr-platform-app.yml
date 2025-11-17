@@ -13,6 +13,7 @@ teams:
   - name: csg
     branches:
       - amd-main
+      - AOCL-*-RC
 
     assistants:
       - type: PRSummary
