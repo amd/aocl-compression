@@ -6,7 +6,19 @@
     "default_issue_types": [],
     "formatting": {
       "ticket_id": "CPUPL-7574",
-      "email_recipients": ["dl.amdindia.aocl@amd.com"]
+      "email_recipients": [],
+      "path_extraction_pattern": [
+        "algos/.*",
+        "api/.*",
+        "docs/.*",
+        "examples/.*",
+        "gtest/.*",
+        "scripts/.*",
+        "test/.*",
+        "threads/.*",
+        "utils/.*"
+      ],
+      "is_csg": true
     }
   }
 }
