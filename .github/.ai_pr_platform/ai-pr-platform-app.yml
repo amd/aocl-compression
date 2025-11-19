@@ -19,7 +19,7 @@ teams:
       - type: PRSummary
         enabled: true
       - type: CodingStandard
-        enabled: true
+        enabled: false
       - type: AIReviewCommentFix
         enabled: true
       - type: CodeQLHistorical
