@@ -911,7 +911,7 @@ int MY_FAST_CALL AOCL_LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* buf
             }
             else //cur= LIT, prev=Non-LIT
             {
-                unsigned matchByte = dic[dicPos - rep0 + (dicPos < rep0 ? dicBufSize : 0)];
+                unsigned matchByte = dic[(dicPos < rep0 ? dicBufSize : 0) + dicPos - rep0];
                 unsigned offs = 0x100;
                 state -= (state < 10) ? 3 : 6;
                 symbol = 1;
@@ -1189,7 +1189,7 @@ int MY_FAST_CALL AOCL_LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* buf
           }
 
           curLen = ((rem < len) ? (unsigned)rem : len);
-          pos = dicPos - rep0 + (dicPos < rep0 ? dicBufSize : 0);
+          pos = (dicPos < rep0 ? dicBufSize : 0) + dicPos - rep0;
 
           processedPos += (UInt32)curLen;
 

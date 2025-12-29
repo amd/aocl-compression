@@ -1212,6 +1212,21 @@ LZ4_FORCE_INLINE int LZ4HC_compress_hashChain (
     const int inputSize = *srcSizePtr;
     const int patternAnalysis = (maxNbAttempts > 128);   /* levels 9+ */
 
+    /* init */
+    DEBUGLOG(5, "LZ4HC_compress_hashChain (dict?=>%i)", dict);
+    *srcSizePtr = 0;
+    
+    /* Handle empty input case: source can be NULL if inputSize == 0 */
+    if (inputSize == 0) {
+        if (limit != notLimited && maxOutputSize <= 0) return 0;  /* no output buffer space */
+        DEBUGLOG(5, "Generating an empty block");
+        assert(limit == notLimited || maxOutputSize >= 1);
+        assert(dest != NULL);
+        dest[0] = 0;  /* LZ4 empty block marker */
+        return 1;
+    }
+
+    /* Now safe to use pointers - inputSize > 0,  source is not NULL */
     const BYTE* ip = (const BYTE*) source;
     const BYTE* anchor = ip;
     const BYTE* const iend = ip + inputSize;
@@ -1228,9 +1243,6 @@ LZ4_FORCE_INLINE int LZ4HC_compress_hashChain (
     LZ4HC_match_t m0, m1, m2, m3;
     const LZ4HC_match_t nomatch = {0, 0, 0};
 
-    /* init */
-    DEBUGLOG(5, "LZ4HC_compress_hashChain (dict?=>%i)", dict);
-    *srcSizePtr = 0;
     if (limit == fillOutput) oend -= LASTLITERALS;                  /* Hack for support LZ4 format restriction */
     if (inputSize < LZ4_minLength) goto _last_literals;             /* Input too small, no compression (all literals) */
 
@@ -2745,6 +2757,22 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
     const int patternAnalysis = (maxNbAttempts > 128);   /* levels 9+ */
 #endif
 
+    /* init */
+    DEBUGLOG(5, "AOCL_LZ4HC_compress_hashChain (dict?=>%i)", dict);
+    *srcSizePtr = 0;
+    
+    /* Handle empty input case: source can be NULL if inputSize == 0 */
+    if (inputSize == 0) {
+        if (limit != notLimited && maxOutputSize <= 0) return 0;  /* no output buffer space */
+        DEBUGLOG(5, "Generating an empty block");
+        LOG_UNFORMATTED(DEBUG, logCtx, "Generating an empty block");
+        assert(limit == notLimited || maxOutputSize >= 1);
+        assert(dest != NULL);
+        dest[0] = 0;  /* LZ4 empty block marker */
+        return 1;
+    }
+
+    /* Now safe to use pointers - inputSize > 0,  source is not NULL */
     const BYTE* ip = (const BYTE*)source;
     const BYTE* anchor = ip;
     const BYTE* const iend = ip + inputSize;
@@ -2761,9 +2789,6 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
     LZ4HC_match_t m0, m1, m2, m3;
     const LZ4HC_match_t nomatch = {0, 0, 0};
 
-    /* init */
-    DEBUGLOG(5, "AOCL_LZ4HC_compress_hashChain (dict?=>%i)", dict);
-    *srcSizePtr = 0;
     if (limit == fillOutput) oend -= LASTLITERALS;                  /* Hack for support LZ4 format restriction */
     if (inputSize < LZ4_minLength) goto _last_literals;             /* Input too small, no compression (all literals) */
 
@@ -3610,6 +3635,23 @@ LZ4_FORCE_INLINE int LZ4HC_compress_hashChain_mt(
     const int inputSize = *srcSizePtr;
     const int patternAnalysis = (maxNbAttempts > 128);   /* levels 9+ */
 
+    /* init */
+    DEBUGLOG(5, "LZ4HC_compress_hashChain_mt (dict?=>%i)", dict);
+    *srcSizePtr = 0;
+    
+    /* Handle empty input case: source can be NULL if inputSize == 0 */
+    if (inputSize == 0) {
+        if (limit != notLimited && maxOutputSize <= 0) return 0;  /* no output buffer space */
+        DEBUGLOG(5, "Generating an empty block");
+        assert(limit == notLimited || maxOutputSize >= 1);
+        assert(dest != NULL);
+        dest[0] = 0;  /* LZ4 empty block marker */
+        if (last_anchor_ptr) *last_anchor_ptr = NULL;
+        if (last_bytes_len) *last_bytes_len = 0;
+        return 1;
+    }
+
+    /* Now safe to use pointers - inputSize > 0,  source is not NULL */
     const BYTE* ip = (const BYTE*) source;
     const BYTE* anchor = ip;
     const BYTE* const iend = ip + inputSize;
@@ -3628,9 +3670,6 @@ LZ4_FORCE_INLINE int LZ4HC_compress_hashChain_mt(
     int result;
     BYTE* dst_without_lastLiterals;
 
-    /* init */
-    DEBUGLOG(5, "LZ4HC_compress_hashChain_mt (dict?=>%i)", dict);
-    *srcSizePtr = 0;
     if (limit == fillOutput) oend -= LASTLITERALS;                  /* Hack for support LZ4 format restriction */
     if (inputSize < LZ4_minLength) goto _last_literals;             /* Input too small, no compression (all literals) */
 

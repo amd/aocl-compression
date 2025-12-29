@@ -1307,7 +1307,10 @@ LZ4_FORCE_INLINE int LZ4_compress_generic_validated(
     assert(acceleration >= 1);
 
     lowLimit = (const BYTE*)source - (dictDirective == withPrefix64k ? dictSize : 0);
-
+    
+    /* External dictionary mode with corrupted dictionary context (NULL dictBase) */
+    if (maybe_extMem && (dictBase == NULL)) { return 0; }
+    
     /* Update context state */
     if (dictDirective == usingDictCtx) {
         /* Subsequent linked blocks can't use the dictionary. */

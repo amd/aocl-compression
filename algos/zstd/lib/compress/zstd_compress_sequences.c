@@ -206,6 +206,7 @@ ZSTD_selectEncodingType(
         size_t const basicCost = isDefaultAllowed ? ZSTD_crossEntropyCost(defaultNorm, defaultNormLog, count, max) : ERROR(GENERIC);
         size_t const repeatCost = *repeatMode != FSE_repeat_none ? ZSTD_fseBitCost(prevCTable, count, max) : ERROR(GENERIC);
         size_t const NCountCost = ZSTD_NCountCost(count, max, nbSeq, FSELog);
+        FORWARD_IF_ERROR(NCountCost, "Failed to calculate normalized count cost");
         size_t const compressedCost = (NCountCost << 3) + ZSTD_entropyCost(count, max, nbSeq);
 
         if (isDefaultAllowed) {

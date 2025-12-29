@@ -1210,7 +1210,13 @@ size_t HUF_readDTableX2_wksp(HUF_DTable* DTable,
     if (tableLog <= HUF_DECODER_FAST_TABLELOG && maxTableLog > HUF_DECODER_FAST_TABLELOG) maxTableLog = HUF_DECODER_FAST_TABLELOG;
 
     /* find maxWeight */
-    for (maxW = tableLog; wksp->rankStats[maxW]==0; maxW--) {}  /* necessarily finds a solution before 0 */
+    maxW = tableLog;
+    while (maxW > 0 && wksp->rankStats[maxW] == 0) {
+        maxW--;
+    }
+    if (wksp->rankStats[maxW] == 0) {  /* all weights are 0, corrupted data */
+        return ERROR(corruption_detected);
+    }
 
     /* Get start index of each weight */
     {   U32 w, nextRankStart = 0;

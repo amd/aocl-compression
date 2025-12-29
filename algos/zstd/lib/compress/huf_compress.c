@@ -274,8 +274,11 @@ size_t HUF_writeCTable_wksp(void* dst, size_t maxDstSize,
     wksp->bitsToWeight[0] = 0;
     for (n=1; n<huffLog+1; n++)
         wksp->bitsToWeight[n] = (BYTE)(huffLog + 1 - n);
-    for (n=0; n<maxSymbolValue; n++)
-        wksp->huffWeight[n] = wksp->bitsToWeight[HUF_getNbBits(ct[n])];
+    for (n=0; n<maxSymbolValue; n++) {
+        size_t nbBits = HUF_getNbBits(ct[n]);
+        if (nbBits > huffLog) return ERROR(corruption_detected);
+        wksp->huffWeight[n] = wksp->bitsToWeight[nbBits];
+    }
 
     /* attempt weights compression by FSE */
     if (maxDstSize < 1) return ERROR(dstSize_tooSmall);

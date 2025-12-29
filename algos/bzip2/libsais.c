@@ -6971,7 +6971,7 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
         fs / k <  2
     */
 #ifdef AOCL_BWT
-    if (1)
+    if (k > 0)
 #else
     if (k > 0 && ((fs / k >= 6) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 6)))
 #endif /* AOCL_BWT */

@@ -303,7 +303,7 @@ void prepare_new_block ( EState* s )
    if(AOCL_use_libsais)
    {
       s->repeat = 0;
-      s->SA = &s->ptr[1];
+      s->SA = (Int32*)&s->ptr[1];
       s->c = -1;
       s->sw = 0;
       s->lms = 0;
@@ -775,7 +775,7 @@ Bool AOCL_copy_input_until_stop ( EState* s )
       s->avail_in_expect-=chars_to_copy;
 
    Int32 next = 0;   // Stores next character
-   UInt32 *SA = s->SA;
+   Int32 *SA = s->SA;
    Int32 c = s->c;
    Int32 repeat = s->repeat;
    Int32 sw = s->sw;

@@ -284,7 +284,7 @@ typedef
 
       /* these variables are used for fused RLE and LMS count gather computation */
 #ifdef AOCL_BZIP2_OPT
-      UInt32 *SA;       // LMS characters & buckets are stored in this buffer.
+      Int32 *SA;       // LMS characters & buckets are stored in this buffer.
       Int32 c;          // Past character.
       Int32 repeat;     // Number of times c character has been repeated.
       Int32 sw;         // Switch statement helper.

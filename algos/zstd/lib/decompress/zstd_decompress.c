@@ -2782,13 +2782,14 @@ size_t AOCL_ZSTD_decompressDCtx_mt(ZSTD_DCtx* dctx, void* dst, size_t dstCapacit
             if (ti_cur->is_error)
             {
                 result = ti_cur->dst_trap_size; //dst_trap_size holds error code on failure
+                int error_type = ti_cur->is_error; // Save error type before destruction
                 aocl_destroy_parallel_decompress_mt(&thread_group_handle);
 #ifdef AOCL_THREADS_LOG
                 printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_id);
 #endif
                 LOG_FORMATTED(ERR, logCtx, "Decompress Thread [id: %d] : Encountered ERROR", thread_id);
                 LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-                if(ti_cur->is_error == 2)
+                if(error_type == 2)
                     return ERROR(dstSize_tooSmall);
                 return result;
             }

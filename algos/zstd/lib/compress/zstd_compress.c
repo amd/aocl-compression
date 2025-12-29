@@ -6649,10 +6649,11 @@ static size_t ZSTD_compressStream_generic(ZSTD_CStream* zcs,
             DEBUGLOG(5, "flush stage");
             assert(zcs->appliedParams.outBufferMode == ZSTD_bm_buffered);
             {   size_t const toFlush = zcs->outBuffContentSize - zcs->outBuffFlushedSize;
-                size_t const flushed = ZSTD_limitCopy(op, (size_t)(oend-op),
+                size_t const outputCapacity = (op != NULL) ? (size_t)(oend-op) : 0;
+                size_t const flushed = ZSTD_limitCopy(op, outputCapacity, 
                             zcs->outBuff + zcs->outBuffFlushedSize, toFlush);
                 DEBUGLOG(5, "toFlush: %u into %u ==> flushed: %u",
-                            (unsigned)toFlush, (unsigned)(oend-op), (unsigned)flushed);
+                            (unsigned)toFlush, (unsigned)outputCapacity, (unsigned)flushed);
                 if (flushed)
                     op += flushed;
                 zcs->outBuffFlushedSize += flushed;

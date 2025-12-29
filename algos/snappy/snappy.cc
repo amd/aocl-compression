@@ -1357,7 +1357,7 @@ class SnappyDecompressor {
 
  public:
   explicit SnappyDecompressor(Source* reader)
-      : reader_(reader), ip_(NULL), ip_limit_(NULL), peeked_(0), eof_(false) {}
+      : reader_(reader), ip_(NULL), ip_limit_(NULL), ip_limit_min_maxtaglen_(NULL), peeked_(0), eof_(false) {}
 
   ~SnappyDecompressor() {
     // Advance past any bytes we peeked at from the reader
@@ -2347,6 +2347,7 @@ class SnappyScatteredWriter {
  public:
   inline explicit SnappyScatteredWriter(const Allocator& allocator)
       : allocator_(allocator),
+        expected_(0),
         full_size_(0),
         op_base_(NULL),
         op_ptr_(NULL),
