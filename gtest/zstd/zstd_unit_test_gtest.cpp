@@ -415,7 +415,7 @@ public:
         seqStore.lit = seqStore.litStart;
         seqStore.maxNbLit = MAX_LIT_LENGTH;
 
-        seqStore.sequencesStart = (seqDef*)calloc(MAX_SEQUENCES_POSSIBLE, sizeof(seqDef));
+        seqStore.sequencesStart = (SeqDef*)calloc(MAX_SEQUENCES_POSSIBLE, sizeof(SeqDef));
         seqStore.sequences = seqStore.sequencesStart;
         seqStore.maxNbSeq = MAX_SEQUENCES_POSSIBLE;
     }
@@ -432,13 +432,15 @@ public:
     }
 
     void evalute_sequences(size_t lit, size_t mat, size_t off) {
+        U32 minMatch = MINMATCH;
         const BYTE* ip = anchor + lit;
-        int res = Test_is_totalbits_limited_seq_possible(ip, anchor, mat, off);
+        if (mat < minMatch) return;
+        int res = Test_is_totalbits_limited_seq_possible(ip, anchor, mat, off, minMatch);
         if (res) { // if claim is possible, validate generated sequence to see if it is within bounds
             reset_sequences();
-            Test_AOCL_ZSTD_storeSequences(&seqStore, ip, anchor, iend, (U32)OFFSET_TO_OFFBASE(off), mat);
+            Test_AOCL_ZSTD_storeSequences(&seqStore, ip, anchor, iend, (U32)OFFSET_TO_OFFBASE(off), mat, minMatch);
             size_t seqCnt = seqStore.sequences - seqStore.sequencesStart;
-            seqDef* curSeq = seqStore.sequencesStart;
+            SeqDef* curSeq = seqStore.sequencesStart;
             for (size_t i = 0; i < seqCnt; ++i) { // for each sequence validate if total_bits is within bounds
                 U32 offBase = curSeq[0].offBase;
                 if (OFFBASE_IS_OFFSET(offBase)) {
@@ -454,7 +456,7 @@ public:
 
     BYTE* anchor;
     const BYTE* iend;
-    seqStore_t seqStore;
+    SeqStore_t seqStore;
 };
 
 TEST_F(ZSTD_is_totalbits_limited_seq_possible, AOCL_Compression_zstd_is_totalbits_limited_seq_possible_common_1) { // specific cases
@@ -476,11 +478,20 @@ TEST_F(ZSTD_is_totalbits_limited_seq_possible, AOCL_Compression_zstd_is_totalbit
     }
 }
 
+#ifndef DEBUG_ASSERT_ENABLED
+#define SKIP_LONG_LENGTH_TYPE
+#else
+/* Assertions get triggered:
+assert(seqStorePtr->longLengthType == ZSTD_llt_none); // there can only be a single long length */
+#define SKIP_LONG_LENGTH_TYPE if (lit > 0xFFFF) continue;
+#endif
+
 TEST_F(ZSTD_is_totalbits_limited_seq_possible, AOCL_Compression_zstd_is_totalbits_limited_seq_possible_common_3) { // large sizes
-    // Larger strides for large lit, match and offset values
+    // Larger strides for lit, match and offset values
     for (size_t lit = MAX_SMALL_LENGTH; lit < MAX_LIT_LENGTH; lit <<= 1) {
         for (size_t mat = MAX_SMALL_LENGTH; mat < MAX_MAT_LENGTH; mat <<= 1) {
             for (size_t off = MAX_SMALL_LENGTH; off < MAX_OFF_LENGTH; off <<= 1) {
+                SKIP_LONG_LENGTH_TYPE
                 evalute_sequences(lit, mat, off);
                 evalute_sequences(lit - 1, mat - 1, off - 1);
                 evalute_sequences(lit + 1, mat + 1, off + 1);
@@ -499,6 +510,7 @@ TEST_F(ZSTD_is_totalbits_limited_seq_possible, AOCL_Compression_zstd_is_totalbit
     for (size_t lit = 1; lit < MAX_LIT_LENGTH; lit <<= 1) {
         for (size_t mat = 0; mat < MAX_SMALL_LENGTH; mat++) {
             for (size_t off = 1; off < MAX_OFF_LENGTH; off <<= 1) {
+                SKIP_LONG_LENGTH_TYPE
                 evalute_sequences(lit, mat, off);
             }
         }
@@ -507,6 +519,7 @@ TEST_F(ZSTD_is_totalbits_limited_seq_possible, AOCL_Compression_zstd_is_totalbit
     for (size_t lit = 1; lit < MAX_LIT_LENGTH; lit <<= 1) {
         for (size_t mat = 1; mat < MAX_MAT_LENGTH; mat <<= 1) {
             for (size_t off = 1; off < MAX_SMALL_LENGTH; off++) {
+                SKIP_LONG_LENGTH_TYPE
                 evalute_sequences(lit, mat, off);
             }
         }
@@ -555,7 +568,7 @@ TEST_F(ZSTD_AOCL_is_FdsSupported, AOCL_Compression_zstd_AOCL_is_FdsSupported_com
     }
 
     // ZSTD_dictMatchState
-    ZSTD_matchState_t ms;
+    ZSTD_MatchState_t ms;
     ms.dedicatedDictSearch = ZSTD_dictMatchState;
     zc->blockState.matchState.dictMatchState = &ms;
     hasExtDict = 0;
@@ -604,152 +617,6 @@ TEST_F(ZSTD_AOCL_is_FdsSupported, AOCL_Compression_zstd_AOCL_is_FdsSupported_com
 *********************************************/
 
 /*********************************************
-* Begin of ZSTD_AOCL_ZSTD_window_needsExtDict
-*********************************************/
-class ZSTD_AOCL_ZSTD_window_needsExtDict : public AOCL_setup_zstd
-{
-public:
-    ZSTD_AOCL_ZSTD_window_needsExtDict() {
-        buffer = (BYTE*)calloc(bufferSz, 1);
-    }
-
-    ~ZSTD_AOCL_ZSTD_window_needsExtDict() {
-        if(buffer) free(buffer);
-    }
-
-    void validate(int needsExtDict, int forceNonContiguous) {
-        Test_ZSTD_window_update(&win, src, srcSize, forceNonContiguous);
-        EXPECT_EQ(needsExtDict, (win.lowLimit < win.dictLimit)); // needsExtDict obtained from AOCL_ZSTD_window_needsExtDict() must match ZSTD_window_update() settings
-    }
-
-    BYTE* get_ptr(size_t pos) {
-        EXPECT_LT(pos, bufferSz);
-        if (pos >= bufferSz) return nullptr;
-        return buffer + pos;
-    }
-
-    void set_inp_and_dict_no_overlap_contig() {
-        win.base = get_ptr(0);
-        win.dictBase = get_ptr(0);
-        win.dictLimit = 512;
-        win.nextSrc = get_ptr(513); //input and dictionary dont overlap
-        win.nbOverflowCorrections = 0;
-        src = win.nextSrc;
-        srcSize = 10;
-    }
-
-    void set_inp_and_dict_no_overlap_noncontig() {
-        win.base = get_ptr(0);
-        win.dictBase = get_ptr(0);
-        win.dictLimit = 512;
-        win.nextSrc = get_ptr(513); //input and dictionary dont overlap
-        win.nbOverflowCorrections = 0;
-        src = win.nextSrc + 1;
-        srcSize = 10;
-    }
-
-    void set_inp_and_dict_overlap(int ll_lt_dl) {
-        //input and dictionary overlap
-        win.base = get_ptr(0);
-        win.dictBase = get_ptr(10);
-        win.nextSrc = get_ptr(50);
-        src = win.nextSrc;
-        if (ll_lt_dl) 
-        { //dB----ip-----dB+lL----dB+dL----ip+srcSize
-            win.dictLimit = 120;
-            win.lowLimit = 100;
-        }
-        else 
-        { //dB----ip----dB+dL----dB+lL----ip+srcSize
-            win.dictLimit = 100;
-            win.lowLimit = 120;
-        }
-        srcSize = 100; //ip+srcSize = 150
-        win.nbOverflowCorrections = 0;
-    }
-
-    const BYTE* src;
-    ZSTD_window_t win;
-    size_t srcSize;
-
-private:
-    BYTE* buffer;
-    const size_t bufferSz = 1024;
-};
-
-TEST_F(ZSTD_AOCL_ZSTD_window_needsExtDict, AOCL_Compression_zstd_AOCL_ZSTD_window_needsExtDict_common_pass_1) { //src = window->nextSrc, input and dictionary dont overlap
-    {  // lowLimit < dictLimit
-        set_inp_and_dict_no_overlap_contig();
-        int forceNonContiguous = 0;
-        win.lowLimit = win.dictLimit - 1;
-        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
-        validate(needsExtDict, forceNonContiguous);
-    }
-    {  // lowLimit >= dictLimit
-        set_inp_and_dict_no_overlap_contig();
-        int forceNonContiguous = 0;
-        win.lowLimit = win.dictLimit;
-        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
-        validate(needsExtDict, forceNonContiguous);
-    }
-    {  // forceNonContiguous
-        set_inp_and_dict_no_overlap_contig();
-        int forceNonContiguous = 1;
-        win.lowLimit = win.dictLimit;
-        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
-        validate(needsExtDict, forceNonContiguous);
-    }
-}
-
-TEST_F(ZSTD_AOCL_ZSTD_window_needsExtDict, AOCL_Compression_zstd_AOCL_ZSTD_window_needsExtDict_common_pass_2) { //src != window->nextSrc, input and dictionary dont overlap
-    {  // lowLimit < dictLimit
-        set_inp_and_dict_no_overlap_noncontig();
-        int forceNonContiguous = 0;
-        win.lowLimit = win.dictLimit - 1;
-        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
-        validate(needsExtDict, forceNonContiguous);
-    }
-    {  // lowLimit >= dictLimit
-        set_inp_and_dict_no_overlap_noncontig();
-        int forceNonContiguous = 0;
-        win.lowLimit = win.dictLimit;
-        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
-        validate(needsExtDict, forceNonContiguous);
-    }
-    {  // forceNonContiguous
-        set_inp_and_dict_no_overlap_noncontig();
-        int forceNonContiguous = 1;
-        win.lowLimit = win.dictLimit;
-        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
-        validate(needsExtDict, forceNonContiguous);
-    }
-}
-
-TEST_F(ZSTD_AOCL_ZSTD_window_needsExtDict, AOCL_Compression_zstd_AOCL_ZSTD_window_needsExtDict_common_pass_3) { //input and dictionary overlap
-    {  // lowLimit < dictLimit
-        set_inp_and_dict_overlap(1);
-        int forceNonContiguous = 0;
-        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
-        validate(needsExtDict, forceNonContiguous);
-    }
-    {  // lowLimit >= dictLimit
-        set_inp_and_dict_overlap(0);
-        int forceNonContiguous = 0;
-        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
-        validate(needsExtDict, forceNonContiguous);
-    }
-    {  // forceNonContiguous
-        set_inp_and_dict_overlap(1);
-        int forceNonContiguous = 1;
-        int needsExtDict = Test_AOCL_ZSTD_window_needsExtDict(&win, src, srcSize, forceNonContiguous);
-        validate(needsExtDict, forceNonContiguous);
-    }
-}
-/*********************************************
-* End of ZSTD_AOCL_ZSTD_window_needsExtDict
-*********************************************/
-
-/*********************************************
 * Begin of ZSTD_AOCL_ZSTD_writeFdsFrame
 *********************************************/
 class ZSTD_AOCL_ZSTD_writeFdsFrame : public AOCL_setup_zstd
@@ -767,9 +634,7 @@ public:
         char* cur = (char*)dst;
         cur += ZSTD_SKIPPABLEHEADERSIZE;
         EXPECT_EQ(*((U64*)cur), FDS_MAGIC_WORD);
-#if AOCL_DECOMPRESS_FAST == 2
-        EXPECT_EQ(*((U64*)(cur + FDS_MAGIC_WORD_BYTES)), FDS_FAST2_NOTB_SO4_NOEXT_REP2);
-#endif
+        EXPECT_EQ(*((U64*)(cur + FDS_MAGIC_WORD_BYTES)), FDS_DEFAULT_CONF);
     }
     void* dst;
 };
@@ -777,14 +642,14 @@ public:
 TEST_F(ZSTD_AOCL_ZSTD_writeFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_pass_1) { // dstCapacity sufficient
     size_t dstCapacity = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE;
     alloc_dst(dstCapacity);
-    EXPECT_EQ(dstCapacity, Test_AOCL_ZSTD_writeFdsFrame(dst, dstCapacity));
+    EXPECT_EQ(dstCapacity, Test_AOCL_ZSTD_writeFdsFrame(dst, dstCapacity, FDS_DEFAULT_CONF));
     validate_fds_frame();
 }
 
 TEST_F(ZSTD_AOCL_ZSTD_writeFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_fail_2) { // dstCapacity insufficient
     size_t dstCapacity = FDS_FRAME_LENGTH + ZSTD_SKIPPABLEHEADERSIZE - 1;
     alloc_dst(dstCapacity);
-    EXPECT_EQ(Test_AOCL_ZSTD_writeFdsFrame(dst, dstCapacity), ERROR(dstSize_tooSmall));
+    EXPECT_EQ(Test_AOCL_ZSTD_writeFdsFrame(dst, dstCapacity, FDS_DEFAULT_CONF), ERROR(dstSize_tooSmall));
 }
 /*********************************************
 * End of ZSTD_AOCL_ZSTD_writeFdsFrame
@@ -811,7 +676,7 @@ public:
     }
 
     void write_valid_fds_frame(size_t sz) {
-        EXPECT_FALSE(ZSTD_isError(Test_AOCL_ZSTD_writeFdsFrame(src, sz)));
+        EXPECT_FALSE(ZSTD_isError(Test_AOCL_ZSTD_writeFdsFrame(src, sz, FDS_DEFAULT_CONF)));
     }
 
     ZSTD_DCtx* dctx;
@@ -823,11 +688,7 @@ TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_readFdsFrame
     alloc_src(srcSz);
     write_valid_fds_frame(srcSz);
     Test_AOCL_ZSTD_readFdsFrame(dctx, (char*)src + ZSTD_SKIPPABLEHEADERSIZE, srcSz - ZSTD_SKIPPABLEHEADERSIZE);
-#if AOCL_DECOMPRESS_FAST == 2
-    EXPECT_EQ(dctx->fds, FDS_FAST2_NOTB_SO4_NOEXT_REP2);
-#else
     EXPECT_EQ(dctx->fds, FDS_DEFAULT_CONF);
-#endif
 }
 
 TEST_F(ZSTD_AOCL_ZSTD_readFdsFrame, AOCL_Compression_zstd_AOCL_ZSTD_writeFdsFrame_common_fail_2) { // srcSize insufficient

@@ -1,4 +1,4 @@
-..  Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+..  Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
 
 ..  Redistribution and use in source and binary forms, with or without
 ..  modification, are permitted provided that the following conditions are met:
@@ -26,8 +26,8 @@
 
 .. _ref-lz4:
 
-LZ4
----
+LZ4 API
+-------
 
 .. doxygengroup:: LZ4_API
    :project: compression

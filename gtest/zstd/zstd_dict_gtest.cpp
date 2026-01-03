@@ -225,7 +225,7 @@ struct Test_ZSTD_CDict_s {
     ZSTD_dictContentType_e dictContentType;
     U32* entropyWorkspace;
     ZSTD_cwksp workspace;
-    ZSTD_matchState_t matchState;
+    ZSTD_MatchState_t matchState;
     ZSTD_compressedBlockState_t cBlockState;
     ZSTD_customMem customMem;
     U32 dictID;
@@ -729,10 +729,16 @@ TEST_F(ZSTD_ZSTD_createCDict_advanced, AOCL_Compression_zstd_ZSTD_createCDict_ad
     create_cdict_dictLoadMethod_invalid(ZSTD_Compress_API::compress_cdict);
 }
 
+#ifndef DEBUG_ASSERT_ENABLED
+/* Assertions get triggered:
+ZSTD_compress_insertDictionary -> 
+    RETURN_ERROR_IF(dictContentType == ZSTD_dct_fullDict, dictionary_wrong, "");
+    assert(0);  // impossible */
 TEST_F(ZSTD_ZSTD_createCDict_advanced, AOCL_Compression_zstd_ZSTD_createCDict_advanced_fail_common_10)
 {
     create_cdict_dictContentType_invalid(ZSTD_Compress_API::compress_cdict);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_createCDict_advanced, AOCL_Compression_zstd_ZSTD_createCDict_advanced_pass_common_11)
 {
@@ -817,10 +823,16 @@ TEST_F(ZSTD_ZSTD_createCDict_advanced2, AOCL_Compression_zstd_ZSTD_createCDict_a
     create_cdict_dictLoadMethod_invalid(ZSTD_Compress_API::compress_cdict2);
 }
 
+#ifndef DEBUG_ASSERT_ENABLED
+/* Assertions get triggered:
+ZSTD_compress_insertDictionary -> 
+    RETURN_ERROR_IF(dictContentType == ZSTD_dct_fullDict, dictionary_wrong, "");
+    assert(0);  // impossible */
 TEST_F(ZSTD_ZSTD_createCDict_advanced2, AOCL_Compression_zstd_ZSTD_createCDict_advanced2_fail_common_10)
 {
     create_cdict_dictContentType_invalid(ZSTD_Compress_API::compress_cdict2);
 }
+#endif
 
 TEST_F(ZSTD_ZSTD_createCDict_advanced2, AOCL_Compression_zstd_ZSTD_createCDict_advanced2_pass_common_11)
 {
@@ -2052,6 +2064,10 @@ protected:
         }
     }
 
+    size_t set_fds_runtime_params(size_t disableFdsFrame) {
+        return Test_ZSTD_CCtx_setFdsRuntimeParams(cctx, disableFdsFrame);
+    }
+
 private:
     void create_dict_raw() {
         EXPECT_TRUE(create_raw_content_dict(900));
@@ -2293,16 +2309,20 @@ public:
 private:
     size_t buffer_less_streaming_multiple(size_t& curCprLen,
         void* dst, size_t dstCapacity, const void* src, size_t srcSize) {
-        CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin_usingDict(dctx, getDictBuffer(), getDictSize()));
         curCprLen = 0;
         size_t curDprLen = 0;
+        size_t cprSize = 0;
         while (curCprLen < srcSize) {
-            size_t const cprSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
-            size_t const dprSize = Test_ZSTD_decompressContinue(dctx, (char*)dst + curDprLen,
-                dstCapacity - curDprLen, (char*)src + curCprLen, cprSize);
-            if (ZSTD_isError(dprSize)) return dprSize;
-            curDprLen += dprSize;
-            curCprLen += cprSize;
+            CHECK_PASS_ZSTD(Test_ZSTD_decompressBegin_usingDict(dctx, getDictBuffer(), getDictSize())); // new frame
+            cprSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+            while (cprSize) {
+                size_t const dprSize = Test_ZSTD_decompressContinue(dctx, (char*)dst + curDprLen,
+                    dstCapacity - curDprLen, (char*)src + curCprLen, cprSize);
+                if (ZSTD_isError(dprSize)) return dprSize;
+                curDprLen += dprSize;
+                curCprLen += cprSize;
+                cprSize = Test_ZSTD_nextSrcSizeToDecompress(dctx);
+            }
         }
         return curDprLen;
     }
@@ -2763,7 +2783,13 @@ TEST_F(ZSTD_ZSTD_getDictID_fromDDict, AOCL_Compression_zstd_ZSTD_getDictID_fromD
  /***********************************************
   * Begin of ZSTD_ZSTD_getDictID_fromFrame
   ***********************************************/
-class ZSTD_ZSTD_getDictID_fromFrame : public ZSTD_decompress_usingDict_base {};
+class ZSTD_ZSTD_getDictID_fromFrame : public ZSTD_decompress_usingDict_base {
+public:
+    ZSTD_ZSTD_getDictID_fromFrame() {
+        size_t disableFdsFrame = 1;
+        set_fds_runtime_params(disableFdsFrame);
+    }
+};
 TEST_F(ZSTD_ZSTD_getDictID_fromFrame, AOCL_Compression_zstd_ZSTD_getDictID_fromFrame_pass_common_1) // create format compliant dictionary
 {
     compress_repeated_formatted(800);
@@ -3110,6 +3136,9 @@ TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDic
     validate_cdict(cdict, (ZSTD_dictContentType_e)100); // does not fail. accepts invalid value
 }
 
+#ifndef DEBUG_ASSERT_ENABLED
+/* Assertions get triggered:
+`!ZSTD_checkCParams(params.cParams)' failed. */
 TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDict_pass_common_11) { // cparams empty
     create_dict_copy();
     memset(&cparams, 0, sizeof(ZSTD_compressionParameters));
@@ -3117,6 +3146,7 @@ TEST_F(ZSTD_ZSTD_initStaticCDict, AOCL_Compression_zstd_Test_ZSTD_initStaticCDic
         ZSTD_dlm_byCopy, ZSTD_dct_auto, cparams);
     validate_cdict(cdict, ZSTD_dct_auto);
 }
+#endif
 /*********************************************
  * End of ZSTD_ZSTD_initStaticCDict
  *********************************************/
@@ -3242,38 +3272,35 @@ TEST_F(ZSTD_ZSTD_initStaticDDict, AOCL_Compression_zstd_Test_ZSTD_initStaticDDic
  * Begin of ZSTD_ZSTD_compress_extDict
  ***********************************************/
 #define FIRST_BLOCK_SIZE 8
-class ZSTD_ZSTD_compress_extDict : public AOCL_setup_zstd {
+class ZSTD_ZSTD_compress_extDict : public ::testing::TestWithParam<std::tuple<int, int>> {
 public:
-    ~ZSTD_ZSTD_compress_extDict() {
-        if (g_zcc)
-            ZSTD_freeCCtx(g_zcc);
+    void SetUp() override {
+        int level = std::get<0>(GetParam());
+        int optOff = std::get<1>(GetParam());
+        int optLevel = DEFAULT_OPT_LEVEL;
+        aocl_setup_zstd_encode(optOff, optLevel, 0, level, 0);
+        aocl_setup_zstd_decode(optOff, optLevel, 0, level, 0);
+
+        g_zcc = ZSTD_createCCtx();
+        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_compressionLevel, level);
+        ZSTD_compressionParameters cparams = Test_ZSTD_getCParams(level, 0, 0);
+        ZSTD_frameParameters fparams = { 1 /* contentSizeHeader*/, 0 /* checksumFlag */, 0 /* noDictIDFlag */ };
+        params.fParams = fparams;
+        params.cParams = cparams;
     }
 
-    ZSTD_parameters setup(int level, int opt_on) {
-        ZSTD_compressionParameters cparams = Test_Get_ZSTD_defaultCParameters(512 KB, level, opt_on);
-        if (g_zcc == NULL) g_zcc = ZSTD_createCCtx();
-        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_compressionLevel, level);
-        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_windowLog, (int)cparams.windowLog);
-        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_hashLog, (int)cparams.hashLog);
-        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_chainLog, (int)cparams.chainLog);
-        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_searchLog, (int)cparams.searchLog);
-        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_minMatch, (int)cparams.minMatch);
-        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_targetLength, (int)cparams.targetLength);
-        ZSTD_CCtx_setParameter(g_zcc, ZSTD_c_strategy, cparams.strategy);
-
-        ZSTD_parameters p;
-        ZSTD_frameParameters f = { 1 /* contentSizeHeader*/, 0, 0 };
-        p.fParams = f;
-        p.cParams = cparams;
-
-        return p;
+    void TearDown() override {
+        if (g_zcc)
+            ZSTD_freeCCtx(g_zcc);
+        aocl_destroy_zstd_decode();
+        aocl_destroy_zstd_encode();
     }
 
     /* compress in multiple blocks. 1st block gets used as dict for 2nd block and
     *_extDict functions gets called for the 2nd block */
-    size_t multi_block_compress(ZSTD_parameters p, void* dst, size_t dstCapacity, void* src, size_t srcSize) {
+    size_t multi_block_compress(void* dst, size_t dstCapacity, void* src, size_t srcSize) {
         BYTE firstBlockBuf[FIRST_BLOCK_SIZE];
-        size_t ret = ZSTD_compressBegin_advanced(g_zcc, NULL, 0, p, srcSize);
+        size_t ret = ZSTD_compressBegin_advanced(g_zcc, NULL, 0, params, srcSize);
         if (Test_ZSTD_isError(ret)) {
             EXPECT_EQ(ret, 0); //ret > 0 if error. Test should fail.
             return 0;
@@ -3345,31 +3372,32 @@ _cleanup:
     }
 
 private:
+    ZSTD_parameters params;
     ZSTD_CCtx* g_zcc = NULL;
 };
 
-
-TEST_F(ZSTD_ZSTD_compress_extDict, AOCL_Compression_zstd_ZSTD_compressStream_common_1) //compress multiple blocks
+TEST_P(ZSTD_ZSTD_compress_extDict, AOCL_Compression_zstd_ZSTD_compressStream_common_1) //compress multiple blocks
 {
-    for (int level = 0; level <= 22; ++level) {
-        for (int opt_on = 0; opt_on <= 1; ++opt_on) {
-            //setup
-            TestLoad_2 d(1024);
-            void* src = d.getOrigData();
-            size_t srcSize = d.getOrigSize();
-            void* dst = d.getCompressedBuff();
-            size_t dstCapacity = d.getCompressedSize();
-            ZSTD_parameters p = setup(level, opt_on);
+    //setup
+    TestLoad_2 d(1024);
+    void* src = d.getOrigData();
+    size_t srcSize = d.getOrigSize();
+    void* dst = d.getCompressedBuff();
+    size_t dstCapacity = d.getCompressedSize();
 
-            //compress
-            size_t outLen = multi_block_compress(p, dst, dstCapacity, src, srcSize);
+    //compress
+    size_t outLen = multi_block_compress(dst, dstCapacity, src, srcSize);
 
-            //validate
-            EXPECT_TRUE(zstd_check_uncompressed_equal_to_original_stream(
-                d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
-        }
-    }
+    //validate
+    EXPECT_TRUE(zstd_check_uncompressed_equal_to_original_stream(
+        d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen));
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    ZSTD_ZSTD_COMPRESS_EXTDICT,
+    ZSTD_ZSTD_compress_extDict,
+    ::testing::Combine(::testing::Range(0, 23), \
+    ::testing::ValuesIn({-1, 0, 1 } /* optOff */)));
 /*********************************************
  * End of ZSTD_ZSTD_compress_extDict
  *********************************************/

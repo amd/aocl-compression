@@ -274,7 +274,10 @@ set(AOCL_ZSTD_DSB_INIT_SEQS_STATE [[
 set(AOCL_ZSTD_DSB_DECODE_SEQUENCE "AOCL_ZSTD_DECODESEQUENCE_MEM64_FDS2")
 set(AOCL_ZSTD_DSB_EXEC_SEQUENCE "AOCL_ZSTD_execSequence_mem64_fast2")
 set(AOCL_ZSTD_DSB_UPDATE_SEQS_STATE [[
-    dctx->entropy.rep[0] = (U32)(seqState.prevOffset);
+    /* During compression offsets that are not maintained are set to rep[0] to account for scenarios
+       where switch from FDS to non-FDS modes occur. Similar operation must be replicated in 
+       decompression as well to account for this scenario. */
+    { U32 i; for (i = 0; i < ZSTD_REP_NUM; i++) dctx->entropy.rep[i] = (U32)(seqState.prevOffset); }
 ]])
 configure_file(
     ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block_decompress_sequences_fds_aocl.h.in

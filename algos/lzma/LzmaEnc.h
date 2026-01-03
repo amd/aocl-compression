@@ -2,7 +2,7 @@
 2019-10-30 : Igor Pavlov : Public domain */
 
 /*
-* Modifications Copyright (C) 2022-24, Advanced Micro Devices. All rights reserved.
+* Modifications Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -77,7 +77,7 @@ typedef struct _CLzmaEncProps
   UInt64 reduceSize; /**< estimated size of data that will be compressed. default = (UInt64)(Int64)-1. \n 
                         Encoder uses this value to reduce dictionary size */
 
-  UInt64 affinity;
+  UInt64 affinity; /**< thread affinity mask for multi-threading */
 
 #ifdef AOCL_LZMA_OPT
   size_t srcLen;
@@ -300,7 +300,13 @@ size_t Lzma_compressBound(size_t insize);
  * @{
  */
 
-/*! @brief Encode data in src and save compressed data to dest
+/*!
+*
+*  @rst 
+*  .. _LzmaEncode:
+*  @endrst
+*
+* @brief Encode data in src and save compressed data to dest
 *
 * | Parameters      | Direction   | Description |
 * |:----------------|:-----------:|:------------|

@@ -1,6 +1,6 @@
 /* trees.c -- output deflated data using Huffman coding
- * Copyright (C) 1995-2021 Jean-loup Gailly
- * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 1995-2024 Jean-loup Gailly
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * detect_data_type() function provided freely by Cosmin Truta, 2006
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
@@ -46,6 +46,9 @@
 #ifdef AOCL_ZLIB_OPT
 #include "aocl_zlib_setup.h"
 static int setup_ok_zlib_tree = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_zlib_tree = ATOMIC_FLAG_INIT;
+#endif /* AOCL_ENABLE_THREADS */
 #endif /* AOCL_ZLIB_OPT */
 
 /* ===========================================================================
@@ -900,15 +903,12 @@ local void send_tree(deflate_state *s, ct_data *tree, int max_code) {
                 send_code(s, curlen, s->bl_tree); count--;
             }
             Assert(count >= 3 && count <= 6, " 3_6?");
-            send_code(s, REP_3_6, s->bl_tree);
-            OPT_send_bits(s, count - 3, 2);
+            send_code(s, REP_3_6, s->bl_tree); OPT_send_bits(s, count - 3, 2);
         } else if (count <= 10) {
-            send_code(s, REPZ_3_10, s->bl_tree);
-            OPT_send_bits(s, count - 3, 3);
+            send_code(s, REPZ_3_10, s->bl_tree); OPT_send_bits(s, count - 3, 3);
 
         } else {
-            send_code(s, REPZ_11_138, s->bl_tree);
-            OPT_send_bits(s, count - 11, 7);
+            send_code(s, REPZ_11_138, s->bl_tree); OPT_send_bits(s, count - 11, 7);
         }
         count = 0; prevlen = curlen;
         if (nextlen == 0) {
@@ -993,7 +993,7 @@ void ZLIB_INTERNAL _tr_stored_block(deflate_state *s, charf *buf,
 #ifdef AOCL_ZLIB_OPT
     bi_windup_fp(s);         /* align on byte boundary */
 #else
-    bi_windup(s);             /* align on byte boundary */
+    bi_windup(s);        /* align on byte boundary */
 #endif /* AOCL_ZLIB_OPT */
 
     put_short(s, (ush)stored_len);
@@ -1074,7 +1074,7 @@ local void compress_block(deflate_state *s, const ct_data *ltree,
             }
             dist--; /* dist is now the match distance - 1 */
             code = d_code(dist);
-            Assert(code < D_CODES, "bad d_code");
+            Assert (code < D_CODES, "bad d_code");
 
             send_code(s, code, dtree);       /* send the distance code */
             extra = extra_dbits[code];
@@ -1086,7 +1086,7 @@ local void compress_block(deflate_state *s, const ct_data *ltree,
 
         /* Check for no overlay of pending_buf on needed symbols */
 #ifdef LIT_MEM
-        Assert(s->pending < (s->lit_bufsize << 1) + sx, "pendingBuf overflow");
+        Assert(s->pending < 2 * (s->lit_bufsize + sx), "pendingBuf overflow");
 #else
         Assert(s->pending < s->lit_bufsize + sx, "pendingBuf overflow");
 #endif

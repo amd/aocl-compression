@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -72,3 +72,135 @@ vector<int> get_supported_optlevels(void) {
 
 const std::vector<std::string> gtest_data_gen_t::randomStrs({ "qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890",
 "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM", "!@#$%^&*()" });
+
+bool gtest_data_gen_t::dstSet(unsigned char val, char* start, char* end) { // fill dst buffer
+    if (start > end || start < compressed_data || end >(compressed_data + compressed_sz))
+        return false;
+    memset(start, val, end - start);
+    return true;
+}
+
+void gtest_data_gen_t::fill_random(char* buf, size_t sz) { // fill buffer with random data
+    for (size_t i = 0; i < sz; i++)
+    {
+        buf[i] = rand() % 255;
+    }
+}
+
+void gtest_data_gen_t::fill_repeated(char* buf, size_t sz) { // fill buffer with repeating patterns
+    memset(buf, 0, sz);
+    size_t cur = 0;
+    while (cur < sz) {
+        int randId = rand() % randomStrs.size(); // pick a string at random
+        int randLen = rand() % randomStrs[randId].size(); // select sub string length
+        if (cur + randLen >= sz) break;
+
+        memcpy(buf + cur, randomStrs[randId].c_str(), randLen * sizeof(char));
+        cur += randLen;
+    }
+}
+
+void gtest_data_gen_t::fill_lowratio(char* buf, size_t sz) { // fill buffer with highly compressible data
+    memset(buf, 0, sz);
+    int randId = 0; // pick a specific string
+    size_t cur = 0;
+    while (cur < sz) {
+        int randLen = rand() % randomStrs[randId].size(); // select sub string length
+        if (cur + randLen >= sz) break;
+
+        memcpy(buf + cur, randomStrs[randId].c_str(), randLen * sizeof(char));
+        cur += randLen;
+    }
+}
+
+void gtest_data_gen_t::fill_highratio(char* buf, size_t sz) { // fill buffer with low compressible data
+    fill_random(buf, sz);
+}
+
+void gtest_data_gen_t::fill_midratio(char* buf, size_t sz) { // fill buffer with moderately compressible data
+    memset(buf, 0, sz);
+    for (size_t i = 0; i < sz; i += 128) {
+        if (i + 128 > sz) break;
+        if (i % 256 == 0) {
+            fill_lowratio(buf + i, 128); // fill with low compressible data
+        }
+        else {
+            fill_highratio(buf + i, 128); // fill with high compressible data
+        }
+    }
+}
+
+void gtest_data_gen_t::fill_overlapcopy(char* buf, size_t sz) { // fill buffer with data that creates overlapping copies
+    memset(buf, 0, sz);
+    for (size_t i = 0; i < sz; i += 6) {
+        if (i + 6 > sz) break;
+        memcpy(buf + i, "abcdef", 6 * sizeof(char)); // fill with repeating pattern
+    }
+}
+
+void gtest_data_gen_t::fill_longmatch(char* buf, size_t sz) { // fill buffer with data that creates long matches
+    fill_random(buf, sz);
+    //insert pattern once every 256*1024 bytes
+    for (size_t i = 0; i < sz; i += 256*1024) {
+        if (i + 12 > sz) break;
+        memcpy(buf + i, "abcdefghijkl", 12 * sizeof(char)); // fill pattern
+    }
+}
+
+std::vector<size_t> gtest_data_gen_t::get_array_of_samples(char* samplesBuffer, size_t sz) {
+    std::vector<size_t> samplesSizes;
+    size_t pos = 0;
+    while (pos < sz) {
+        int randId = rand() % randomStrs.size(); // pick a string at random
+        int repeat = (rand() % 5) + 1;
+        std::string str;
+        for (int i = 0; i < repeat; ++i) { // append N copies of the string to create samples of different sizes
+            str.append(randomStrs[randId]);
+        }
+        if ((pos + str.size()) > sz) {
+            size_t last_sz = sz - pos;
+            memcpy(samplesBuffer, str.c_str(), last_sz);
+            samplesSizes.push_back(last_sz);
+            break;
+        }
+        size_t cur_sz = str.size();
+        memcpy(samplesBuffer, str.c_str(), cur_sz);
+        samplesSizes.push_back(cur_sz);
+        pos += cur_sz;
+    }
+    return samplesSizes;
+}
+
+void gtest_data_gen_t::fill_source(gtest_data_gen_type type) {
+    switch (type) {
+        case gtest_data_gen_type::repeated:
+            fill_repeated(orig_data, orig_sz);
+            break;
+        case gtest_data_gen_type::lowratio:
+            fill_lowratio(orig_data, orig_sz);
+            break;
+        case gtest_data_gen_type::midratio:
+            fill_midratio(orig_data, orig_sz);
+            break;
+        case gtest_data_gen_type::highratio:
+            fill_highratio(orig_data, orig_sz);
+            break;
+        case gtest_data_gen_type::overlapcopy:
+            fill_overlapcopy(orig_data, orig_sz);
+            break;
+        case gtest_data_gen_type::longmatch:
+            fill_longmatch(orig_data, orig_sz);
+            break;
+        default:
+            fill_random(orig_data, orig_sz);
+            break;
+    };
+}
+
+void gtest_data_gen_t::create_source(size_t inp_sz, gtest_data_gen_type type) {
+    orig_data = (char*)malloc(inp_sz);
+    if (orig_data == NULL) {
+        throw std::runtime_error("Failed to allocate memory for source buffer.");
+    }
+    fill_source(type);
+}

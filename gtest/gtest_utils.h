@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -66,7 +66,7 @@ vector<int> get_supported_optlevels(void);
 /* Data generator class to provide different types of random input streams
 *  Manages buffers for generated original data and compressed data */
 using gtest_compress_bound_t = std::function<size_t(size_t)>;
-enum class gtest_data_gen_type { random, repeated };
+enum class gtest_data_gen_type { random, repeated, lowratio, midratio, highratio, overlapcopy, longmatch };
 
 class gtest_data_gen_t {
 public:
@@ -114,14 +114,6 @@ public:
         return compressed_sz;
     }
 
-    // Fill dst buffer
-    bool dstSet(unsigned char val, char* start, char* end) {
-        if (start > end || start < compressed_data || end >(compressed_data + compressed_sz))
-            return false;
-        memset(start, val, end - start);
-        return true;
-    }
-
     // Destructor function.
     ~gtest_data_gen_t()
     {
@@ -131,62 +123,20 @@ public:
         compressed_data = NULL;
     }
 
-    static void fill_random(char* buf, size_t sz) { // fill buffer with random data
-        for (size_t i = 0; i < sz; i++)
-        {
-            buf[i] = rand() % 255;
-        }
-    }
+    bool dstSet(unsigned char val, char* start, char* end);
 
-    static void fill_repeated(char* buf, size_t sz) { // fill buffer with repeating patterns
-        memset(buf, 0, sz);
-        size_t cur = 0;
-        while (cur < sz) {
-            int randId = rand() % randomStrs.size(); // pick a string at random
-            int randLen = rand() % randomStrs[randId].size(); // select sub string length
-            if (cur + randLen >= sz) break;
-
-            memcpy(buf + cur, randomStrs[randId].c_str(), randLen * sizeof(char));
-            cur += randLen;
-        }
-    }
-
-    static std::vector<size_t> get_array_of_samples(char* samplesBuffer, size_t sz) {
-        std::vector<size_t> samplesSizes;
-        size_t pos = 0;
-        while (pos < sz) {
-            int randId = rand() % randomStrs.size(); // pick a string at random
-            int repeat = (rand() % 5) + 1;
-            std::string str;
-            for (int i = 0; i < repeat; ++i) { // append N copies of the string to create samples of different sizes
-                str.append(randomStrs[randId]);
-            }
-            if ((pos + str.size()) > sz) {
-                size_t last_sz = sz - pos;
-                memcpy(samplesBuffer, str.c_str(), last_sz);
-                samplesSizes.push_back(last_sz);
-                break;
-            }
-            size_t cur_sz = str.size();
-            memcpy(samplesBuffer, str.c_str(), cur_sz);
-            samplesSizes.push_back(cur_sz);
-            pos += cur_sz;
-        }
-        return samplesSizes;
-    }
+    static std::vector<size_t> get_array_of_samples(char* samplesBuffer, size_t sz);
+    static void fill_random(char* buf, size_t sz);
+    static void fill_repeated(char* buf, size_t sz);
+    static void fill_lowratio(char* buf, size_t sz);
+    static void fill_highratio(char* buf, size_t sz);
+    static void fill_midratio(char* buf, size_t sz);
+    static void fill_overlapcopy(char* buf, size_t sz);
+    static void fill_longmatch(char* buf, size_t sz);
 
 private:
-    void create_source(size_t inp_sz, gtest_data_gen_type type) {
-        orig_data = (char*)malloc(inp_sz);
-        switch (type) {
-        case gtest_data_gen_type::repeated:
-            fill_repeated(orig_data, orig_sz);
-            break;
-        default:
-            fill_random(orig_data, orig_sz);
-            break;
-        };
-    }
+    void fill_source(gtest_data_gen_type type);
+    void create_source(size_t inp_sz, gtest_data_gen_type type);
 
     //source buffer (original data which we intend to compress).
     char* orig_data = NULL;

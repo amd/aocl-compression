@@ -35,6 +35,7 @@ set(AOCL_LZ4_DGV_ADDITIONAL_PARAMS "/* none */")
 set(AOCL_LZ4_DGV_LONG_MATCH [[size_t const addl = read_variable_length(&ip, iend - LASTLITERALS + 1, 0);
                 if (addl == rvl_error) {
                     LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional match length.");
+                    DEBUGLOG(5, "error reading long match length");
                     goto _output_error;
                 }
                 length += addl;
@@ -52,6 +53,21 @@ set(AOCL_LZ4_DGV_COPY_MATCH [[size_t const addl = read_variable_length(&ip, iend
                 }
                 length += addl;
 ]])
+set(AOCL_LZ4_DGV_MATCH_COPY [[if (unlikely(offset<8)) {
+                LZ4_write32(op, 0);   /* silence msan warning when offset==0 */
+                op[0] = match[0];
+                op[1] = match[1];
+                op[2] = match[2];
+                op[3] = match[3];
+                match += inc32table[offset];
+                LZ4_memcpy(op+4, match, 4);
+                match -= dec64table[offset];
+            } else {
+                LZ4_memcpy(op, match, 8);
+                match += 8;
+            }
+            op += 8;]])
+set(AOCL_LZ4_DGV_CHECK_LAST_THREAD "/* none */")
 set(AOCL_LZ4_DGV_SAFE_DECODE_EXIT "/* nothing */")
 
 configure_file(
@@ -67,6 +83,7 @@ set(AOCL_LZ4_DGV_LONG_MATCH [[if (is_last_thread) {
                     size_t const addl = read_variable_length(&ip, iend - LASTLITERALS + 1, 0);
                     if (addl == rvl_error) { 
                         LOG_FORMATTED(ERR, logCtx, AOCL_LZ4_DGV_LOG_PREFIX"Encountered variable_length_error while decoding additional match length.", omp_get_thread_num());
+                        DEBUGLOG(5, "error reading long match length");
                         goto _output_error; 
                     }
                     length += addl;
@@ -74,6 +91,7 @@ set(AOCL_LZ4_DGV_LONG_MATCH [[if (is_last_thread) {
                     size_t const addl = read_variable_length(&ip, iend + 1, 0);
                     if (addl == rvl_error) {
                         LOG_FORMATTED(ERR, logCtx, AOCL_LZ4_DGV_LOG_PREFIX"Encountered variable_length_error while decoding additional match length.", omp_get_thread_num());
+                        DEBUGLOG(5, "error reading long match length");
                         goto _output_error; 
                     }
                     length += addl;
@@ -95,6 +113,22 @@ set(AOCL_LZ4_DGV_COPY_MATCH [[if (is_last_thread) {
                     length += addl;
                 }
 ]])
+set(AOCL_LZ4_DGV_MATCH_COPY [[if(cpy <= oend /* ensure that the output buffer is not overflowed */)
+            {
+                /* 
+                    In multi-threaded mode, chunks differ from traditional LZ4 format - they may end with
+                    an LZ4 compressed sequence instead of LASTLITERALS bytes. The traditional LZ4 code copies
+                    8 bytes at a time, which could cause buffer overflows by writing into the next thread's
+                    starting point of output buffer. Therefore, we need to handle copying differently in multi-threaded mode.
+                */
+                while(op < cpy)
+                {
+                    *op = *match;
+                    op++;
+                    match++;
+                }
+            }]])
+set(AOCL_LZ4_DGV_CHECK_LAST_THREAD "&& is_last_thread /* LASTLITERALS validation applies solely to the last thread; other threads might process chunks with last-literals smaller than the minimum. */")
 set(AOCL_LZ4_DGV_SAFE_DECODE_EXIT [[if ((cpy == oend) || (ip >= iend)) {
                 break;
             }

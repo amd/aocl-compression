@@ -166,6 +166,9 @@ static void aocl_setup_native(void);
 /* flag to indicate status of dynamic dispatcher setup */
 static int setup_ok_zlib_crc = 0;
 #endif /* AOCL_ZLIB_OPT */
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_zlib_crc = ATOMIC_FLAG_INIT;
+#endif /* AOCL_ENABLE_THREADS */
 
 /*
   Return a(x) multiplied by b(x) modulo p(x), where p(x) is the CRC polynomial,
@@ -565,8 +568,7 @@ local void braid(z_crc_t ltl[][256], z_word_t big[][256], int n, int w) {
  * This function can be used by asm versions of crc32(), and to force the
  * generation of the CRC tables in a threaded application.
  */
-const z_crc_t FAR * ZEXPORT get_crc_table(void)
-{
+const z_crc_t FAR * ZEXPORT get_crc_table(void) {
 #ifdef DYNAMIC_CRC_TABLE
     once(&made, make_crc_table);
 #endif /* DYNAMIC_CRC_TABLE */

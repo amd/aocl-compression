@@ -64,7 +64,7 @@ extern "C" {
 /// @cond DOXYGEN_SHOULD_SKIP_THIS 
 
 /* --- Useful constants --- */
-#define LZ4HC_CLEVEL_MIN         3
+#define LZ4HC_CLEVEL_MIN         2
 #define LZ4HC_CLEVEL_DEFAULT     9
 #define LZ4HC_CLEVEL_OPT_MIN    10
 #define LZ4HC_CLEVEL_MAX        12
@@ -79,7 +79,11 @@ extern "C" {
  * @name Block Compression Functions
  * @{
 */
-/*! 
+/*!
+ *  @rst 
+ *  .. _LZ4_compress_HC:
+ *  @endrst
+ * 
  *  @brief Compress data from `src` into `dst`, using the powerful but slower "HC" algorithm.
  *
  * | Parameters | Direction   | Description |
@@ -313,6 +317,8 @@ LZ4LIB_API int             AOCL_LZ4_freeStreamHC(AOCL_LZ4_streamHC_t* streamHCPt
 
   After reset, a first "fictional block" can be designated as initial dictionary,
   using LZ4_loadDictHC() (Optional).
+  Note: In order for LZ4_loadDictHC() to create the correct data structure,
+  it is essential to set the compression level _before_ loading the dictionary.
 
   Invoke LZ4_compress_HC_continue() to compress each successive block.
   The number of blocks is unlimited.
@@ -484,15 +490,43 @@ LZ4LIB_API int LZ4_compress_HC_continue_destSize(LZ4_streamHC_t* LZ4_streamHCPtr
 */
 LZ4LIB_API int LZ4_saveDictHC (LZ4_streamHC_t* streamHCPtr, char* safeBuffer, int maxDictSize);
 
-#ifdef AOCL_UNIT_TEST
-/* Wrapper functions for (static inlined) functions which require unit testing. */
-LZ4LIB_API int Test_LZ4HC_countBack(const LZ4_byte* const ip, const LZ4_byte* const match,
-                    const LZ4_byte* const iMin, const LZ4_byte* const mMin);
-                    
-LZ4LIB_API int Test_AOCL_LZ4HC_countBack(const LZ4_byte* const ip, const LZ4_byte* const match,
-                    const LZ4_byte* const iMin, const LZ4_byte* const mMin);
 
-#endif
+/*! LZ4_attach_HC_dictionary() : 
+ *  @brief This API allows for the efficient re-use of a static dictionary many times.
+ *         Stable since v1.10.0
+ *
+ *  | Parameters | Direction | Description |
+ *  |:-----------|:---------:|:------------|
+ *  | \b working_stream    | in,out | A pointer to the LZ4_streamHC_t structure representing the working compression stream. |
+ *  | \b dictionary_stream |   in   | A pointer to the LZ4_streamHC_t structure representing the dictionary stream. | 
+ * 
+ * @return \b NULL
+ * 
+ * @note
+ * -# Rather than re-loading the dictionary buffer into a working context before
+ *    each compression, or copying a pre-loaded dictionary's LZ4_streamHC_t into a
+ *    working LZ4_streamHC_t, this function introduces a no-copy setup mechanism,
+ *    in which the working stream references the dictionary stream in-place.
+ *
+ * -# Several assumptions are made about the state of the dictionary stream.
+ *    Currently, only streams which have been prepared by LZ4_loadDictHC() should
+ *    be expected to work.
+ *
+ * -# Alternatively, the provided dictionary stream pointer may be NULL, in which
+ *    case any existing dictionary stream is unset.
+ *
+ * -# A dictionary should only be attached to a stream without any history (i.e.,
+ *    a stream that has just been reset).
+ *
+ * -# The dictionary will remain attached to the working stream only for the
+ *    current stream session. Calls to LZ4_resetStreamHC(_fast) will remove the
+ *    dictionary context association from the working stream. The dictionary
+ *    stream (and source buffer) must remain in-place / accessible / unchanged
+ *    through the lifetime of the stream session.
+ */
+LZ4LIB_API void
+LZ4_attach_HC_dictionary(LZ4_streamHC_t* working_stream,
+                   const LZ4_streamHC_t* dictionary_stream);
 
 
 /*^**********************************************
@@ -520,25 +554,23 @@ LZ4LIB_API int Test_AOCL_LZ4HC_countBack(const LZ4_byte* const ip, const LZ4_byt
  * Declare or allocate an LZ4_streamHC_t instead.
 **/
 typedef struct LZ4HC_CCtx_internal LZ4HC_CCtx_internal;
-/// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 struct LZ4HC_CCtx_internal
 {
-    LZ4_u32   hashTable[LZ4HC_HASHTABLESIZE];
-    LZ4_u16   chainTable[LZ4HC_MAXD];
-    const LZ4_byte* end;       /**< Next block here to continue on current prefix */
-    const LZ4_byte* prefixStart;    /**< All index relative to this position */
-    const LZ4_byte* dictStart;  /**< Alternate base for extDict */
-    LZ4_u32   dictLimit;       /**< Below that point, need extDict */
-    LZ4_u32   lowLimit;        /**< Below that point, no more dict */
-    LZ4_u32   nextToUpdate;    /**< Index from which to continue dictionary update */
-    short     compressionLevel; /**< Is a measure of the compression quality */
-    LZ4_i8    favorDecSpeed;   /**< Favor decompression speed if this flag set,
-                                  otherwise, favor compression ratio */
-    LZ4_i8    dirty;           /**< Stream has to be fully reset if this flag is set */
+    LZ4_u32 hashTable[LZ4HC_HASHTABLESIZE];
+    LZ4_u16 chainTable[LZ4HC_MAXD];
+    const LZ4_byte* end;         /**< Next block here to continue on current prefix */
+    const LZ4_byte* prefixStart; /**< Indexes relative to this position */
+    const LZ4_byte* dictStart;   /**< Alternate reference for extDict */
+    LZ4_u32 dictLimit;           /**< Below that point, need extDict */
+    LZ4_u32 lowLimit;            /**< Below that point, no more history */
+    LZ4_u32 nextToUpdate;        /**< Index from which to continue dictionary update */
+    short   compressionLevel;    /**< Is a measure of the compression quality */
+    LZ4_i8  favorDecSpeed;       /**< Favor decompression speed if this flag set,
+                                      otherwise, favor compression ratio */
+    LZ4_i8  dirty;               /**< Stream has to be fully reset if this flag is set */
     const LZ4HC_CCtx_internal* dictCtx; /**< Current context of dictionary */
 };
 
-/// @cond DOXYGEN_SHOULD_SKIP_THIS
 /* Macros to be used in cache efficient hashchain implementation */
 #define CHAIN_TYPE LZ4_u32
 
@@ -587,13 +619,13 @@ struct AOCL_LZ4HC_CCtx_internal
 #endif
 
 union LZ4_streamHC_u {
-    void* minStateSize[LZ4_STREAMHC_MINSIZE];
+    char minStateSize[LZ4_STREAMHC_MINSIZE];
     LZ4HC_CCtx_internal internal_donotuse;
 }; /* previously typedef'd to LZ4_streamHC_t */
 
 #ifdef AOCL_LZ4HC_OPT
 union AOCL_LZ4_streamHC_u {
-    void* minStateSize[AOCL_LZ4_STREAMHC_MINSIZE];
+    char minStateSize[AOCL_LZ4_STREAMHC_MINSIZE];
     AOCL_LZ4HC_CCtx_internal internal_donotuse;
 }; /* previously typedef'd to AOCL_LZ4_streamHC_t */
 #endif
@@ -674,10 +706,16 @@ LZ4LIB_API LZ4_streamHC_t* LZ4_initStreamHC(void* buffer, size_t size);
 LZ4LIB_API AOCL_LZ4_streamHC_t* AOCL_LZ4_initStreamHC(void* buffer, size_t size);
 #endif /* AOCL_LZ4HC_OPT */
 
-/*===   Enums   ===*/
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
+/*===   Enums   ===*/
 typedef enum { noDictCtx, usingDictCtxHc } dictCtx_directive;
 typedef enum { favorCompressionRatio = 0, favorDecompressionSpeed } HCfavor_e;
+/*===   Struct   ===*/
+typedef struct {
+    int off;
+    int len;
+    int back;  /* negative value */
+} LZ4HC_match_t;
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 #ifdef AOCL_UNIT_TEST
@@ -689,13 +727,11 @@ LZ4LIB_API void Test_AOCL_LZ4HC_init_internal(AOCL_LZ4HC_CCtx_internal* hc4, con
 LZ4LIB_API void Test_AOCL_LZ4HC_Insert(AOCL_LZ4HC_CCtx_internal* hc4, const LZ4_byte* ip, const int Hash_Chain_Max, const int Hash_Chain_Slot_Sz);
 
 /* Test wrapper function of AOCL_LZ4HC_InsertAndGetWiderMatch for unit testing */
-LZ4LIB_API int Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
+LZ4LIB_API LZ4HC_match_t Test_AOCL_LZ4HC_InsertAndGetWiderMatch(
     AOCL_LZ4HC_CCtx_internal* const hc4,
     const LZ4_byte* const ip,
     const LZ4_byte* const iLowLimit, const LZ4_byte* const iHighLimit,
     int longest,
-    const LZ4_byte** matchpos,
-    const LZ4_byte** startpos,
     const int maxNbAttempts,
     const int patternAnalysis, const int chainSwap,
     const dictCtx_directive dict,
@@ -915,34 +951,6 @@ LZ4LIB_STATIC_API int LZ4_compress_HC_extStateHC_fastReset (
     const char* src, char* dst,
     int srcSize, int dstCapacity,
     int compressionLevel);
-/* LZ4_attach_HC_dictionary() :
- *  This is an experimental API that allows for the efficient use of a
- *  static dictionary many times.
- *
- *  Rather than re-loading the dictionary buffer into a working context before
- *  each compression, or copying a pre-loaded dictionary's LZ4_streamHC_t into a
- *  working LZ4_streamHC_t, this function introduces a no-copy setup mechanism,
- *  in which the working stream references the dictionary stream in-place.
- *
- *  Several assumptions are made about the state of the dictionary stream.
- *  Currently, only streams which have been prepared by LZ4_loadDictHC() should
- *  be expected to work.
- *
- *  Alternatively, the provided dictionary stream pointer may be NULL, in which
- *  case any existing dictionary stream is unset.
- *
- *  A dictionary should only be attached to a stream without any history (i.e.,
- *  a stream that has just been reset).
- *
- *  The dictionary will remain attached to the working stream only for the
- *  current stream session. Calls to LZ4_resetStreamHC(_fast) will remove the
- *  dictionary context association from the working stream. The dictionary
- *  stream (and source buffer) must remain in-place / accessible / unchanged
- *  through the lifetime of the stream session.
- */
-LZ4LIB_STATIC_API void LZ4_attach_HC_dictionary(
-          LZ4_streamHC_t *working_stream,
-    const LZ4_streamHC_t *dictionary_stream);
 
 #if defined (__cplusplus)
 }

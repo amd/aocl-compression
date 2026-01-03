@@ -659,6 +659,11 @@ unsigned int BZ2_bzCompressBound(unsigned int insize);
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
 /*!
+*
+*  @rst 
+*  .. _BZ2_bzBuffToBuffCompress:
+*  @endrst
+*
 * @brief Attempts to compress the data in `source` into the destination buffer, `dest`. 
 * 
 * | Parameters | Direction   | Description |
@@ -714,6 +719,11 @@ BZ_EXTERN int BZ_API(BZ2_bzBuffToBuffCompress) (
    );
 
 /*!
+*
+*  @rst 
+*  .. _BZ2_bzBuffToBuffDecompress:
+*  @endrst
+*
 * @brief Attempts to decompress the data in `source` into the destination buffer, `dest`. 
 * 
 * | Parameters | Direction   | Description |

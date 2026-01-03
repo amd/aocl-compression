@@ -113,14 +113,14 @@ LZ4_FORCE_INLINE int
         }
         if (unlikely(srcSize==0)) { return -1; }
 
-	/* LZ4_FAST_DEC_LOOP:
+    /* LZ4_FAST_DEC_LOOP:
      * designed for modern OoO performance cpus,
      * where copying reliably 32-bytes is preferable to an unpredictable branch.
      * note : fast loop may show a regression for some client arm chips. */
 #if LZ4_FAST_DEC_LOOP
         if ((oend - op) < FASTLOOP_SAFE_DISTANCE) {
-            AOCL_LZ4_DGV_LOG_UNFORMATTED(INFO, logCtx, "skip fast decode loop");
-            DEBUGLOG(6, "skip fast decode loop");
+            AOCL_LZ4_DGV_LOG_UNFORMATTED(INFO, logCtx, "move to safe decode loop");
+            DEBUGLOG(6, "move to safe decode loop");
             goto safe_decode;
         }
 
@@ -131,59 +131,64 @@ LZ4_FORCE_INLINE int
         __asm__(".p2align 4");
 #endif
         /* Fast loop : decode sequences as long as output < oend-FASTLOOP_SAFE_DISTANCE */
+        DEBUGLOG(6, "using fast decode loop");
         while (1) {
             /* Main fastloop assertion: We can always wildcopy FASTLOOP_SAFE_DISTANCE */
             assert(oend - op >= FASTLOOP_SAFE_DISTANCE);
             assert(ip < iend);
             token = *ip++;
             length = token >> ML_BITS;  /* literal length */
+            DEBUGLOG(7, "blockPos%6u: litLength token = %u", (unsigned)(op-(BYTE*)dst), (unsigned)length);
 
             /* decode literal length */
             if (length == RUN_MASK) {
                 size_t const addl = read_variable_length(&ip, iend-RUN_MASK, 1);
-                if (addl == rvl_error){ 
+                if (addl == rvl_error) {
                     AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional literal length.");
-                    goto _output_error; 
+                    DEBUGLOG(6, "error reading long literal length");
+                    goto _output_error;
                 }
                 length += addl;
                 if (unlikely((uptrval)(op)+length<(uptrval)(op))) { goto _output_error; } /* overflow detection */
                 if (unlikely((uptrval)(ip)+length<(uptrval)(ip))) { goto _output_error; } /* overflow detection */
 
                 /* copy literals */
-                cpy = op+length;
                 LZ4_STATIC_ASSERT(MFLIMIT >= WILDCOPYLENGTH);
-                if ((cpy>oend-64) || (ip+length>iend-64)) { goto safe_literal_copy; }
-                AOCL_LZ4_wildCopy64_AVX(op, ip, cpy);
-                ip += length; op = cpy;
-            } else {
-                cpy = op+length;
-                DEBUGLOG(7, "copy %u bytes in a 16-bytes stripe", (unsigned)length);
+                if ((op+length>oend-64) || (ip+length>iend-64)) { goto safe_literal_copy; }
+                AOCL_LZ4_wildCopy64_AVX(op, ip, op+length);
+                ip += length; op += length;
+            } else if (ip <= iend-(16 + 1/*max lit + offset + nextToken*/)) {
                 /* We don't need to check oend, since we check it once for each loop below */
-                if (ip > iend-(16 + 1/*max lit + offset + nextToken*/)) { goto safe_literal_copy; }
+                DEBUGLOG(7, "copy %u bytes in a 16-bytes stripe", (unsigned)length);
                 /* Literals can only be <= 14, but hope compilers optimize better when copy by a register size */
                 LZ4_memcpy(op, ip, 16);
-                ip += length; op = cpy;
+                ip += length; op += length;
+            } else {
+                goto safe_literal_copy;
             }
 
             /* get offset */
             offset = LZ4_readLE16(ip); ip+=2;
+            DEBUGLOG(6, "blockPos%6u: offset = %u", (unsigned)(op-(BYTE*)dst), (unsigned)offset);
             match = op - offset;
             assert(match <= op);  /* overflow check */
 
             /* get matchlength */
             length = token & ML_MASK;
+            DEBUGLOG(7, "  match length token = %u (len==%u)", (unsigned)length, (unsigned)length+MINMATCH);
 
             if (length == ML_MASK) {
                 @AOCL_LZ4_DGV_LONG_MATCH@
                 length += MINMATCH;
+                DEBUGLOG(7, "  long match length == %u", (unsigned)length);
                 if (unlikely((uptrval)(op)+length<(uptrval)op)) { goto _output_error; } /* overflow detection */
-                if ((checkOffset) && (unlikely(match + dictSize < lowPrefix))) { goto _output_error; } /* Error : offset outside buffers */
                 if (op + length >= oend - FASTLOOP_SAFE_DISTANCE) {
                     goto safe_match_copy;
                 }
             } else {
                 length += MINMATCH;
                 if (op + length >= oend - FASTLOOP_SAFE_DISTANCE) {
+                    DEBUGLOG(7, "moving to safe_match_copy (ml==%u)", (unsigned)length);
                     goto safe_match_copy;
                 }
 
@@ -201,10 +206,11 @@ LZ4_FORCE_INLINE int
                         continue;
             }   }   }
 
-            if (checkOffset && (unlikely(match + dictSize < lowPrefix))) { 
+            if ( checkOffset && (unlikely(match + dictSize < lowPrefix)) ) { 
                 AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Offset outside buffers.");
-                goto _output_error; 
-            } /* Error : offset outside buffers */
+                DEBUGLOG(5, "Error : pos=%zi, offset=%zi => outside buffers", op-lowPrefix, op-match);
+                goto _output_error;
+            }
             /* match starting within external dictionary */
             if ((dict==usingExtDict) && (match < lowPrefix)) {
                 assert(dictEnd != NULL);
@@ -213,7 +219,8 @@ LZ4_FORCE_INLINE int
                         DEBUGLOG(7, "partialDecoding: dictionary match, close to dstEnd");
                         length = MIN(length, (size_t)(oend-op));
                     } else {
-                        goto _output_error;  /* end-of-block condition violated */
+                        DEBUGLOG(6, "end-of-block condition violated")
+                        goto _output_error;
                 }   }
 
                 if (length <= (size_t)(lowPrefix-match)) {
@@ -260,10 +267,12 @@ LZ4_FORCE_INLINE int
 #endif
 
         /* Main Loop : decode remaining sequences where output < FASTLOOP_SAFE_DISTANCE */
+        DEBUGLOG(6, "using safe decode loop");
         while (1) {
             assert(ip < iend);
             token = *ip++;
             length = token >> ML_BITS;  /* literal length */
+            DEBUGLOG(7, "blockPos%6u: litLength token = %u", (unsigned)(op-(BYTE*)dst), (unsigned)length);
 
             /* A two-stage shortcut for the most common case:
              * 1) If the literal length is 0..14, and there is enough space,
@@ -284,6 +293,7 @@ LZ4_FORCE_INLINE int
                 /* The second stage: prepare for match copying, decode full info.
                  * If it doesn't work out, the info won't be wasted. */
                 length = token & ML_MASK; /* match length */
+                DEBUGLOG(7, "blockPos%6u: matchLength token = %u (len=%u)", (unsigned)(op-(BYTE*)dst), (unsigned)length, (unsigned)length + 4);
                 offset = LZ4_readLE16(ip); ip += 2;
                 match = op - offset;
                 assert(match <= op); /* check overflow */
@@ -317,11 +327,12 @@ LZ4_FORCE_INLINE int
                 if (unlikely((uptrval)(ip)+length<(uptrval)(ip))) { goto _output_error; } /* overflow detection */
             }
 
-            /* copy literals */
-            cpy = op+length;
 #if LZ4_FAST_DEC_LOOP
         safe_literal_copy:
 #endif
+            /* copy literals */
+            cpy = op+length;
+
             LZ4_STATIC_ASSERT(MFLIMIT >= WILDCOPYLENGTH);
             if ((cpy>oend-MFLIMIT) || (ip+length>iend-(2+1+LASTLITERALS))) {
                 /* We've either hit the input parsing restriction or the output parsing restriction.
@@ -357,13 +368,14 @@ LZ4_FORCE_INLINE int
                       * so check that we exactly consume the input and don't overrun the output buffer.
                       */
                     @AOCL_LZ4_DGV_LAST_SEQ_CHECK@
-                        DEBUGLOG(6, "should have been last run of literals")
-                        DEBUGLOG(6, "ip(%p) + length(%i) = %p != iend (%p)", (void *)ip, (int)length, (void *)(ip+length), (void *)iend);
-                        DEBUGLOG(6, "or cpy(%p) > oend(%p)", (void *)cpy, (void *)oend);
+                        DEBUGLOG(5, "should have been last run of literals")
+                        DEBUGLOG(5, "ip(%p) + length(%i) = %p != iend (%p)", ip, (int)length, ip+length, iend);
+                        DEBUGLOG(5, "or cpy(%p) > (oend-MFLIMIT)(%p)", cpy, oend-MFLIMIT);
+                        DEBUGLOG(5, "after writing %u bytes / %i bytes available", (unsigned)(op-(BYTE*)dst), outputSize);
                         goto _output_error;
                     }
                 }
-                LZ4_memmove(op, ip, length);  /* supports overlapping memory regions; only matters for in-place decompression scenarios */
+                LZ4_memmove(op, ip, length);  /* supports overlapping memory regions, for in-place decompression scenarios */
                 ip += length;
                 op += length;
                 /* Necessarily EOF when !partialDecoding.
@@ -375,7 +387,7 @@ LZ4_FORCE_INLINE int
                     break;
                 }
             } else {
-                LZ4_wildCopy8(op, ip, cpy);   /* can overwrite up to 8 beyond cpy */
+                LZ4_wildCopy8(op, ip, cpy);   /* can overwrite up to 8 bytes beyond cpy */
                 ip += length; op = cpy;
             }
 
@@ -385,6 +397,7 @@ LZ4_FORCE_INLINE int
 
             /* get matchlength */
             length = token & ML_MASK;
+            DEBUGLOG(7, "blockPos%6u: matchLength token = %u", (unsigned)(op-(BYTE*)dst), (unsigned)length);
 
     _copy_match:
             if (length == ML_MASK) {
@@ -449,24 +462,11 @@ LZ4_FORCE_INLINE int
                 continue;
             }
 
-            if (unlikely(offset<8)) {
-                LZ4_write32(op, 0);   /* silence msan warning when offset==0 */
-                op[0] = match[0];
-                op[1] = match[1];
-                op[2] = match[2];
-                op[3] = match[3];
-                match += inc32table[offset];
-                LZ4_memcpy(op+4, match, 4);
-                match -= dec64table[offset];
-            } else {
-                LZ4_memcpy(op, match, 8);
-                match += 8;
-            }
-            op += 8;
+            @AOCL_LZ4_DGV_MATCH_COPY@
 
             if (unlikely(cpy > oend-MATCH_SAFEGUARD_DISTANCE)) {
                 BYTE* const oCopyLimit = oend - (WILDCOPYLENGTH-1);
-                if (cpy > oend-LASTLITERALS) { 
+                if (cpy > oend-LASTLITERALS @AOCL_LZ4_DGV_CHECK_LAST_THREAD@) { 
                     AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Last LASTLITERALS bytes must be uncompressed literals.");
                     goto _output_error; 
                 } /* Error : last LASTLITERALS bytes must be literals (uncompressed) */
@@ -478,7 +478,7 @@ LZ4_FORCE_INLINE int
                 while (op < cpy) { *op++ = *match++; }
             } else {
                 LZ4_memcpy(op, match, 8);
-                if (length > 16)  { LZ4_wildCopy8(op+8, match+8, cpy); }
+                if (length > 16) { LZ4_wildCopy8(op+8, match+8, cpy); }
             }
             op = cpy;   /* wildcopy correction */
 

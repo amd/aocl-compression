@@ -2,6 +2,7 @@
  * huff0 huffman codec,
  * part of Finite State Entropy library
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2025, Advanced Micro Devices. All rights reserved.
  *
  * You can contact the author at :
  * - Source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -12,10 +13,6 @@
  * You may select, at your option, one of the above-listed licenses.
 ****************************************************************** */
 
-#if defined (__cplusplus)
-extern "C" {
-#endif
-
 #ifndef HUF_H_298734234
 #define HUF_H_298734234
 
@@ -25,6 +22,9 @@ extern "C" {
 #define FSE_STATIC_LINKING_ONLY
 #include "fse.h"
 
+#if AOCL_DECOMPRESS_FAST > 1
+#include "aocl_fds.h"
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
 
 /* ***   Tool functions *** */
 #define HUF_BLOCKSIZE_MAX (128 * 1024)   /**< maximum input size for a single block compressed with HUF_compress */
@@ -197,8 +197,21 @@ size_t HUF_readCTable (HUF_CElt* CTable, unsigned* maxSymbolValuePtr, const void
 
 /** HUF_getNbBitsFromCTable() :
  *  Read nbBits from CTable symbolTable, for symbol `symbolValue` presumed <= HUF_SYMBOLVALUE_MAX
- *  Note 1 : is not inlined, as HUF_CElt definition is private */
+ *  Note 1 : If symbolValue > HUF_readCTableHeader(symbolTable).maxSymbolValue, returns 0
+ *  Note 2 : is not inlined, as HUF_CElt definition is private
+ */
 U32 HUF_getNbBitsFromCTable(const HUF_CElt* symbolTable, U32 symbolValue);
+
+typedef struct {
+    BYTE tableLog;
+    BYTE maxSymbolValue;
+    BYTE unused[sizeof(size_t) - 2];
+} HUF_CTableHeader;
+
+/** HUF_readCTableHeader() :
+ *  @returns The header from the CTable specifying the tableLog and the maxSymbolValue.
+ */
+HUF_CTableHeader HUF_readCTableHeader(HUF_CElt const* ctable);
 
 /*
  * HUF_decompress() does the following:
@@ -266,8 +279,25 @@ size_t HUF_readDTableX1_wksp(HUF_DTable* DTable, const void* src, size_t srcSize
 size_t HUF_readDTableX2_wksp(HUF_DTable* DTable, const void* src, size_t srcSize, void* workSpace, size_t wkspSize, int flags);
 #endif
 
-#endif   /* HUF_H_298734234 */
+#if AOCL_DECOMPRESS_FAST > 1
+/* AOCL FDS variants.
+ * Same as the reference implementation, but accepts additional parameter of type aocl_entropy_fds_t*.
+ */
+size_t AOCL_HUF_compress1X_repeat(aocl_entropy_fds_t* entropy_fds_config, void* dst, size_t dstSize,
+    const void* src, size_t srcSize,
+    unsigned maxSymbolValue, unsigned tableLog,
+    void* workSpace, size_t wkspSize,   /**< `workSpace` must be aligned on 4-bytes boundaries, `wkspSize` must be >= HUF_WORKSPACE_SIZE */
+    HUF_CElt* hufTable, HUF_repeat* repeat, int flags);
 
-#if defined (__cplusplus)
-}
-#endif
+size_t AOCL_HUF_compress4X_repeat(aocl_entropy_fds_t* entropy_fds_config, void* dst, size_t dstSize,
+    const void* src, size_t srcSize,
+    unsigned maxSymbolValue, unsigned tableLog,
+    void* workSpace, size_t wkspSize,    /**< `workSpace` must be aligned on 4-bytes boundaries, `wkspSize` must be >= HUF_WORKSPACE_SIZE */
+    HUF_CElt* hufTable, HUF_repeat* repeat, int flags);
+
+size_t AOCL_HUF_buildCTable_wksp (aocl_entropy_fds_t* entropy_fds_config, HUF_CElt* tree,
+    const unsigned* count, U32 maxSymbolValue, U32 maxNbBits,
+    void* workSpace, size_t wkspSize);
+#endif /* AOCL_DECOMPRESS_FAST > 1 */
+
+#endif   /* HUF_H_298734234 */

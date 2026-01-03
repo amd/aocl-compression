@@ -1,4 +1,3 @@
-
 /*-------------------------------------------------------------*/
 /*--- Library top-level functions.                          ---*/
 /*---                                               bzlib.c ---*/
@@ -30,6 +29,7 @@
 */
 
 #include "utils/utils.h"
+#include "algos/common/aoclAlgoLog.h"
 #include "bzlib_private.h"
 #include "libsais.h"
 
@@ -47,6 +47,9 @@ int AOCL_use_libsais = 0;
 #endif
 
 static int setup_ok_bzip2 = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_bzip2 = ATOMIC_FLAG_INIT;
+#endif
 
 /*---------------------------------------------------*/
 /*--- Compression stuff                           ---*/
@@ -102,11 +105,19 @@ void BZ2_bz__AssertH__fail ( int errcode )
 }
 #endif
 
-//Minimum compressed buffer size
-#define MIN_PAD_SIZE (16*1024)
+// Define the size of the temporary buffer used for compressing 1 byte of data.
+#define SMALLER_CHUNK_DEST_SIZE 40
+/*
+   This function estimates the upper bound of the compressed output size.
+   The calculation includes safety margins based on empirical testing:
+   - Random data (worst case) requires ~5.1% additional space, for 100k block size (level 1).
+   - Added 12.5% extra padding for safety margin.
+   - Minimum padding of 1024 bytes, for small inputs.
+*/
+#define MIN_PAD_SIZE (1024)
 unsigned int BZ2_bzCompressBound(unsigned int insize)
 {
-   unsigned int outSize = (insize + (insize / 6) + MIN_PAD_SIZE);
+   unsigned int outSize = (insize + (insize / 8) + MIN_PAD_SIZE);
    return outSize;
 }
 
@@ -410,6 +421,9 @@ int BZ_API(BZ2_bzCompressInit)
    if(AOCL_use_libsais)
       s->block += 2;
 #endif /* AOCL_BZIP2_OPT */
+#ifdef AOCL_ENABLE_THREADS
+   s->mt_head_node = NULL;
+#endif /* AOCL_ENABLE_THREADS */
 
    strm->state          = s;
    strm->total_in_lo32  = 0;
@@ -1163,6 +1177,12 @@ int BZ_API(BZ2_bzDecompressInit)
    s->tt                    = NULL;
    s->currBlockNo           = 0;
    s->verbosity             = verbosity;
+#ifdef AOCL_ENABLE_THREADS
+   s->mt_head_node = NULL;
+#endif /* AOCL_ENABLE_THREADS */
+#ifdef AOCL_BZIP2_OPT
+   s->temp_tt = NULL;
+#endif /* AOCL_BZIP2_OPT */
 
    return BZ_OK;
 }
@@ -1321,7 +1341,236 @@ Bool unRLE_obuf_to_output_FAST ( DState* s )
    return False;
 }
 
+#ifdef AOCL_BZIP2_OPT
 
+/*
+   Size of the intermediate lookup table for fast character retrieval optimization.
+   The BWT block is divided into this many chunks for the chunk-based character lookup.
+   Larger values provide finer granularity but use more memory.
+*/
+ #define AOCL_INTERMEDIATE_TABLE_SIZE (2048)
+
+/*
+   This function creates an intermediate mapping table that divides the block
+   into equal-sized chunks and tries to determine if each chunk contains data
+   from only one character. If a chunk maps to a single character, we store
+   that character's value for fast lookup. If a chunk spans multiple characters
+   or boundaries, we store -1 to indicate that a slower, precise lookup is needed.
+
+   Returns the size of each chunk when the block is divided into
+   `AOCL_INTERMEDIATE_TABLE_SIZE` equal pieces.
+*/
+static Int32 AOCL_init_index_to_char_table (Int32 *char_boundaries, UChar *seqToUnseq, Int32 nblock, Int32 *index_to_char, Int32 nInUse)
+{
+   /* Initialize all entries to -1 (unknown/mixed). Also set a sentinel. */
+   for (Int32 i = 0; i < AOCL_INTERMEDIATE_TABLE_SIZE + 1; i++) {
+      index_to_char[i] = -1;
+   }
+
+   /* Size of each chunk when dividing the block into AOCL_INTERMEDIATE_TABLE_SIZE pieces */
+   const Int32 chunk_size = (nblock / AOCL_INTERMEDIATE_TABLE_SIZE) + (nblock % AOCL_INTERMEDIATE_TABLE_SIZE != 0);
+   Int32 index = 0;
+   Int32 i = 0;
+   while (i < AOCL_INTERMEDIATE_TABLE_SIZE && index < nInUse) {
+      Int32 start_index = i * chunk_size;
+      Int32 end_index = (i + 1) * chunk_size - 1;
+      /*
+         Cases:
+         - Entire chunk inside a single symbol range -> record that symbol.
+         - Chunk crosses a boundary -> mark -1.
+      */
+      if (start_index >= char_boundaries[index] && end_index < char_boundaries[index + 1]) {
+         index_to_char[i] = seqToUnseq[index];
+         i++;
+      } else if (start_index < char_boundaries[index]) {
+         index_to_char[i] = -1;
+         i++;
+      } else {
+         index_to_char[i] = -1;
+         index++;
+      }
+   }
+
+   /* Sentinel for safety on out-of-range access. */
+   index_to_char[AOCL_INTERMEDIATE_TABLE_SIZE] = -1;
+
+   return chunk_size;
+}
+
+static
+Bool AOCL_unRLE_obuf_to_output_FAST ( DState* s )
+{
+   Int32 *char_boundaries = s->cftab;
+   Int32 nblock = s->save_nblock;
+   
+   /* Lookup table to optimize character retrieval by dividing block into chunks */
+   Int32 index_to_char[AOCL_INTERMEDIATE_TABLE_SIZE + 1];
+   
+   /* Initialize the intermediate character lookup table for fast access */
+   const Int32 chunk_size = AOCL_init_index_to_char_table(char_boundaries, s->seqToUnseq, nblock, index_to_char, s->nInUse);
+
+   Int32 index = s->tt[s->origPtr] >> 8;
+   Int32 prev = s->origPtr;
+
+   /* Switch flag to alternate between two different character retrieval methods */
+   Int32 sw = 0;
+
+   /* 
+      Binary search to find character at position x in BWT block
+      Uses char_boundaries[] table which contains cumulative frequencies for active characters.
+   */
+   #define AOCL_CHAR_AT(x, ans)                                         \
+   {                                                                    \
+      Int32 start_index = 0, end_index = s->nInUse - 1, mid;            \
+      while (start_index <= end_index) {                                \
+         mid = (start_index + end_index) / 2;                           \
+         if (x >= char_boundaries[mid]) {                               \
+            if (mid == s->nInUse - 1 || x < char_boundaries[mid + 1]) { \
+               ans = s->seqToUnseq[mid];                                \
+               break;                                                   \
+            }                                                           \
+            start_index = mid + 1;                                      \
+         } else {                                                       \
+            end_index = mid - 1;                                        \
+         }                                                              \
+      }                                                                 \
+   }
+
+   /*
+      Fast character retrieval during BWT reconstruction
+      Alternates between fast chunk lookup and precise LF-mapping traversal
+   */
+   #define AOCL_GET_NEXT_CHAR(ans)                       \
+   if (sw == 0) {                                        \
+      /* Fast path: use chunk-level lookup table */      \
+      Int32 temp_ans = index_to_char[prev / chunk_size]; \
+      if (temp_ans == -1) {                              \
+         /* Fallback to precise binary search */         \
+         AOCL_CHAR_AT(prev, temp_ans);                   \
+      }                                                  \
+      ans = temp_ans;                                    \
+      sw = 1;                                            \
+   } else {                                              \
+      /* Follow LF-mapping through transform table */    \
+      prev = index;                                      \
+      ans = s->tt[index] & 0xff;                         \
+      index = s->tt[index] >> 8;                         \
+      sw = 0;                                            \
+   }
+
+   AOCL_GET_NEXT_CHAR(s->k0);
+   s->nblock_used++;
+
+   /* restore */
+   UInt32         c_calculatedBlockCRC   = s->calculatedBlockCRC;
+   UChar          c_state_out_ch         = s->state_out_ch;
+   Int32          c_state_out_len        = s->state_out_len;
+   Int32          c_nblock_used          = s->nblock_used;
+   Int32          c_k0                   = s->k0;
+   UInt32         c_tPos                 = s->tPos;
+   char*          cs_next_out            = s->strm->next_out;
+   unsigned int   cs_avail_out           = s->strm->avail_out;
+   /* end restore */
+
+   UInt32         avail_out_INIT = cs_avail_out;
+   Int32          s_save_nblockPP = s->save_nblock + 1;
+   unsigned int   total_out_lo32_old;
+   UChar          k1;
+
+   while (True) {
+      /* try to finish existing run */
+      if (c_state_out_len > 0) {
+         while (True) {
+            if (cs_avail_out == 0)
+               goto return_notr;
+            if (c_state_out_len == 1)
+               break;
+            *((UChar *)(cs_next_out)) = c_state_out_ch;
+            BZ_UPDATE_CRC(c_calculatedBlockCRC, c_state_out_ch);
+            c_state_out_len--;
+            cs_next_out++;
+            cs_avail_out--;
+         }
+         s_state_out_len_eq_one:
+         {
+            if (cs_avail_out == 0) {
+               c_state_out_len = 1;
+               goto return_notr;
+            };
+            *((UChar *)(cs_next_out)) = c_state_out_ch;
+            BZ_UPDATE_CRC(c_calculatedBlockCRC, c_state_out_ch);
+            cs_next_out++;
+            cs_avail_out--;
+         }
+      }
+      /* Only caused by corrupt data stream? */
+      if (c_nblock_used > s_save_nblockPP)
+         return True;
+
+      /* can a new run be started? */
+      if (c_nblock_used == s_save_nblockPP) {
+         c_state_out_len = 0;
+         goto return_notr;
+      };
+      c_state_out_ch = c_k0;
+      AOCL_GET_NEXT_CHAR(k1);
+      c_nblock_used++;
+      if (k1 != c_k0) {
+         c_k0 = k1;
+         goto s_state_out_len_eq_one;
+      }
+      if (c_nblock_used == s_save_nblockPP)
+         goto s_state_out_len_eq_one;
+
+      c_state_out_len = 2;
+      AOCL_GET_NEXT_CHAR(k1);
+      c_nblock_used++;
+      if (c_nblock_used == s_save_nblockPP)
+         continue;
+      if (k1 != c_k0) {
+         c_k0 = k1;
+         continue;
+      };
+
+      c_state_out_len = 3;
+      AOCL_GET_NEXT_CHAR(k1);
+      c_nblock_used++;
+      if (c_nblock_used == s_save_nblockPP)
+         continue;
+      if (k1 != c_k0) {
+         c_k0 = k1;
+         continue;
+      };
+
+      AOCL_GET_NEXT_CHAR(k1);
+      c_nblock_used++;
+      c_state_out_len = ((Int32)k1) + 4;
+      AOCL_GET_NEXT_CHAR(c_k0);
+      c_nblock_used++;
+   }
+
+   return_notr:
+   total_out_lo32_old = s->strm->total_out_lo32;
+   s->strm->total_out_lo32 += (avail_out_INIT - cs_avail_out);
+   if (s->strm->total_out_lo32 < total_out_lo32_old)
+      s->strm->total_out_hi32++;
+
+   /* save */
+   s->calculatedBlockCRC = c_calculatedBlockCRC;
+   s->state_out_ch = c_state_out_ch;
+   s->state_out_len = c_state_out_len;
+   s->nblock_used = c_nblock_used;
+   s->k0 = c_k0;
+   s->tPos = c_tPos;
+   s->strm->next_out = cs_next_out;
+   s->strm->avail_out = cs_avail_out;
+   /* end save */
+
+   #undef AOCL_CHAR_AT
+   #undef AOCL_GET_NEXT_CHAR
+   return False;
+}
+#endif
 
 /*---------------------------------------------------*/
 __inline__ Int32 BZ2_indexIntoF ( Int32 indx, Int32 *cftab )
@@ -1460,6 +1709,11 @@ int BZ_API(BZ2_bzDecompress) ( bz_stream *strm )
       if (s->state == BZ_X_OUTPUT) {
          if (s->smallDecompress)
             corrupt = unRLE_obuf_to_output_SMALL ( s ); else
+#ifdef AOCL_BZIP2_OPT
+            if(s->blockRandomised == 0 && s->save_nblock >= (AOCL_RANGE_THRESHOLD) && AOCL_use_libsais)
+               corrupt = AOCL_unRLE_obuf_to_output_FAST ( s );
+            else
+#endif
             corrupt = unRLE_obuf_to_output_FAST  ( s );
          if (corrupt) return BZ_DATA_ERROR;
          if (s->nblock_used == s->save_nblock+1 && s->state_out_len == 0) {
@@ -1470,6 +1724,7 @@ int BZ_API(BZ2_bzDecompress) ( bz_stream *strm )
             if (s->verbosity >= 2) VPrintf0 ( "]" );
             if (s->calculatedBlockCRC != s->storedBlockCRC)
                return BZ_DATA_ERROR;
+            AOCL_APPEND_CHECKSUM_NODE(s, s->storedBlockCRC);
             s->calculatedCombinedCRC 
                = (s->calculatedCombinedCRC << 1) | 
                     (s->calculatedCombinedCRC >> 31);
@@ -1517,6 +1772,10 @@ int BZ_API(BZ2_bzDecompressEnd)  ( bz_stream *strm )
    if (s->ll16 != NULL) BZFREE(s->ll16);
    if (s->ll4  != NULL) BZFREE(s->ll4);
 
+#ifdef AOCL_BZIP2_OPT
+   if (s->temp_tt != NULL) BZFREE(s->temp_tt);
+#endif
+   
    BZFREE(strm->state);
    strm->state = NULL;
 
@@ -1931,6 +2190,7 @@ int Test_libsais(const unsigned char * T, int * SA, int n, int fs, int * freq)
 /*---------------------------------------------------*/
 
 /*---------------------------------------------------*/
+#ifndef AOCL_ENABLE_THREADS
 int BZ_API(BZ2_bzBuffToBuffCompress) 
                          ( char*         dest, 
                            unsigned int* destLen,
@@ -1941,19 +2201,31 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
                            int           workFactor )
 {
    AOCL_SETUP_NATIVE();
+
+   if (dest == NULL || destLen == NULL || 
+      source == NULL ||
+      blockSize100k < 1 || blockSize100k > 9 ||
+      verbosity < 0 || verbosity > 4 ||
+      workFactor < 0 || workFactor > 250)
+  {
+     LOG_UNFORMATTED(INFO, logCtx, "Exit");
+     return BZ_PARAM_ERROR;
+  }
+#else
+int BZ2_bzBuffToBuffCompress_internal
+(  char*         dest, 
+   unsigned int* destLen,
+   char*         source, 
+   unsigned int  sourceLen,
+   int           blockSize100k, 
+   int           verbosity, 
+   int           workFactor,
+   mt_data_list* mt_head_node )
+{
+#endif /* AOCL_ENABLE_THREADS */
    bz_stream strm;
    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
    int ret;
-
-   if (dest == NULL || destLen == NULL || 
-       source == NULL ||
-       blockSize100k < 1 || blockSize100k > 9 ||
-       verbosity < 0 || verbosity > 4 ||
-       workFactor < 0 || workFactor > 250)
-   {
-      LOG_UNFORMATTED(INFO, logCtx, "Exit");
-      return BZ_PARAM_ERROR;
-   }
 
    if (workFactor == 0) workFactor = 30;
    strm.bzalloc = NULL;
@@ -1971,6 +2243,9 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
    strm.next_out = dest;
    strm.avail_in = sourceLen;
    strm.avail_out = *destLen;
+#ifdef AOCL_ENABLE_THREADS
+   ((EState *)strm.state)->mt_head_node = mt_head_node;
+#endif /* AOCL_ENABLE_THREADS */
 
    ret = BZ2_bzCompress ( &strm, BZ_FINISH );
    if (ret == BZ_FINISH_OK) goto output_overflow;
@@ -1980,6 +2255,7 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
    *destLen -= strm.avail_out;   
    BZ2_bzCompressEnd ( &strm );
    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+   AOCL_LOG_API_SUMMARY(blockSize100k, sourceLen, *destLen);
    return BZ_OK;
 
    output_overflow:
@@ -1993,8 +2269,171 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
    return ret;
 }
 
+#ifdef AOCL_ENABLE_THREADS
+#include "aocl_bzip2_mt_helper.h"
+// Multi-threaded version of the BZ2_bzBuffToBuffCompress function.
+int BZ_API(BZ2_bzBuffToBuffCompress) 
+                         ( char*         dest, 
+                           unsigned int* destLen,
+                           char*         source, 
+                           unsigned int  sourceLen,
+                           int           blockSize100k, 
+                           int           verbosity, 
+                           int           workFactor )
+{
+   AOCL_SETUP_NATIVE();
+   if (dest == NULL || destLen == NULL || 
+      source == NULL ||
+      blockSize100k < 1 || blockSize100k > 9 ||
+      verbosity < 0 || verbosity > 4 ||
+      workFactor < 0 || workFactor > 250)
+  {
+     LOG_UNFORMATTED(INFO, logCtx, "Exit");
+     return BZ_PARAM_ERROR;
+  }
+
+   aocl_thread_group_t thread_group_handle;
+   aocl_thread_info_t cur_thread_info;
+   AOCL_INT32 rap_frame_length;
+   mt_data_list* mt_head_table = NULL;
+ 
+   rap_frame_length = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)source, dest,
+                                               (AOCL_UINTP)sourceLen,
+                                               (AOCL_UINTP)(*destLen),
+                                               (AOCL_UINTP)(INPUT_BLOCK_SIZE-19), blockSize100k);
+
+   if(rap_frame_length < 0)
+      return rap_frame_length;
+
+   if(thread_group_handle.num_threads < 2)
+      return BZ2_bzBuffToBuffCompress_internal(dest, 
+         destLen,
+         source, 
+         sourceLen,
+         blockSize100k, 
+         verbosity, 
+         workFactor,
+         NULL);
+
+   // memory allocation for multithreaded checksum table.
+   mt_head_table = (mt_data_list *)malloc(sizeof(mt_data_list) * thread_group_handle.num_threads);
+   memset(mt_head_table, 0, sizeof(mt_data_list) * thread_group_handle.num_threads);
+
+   // Multi-threaded copmression.
+   #pragma omp parallel private(cur_thread_info) shared(thread_group_handle, mt_head_table) num_threads(thread_group_handle.num_threads)
+   {
+      UInt32 maxSrcSize = thread_group_handle.common_part_src_size + thread_group_handle.leftover_part_src_bytes;
+      UInt32 cmpr_bound_pad = BZ2_bzCompressBound(maxSrcSize) - maxSrcSize;
+      UInt32 is_error = 1;
+      UInt32 thread_id = omp_get_thread_num();
+      int ret = 0;
+      mt_data_list * mt_head_node = &mt_head_table[thread_id];
+
+      // Temperory buffer to store 1 byte compressed data, whatever may be the byte, the compressed output would always be 37 bytes.
+      char smaller_chunk_dest[SMALLER_CHUNK_DEST_SIZE];
+      unsigned int smaller_chunk_len = SMALLER_CHUNK_DEST_SIZE;
+
+      bit_stream state;
+      /*
+         The input data is divided into two chunks for compression:
+         1. A "bigger chunk" that contains input data, excluding the last byte.
+         2. A "smaller chunk" that consists of only the last byte of the input.
+
+         This division is necessary because the compressed output from `BZ2_bzBuffToBuffCompress_internal`
+         is not guaranteed to be byte-aligned. To merge the outputs produced by multiple threads into a single destination buffer,
+         the outputs from each thread would typically need to be bit-shifted to align properly. However, bit-shifting is computationally
+         expensive and inefficient.
+
+         To address this, the "bigger chunk" is compressed without any padding, and the number of empty bits at the end of its output
+         is measured. Using this information, padding bits are added to the "smaller chunk" during compression. This ensures that when
+         the compressed output of the "smaller chunk" is appended to the "bigger chunk," the combined output becomes fully byte-aligned.
+      */
+      if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
+      {
+         mt_head_node->padding_bits = 0;
+         ret |= BZ2_bzBuffToBuffCompress_internal(cur_thread_info.dst_trap,
+            (unsigned int *)&cur_thread_info.dst_trap_size,
+            cur_thread_info.partition_src, 
+            cur_thread_info.partition_src_size - 1 /* last byte excluded */,
+            blockSize100k, verbosity, workFactor, mt_head_node);
+
+         char * output_ptr = cur_thread_info.dst_trap + cur_thread_info.dst_trap_size;
+         int bigger_chunk_empty_bits = get_empty_bits((unsigned char *)output_ptr);
+
+         int smaller_chunk_padding_bits = (bigger_chunk_empty_bits + 5 /* 1 byte compression always produces 5 empty bits */)%8;
+
+         mt_head_node->padding_bits = smaller_chunk_padding_bits;
+         ret |= BZ2_bzBuffToBuffCompress_internal(smaller_chunk_dest, &smaller_chunk_len,
+                  cur_thread_info.partition_src+cur_thread_info.partition_src_size-1 /* last byte */, 
+                  1/* input length */, blockSize100k, verbosity, workFactor, mt_head_node);
+
+         // Ignore BZIP2 end of sequence (EOS magic number "6 bytes", combined checksum "4 bytes")
+         output_ptr -= BZIP2_EOS_BYTES+1;
+
+         // Remove emtpy bits and store the useful bits in "state" variable, which would be later appended with "1 byte input compressed data".
+         state.buff = (*(output_ptr)) >> bigger_chunk_empty_bits;
+         state.bits = 8 - bigger_chunk_empty_bits;
+         state.buff <<= 32 - state.bits;
+
+         // Ignore header bytes and append all the useful bits of "one byte input compressed data" into bigger compressed data.
+         smaller_chunk_len -= BZIP2_HEADER_BYTES + BZIP2_EOS_BYTES;
+         if(thread_id == thread_group_handle.num_threads - 1)
+         {
+            smaller_chunk_len += BZIP2_EOS_MAGIC_NUMBER_BYTES; // for last thread, retain EOS magic number
+         }
+         for (int k = 0; k < smaller_chunk_len; k++)
+         {
+            append(&output_ptr, smaller_chunk_dest[k+BZIP2_HEADER_BYTES], 8, &state);
+         }
+         finish_append(&output_ptr, &state);
+
+         // Only when `bigger_chunk_empty_bits` is not zero, we need an extra byte to store the padding bits.
+         if(bigger_chunk_empty_bits)
+            output_ptr--;
+
+         cur_thread_info.dst_trap_size = output_ptr - cur_thread_info.dst_trap;
+
+         if(ret)
+            is_error = -1 * ret;
+         else
+            is_error = 0;
+      } // aocl_do_partition_compress_mt
+
+      thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+      thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+      thread_group_handle.threads_info_list[thread_id].dst_trap_size = cur_thread_info.dst_trap_size;
+      thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+      thread_group_handle.threads_info_list[thread_id].is_error = is_error;
+      thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
+   }
+
+   *destLen = aocl_bzip2_mt_post_processing(dest, &thread_group_handle, mt_head_table, rap_frame_length);
+
+   int ret = 0;
+   // check for errors.
+   if(*destLen == 0)
+   {
+      for (Int32 thread_id = 0; thread_id < thread_group_handle.num_threads; thread_id++)
+      {
+         if(thread_group_handle.threads_info_list[thread_id].is_error)
+         {
+            ret = -1 * thread_group_handle.threads_info_list[thread_id].is_error;
+            break;
+         }
+      }
+   }
+
+   aocl_destroy_parallel_compress_mt(&thread_group_handle);
+   bz_mt_free_checksum_nodes(thread_group_handle.num_threads, mt_head_table);
+   free(mt_head_table);
+   mt_head_table = NULL;
+
+   return ret;
+}
+#endif /* AOCL_ENABLE_THREADS */
 
 /*---------------------------------------------------*/
+#ifndef AOCL_ENABLE_THREADS
 int BZ_API(BZ2_bzBuffToBuffDecompress) 
                            ( char*         dest, 
                              unsigned int* destLen,
@@ -2004,6 +2443,19 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)
                              int           verbosity )
 {
    AOCL_SETUP_NATIVE();
+#else
+int BZ_API(BZ2_bzBuffToBuffDecompress_internal) 
+                           ( char*         dest, 
+                             unsigned int* destLen,
+                             char*         source, 
+                             unsigned int  sourceLen,
+                             int           small,
+                             int           verbosity,
+                             int           state,
+                             int           level,
+                             mt_data_list * mt_head_node)
+{
+#endif /* AOCL_ENABLE_THREADS */
    bz_stream strm;
    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
    int ret;
@@ -2026,6 +2478,36 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)
       LOG_UNFORMATTED(INFO, logCtx, "Exit");
       return ret;
    }
+#ifdef AOCL_ENABLE_THREADS
+   DState * s = (DState *)strm.state;
+   s->state = state;
+   if(state != BZ_X_MAGIC_1)
+   {
+      /*
+       * Manual memory allocation for multi-threaded decompression:
+       * In BZ2_decompress (decompress.c), memory allocation normally occurs when s->state 
+       * equals BZ_X_MAGIC_1 (first block with BZIP2 header), since only BZIP2 header has the information about blockSize100k,
+       * after the memory is allocated this memory is reused for subsequent blocks in single-threaded processing. 
+       * However, in parallel processing, only the first thread encounters BZ_X_MAGIC_1 state and performs allocation. 
+       * All other threads start with BZ_X_BLKHDR_1 state (block header only, no BZIP2 header), 
+       * so BZ2_decompress skips memory allocation for them. We manually handle this allocation 
+       * here for parallel threads, using blockSize100k information obtained from the first 
+       * thread's BZIP2 header.
+       * Memory cleanup is handled by BZ2_bzDecompressEnd.
+       */
+      s->blockSize100k = level;
+      if (s->smallDecompress) {
+         s->ll16 = strm.bzalloc(strm.opaque, s->blockSize100k * 100000 * sizeof(UInt16),1 );
+         s->ll4  = strm.bzalloc(strm.opaque,  
+                     ((1 + s->blockSize100k * 100000) >> 1) * sizeof(UChar) , 1);
+         if (s->ll16 == NULL || s->ll4 == NULL) return (BZ_MEM_ERROR);
+      } else {
+         s->tt  = strm.bzalloc(strm.opaque,  s->blockSize100k * 100000 * sizeof(Int32) , 1);
+         if (s->tt == NULL) return (BZ_MEM_ERROR);
+      }
+   }
+   s->mt_head_node = mt_head_node;
+#endif /* AOCL_ENABLE_THREADS */
 
    strm.next_in = source;
    strm.next_out = dest;
@@ -2060,6 +2542,126 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)
    return ret; 
 }
 
+#ifdef AOCL_ENABLE_THREADS
+// Multi-threaded version of the BZ2_bzBuffToBuffDecompress function.
+int BZ_API(BZ2_bzBuffToBuffDecompress)(char *dest,
+                                       unsigned int *destLen,
+                                       char *source,
+                                       unsigned int sourceLen,
+                                       int small,
+                                       int verbosity)
+{
+   AOCL_SETUP_NATIVE();
+   if (dest == NULL || destLen == NULL || source == NULL || (small != 0 && small != 1) || verbosity < 0 || verbosity > 4)
+   {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
+      return BZ_PARAM_ERROR;
+   }
+   aocl_thread_group_t thread_group_handle;
+   aocl_thread_info_t cur_thread_info;
+   Int32 rap_metadata_len = aocl_setup_parallel_decompress_mt(&thread_group_handle, source, dest, sourceLen, *destLen, 0);
+
+   if(rap_metadata_len < 0)
+   {
+      LOG_UNFORMATTED(INFO, logCtx, "Exit");
+      return rap_metadata_len;
+   }
+   // If RAP metadata is missing or only one thread is available, fall back to single-threaded decompression
+   if (AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle))
+      return BZ2_bzBuffToBuffDecompress_internal(dest, destLen, source + rap_metadata_len, sourceLen - rap_metadata_len, small, verbosity, BZ_X_MAGIC_1, 0, NULL);
+
+   // memory allocation for multithreaded checksum table.
+   mt_data_list * mt_head_table = (mt_data_list *)malloc(sizeof(mt_data_list) * thread_group_handle.num_threads);
+   memset(mt_head_table, 0, sizeof(mt_data_list) * thread_group_handle.num_threads);
+
+   int level = source[rap_metadata_len + 3] - BZ_HDR_0;
+   #pragma omp parallel private(cur_thread_info) shared(thread_group_handle, mt_head_table) num_threads(thread_group_handle.num_threads)
+   {
+      int state = BZ_X_MAGIC_1;
+      int local_result = 0;
+      AOCL_UINT32 thread_id = omp_get_thread_num();
+      AOCL_INT32 thread_parallel_res = 0;
+      Int32 dst_offset = 0;
+      mt_data_list * mt_head_node = &mt_head_table[thread_id];
+
+      AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
+
+      Int32 current_thread_id = AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur);
+      state = current_thread_id ? BZ_X_BLKHDR_1 : BZ_X_MAGIC_1;
+      thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, &cur_thread_info, current_thread_id);
+      dst_offset = cur_thread_info.dst_trap - thread_group_handle.dst;
+      
+      // If partition setup was successful
+      if (thread_parallel_res == 0)
+      {
+         unsigned int dst_len = cur_thread_info.dst_trap_size;
+         local_result = BZ2_bzBuffToBuffDecompress_internal(cur_thread_info.dst_trap, &dst_len,
+                                                                  cur_thread_info.partition_src,
+                                                                  cur_thread_info.partition_src_size,
+                                                                  small, verbosity, state, level, mt_head_node);
+         cur_thread_info.dst_trap_size = (AOCL_UINTP)dst_len;
+         local_result = (local_result == BZ_OUTBUFF_FULL) ? BZ_OK : local_result;
+      } // aocl_do_partition_decompress_mt
+      else
+      {
+         local_result = thread_parallel_res;
+      }
+
+      ti_cur->dst_trap = cur_thread_info.dst_trap;
+      ti_cur->is_error = -1 * local_result;
+
+      // Copy the decompressed data to the final destination buffer
+      if(dst_offset + cur_thread_info.dst_trap_size <= thread_group_handle.dst_size)
+         memcpy(dest + dst_offset, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+      else
+      {
+         ti_cur->is_error = -1 * BZ_OUTBUFF_FULL;
+         break;
+      }
+   
+      // If this is the last thread, update the total decompressed length
+      if(thread_id == thread_group_handle.num_threads-1)
+         *destLen = dst_offset + cur_thread_info.dst_trap_size;
+
+      AOCL_MT_PROCESS_PARTITION_END(ti_cur);
+   } // #pragma omp parallel
+
+   int is_error = BZ_OK;
+   UInt32 calculated_checksum = 0;
+   // Aggregate error status from all threads
+   for(int thread_id = 0; thread_id < thread_group_handle.num_threads; thread_id++)
+   {
+      AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
+      if(ti_cur->is_error != BZ_OK)
+      {
+         is_error = -1 * ti_cur->is_error;
+      }
+      AOCL_MT_PROCESS_PARTITION_END(ti_cur);
+
+      calculated_checksum = bz_mt_cur_thread_checksum(mt_head_table[thread_id].head, calculated_checksum);
+   }
+
+   if(is_error == BZ_OK)
+   {
+      UInt32 stored_checksum = 0;
+      // Extract the stored checksum from the end of the compressed source data (last 4 bytes)
+      for(int i=0;i<4;i++)
+      {
+         unsigned char uc = (unsigned char)source[sourceLen - 4 + i];
+         stored_checksum = (stored_checksum << 8) | uc;
+      }
+      if(stored_checksum != calculated_checksum)
+         is_error = BZ_DATA_ERROR;
+   }
+   
+   aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+   bz_mt_free_checksum_nodes(thread_group_handle.num_threads, mt_head_table);
+   free(mt_head_table);
+   mt_head_table = NULL;
+
+   return is_error;
+}
+#endif /* AOCL_ENABLE_THREADS */
 
 /*---------------------------------------------------*/
 /*--

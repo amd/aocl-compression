@@ -1,4 +1,4 @@
-# Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -126,6 +126,9 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             if (AOCL_DECOMPRESS_FAST)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
             endif()
+            if (AOCL_COMPRESS_FAST)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_COMPRESS_FAST=${AOCL_COMPRESS_FAST}")
+            endif()
             if (AOCL_ENABLE_LOG_FEATURE)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_LOG_FEATURE")
             endif()
@@ -154,6 +157,9 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             endif()
             if(AOCL_TEST_FUZZER_WITH_CORPUS)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_TEST_FUZZER_WITH_CORPUS")
+            endif()
+            if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUG_ASSERT_ENABLED")
             endif()
 
             # Non API function tests

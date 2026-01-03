@@ -2,7 +2,7 @@
 2021-04-01 : Igor Pavlov : Public domain */
 
 /**
-* Modifications Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+* Modifications Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -61,6 +61,9 @@ static void aocl_setup_native(void);
 #endif
 
 static int setup_ok_lzma_decode = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_lzmadec = ATOMIC_FLAG_INIT;
+#endif
 
 /* Key terms used in range decoder:
 *
@@ -768,7 +771,7 @@ int MY_FAST_CALL LZMA_DECODE_REAL(CLzmaDec* p, SizeT limit, const Byte* bufLimit
           }
 
           curLen = ((rem < len) ? (unsigned)rem : len);
-          pos = dicPos - rep0 + (dicPos < rep0 ? dicBufSize : 0);
+          pos = (dicPos < rep0 ? dicBufSize : 0) + dicPos - rep0;
 
           processedPos += (UInt32)curLen;
 
@@ -2116,9 +2119,9 @@ static void aocl_setup_native(void) {
 #endif
 
 void aocl_destroy_lzma_decode(void){
-    AOCL_ENTER_CRITICAL(setup_lzma_decode)
+    AOCL_ENTER_CRITICAL(setup_lzmadec)
     setup_ok_lzma_decode = 0;
-    AOCL_EXIT_CRITICAL(setup_lzma_decode)
+    AOCL_EXIT_CRITICAL(setup_lzmadec)
 }
 
 #ifdef AOCL_UNIT_TEST

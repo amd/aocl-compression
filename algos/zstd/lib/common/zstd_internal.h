@@ -40,10 +40,6 @@
 #  define ZSTD_TRACE 0
 #endif
 
-#if defined (__cplusplus)
-extern "C" {
-#endif
-
 /* ---- static assert (debug) --- */
 #define ZSTD_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)
 #define ZSTD_isError ERR_isError   /* for inlining */
@@ -96,7 +92,7 @@ typedef enum { bt_raw, bt_rle, bt_compressed, bt_reserved } blockType_e;
 #define MIN_CBLOCK_SIZE (1 /*litCSize*/ + 1 /* RLE or RAW */)   /* for a non-null block */
 #define MIN_LITERALS_FOR_4_STREAMS 6
 
-typedef enum { set_basic, set_rle, set_compressed, set_repeat } symbolEncodingType_e;
+typedef enum { set_basic, set_rle, set_compressed, set_repeat } SymbolEncodingType_e;
 
 #define LONGNBSEQ 0x7F00
 
@@ -186,19 +182,24 @@ static UNUSED_ATTR const U32 OF_defaultNormLog = OF_DEFAULTNORMLOG;
 */
 #if AOCL_DECOMPRESS_FAST > 1
 // Metadata flags currently supported
+#define FDS_UNSUPPORTED               (U64)(-1) // Unable to support FDS
 #define FDS_NONE                      (U64)0    // No constraints
-#define FDS_FAST2_ANALYZE             (U64)(-1) // Under analysis. Impose maximum constraints 
 #define FDS_FAST2_NOTB_SO4_NOEXT_REP3 (U64)0x67 // 1 100 1 11, no large total bits, no offsets < 16, no external dictionary, no rep3,2,1
 #define FDS_FAST2_NOTB_SO4_NOEXT_REP2 (U64)0x66 // 1 100 1 10, no large total bits, no offsets < 16, no external dictionary, no rep3,2
 #define FDS_FAST2_NOTB_SO3_NOEXT_REP3 (U64)0x5F // 1 011 1 11, no large total bits, no offsets < 8, no external dictionary, no rep3,2,1
 #define FDS_FAST2_NOTB_SO3_NOEXT_REP2 (U64)0x5E // 1 011 1 10, no large total bits, no offsets < 8, no external dictionary, no rep3,2
+
 #define FDS_DEFAULT_CONF FDS_NONE                   // No constraints
+#if AOCL_DECOMPRESS_FAST == 2
+#define FDS_ALL_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP2  // Fixed constraint set
+#else
 #define FDS_ALL_CONF FDS_FAST2_NOTB_SO4_NOEXT_REP3  // All constraints
+#endif
 
 // Decompress fast settings
 /*
  * AOCL_DECOMPRESS_FAST = 1: No FDS frame inserted. Modifications in decompressor only.
- * AOCL_DECOMPRESS_FAST = 2: FDS frame inserted. All FDS_FAST2_NOTB_SO4_NOEXT_REP2 constraints imposed.
+ * AOCL_DECOMPRESS_FAST = 2: FDS frame inserted. FDS_FAST2_CONF constraints imposed.
  * AOCL_DECOMPRESS_FAST = 3: FDS frame inserted. Data aware compression. Constraints imposed selectively based on dynamic analysis.
 */
 #endif
@@ -213,7 +214,7 @@ static void ZSTD_copy8(void* dst, const void* src) {
     ZSTD_memcpy(dst, src, 8);
 #endif
 }
-#define COPY8(d,s) { ZSTD_copy8(d,s); d+=8; s+=8; }
+#define COPY8(d,s) do { ZSTD_copy8(d,s); d+=8; s+=8; } while (0)
 
 /* Need to use memmove here since the literal buffer can now be located within
    the dst buffer. In circumstances where the op "catches up" to where the
@@ -233,7 +234,7 @@ static void ZSTD_copy16(void* dst, const void* src) {
     ZSTD_memcpy(dst, copy16_buf, 16);
 #endif
 }
-#define COPY16(d,s) { ZSTD_copy16(d,s); d+=16; s+=16; }
+#define COPY16(d,s) do { ZSTD_copy16(d,s); d+=16; s+=16; } while (0)
 
 #define WILDCOPY_OVERLENGTH 32
 #define WILDCOPY_VECLEN 16
@@ -262,7 +263,7 @@ void ZSTD_wildcopy(void* dst, const void* src, ptrdiff_t length, ZSTD_overlap_e 
     if (ovtype == ZSTD_overlap_src_before_dst && diff < WILDCOPY_VECLEN) {
         /* Handle short offset copies. */
         do {
-            COPY8(op, ip)
+            COPY8(op, ip);
         } while (op < oend);
     } else {
         assert(diff >= WILDCOPY_VECLEN || diff <= -WILDCOPY_VECLEN);
@@ -300,7 +301,7 @@ void AOCL_ZSTD_wildcopy_long(void* dst, const void* src, ptrdiff_t length, ZSTD_
     if (ovtype == ZSTD_overlap_src_before_dst && diff < WILDCOPY_VECLEN) {
         /* Handle short offset copies. */
         do {
-            COPY8(op, ip)
+            COPY8(op, ip);
         } while (op < oend);
     }
     else {
@@ -341,76 +342,6 @@ typedef enum {
 /*-*******************************************
 *  Private declarations
 *********************************************/
-typedef struct seqDef_s {
-    U32 offBase;   /* offBase == Offset + ZSTD_REP_NUM, or repcode 1,2,3 */
-    U16 litLength;
-    U16 mlBase;    /* mlBase == matchLength - MINMATCH */
-} seqDef;
-
-/* Controls whether seqStore has a single "long" litLength or matchLength. See seqStore_t. */
-typedef enum {
-    ZSTD_llt_none = 0,             /* no longLengthType */
-    ZSTD_llt_literalLength = 1,    /* represents a long literal */
-    ZSTD_llt_matchLength = 2       /* represents a long match */
-} ZSTD_longLengthType_e;
-
-#if AOCL_DECOMPRESS_FAST > 1
-typedef struct {
-    U64 state;       // AOCL fast decompress settings
-    U32 ratio;       // Compression ratio of block compressor
-    U16 count;       // Analysis counter
-    U16 written;     // Is FDS frame written to stream?
-    U64 single_pass; // Is input provided through a single-pass API?
-                     // APIs like : ZSTD_compress(), ZSTD_compress2(), ZSTD_compressCCtx(), ZSTD_compress_usingDict(), etc
-} aocl_fds_t;
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
-
-typedef struct {
-    seqDef* sequencesStart;
-    seqDef* sequences;      /* ptr to end of sequences */
-    BYTE*  litStart;
-    BYTE*  lit;             /* ptr to end of literals */
-    BYTE*  llCode;
-    BYTE*  mlCode;
-    BYTE*  ofCode;
-    size_t maxNbSeq;
-    size_t maxNbLit;
-
-    /* longLengthPos and longLengthType to allow us to represent either a single litLength or matchLength
-     * in the seqStore that has a value larger than U16 (if it exists). To do so, we increment
-     * the existing value of the litLength or matchLength by 0x10000.
-     */
-    ZSTD_longLengthType_e longLengthType;
-    U32                   longLengthPos;  /* Index of the sequence to apply long length modification to */
-#if AOCL_DECOMPRESS_FAST > 1
-    aocl_fds_t fds_config; /* AOCL fast decompress settings */
-#endif /* AOCL_DECOMPRESS_FAST > 1 */
-} seqStore_t;
-
-typedef struct {
-    U32 litLength;
-    U32 matchLength;
-} ZSTD_sequenceLength;
-
-/**
- * Returns the ZSTD_sequenceLength for the given sequences. It handles the decoding of long sequences
- * indicated by longLengthPos and longLengthType, and adds MINMATCH back to matchLength.
- */
-MEM_STATIC ZSTD_sequenceLength ZSTD_getSequenceLength(seqStore_t const* seqStore, seqDef const* seq)
-{
-    ZSTD_sequenceLength seqLen;
-    seqLen.litLength = seq->litLength;
-    seqLen.matchLength = seq->mlBase + MINMATCH;
-    if (seqStore->longLengthPos == (U32)(seq - seqStore->sequencesStart)) {
-        if (seqStore->longLengthType == ZSTD_llt_literalLength) {
-            seqLen.litLength += 0x10000;
-        }
-        if (seqStore->longLengthType == ZSTD_llt_matchLength) {
-            seqLen.matchLength += 0x10000;
-        }
-    }
-    return seqLen;
-}
 
 /**
  * Contains the compressed frame size and an upper-bound for the decompressed frame size.
@@ -423,10 +354,6 @@ typedef struct {
     size_t compressedSize;
     unsigned long long decompressedBound;
 } ZSTD_frameSizeInfo;   /* decompress & legacy */
-
-const seqStore_t* ZSTD_getSeqStore(const ZSTD_CCtx* ctx);   /* compress & dictBuilder */
-int ZSTD_seqToCodes(const seqStore_t* seqStorePtr);   /* compress, dictBuilder, decodeCorpus (shouldn't get its definition from here) */
-
 
 /* ZSTD_invalidateRepCodes() :
  * ensures next compression will not use repcodes from previous block.
@@ -443,13 +370,13 @@ typedef struct {
 
 /*! ZSTD_getcBlockSize() :
  *  Provides the size of compressed block from block header `src` */
-/* Used by: decompress, fullbench (does not get its definition from here) */
+/*  Used by: decompress, fullbench */
 size_t ZSTD_getcBlockSize(const void* src, size_t srcSize,
                           blockProperties_t* bpPtr);
 
 /*! ZSTD_decodeSeqHeaders() :
  *  decode sequence header from src */
-/* Used by: decompress, fullbench (does not get its definition from here) */
+/*  Used by: zstd_decompress_block, fullbench */
 size_t ZSTD_decodeSeqHeaders(ZSTD_DCtx* dctx, int* nbSeqPtr,
                        const void* src, size_t srcSize);
 
@@ -461,9 +388,5 @@ MEM_STATIC int ZSTD_cpuSupportsBmi2(void)
     ZSTD_cpuid_t cpuid = ZSTD_cpuid();
     return ZSTD_cpuid_bmi1(cpuid) && ZSTD_cpuid_bmi2(cpuid);
 }
-
-#if defined (__cplusplus)
-}
-#endif
 
 #endif   /* ZSTD_CCOMMON_H_MODULE */

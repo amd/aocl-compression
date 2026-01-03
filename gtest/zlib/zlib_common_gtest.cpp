@@ -95,7 +95,7 @@ TEST_P(AOCL_Compression_zlib, compress_common)
 
   EXPECT_EQ(compress(dest, &destLen, src, srcLen), Z_OK); // AOCL_Compression_zlib_compress_common_6
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompressLen, srcLen);
+  EXPECT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
   free(dest);
   dest = nullptr;
@@ -114,7 +114,7 @@ TEST_P(AOCL_Compression_zlib, compress_boundary)
 
   EXPECT_EQ(compress(dest, &destLen, src, srcLen), Z_OK); // AOCL_Compression_zlib_compress_common_7
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompressLen, srcLen);
+  EXPECT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
   free(dest);
   dest = nullptr;
@@ -162,7 +162,7 @@ TEST_P(AOCL_Compression_zlib, compress2_common)
 
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, 6), Z_OK); // AOCL_Compression_zlib_compress2_common_8
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompressLen, srcLen);
+  EXPECT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
   free(dest);
   dest = nullptr;
@@ -181,7 +181,7 @@ TEST_P(AOCL_Compression_zlib, compress2_boundary)
 
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, 6), Z_OK); // AOCL_Compression_zlib_compress2_common_9
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, dest, destLen), Z_OK);
-  ASSERT_EQ(uncompressLen, srcLen);
+  EXPECT_EQ(uncompressLen, srcLen);
   EXPECT_STREQ(c, (char *)uncompressed);
   free(dest);
   dest = nullptr;
@@ -937,7 +937,18 @@ void compress2_fuzz(vector<Bytef> source, size_t dest_sz,
   uLong srcLen = source.size();
   vector<Bytef> dest(destLen, 0);
 
-  compress2(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  int ret = compress2(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  if(ret == Z_OK)
+  {
+    vector<Bytef> decompressed(source.size());
+    uLong origlen = decompressed.size();
+    int ret2 = uncompress(decompressed.data(), &origlen, dest.data(), destLen);
+    EXPECT_EQ(ret2, Z_OK);
+    if(ret2 == Z_OK)
+    {
+      EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+    }
+  }
   aocl_destroy_zlib();
 }
 FUZZ_TEST(AOCL_Compression_zlib, compress2_fuzz)
@@ -993,7 +1004,18 @@ void compress2_gzip_fuzz(vector<Bytef> source, size_t dest_sz,
   uLong srcLen = source.size();
   vector<Bytef> dest(destLen, 0);
 
-  compress2_gzip(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  int ret = compress2_gzip(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  if(ret == Z_OK)
+  {
+    vector<Bytef> decompressed(source.size());
+    uLong origlen = decompressed.size();
+    int ret2 = uncompress2_gzip(decompressed.data(), &origlen, dest.data(), &destLen);
+    EXPECT_EQ(ret2, Z_OK);
+    if(ret2 == Z_OK)
+    {
+      EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+    }
+  }
   aocl_destroy_zlib();
 }
 FUZZ_TEST(AOCL_Compression_zlib, compress2_gzip_fuzz)
@@ -1048,7 +1070,19 @@ void compress2_raw_fuzz(vector<Bytef> source, size_t dest_sz,
   uLong srcLen = source.size();
   vector<Bytef> dest(destLen, 0);
 
-  compress2_raw(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  int ret = compress2_raw(dest.data(), &destLen, (const Bytef *)source.data(), srcLen, level);
+  if(ret == Z_OK)
+  {
+    vector<Bytef> decompressed(source.size());
+    uLong origlen = decompressed.size();
+    int ret2 = uncompress2_raw(decompressed.data(), &origlen, dest.data(), &destLen);
+    EXPECT_EQ(ret2, Z_OK);
+    if(ret2 == Z_OK)
+    {
+      EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+    }
+  }
+
   aocl_destroy_zlib();
 }
 FUZZ_TEST(AOCL_Compression_zlib, compress2_raw_fuzz)

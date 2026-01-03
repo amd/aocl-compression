@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -83,8 +83,8 @@ extern "C" {
 #endif
 #endif
 
-#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 5.1.0"
-#define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 3.0"
+#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 5.2.0"
+#define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 4.0"
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
  /**

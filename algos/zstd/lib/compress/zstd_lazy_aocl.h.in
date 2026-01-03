@@ -50,7 +50,7 @@
 */
 FORCE_INLINE_TEMPLATE size_t
 @AOCL_ZSTD_CLNF_FUNC@(
-    ZSTD_matchState_t* ms, seqStore_t* seqStore,
+    ZSTD_MatchState_t* ms, SeqStore_t* seqStore,
     U32 rep[ZSTD_REP_NUM],
     const void* src, size_t srcSize,
     const searchMethod_e searchMethod, const U32 depth)
@@ -85,6 +85,10 @@ FORCE_INLINE_TEMPLATE size_t
     if (searchMethod == search_rowHash) {
         ZSTD_row_fillHashCache(ms, base, rowLog, mls, ms->nextToUpdate, ilimit);
     }
+
+#ifdef AOCL_COMPRESS_FAST
+    unsigned lazyLimit = seqStore->lazyLimit;
+#endif
 
     /* Match Loop */
 #if defined(__GNUC__) && defined(__x86_64__)
@@ -127,7 +131,11 @@ FORCE_INLINE_TEMPLATE size_t
         }
 
         /* let's try to find a better solution */
+#ifdef AOCL_COMPRESS_FAST
+        if (matchLength <= lazyLimit && depth >= 1) /* restrict lazy eval to short matches only */
+#else
         if (depth >= 1)
+#endif
             while (ip < ilimit) {
                 DEBUGLOG(7, "search depth 1");
                 ip++;
@@ -190,7 +198,7 @@ FORCE_INLINE_TEMPLATE size_t
 
         {
             U32 offset_t = OFFBASE_IS_OFFSET(offBase) ? (U32)OFFBASE_TO_OFFSET(offBase) : 1;
-            if (!is_totalbits_limited_seq_possible(start, anchor, matchLength, offset_t)) {
+            if (!is_totalbits_limited_seq_possible(start, anchor, matchLength, offset_t, MINMATCH)) {
                 offset_1 = prev_offset_1; //revert
 #ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
                 size_t const step = ((size_t)(ip - anchor) >> aocl_kSearchStrengthLazy) + 1;   /* jump faster over incompressible sections */;

@@ -8,8 +8,8 @@ compression and decompression methods which facilitate the applications to
 easily integrate and use them.
 AOCL-Compression supports lz4, zlib/deflate, lzma, zstd, bzip2, snappy, and lz4hc
 based compression and decompression methods along with their native APIs.
-The library offers openMP based multi-threaded implementation of lz4, zlib, 
-zstd and snappy compression methods.
+The library offers openMP based multi-threaded implementation for all the methods
+(for LZMA, only multi-threaded compression is supported).
 It supports the dynamic dispatcher feature that executes the most optimal
 function variant implemented using Function Multi-versioning thereby offering
 a single optimized library portable across different x86 CPU architectures.
@@ -26,8 +26,8 @@ Installation
 
 1. Download the latest stable release from the Github repository:<br>
 https://github.com/amd/aocl-compression
-2. Install CMake on the machine where the sources are to be compiled.
-3. Make any one of the compilers GCC or Clang available on the machine.
+2. Install CMake (version 3.13.0+) on the machine where the sources are to be compiled.
+3. Make any one of the supported compilers (GCC 8.5+ or Clang 11.0+) available on the machine.
 4. Then, use the cmake based build system to compile and generate AOCL-Compression <br>
 library and testsuite binary as explained below for Linux® and Windows® platforms.
 
@@ -36,11 +36,11 @@ Building on Linux
 
 1. To create a build directory and configure the build system in it, run the following:
    ```
-    cmake -B <build directory> <CMakeList.txt filepath>
+    cmake -B <build directory> <directory containing CMakeList.txt>
    ```
    Additional options that can be specified for build configuration are:
    ```
-   cmake -B <build directory> <CMakeList.txt filepath> 
+   cmake -B <build directory> <directory containing CMakeList.txt> 
       -DCMAKE_INSTALL_PREFIX=<install path> 
       -DCMAKE_BUILD_TYPE=<Debug or Release> 
       -DBUILD_STATIC_LIBS=ON
@@ -113,10 +113,12 @@ SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS |  Enable Snappy branchless decompression op
 LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
 AOCL_ZSTD_SEARCH_SKIP_OPT           |  Enable ZSTD match skipping optimization that steps more aggresively when matches are not found (Enabled by default)
+AOCL_ZSTD_DYN_BLOCK_SIZE            |  Enable ZSTD dynamic block size determination (Disabled by default)
 AOCL_DECOMPRESS_FAST                |  Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values: {1,2,3} ZSTD, {1,2} Snappy, {1} LZ4. (Disabled by default)
+AOCL_COMPRESS_FAST                  |  Enable fast compression modes that might compromise on compression ratio but compress faster. Supported values: {1,2} ZSTD. (Disabled by default)
 AOCL_TEST_COVERAGE                  |  Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)
 AOCL_ENABLE_LOG_FEATURE             |  Enables logging through environment variable `AOCL_ENABLE_LOG` (Disabled by default)
-CODE_COVERAGE                       |  Enable source code coverage. Only supported on Linux with the GCC compiler (Disabled by default)
+CODE_COVERAGE                       |  Enable code coverage (GCC/gcov for Linux and Clang/llvm-cov for both Linux and Windows) (Disabled by default)
 ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
 VALGRIND                            |  Enable Valgrind checks. Only supported on Linux/Debug and incompatible with ASAN=ON (Disabled by default)
 BUILD_DOC                           |  Build documentation for this library (Disabled by default)
@@ -140,12 +142,18 @@ NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression 
 AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
 AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
 ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
-BUILD_UTILITY                       |  Enable third party utility build: zstd (Disabled by default)" OFF)
+BUILD_UTILITY                       |  Enable third party utility build: minigzip(zlib), zstd_utility(zstd) (Disabled by default)
+AOCL_BZIP2_HUFFMAN_ITERATIONS       |  Control number of BZIP2 Huffman tables refinement iterations (1-4). Lower values are faster but reduce compression ratio. (Default: 3)
 
 * NOTE: <br>
-   1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by <br>
-   setting environment variable AOCL_ZLIB_QUICK_MODE=ON. It also improves performance for levels 2, 3 and 5 <br>
+   1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by
+   setting environment variable AOCL_ZLIB_QUICK_MODE=ON. It also improves performance for levels 2, 3 and 5
    while trading off compression ratio. <br>
+   2. **Threading Options Conflict**: If both `AOCL_ENABLE_THREADS` and `NATIVE_ENABLE_THREADS` are enabled, 
+   `NATIVE_ENABLE_THREADS` will be automatically disabled to avoid conflicts. <br>
+   3. **BUILD_UTILITY Forces Static Build**: When `BUILD_UTILITY=ON`, the build system automatically forces 
+   `BUILD_STATIC_LIBS=ON` as some utilities cannot link to shared libraries. <br>
+
 
 Running AOCL-Compression Test Bench On Linux
 --------------------------------------------
@@ -348,13 +356,14 @@ Fuzzer test can be run in two modes:
    *  AOCL_FUZZ_SIZE_MAX : Max size in bytes to use for i/o buffers used in fuzz testing.
    *  AOCL_FUZZ_CPR_RATIO : Compression ratio estimate of compressed files used for decompress API fuzz tests.
 
-Running source code coverage using GCOV
+Running source code coverage
 ---------------------------------------
 
 To measure source code coverage, use CODE_COVERAGE option while configuring the CMake build. Run CMake with the custom target option 'code-coverage' to execute tests and generate code coverage data. The code coverage reports are generated in the build directory under subdirectory called 'coverage/html_report'. Open the HTML files in browser to view the coverage information.
+Supports Linux (GCC/Clang) and Windows (ClangCL). The build system automatically detects the compiler type and uses the appropriate coverage tool.
 
 Following is the sample command usage to run code coverage:
-`cmake -B <build directory> <CMakeList.txt filepath> 
+`cmake -B <build directory> <directory containing CMakeList.txt> 
       -DCMAKE_INSTALL_PREFIX=<install path> 
       -DCMAKE_BUILD_TYPE=Debug 
       -DBUILD_STATIC_LIBS=ON
@@ -396,7 +405,7 @@ Following are a few sample commands to use the script available in the 'scripts'
 Generating Documentation
 ------------------------
 - To generate documentation, specify the `-DBUILD_DOC=ON` option while building.
-- Documents will be generated in HTML format in the folder __docs/html__ as doxygen output &  __docs/sphinx/html__ as sphinx output. Open the index.html file from respective folders in any browser to view the documentation.
+- Documents will be generated in HTML format in the folder __docs/sphinx/html__ . Open index.html file from the folder in any browser to view the documentation.
 - The following packages are expected before running CMake with `-DBUILD_DOC=ON` option:
    1. Doxygen.
    2. Python packages:
@@ -428,10 +437,12 @@ Enabling specific instructions (ISA)
 
 Multi-threaded Compression and Decompression
 --------------------------------------------
-- Parallel compression and decompression of lz4, lz4hc, zlib (zlib, deflate and gzip formats), zstd and snappy 
-  is implemented using openMP multi-threading. A RAP (random access point) frame is introduced in AOCL-Compression
-  to support parallel decompression of the compressed streams/files. Use AOCL_ENABLE_THREADS
-  config option to enable the multi-threading.
+- AOCL-Compression provides parallel compression and decompression capabilities for multiple formats:
+  lz4, lz4hc, zlib (including zlib, deflate, and gzip formats), zstd, snappy, bzip2, and lzma.
+  Note: For lzma, only multi-threaded compression is currently supported.
+- The parallel processing is implemented using OpenMP multi-threading. To enable parallel decompression
+  of compressed streams and files, AOCL-Compression introduces a RAP (Random Access Point) frame format.
+- Enable multi-threading support by using the `AOCL_ENABLE_THREADS` configuration option.
 - A stream compressed with multi-threaded AOCL-Compression library can be decompressed using any
   single-threaded standard decompressor by simply skipping the initial block of bytes containing
   the RAP frame present at the start of the stream.

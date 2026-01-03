@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -50,7 +50,7 @@
  * | <--------------------------------------------------------------------- RAP Frame -------------------------------------------------------------------> |    *
  * | <----------------------------- RAP Header -----------------------------> | <----------------------------- RAP Metadata -----------------------------> |    *
  * | <-- RAP Magic word (8 bytes) --> | <-- RAP Metadata length (4 bytes) --> |                                                                                 *
- *                                                                              | <--- Num Main Threads (2 bytes) --> | <-- Num Child Threads (2 bytes) ---> |  *
+ *                                                                            | <--- Num Main Threads (2 bytes) --> | <-- Num Child Threads (2 bytes) ---> |    *
  *                                                                                                                                                              *
  * | <----------------------------------------------------------- RAP Metadata cont'd -------------------------------------------------------------------> |    *
  * | <-- Main Thread-1 (RAP Offset(4 bytes), RAP Length(4 bytes), Opt Decompressed Length(4 bytes)) --> | ................................................      *
@@ -101,7 +101,11 @@ extern "C"
     RAP_MAIN_THREAD_COUNT_BYTES + RAP_CHILD_THREAD_COUNT_BYTES + \
     (mainThreads * (RAP_OFFSET_BYTES + RAP_LEN_BYTES + DECOMP_LEN_BYTES)) + \
     (childThreads * mainThreads * (RAP_OFFSET_BYTES + RAP_LEN_BYTES)) )
-//#define APPROX_PADDED_DST_CHUNK //Keep this disabled as it is more accurate to send the actual dest decompressed len bytes
+
+
+#define AOCL_MT_DECOMP_PARTITION_SUCCESS 0
+#define AOCL_MT_DECOMP_PARTITION_EMPTY_SRC 1
+#define AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE -1
 
 #define RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(error) { \
                         LOG_UNFORMATTED(ERR, logCtx, "Destination buffer is too small/ insufficient."); \
@@ -141,6 +145,26 @@ extern "C"
         }
 
 #define WINDOW_FACTOR 4
+
+#define AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle) (thread_group_handle.threads_info_list == NULL) /* no partitions found after setup */
+
+#define AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur) ti_cur->thread_id /* serialized id of partition associated with a thread */
+
+#define AOCL_MT_IS_FIRST_PARTITION(ti_cur) \
+        (AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur) == 0) /* is first partition of first thread? */
+
+#define AOCL_MT_IS_LAST_PARTITION(thread_group_handle, ti_cur, thread_id) ( /* is last partition of last thread? */ \
+        (thread_id == (thread_group_handle.num_threads - 1) /* last thread */) \
+        && ti_cur->next == NULL /* last partition for this thread */)
+
+#define AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id) /* processing partitions serially. loop start */ \
+        aocl_thread_info_t* ti_cur = &thread_group_handle.threads_info_list[thread_id]; \
+        while (ti_cur) {
+
+
+#define AOCL_MT_PROCESS_PARTITION_END(ti_cur) /* processing partitions serially. loop end */ \
+        ti_cur = ti_cur->next; /* next linked partition */ \
+        }
 
 //#define AOCL_THREADS_LOG
 #ifdef AOCL_THREADS_LOG
@@ -296,7 +320,7 @@ EXPORT_SYM_THREADS void aocl_destroy_parallel_compress_mt(aocl_thread_group_t* t
  * | \b dst                 | in          | Output stream buffer pointer. |
  * | \b in_size             | in          | Input stream buffer size. |
  * | \b out_size            | in          | Output stream buffer pointer. |
- * | \b use_ST_decompressor| in          | If set to 1, just returns the RAP frame length without setting up the thread group for multi-threaded execution. |
+ * | \b use_ST_decompressor | in          | If set to 1, just returns the RAP frame length without setting up the thread group for multi-threaded execution. |
  *
  * return
  * | Result     | Description |
@@ -326,7 +350,6 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_grou
  * |:-----------------------|:-----------:|:------------|
  * | \b thread_grp          | in          | Holds list of thread info, pointers to input and output streams and other information needed for multi-threaded decompression. |
  * | \b cur_thread_info     | out         | Current thread info. |
- * | \b cmpr_bound_pad      | in          | Number of additional padding bytes if needed for the allocated destination buffer. |
  * | \b thread_id           | in          | Current thread id. |
  *
  * return
@@ -337,9 +360,8 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_grou
  * | Fail       | `ERR_MEMORY_ALLOC`                                   |
  *
  */
-EXPORT_SYM_THREADS AOCL_INT32 aocl_do_partition_decompress_mt(aocl_thread_group_t* thread_grp,
-                                     aocl_thread_info_t* cur_thread_info,
-                                     AOCL_UINTP cmpr_bound_pad, AOCL_UINT32 thread_id);
+EXPORT_SYM_THREADS AOCL_INT32 aocl_do_partition_decompress_mt(const aocl_thread_group_t* thread_grp,
+                                     aocl_thread_info_t* cur_thread_info, AOCL_UINT32 thread_id);
 
 /**
  * Function to free memory associated with the multi-threaded decompressor.

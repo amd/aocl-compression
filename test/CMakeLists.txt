@@ -1,4 +1,4 @@
-# Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -80,6 +80,10 @@ if (NATIVE_ENABLE_THREADS)
     set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DNATIVE_ENABLE_THREADS")
 endif()
 
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set_property(SOURCE ${TESTBENCH_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUG_ASSERT_ENABLED")
+endif()
+
 #Enabling strict warnings
 if(ENABLE_STRICT_WARNINGS)
     if (WIN32)
@@ -99,7 +103,7 @@ list(TRANSFORM INTERNAL_INC_FILES PREPEND ${CMAKE_SOURCE_DIR}/)
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/include/types.h
     COMMENT "Copy interface headers to build path"
-    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/include
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/include
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/include
     COMMAND ${CMAKE_COMMAND} -E copy ${INTERNAL_INC_FILES} ${CMAKE_BINARY_DIR}/include 
     DEPENDS ${TESTBENCH_SRC_FILES} ${INTERNAL_INC_FILES})
@@ -138,7 +142,8 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
         message(STATUS "Downloading Calgary dataset ...")
         file(DOWNLOAD http://corpus.canterbury.ac.nz/resources/calgary.zip ${CMAKE_BINARY_DIR}/datasets/calgary.zip SHOW_PROGRESS)
         message(STATUS "Extracting Calgary dataset ...")
-        file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/datasets/calgary.zip DESTINATION ${CMAKE_BINARY_DIR}/calgary)
+        file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/calgary)
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xf ${CMAKE_BINARY_DIR}/datasets/calgary.zip WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/calgary)
     endif()
 
     set(CANTERBURY "${CMAKE_BINARY_DIR}/datasets/cantrbry.zip")
@@ -146,7 +151,8 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
         message(STATUS "Downloading Canterbury dataset ...")
         file(DOWNLOAD http://corpus.canterbury.ac.nz/resources/cantrbry.zip ${CMAKE_BINARY_DIR}/datasets/cantrbry.zip SHOW_PROGRESS)
         message(STATUS "Extracting Canterbury dataset ...")
-        file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/datasets/cantrbry.zip DESTINATION ${CMAKE_BINARY_DIR}/canterbury)
+        file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/canterbury)
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xf ${CMAKE_BINARY_DIR}/datasets/cantrbry.zip WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/canterbury)
     endif()
 
     set(SILESIA "${CMAKE_BINARY_DIR}/datasets/silesia.zip")
@@ -154,33 +160,69 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
         message(STATUS "Downloading Silesia dataset ...")
         file(DOWNLOAD http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip ${CMAKE_BINARY_DIR}/datasets/silesia.zip SHOW_PROGRESS)
         message(STATUS "Extracting Silesia dataset ...")
-        file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/datasets/silesia.zip DESTINATION ${CMAKE_BINARY_DIR}/silesia)
+        file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/silesia)
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xf ${CMAKE_BINARY_DIR}/datasets/silesia.zip WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/silesia)
     endif()
 
     # only run if code coverage is enabled
     if (CODE_COVERAGE)
-        find_program(GCOV gcov)
-        find_program(LCOV lcov)
-        find_program(GENHTML genhtml)
-    
-        if (NOT (GCOV AND LCOV AND GENHTML))
-            message(WARNING "Required tools not found: gcov,lcov,genhtml. Code coverage can not be performed")
-        endif()  
-    
-        # set lcov variable to exclude paths during code coverage
-        set(LCOV_FILTERS "'/usr/*';'/*/_deps/*'")
-    
-        # add custom target for running ctest and generating code coverage report
-        add_custom_target(code-coverage
-            COMMAND ${CMAKE_COMMAND} -E make_directory coverage/
-            COMMAND ctest -j
-            COMMAND ${LCOV} --rc lcov_branch_coverage=1 --capture --directory . --output-file coverage/coverage.info
-            COMMAND ${LCOV} --rc lcov_branch_coverage=1 --remove  coverage/coverage.info ${LCOV_FILTERS} --output-file coverage/coverage_filtered.info 
-            COMMAND ${LCOV} --list coverage/coverage_filtered.info
-            COMMAND ${GENHTML} --rc genhtml_branch_coverage=1 coverage/coverage_filtered.info --output-directory coverage/html_report
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-            COMMENT "Generating Code Coverage Report (LCOV) after tests.."
-        )
+        if (LLVM_COVERAGE)
+            find_program(LLVM_PROFDATA llvm-profdata)
+            find_program(LLVM_COV llvm-cov)
+            if (NOT (LLVM_PROFDATA AND LLVM_COV))
+                message(WARNING "Required tools not found: llvm-profdata, llvm-cov. LLVM code coverage cannot be performed.")
+            else()
+                # Clang source-based coverage flow
+                if (BUILD_STATIC_LIBS)
+			set(LLVM_COV_OBJ_SHARED_LIB)
+                else()
+                    set(LLVM_COV_OBJ_SHARED_LIB -object $<TARGET_FILE:aocl_compression>)
+                endif()
+                
+                set(PROFILE_DIR "coverage")
+                if (WIN32)
+                    #Used double %% to prevent CMake variable expansion
+                    set(PROFILE_PATTERN "coverage/%%5m.profraw")
+                else()
+                    set(PROFILE_PATTERN "coverage/%5m.profraw")
+                endif()
+                set(PROFILE_MERGE_PATTERN "coverage/*.profraw")            
+		# add custom target for running ctest and generating code coverage report(llvm-cov)
+                add_custom_target(code-coverage
+                    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROFILE_DIR}
+                    COMMAND ${CMAKE_COMMAND} -E remove -f ${PROFILE_MERGE_PATTERN} || ${CMAKE_COMMAND} -E echo "No existing profiles to clean"
+                    COMMAND ${CMAKE_COMMAND} -E env LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/${PROFILE_PATTERN} ctest -j
+                    COMMAND ${LLVM_PROFDATA} merge -sparse ${CMAKE_BINARY_DIR}/${PROFILE_MERGE_PATTERN} -o coverage/coverage.profdata
+                    COMMAND ${LLVM_COV} report $<TARGET_FILE:aocl_compression_bench> -instr-profile=coverage/coverage.profdata ${LLVM_COV_OBJ_SHARED_LIB}
+                    COMMAND ${LLVM_COV} show $<TARGET_FILE:aocl_compression_bench> -instr-profile=coverage/coverage.profdata ${LLVM_COV_OBJ_SHARED_LIB} -format=html -output-dir coverage/html_report --show-line-counts-or-regions --show-branches=count
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                    COMMENT "Generating Code Coverage Report (llvm-cov) after tests.."
+                )
+            endif()
+        elseif (GCOV_COVERAGE)
+            find_program(GCOV NAMES gcov)
+            find_program(LCOV lcov)
+            find_program(GENHTML genhtml)
+            if (NOT (GCOV AND LCOV AND GENHTML))
+                message(WARNING "Required tools not found: gcov, lcov, genhtml. GCOV code coverage cannot be performed.")
+            else()
+                # set lcov variable to exclude paths during code coverage
+                set(LCOV_FILTERS "'/usr/*';'/*/_deps/*'")
+		# add custom target for running ctest and generating code coverage report(gcov)
+                add_custom_target(code-coverage
+                    COMMAND ${CMAKE_COMMAND} -E make_directory coverage/
+                    COMMAND ctest -j
+                    COMMAND ${LCOV} --gcov-tool ${GCOV} --rc lcov_branch_coverage=1 --capture --directory . --output-file coverage/coverage.info
+                    COMMAND ${LCOV} --rc lcov_branch_coverage=1 --remove  coverage/coverage.info ${LCOV_FILTERS} --output-file coverage/coverage_filtered.info 
+                    COMMAND ${LCOV} --list coverage/coverage_filtered.info
+                    COMMAND ${GENHTML} --rc genhtml_branch_coverage=1 coverage/coverage_filtered.info --output-directory coverage/html_report
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                    COMMENT "Generating Code Coverage Report (LCOV) after tests.."
+                )
+            endif()
+        else()
+            message(WARNING "CODE_COVERAGE is ON but LLVM_COVERAGE or GCOV_COVERAGE is not enabled. Skipping coverage target.")
+        endif()
     endif()
 
     if (VALGRIND)
@@ -192,7 +234,7 @@ endif ()
 
 # add test cases
 if (AOCL_TEST_COVERAGE)
-    cmake_minimum_required(VERSION 3.26.0)
+    cmake_minimum_required(VERSION 3.13.0)
     enable_testing()
 
     file(GLOB calgary_dataset ${CMAKE_BINARY_DIR}/calgary/*)

@@ -37,31 +37,13 @@
  */
 
 #ifdef AOCL_ZSTD_OPT
-#if AOCL_DECOMPRESS_FAST > 2
-/* Skipping long matches when enforcing constraints can significantly impact 
- * compression ratio and decompression speed. If such matches are encountered
- * while imposing constraints, stop enforcing constraints. */
-#define AOCL_LONG_MATCH_LIMIT_DFAST (16 * 1024)
-FORCE_INLINE_TEMPLATE
-size_t AOCL_ZSTD_isLongMatch(seqStore_t* seqStore, 
-const BYTE* ip, const BYTE* match, const BYTE* const iend)
-{
-    if (MEM_read64(match) == MEM_read64(ip)) {
-        size_t mLength = AOCL_ZSTD_count(ip + 8, match + 8, iend) + 8;
-        if (mLength > AOCL_LONG_MATCH_LIMIT_DFAST) {
-            seqStore->fds_config.state = FDS_NONE; // stop imposing constraints from next block
-            return mLength;
-        }
-    }
-    return 0;
-}
-#endif /* AOCL_DECOMPRESS_FAST > 2 */
+@AOCL_ZSTD_CDNGF_IS_LONG_MATCH@
 
 #if AOCL_DECOMPRESS_FAST > 1
 @AOCL_ZSTD_CDNGF_COMMENT@
 FORCE_INLINE_TEMPLATE
 size_t @AOCL_ZSTD_CDNGF_FUNC@(
-    ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+    ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
     void const* src, size_t srcSize, U32 const mls /* template */)
 {
     ZSTD_compressionParameters const* cParams = &ms->cParams;
@@ -138,12 +120,7 @@ size_t @AOCL_ZSTD_CDNGF_FUNC@(
 
         /* Inner Loop: one iteration per search / position */
         do {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-            // Alternate between values 1 and 2 for step while searching for a match. In case
-            // the value of step exceeds 2 (this happens when the value of step is incremented
-            // when ip1 exceeds nextStep), we let step retain its value.
-            step = (step > 2) ? step : step ^ 3;
-#endif
+            // AOCL_ZSTD_SEARCH_SKIP_OPT : alternate step not used. Improves ratio.
             const size_t hs0 = ZSTD_hashPtr(ip, hBitsS, mls);
             const U32 idxs0 = hashSmall[hs0];
             curr = (U32)(ip - base);
@@ -168,14 +145,10 @@ size_t @AOCL_ZSTD_CDNGF_FUNC@(
 
 _revert_back_point :
             if (ip1 >= nextStep) {
-#ifdef AOCL_ZSTD_SEARCH_SKIP_OPT
-                step += 3;
-                LOG_FORMATTED(DEBUG, logCtx, "step = %zu", step);
-#else
+                // AOCL_ZSTD_SEARCH_SKIP_OPT : step += 3 not used. Improves ratio.
                 PREFETCH_L1(ip1 + 64);
                 PREFETCH_L1(ip1 + 128);
                 step++;
-#endif /* AOCL_ZSTD_SEARCH_SKIP_OPT */
                 nextStep += kStepIncr;
             }
             ip = ip1;
@@ -207,7 +180,7 @@ _revert_back_point :
                 offset = (U32)(ip - matchl1);
                 while (((ip > anchor) & (matchl1 > prefixLowest)) && (ip[-1] == matchl1[-1])) { ip--; matchl1--; mLength++; } /* catch up */
 
-                if (is_totalbits_limited_seq_possible(ip, anchor, mLength, offset)) {
+                if (is_totalbits_limited_seq_possible(ip, anchor, mLength, offset, MINMATCH)) {
                     goto _match_found;
                 }
                 else {
@@ -223,7 +196,7 @@ _revert_back_point :
             goto _revert_back_point;
         while (((ip > anchor) & (matchs0 > prefixLowest)) && (ip[-1] == matchs0[-1])) { ip--; matchs0--; mLength++; } /* catch up */
 
-        if (!is_totalbits_limited_seq_possible(ip, anchor, mLength, offset)) {
+        if (!is_totalbits_limited_seq_possible(ip, anchor, mLength, offset, MINMATCH)) {
             goto _revert_back_point;
         }
 
@@ -246,7 +219,7 @@ _revert_back_point :
         //store sequences such that totalbits for each sequence is < MAX_TOTAL_BITS
         @AOCL_ZSTD_CDNGF_STORE_SEQ@
 
-    _match_stored:
+@AOCL_ZSTD_CDNGF_MATCH_STORED@
         /* match found */
         ip += mLength;
         anchor = ip;

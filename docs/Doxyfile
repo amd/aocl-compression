@@ -42,7 +42,7 @@ DOXYFILE_ENCODING      = UTF-8
 # title of most generated pages and in a few other places.
 # The default value is: My Project.
 
-PROJECT_NAME           = "AOCL-Compression 5.1.0"
+PROJECT_NAME           = "AOCL-Compression 5.2.0"
 
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This
 # could be handy for archiving the generated documentation or if some version
@@ -61,7 +61,7 @@ PROJECT_BRIEF          =
 # pixels and the maximum width should not exceed 200 pixels. Doxygen will copy
 # the logo to the output directory.
 
-PROJECT_LOGO           = styling/AMD_Logo.png
+PROJECT_LOGO           =
 
 # The OUTPUT_DIRECTORY tag is used to specify the (relative or absolute) path
 # into which the generated documentation will be written. If a relative path is
@@ -283,7 +283,8 @@ TAB_SIZE               = 4
 # with the commands \{ and \} for these it is advised to use the version @{ and
 # @} or use a double escape (\\{ and \\})
 
-ALIASES                =
+ALIASES                = "rst=^^\verbatim embed:rst:leading-asterisk^^" \
+                         "endrst=\endverbatim"
 
 # Set the OPTIMIZE_OUTPUT_FOR_C tag to YES if your project consists of C sources
 # only. Doxygen will then generate output that is more tailored for C. For
@@ -801,7 +802,7 @@ LAYOUT_FILE            =
 # The CITE_BIB_FILES tag can be used to specify one or more bib files containing
 # the reference definitions. This must be a list of .bib files. The .bib
 # extension is automatically appended if omitted. This requires the bibtex tool
-# to be installed. See also https://en.wikipedia.org/wiki/BibTeX for more info.
+# to be installed.
 # For LaTeX the style of the bibliography can be controlled using
 # LATEX_BIB_STYLE. To use this feature you need bibtex and perl available in the
 # search path. See also \cite for info how to create references.
@@ -917,18 +918,18 @@ WARN_LOGFILE           =
 # spaces. See also FILE_PATTERNS and EXTENSION_MAPPING
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = ../api \
-                         ./README.md \
-                         ./INSTALLATION.md \
-                         ../algos/lz4 \
-                         ../algos/snappy \
+INPUT                  = ../api/aocl_compression.h \
+                         ../algos/lz4/lz4.h \
+                         ../algos/lz4/lz4hc.h \
+                         ../algos/lz4/lz4frame.h \
+                         ../algos/snappy/snappy.h \
+                         ../algos/snappy/snappy-c.h \
                          ../algos/zlib/zlib.h \
-                         ../algos/zlib/README.md \
-                         ../algos/bzip2 \
-                         ../algos/lzma \
-                         ../algos/zstd/lib/zstd.h \
-                         ../algos/zstd/README_DOXYGEN.md \
-                         EXAMPLE_README.md
+                         ../algos/bzip2/bzlib.h \
+                         ../algos/lzma/lzma.h \
+                         ../algos/lzma/LzmaDec.h \
+                         ../algos/lzma/LzmaEnc.h \
+                         ../algos/zstd/lib/zstd.h
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding. Doxygen uses
@@ -1239,46 +1240,6 @@ USE_HTAGS              = NO
 
 VERBATIM_HEADERS       = YES
 
-# If the CLANG_ASSISTED_PARSING tag is set to YES then doxygen will use the
-# clang parser (see:
-# http://clang.llvm.org/) for more accurate parsing at the cost of reduced
-# performance. This can be particularly helpful with template rich C++ code for
-# which doxygen's built-in parser lacks the necessary type information.
-# Note: The availability of this option depends on whether or not doxygen was
-# generated with the -Duse_libclang=ON option for CMake.
-# The default value is: NO.
-
-CLANG_ASSISTED_PARSING = NO
-
-# If the CLANG_ASSISTED_PARSING tag is set to YES and the CLANG_ADD_INC_PATHS
-# tag is set to YES then doxygen will add the directory of each input to the
-# include path.
-# The default value is: YES.
-# This tag requires that the tag CLANG_ASSISTED_PARSING is set to YES.
-
-CLANG_ADD_INC_PATHS    = YES
-
-# If clang assisted parsing is enabled you can provide the compiler with command
-# line options that you would normally use when invoking the compiler. Note that
-# the include paths will already be set by doxygen for the files and directories
-# specified with INPUT and INCLUDE_PATH.
-# This tag requires that the tag CLANG_ASSISTED_PARSING is set to YES.
-
-CLANG_OPTIONS          =
-
-# If clang assisted parsing is enabled you can provide the clang parser with the
-# path to the directory containing a file called compile_commands.json. This
-# file is the compilation database (see:
-# http://clang.llvm.org/docs/HowToSetupToolingForLLVM.html) containing the
-# options used when the source files were built. This is equivalent to
-# specifying the -p option to a clang tool, such as clang-check. These options
-# will then be passed to the parser. Any options specified with CLANG_OPTIONS
-# will be added as well.
-# Note: The availability of this option depends on whether or not doxygen was
-# generated with the -Duse_libclang=ON option for CMake.
-
-CLANG_DATABASE_PATH    =
-
 #---------------------------------------------------------------------------
 # Configuration options related to the alphabetical class index
 #---------------------------------------------------------------------------
@@ -1306,7 +1267,7 @@ IGNORE_PREFIX          =
 # If the GENERATE_HTML tag is set to YES, doxygen will generate HTML output
 # The default value is: YES.
 
-GENERATE_HTML          = YES
+GENERATE_HTML          = NO
 
 # The HTML_OUTPUT tag is used to specify where the HTML docs will be put. If a
 # relative path is entered the value of OUTPUT_DIRECTORY will be put in front of
@@ -1341,7 +1302,7 @@ HTML_FILE_EXTENSION    = .html
 # of the possible markers and block names see the documentation.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_HEADER            = styling/header.html
+HTML_HEADER            =
 
 # The HTML_FOOTER tag can be used to specify a user-defined HTML footer for each
 # generated HTML page. If the tag is left blank doxygen will generate a standard
@@ -1351,7 +1312,7 @@ HTML_HEADER            = styling/header.html
 # that doxygen normally uses.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_FOOTER            = styling/footer.html
+HTML_FOOTER            =
 
 # The HTML_STYLESHEET tag can be used to specify a user-defined cascading style
 # sheet that is used by each HTML page. It can be used to fine-tune the look of
@@ -1381,8 +1342,7 @@ HTML_STYLESHEET        =
 # documentation.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_EXTRA_STYLESHEET  = styling/doxygen-awesome.css \
-                         styling/doxygen-awesome-sidebar-only.css
+HTML_EXTRA_STYLESHEET  =
 
 # The HTML_EXTRA_FILES tag can be used to specify one or more extra images or
 # other source files which should be copied to the HTML output directory. Note
@@ -1392,8 +1352,7 @@ HTML_EXTRA_STYLESHEET  = styling/doxygen-awesome.css \
 # files will be copied as-is; there are no commands or markers available.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_EXTRA_FILES       = styling/doxygen-fragment-copy-button.js \
-                         styling/doxygen-interactive-toc.js
+HTML_EXTRA_FILES       =
 
 # The HTML_COLORSTYLE tag can be used to specify if the generated HTML output
 # should be rendered with a dark or light theme.
@@ -1410,8 +1369,7 @@ HTML_COLORSTYLE        = AUTO_LIGHT
 
 # The HTML_COLORSTYLE_HUE tag controls the color of the HTML output. Doxygen
 # will adjust the colors in the style sheet and background images according to
-# this color. Hue is specified as an angle on a color-wheel, see
-# https://en.wikipedia.org/wiki/Hue for more information. For instance the value
+# this color. Hue is specified as an angle on a color-wheel. For instance the value
 # 0 represents red, 60 is yellow, 120 is green, 180 is cyan, 240 is blue, 300
 # purple, and 360 is red again.
 # Minimum value: 0, maximum value: 359, default value: 220.
@@ -1438,14 +1396,6 @@ HTML_COLORSTYLE_SAT    = 100
 
 HTML_COLORSTYLE_GAMMA  = 80
 
-# If the HTML_TIMESTAMP tag is set to YES then the footer of each generated HTML
-# page will contain the date and time when the page was generated. Setting this
-# to YES can help to show when doxygen was last run and thus if the
-# documentation is up to date.
-# The default value is: NO.
-# This tag requires that the tag GENERATE_HTML is set to YES.
-
-HTML_TIMESTAMP         = NO
 
 # If the HTML_DYNAMIC_MENUS tag is set to YES then the generated HTML
 # documentation will contain a main index with vertical navigation menus that
@@ -2100,20 +2050,12 @@ LATEX_BATCHMODE        = NO
 LATEX_HIDE_INDICES     = NO
 
 # The LATEX_BIB_STYLE tag can be used to specify the style to use for the
-# bibliography, e.g. plainnat, or ieeetr. See
-# https://en.wikipedia.org/wiki/BibTeX and \cite for more info.
+# bibliography, e.g. plainnat, or ieeetr.
 # The default value is: plain.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
 LATEX_BIB_STYLE        = plain
 
-# If the LATEX_TIMESTAMP tag is set to YES then the footer of each generated
-# page will contain the date and time when the page was generated. Setting this
-# to NO can help when comparing the output of multiple runs.
-# The default value is: NO.
-# This tag requires that the tag GENERATE_LATEX is set to YES.
-
-LATEX_TIMESTAMP        = NO
 
 # The LATEX_EMOJI_DIRECTORY tag is used to specify the (relative or absolute)
 # path from which the emoji images will be read. If a relative path is entered,
@@ -2400,7 +2342,10 @@ PREDEFINED             = OF(x)=x \
                          LZMALIB_API= \
                          ZSTDLIB_API= \
                          EXPORT_SYM_DYN= \
-                         SNAPPYLIB_API=
+                         SNAPPYLIB_API= \
+                         ZSTDLIB_STATIC_API= \
+                         FAR= \
+                         z_const=
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
 # tag can be used to specify a list of macro names that should be expanded. The

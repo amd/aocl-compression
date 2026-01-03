@@ -111,10 +111,10 @@
 #endif /* AOCL_SNAPPY_AVX_OPT */
 
 #include "utils/utils.h"
+#include "algos/common/aoclAlgoLog.h"
 
 #ifdef AOCL_ENABLE_THREADS
 #include "threads/threads.h"
-#include "algos/common/aoclThreadUtils.h"
 #endif
 // AOCL definitions end
 
@@ -132,6 +132,9 @@ static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE()
 #endif
 static int setup_ok_snappy = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static std::atomic_flag setup_snappy = ATOMIC_FLAG_INIT;
+#endif
 
 /* --------- Forward declarations for dynamic ISA selection - start ---------*/
 
@@ -1729,6 +1732,7 @@ size_t Compress(Source* reader, Sink* writer, CompressionOptions options) {
   }
 
   Report(token, "snappy_compress", written, uncompressed_size);
+  AOCL_LOG_API_SUMMARY(options.level, uncompressed_size, written);
   return written;
 }
 
@@ -4017,6 +4021,7 @@ namespace internal {
 */
 char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
                        uint16_t* table, const int table_size) {
+  AOCL_LOG_INIT_STATS();
   // "ip" is the input pointer, and "op" is the output pointer.
   const char* ip = input;
   assert(input_size <= kBlockSize);
@@ -4029,7 +4034,7 @@ char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
   if (input_size >= kInputMarginBytes) {
     const char* ip_limit = input + input_size - kInputMarginBytes;
     
-    LOG_FORMATTED(DEBUG, logCtx, "Input size = %zu, Input size until limit = %zu",
+    LOG_FORMATTED(TRACE, logCtx, "Input size = %zu, Input size until limit = %zu",
      input_size, (size_t)(ip_limit - ip));
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
     uint32_t bbhl_prev = 0; //baseline bytes_between_hash_lookups to use
@@ -4113,8 +4118,9 @@ char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
         uint32_t bytes_between_hash_lookups = skip >> 5;
         skip += bytes_between_hash_lookups;
 #endif
-        LOG_FORMATTED(DEBUG, logCtx, "skip = %u", skip);
+        LOG_FORMATTED(TRACE, logCtx, "skip = %u", skip);
 
+        AOCL_LOG_UPDATE_SKIP(bytes_between_hash_lookups);
         const char* next_ip = ip + bytes_between_hash_lookups;
         if (next_ip > ip_limit) {
           ip = next_emit;
@@ -4168,6 +4174,7 @@ char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
         std::pair<size_t, bool> p =
             FindMatchLength(candidate + 4, ip + 4, ip_end, &data);
         size_t matched = 4 + p.first;
+        AOCL_LOG_UPDATE_MATCH(matched);
         ip += matched;
         size_t offset = base - candidate;
         assert(0 == memcmp(base, candidate, matched));
@@ -4210,11 +4217,12 @@ char* AOCL_CompressFragment_c(const char* input, size_t input_size, char* op,
 
  emit_remainder:
   // Emit the remaining bytes as a literal
-  LOG_FORMATTED(DEBUG, logCtx, "Emit remaining %d bytes", (int)(ip_end - ip));
+  LOG_FORMATTED(TRACE, logCtx, "Emit remaining %d bytes", (int)(ip_end - ip));
   if (ip < ip_end) {
     op = EmitLiteral</*allow_fast_path=*/false>(op, ip, ip_end - ip);
   }
 
+  AOCL_LOG_CLEAR_STATS(input_size);
   return op;
 }
 }
@@ -4361,6 +4369,7 @@ AOCL_SNAPPY_TARGET_AVX
 */
 char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op,
                        uint16_t* table, const int table_size) {
+  AOCL_LOG_INIT_STATS();
   // "ip" is the input pointer, and "op" is the output pointer.
   const char* ip = input;
   assert(input_size <= kBlockSize);
@@ -4381,7 +4390,7 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
     const char* ip_limit = input + input_size - kInputMarginBytes;
 #endif
     
-    LOG_FORMATTED(DEBUG, logCtx, "Input size = %zu, Input size until limit = %zu",
+    LOG_FORMATTED(TRACE, logCtx, "Input size = %zu, Input size until limit = %zu",
      input_size, (size_t)(ip_limit - ip));
 #ifdef AOCL_SNAPPY_MATCH_SKIP_OPT
     uint32_t bbhl_prev = 0; //baseline bytes_between_hash_lookups to use
@@ -4465,8 +4474,9 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
         uint32_t bytes_between_hash_lookups = skip >> 5;
         skip += bytes_between_hash_lookups;
 #endif
-        LOG_FORMATTED(DEBUG, logCtx, "skip = %u", skip);
+        LOG_FORMATTED(TRACE, logCtx, "skip = %u", skip);
 
+        AOCL_LOG_UPDATE_SKIP(bytes_between_hash_lookups);
         const char* next_ip = ip + bytes_between_hash_lookups;
         if (SNAPPY_PREDICT_FALSE(next_ip > ip_limit)) {
           ip = next_emit;
@@ -4564,6 +4574,7 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
         std::pair<size_t, bool> p =
             FindMatchLength(candidate + 4, ip + 4, ip_end, &data);
         size_t matched = 4 + p.first;
+        AOCL_LOG_UPDATE_MATCH(matched);
         ip += matched;
         size_t offset = base - candidate;
         assert(0 == memcmp(base, candidate, matched));
@@ -4606,11 +4617,12 @@ char* AOCL_CompressFragment_crc32(const char* input, size_t input_size, char* op
 
  emit_remainder:
   // Emit the remaining bytes as a literal
-  LOG_FORMATTED(DEBUG, logCtx, "Emit remaining %d bytes", (int)(ip_end - ip));
+  LOG_FORMATTED(TRACE, logCtx, "Emit remaining %d bytes", (int)(ip_end - ip));
   if (ip < ip_end) {
     op = EmitLiteral</*allow_fast_path=*/false>(op, ip, ip_end - ip);
   }
 
+  AOCL_LOG_CLEAR_STATS(input_size);
   return op;
 }
 }
@@ -5156,7 +5168,7 @@ aocl_thread_group_t thread_group_handle;
     ret_status = 0;
   }
 
-  if (ret_status == 0 /* for when compressed is NULL*/ || AOCL_MT_NO_PARTITIONS(thread_group_handle)) {
+  if (ret_status == 0 /* for when compressed is NULL*/ || AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle)) {
     LOG_UNFORMATTED(INFO, logCtx, "Running single threaded decompression");
     size_t ulength;
     const char *start_compressed = compressed + ret_status;
@@ -5187,14 +5199,15 @@ aocl_thread_group_t thread_group_handle;
 
       AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
       thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, 
-          &cur_thread_info, 0 /*cmpr_bound_pad*/, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur));
-      if (thread_parallel_res == 0)
+          &cur_thread_info, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur));
+      if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_SUCCESS || 
+          thread_parallel_res == AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE /* Expected error due to unspecified destination size. */)
       {
         local_result = SNAPPY_SAW_raw_uncompress_direct_fp(cur_thread_info.partition_src, 
             cur_thread_info.partition_src_size, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
         is_error = local_result ? 0 : 1;
       } // aocl_do_partition_decompress_mt
-      else if (thread_parallel_res == 1)
+      else if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_EMPTY_SRC)
       {
         local_result = 0;
         is_error = 0;
@@ -5212,11 +5225,8 @@ aocl_thread_group_t thread_group_handle;
 #ifdef AOCL_THREADS_LOG
     printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
 #endif
-  
-    /* compute cumulative dst_trap_size and save in unsued member partition_src_size
-     * This is used as offset to indicate starting points of decompressed data blocks in dst */
-    uint32_t dst_offset = 0;
-    aocl_thread_info_t* ti_prev = NULL;
+
+    /* Check all threads for errors. If any failed, cleanup and return false. */
     for (uint32_t thread_cnt = 0; thread_cnt < thread_group_handle.num_threads; thread_cnt++)
     {
       AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_cnt)
@@ -5230,23 +5240,10 @@ aocl_thread_group_t thread_group_handle;
         LOG_FORMATTED(ERR, logCtx, "Decompress Thread [id: %d] : Encountered ERROR", thread_cnt);
         return false;
       }
-        
-      if (ti_prev != NULL) {
-        dst_offset = ti_prev->partition_src_size + ti_prev->dst_trap_size; // cumulative dst_trap_size
-      }
-      ti_cur->partition_src_size = dst_offset;
-      ti_prev = ti_cur;
+
       AOCL_MT_PROCESS_PARTITION_END(ti_cur)
     }
-/* copy decompressed data from threads to dst multi-threaded */
-#pragma omp parallel shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
-  {
-    uint32_t thread_cnt = omp_get_thread_num();
-    AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_cnt)
-    memcpy(thread_group_handle.dst + ti_cur->partition_src_size, // dst_offset = ti_cur->partition_src_size
-        ti_cur->dst_trap, ti_cur->dst_trap_size);
-    AOCL_MT_PROCESS_PARTITION_END(ti_cur)
-  }
+
     // free the memory allocated for the the thread_info_list and/or for each thread's dst_trap
     aocl_destroy_parallel_decompress_mt(&thread_group_handle);
     return true;

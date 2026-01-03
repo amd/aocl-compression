@@ -33,7 +33,12 @@ set(AOCL_LZ4_COMPRESS_GENERIC_VALIDATED_COMMENT "")
 set(AOCL_LZ4_COMPRESS_GENERIC_VALIDATED_FUNC "AOCL_LZ4_compress_generic_validated")
 set(AOCL_LZ4_CGV_ADDITIONAL_PARAMS "/* none */")
 set(AOCL_LZ4_CGV_INIT_START_BYTE [[/* First Byte */
-    AOCL_LZ4_putPosition(ip, cctx->hashTable, tableType, base);
+    {   U32 const h = AOCL_LZ4_hashPosition(ip, tableType);
+        if (tableType == byPtr) {
+            LZ4_putPositionOnHash(ip, h, cctx->hashTable, byPtr);
+        } else {
+            LZ4_putIndexOnHash(startIndex, h, cctx->hashTable, tableType);
+    }   }
     ip++; forwardH = AOCL_LZ4_hashPosition(ip, tableType);
 ]])
 set(AOCL_LZ4_CGV_INIT_IPDATA "U32 ipData;")
@@ -69,7 +74,12 @@ set(AOCL_LZ4_CGV_INIT_START_BYTE [[assert(dictDirective == noDict);
     /* Skip first two bytes */
     ip += 2;
     /* Third Byte */
-    AOCL_LZ4_putPosition(ip, cctx->hashTable, tableType, base);
+    {   U32 const h = AOCL_LZ4_hashPosition(ip, tableType);
+        if (tableType == byPtr) {
+            LZ4_putPositionOnHash(ip, h, cctx->hashTable, byPtr);
+        } else {
+            LZ4_putIndexOnHash(ip-base, h, cctx->hashTable, tableType);
+    }   }
     ip++; forwardH = AOCL_LZ4_hashPosition(ip, tableType);
 ]])
 set(AOCL_LZ4_CGV_INIT_IPDATA "U64 ipDataFwd, ipDataBck;") 
@@ -106,7 +116,12 @@ set(AOCL_LZ4_CGV_ADDITIONAL_PARAMS [[,unsigned char** last_anchor_ptr
 ]])
 set(AOCL_LZ4_CGV_INIT_START_BYTE [[BYTE* dst_without_lastLiterals;
     /* First Byte */
-    AOCL_LZ4_putPosition(ip, cctx->hashTable, tableType, base);
+    {   U32 const h = AOCL_LZ4_hashPosition(ip, tableType);
+        if (tableType == byPtr) {
+            LZ4_putPositionOnHash(ip, h, cctx->hashTable, byPtr);
+        } else {
+            LZ4_putIndexOnHash(startIndex, h, cctx->hashTable, tableType);
+    }   }
     ip++; forwardH = AOCL_LZ4_hashPosition(ip, tableType);
 ]])
 set(AOCL_LZ4_CGV_INIT_IPDATA "U32 ipData;") 

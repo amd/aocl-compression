@@ -34,10 +34,11 @@
 # @author S. Biplab Raut
 
 
-cmake_minimum_required(VERSION 3.26.0)
+cmake_minimum_required(VERSION 3.13.0)
 
 #set the project name
 project(AOCL-COMPRESSION-LIBRARY CXX C ASM)
+set(CMAKE_C_STANDARD 11) # support atomic operations
 message(STATUS "Building for AOCL COMPRESSION LIBRARY")
 
 string(TIMESTAMP TODAY "%Y%m%d")
@@ -52,7 +53,7 @@ if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 elseif ("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
     if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 11.0)
         message(FATAL_ERROR "Minimum Clang version supported is 11.0! In case of AOCC, use version 2.3 and above!")
-endif ()
+    endif ()
 else ()
     message(FATAL_ERROR "Compiler not supported! Library has only been tested with Clang and GCC.")
 endif ()
@@ -69,10 +70,11 @@ else()
 endif()
 option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Enabled by default)" ON)
 option (AOCL_ZSTD_SEARCH_SKIP_OPT "Enable ZSTD match skipping optimization that steps more aggresively when matches are not found (Enabled by default)" ON)
+option (AOCL_ZSTD_DYN_BLOCK_SIZE "Enable ZSTD dynamic block size determination  (Disabled by default)" OFF)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option (AOCL_TEST_COVERAGE "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" OFF)
+option (CODE_COVERAGE "Enable code coverage (GCC/gcov for Linux and Clang/llvm-cov for both Linux and Windows)" OFF)
 if(UNIX)
-    option (CODE_COVERAGE "Enable source code coverage (only on Linux with GCC compiler)" OFF)
     option (ASAN "Enable Address Sanitizer checks (only on Linux/Debug build)" OFF)
     option (VALGRIND "Enable Valgrind checks (only on Linux/Debug. Incompatible with ASAN=ON)" OFF)
 endif()
@@ -86,7 +88,7 @@ option (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL "Build with xz utils lzma APIs. Expe
 option (AOCL_ENABLE_LOG_FEATURE "Enable logging support in library, for which log level is determined by environement variable AOCL_ENABLE_LOG (go through README.md) (Disabled by default)" OFF)
 option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression using SMP openMP threads (Disabled by default)" OFF)
 option (TEST_COVERAGE_THIRD_PARTY "Enable third party test bench based CTest suite (Disabled by default)" OFF)
-option (BUILD_UTILITY "Enable third party utility build: zstd (Disabled by default)" OFF)
+option (BUILD_UTILITY "Enable third party utility build: minigzip(zlib), zstd_utility(zstd) (Disabled by default)" OFF)
 option (NATIVE_ENABLE_THREADS "Enable native multi-threaded compression for supported methods (Disabled by default)" OFF)
 option (AOCL_TEST_FUZZER "Enable AOCL Compression fuzzer (only on Linux with Clang compiler)" OFF)
 option (AOCL_TEST_FUZZER_WITH_CORPUS "Run fuzzer tests with corpus (only on Linux with Clang compiler)" OFF)
@@ -121,7 +123,7 @@ set_property(
     PROPERTY STRINGS
     "OFF" "1" "2" "3" # Higher values generally leads to faster decompression with larger compromise on compression speed/ratio
 )
-if (NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF" AND AOCL_ENABLE_THREADS)
+if (NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF" AND (AOCL_ENABLE_THREADS OR NATIVE_ENABLE_THREADS))
     message(WARNING "Fast decompression mode excluded as it is supported in single threaded mode only")
     set(AOCL_DECOMPRESS_FAST "OFF") # Fast decompression modes supported in single threaded mode only
 endif()
@@ -131,6 +133,14 @@ if(NOT AOCL_DECOMPRESS_FAST STREQUAL "OFF")
     # LZ4
     set(AOCL_LZ4_DECOMPRESS_FAST "ON")
 endif()
+
+# Faster compression settings for supported methods
+set(AOCL_COMPRESS_FAST "OFF" CACHE STRING "Enable fast compression modes that might compromise on compression ratio but compress faster. Supported values: {1,2} ZSTD." )
+set_property(
+    CACHE AOCL_COMPRESS_FAST
+    PROPERTY STRINGS
+    "OFF" "1" "2" # Higher values generally lead to faster compression with larger compromise on compression ratio
+)
 
 # Avoid enabling AOCL and native multi-threaded implementations simultaneously as it might lead to sub-optimal performance
 if (AOCL_ENABLE_THREADS AND NATIVE_ENABLE_THREADS)
@@ -155,14 +165,20 @@ if (AOCL_EXCLUDE_BZIP2 AND AOCL_EXCLUDE_LZ4 AND AOCL_EXCLUDE_LZ4HC AND AOCL_EXCL
     message(FATAL_ERROR "All compression methods are excluded. Unable to build library.")
 endif()
 
-# setup to get source code coverage(GCOV)
+# setup to get source code coverage
 if (CODE_COVERAGE)
-    if (NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${CMAKE_C_COMPILER_ID} STREQUAL "GNU"))
-        # Switch off GCOV: target not supported
+    if (${CMAKE_C_COMPILER_ID} STREQUAL "GNU" AND ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        set(GCOV_COVERAGE ON)
+        message(STATUS "Code coverage: enabling GCOV coverage tool (Linux + GCC)")
+    elseif (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
+        set(LLVM_COVERAGE ON)
+	message(STATUS "Code coverage: enabling LLVM-COV coverage tool")
+    else()
         set(CODE_COVERAGE OFF)
-        message(WARNING "Target not supported. Code coverage is only supported on Linux OS with GCC compiler")
+        message(WARNING "Target not supported for coverage. Supported: Linux gcc with gcov or Clang (Linux/Windows) with llvm-cov.")
     endif()
 endif()
+
 
 # setup to run memory check using AddressSanitizer 
 if (ASAN)
@@ -304,7 +320,6 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/gzwrite.c
                     ${ALGOS_PATH}/zlib/infback.c
                     ${ALGOS_PATH}/zlib/inffast.c
-                    ${ALGOS_PATH}/zlib/inffast_chunk.c
                     ${ALGOS_PATH}/zlib/inflate.c
                     ${ALGOS_PATH}/zlib/inftrees.c
                     ${ALGOS_PATH}/zlib/longest_match_x86.c
@@ -314,6 +329,12 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/zutil.c
                     ${ALGOS_PATH}/zlib/zlib.h
                     ${ALGOS_PATH}/zlib/aocl_zlib_utils.c)
+set (ZLIBNG_SRC_FILES        ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
+                             ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_sse2.c
+                             ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
+set_property(SOURCE ${ZLIBNG_SRC_FILES} APPEND PROPERTY INCLUDE_DIRECTORIES 
+                    "${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/zlib/zlib-ng/;${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/zlib/")
+set_property(SOURCE ${ZLIBNG_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DHAVE_ATTRIBUTE_ALIGNED=1;-DHAVE_HIDDEN=1")
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
 endif ()
@@ -342,6 +363,7 @@ set (ZSTD_SRC_FILES ${ALGOS_PATH}/zstd/lib/common/code_alignment.c
                     ${ALGOS_PATH}/zstd/lib/compress/fse_compress.c
                     ${ALGOS_PATH}/zstd/lib/compress/huf_compress.c
                     ${ALGOS_PATH}/zstd/lib/compress/hist.c
+                    ${ALGOS_PATH}/zstd/lib/compress/zstd_preSplit.c
                     ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress.c
                     ${ALGOS_PATH}/zstd/lib/decompress/huf_decompress.c
                     ${ALGOS_PATH}/zstd/lib/decompress/huf_decompress_amd64.S
@@ -362,12 +384,17 @@ set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.cpp
 						utils/utils.h)
 # Source files utilizing AVX-512 and higher ISA extensions
-set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c)
+set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
+                      ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
 
 if (AOCL_ENABLE_THREADS)
     set (THREADS_SRC_FILES threads/code_alignment.c
                            threads/threads.c
                            threads/threads.h)
+    if (NOT AOCL_EXCLUDE_BZIP2)
+        set(BZIP2_SRC_FILES ${BZIP2_SRC_FILES}  ${ALGOS_PATH}/bzip2/aocl_bzip2_mt_helper.c 
+                                                ${ALGOS_PATH}/bzip2/aocl_bzip2_mt_helper.h)
+    endif ()
 endif ()
 
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -438,6 +465,7 @@ endif()
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
     message(STATUS "Build type selected is Release")
     add_compile_definitions(CFLAGS_SET1="${CMAKE_C_FLAGS_RELEASE}")
+    add_compile_definitions(_FORTIFY_SOURCE=2)
 else ()
     message(STATUS "Build type selected is Debug")
     add_compile_definitions(CFLAGS_SET1="${CMAKE_C_FLAGS_DEBUG}")
@@ -449,8 +477,8 @@ else ()
     else () # enable all debug flags
 		set_property(SOURCE ${BZIP2_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DBZ_DEBUG")
 		set_property(SOURCE ${ZLIB_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DZLIB_DEBUG")
-		set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUGLEVEL=1")
 	endif()
+    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUGLEVEL=1")
 endif()
 
 #set(USER_DEBUG_ON "-g")
@@ -458,17 +486,24 @@ message(STATUS "C Compiler used: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ Compiler used: ${CMAKE_CXX_COMPILER}")
 set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
 
-if(WIN32 OR NOT OpenMP_libomp_LIBRARY)
-    find_package(OpenMP REQUIRED)
-else()
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+if(AOCL_ENABLE_THREADS) # OpenMP dependency for MT feature support
+    if(WIN32 OR NOT OpenMP_libomp_LIBRARY)
+        find_package(OpenMP REQUIRED)
+    else()
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+    endif()
 endif()
 
 if (WIN32)
 	if (CMAKE_BUILD_TYPE STREQUAL "Release")
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
+        # Security flags
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /GS /DYNAMICBASE /guard:cf /w14774 /w14775")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GS /DYNAMICBASE /guard:cf /w14774 /w14775")
+		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /DYNAMICBASE /NXCOMPAT /GUARD:CF /HIGHENTROPYVA")
+		set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DYNAMICBASE /NXCOMPAT /GUARD:CF /HIGHENTROPYVA")
 	else()
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
@@ -495,6 +530,13 @@ if(NOT BUILD_STATIC_LIBS)
 endif()
 elseif (UNIX)
     set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_FLAGS "-msse4.1")
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+	set(SECURITY_FLAGS "-fstack-protector-strong -fpie -Wformat -Wformat-security")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SECURITY_FLAGS}")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECURITY_FLAGS}")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie -Wl,-z,relro -Wl,-z,now")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,relro -Wl,-z,now")
+endif()
 if (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
     # Optimization level controls at per function level are not available in Clang.
     # Hence setting it at file level here for lz4.
@@ -563,11 +605,18 @@ if (AOCL_DECOMPRESS_FAST)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
     set_property(SOURCE ${SNAPPY_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
 endif()
+if (AOCL_COMPRESS_FAST)
+    set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_COMPRESS_FAST=${AOCL_COMPRESS_FAST}")
+endif()
 if (AOCL_ZSTD_WILDCOPY_LONG)
     set_property(SOURCE ${ZSTD_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ZSTD_WILDCOPY_LONG")
 endif()
-if (TEST_COVERAGE_THIRD_PARTY OR NATIVE_ENABLE_THREADS)
+if (NATIVE_ENABLE_THREADS)
     set_property(SOURCE ${ZSTD_SRC_FILES}  APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_MULTITHREAD")
+    # Prefer -pthread flag
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
+    message(STATUS "Found Threads library for native multi-threading support")
 endif()
 if(AOCL_EXCLUDE_DEPRECATED_APIS)
     set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_DEPRECATED_APIS")
@@ -613,6 +662,7 @@ set(SRC_FILES
         ${LZMA_SRC_FILES}
         ${SNAPPY_SRC_FILES}
         ${ZLIB_SRC_FILES}
+        ${ZLIBNG_SRC_FILES}
         ${ZSTD_SRC_FILES}
         ${COMMON_SRC_FILES}
         ${THREADS_SRC_FILES}
@@ -648,7 +698,11 @@ if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
     endif()
 endif()
 
-
+#Disable strict warnings for Debug build
+if (NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
+    message(WARNING  "Do not treat warnings as errors for non Release build")
+    set(ENABLE_STRICT_WARNINGS OFF)
+endif()
 #Enabling strict warnings
 if(ENABLE_STRICT_WARNINGS)
     if (WIN32)
@@ -689,14 +743,20 @@ add_custom_command(
         TARGET ${lib_name}
         POST_BUILD
         COMMENT "Copy library to ${ROOT_DIR}/lib"
-        COMMAND ${CMAKE_COMMAND} -E rm -rf ${ROOT_DIR}/lib
+        COMMAND ${CMAKE_COMMAND} -E remove_directory ${ROOT_DIR}/lib
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ROOT_DIR}/lib
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${lib_name}> ${ROOT_DIR}/lib
         )
+
 # add the compiler and linker flags for code coverage
 if (CODE_COVERAGE)
-    target_compile_options(${lib_name} PUBLIC --coverage -fprofile-abs-path)
-    target_link_options(${lib_name} PUBLIC --coverage)        
+    if (GCOV_COVERAGE)
+        target_compile_options(${lib_name} PUBLIC --coverage -fprofile-abs-path)
+        target_link_options(${lib_name} PUBLIC --coverage)
+    elseif (LLVM_COVERAGE)
+        target_compile_options(${lib_name} PUBLIC -fprofile-instr-generate -fcoverage-mapping)
+        target_link_options(${lib_name} PUBLIC -fprofile-instr-generate -fcoverage-mapping)
+    endif()
 endif()
 
 # add the compiler and linker flags for AddressSanitizer 
@@ -712,12 +772,19 @@ target_include_directories(${lib_name}
                             PRIVATE ${PROJECT_BINARY_DIR} # required for files generated from .in templates
                             PRIVATE ${ALGOS_PATH}/common
                             PRIVATE api)
+if (AOCL_ENABLE_THREADS)
+    if (OPENMP_FOUND AND (WIN32 OR NOT OpenMP_libomp_LIBRARY))
+        target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+    else()
+        target_link_libraries(${lib_name} PUBLIC ${OpenMP_libomp_LIBRARY})
+    endif ()
+endif()
 
-if (OPENMP_FOUND AND (WIN32 OR NOT OpenMP_libomp_LIBRARY))
-    target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
-else()
-    target_link_libraries(${lib_name} PUBLIC ${OpenMP_libomp_LIBRARY})
-endif ()
+# Link pthread library for native multi-threading 
+if (NATIVE_ENABLE_THREADS)
+    target_link_libraries(${lib_name} PUBLIC Threads::Threads)
+    message(STATUS "Linked Threads::Threads for native multi-threading support")
+endif()
 
 #add benchmarking application and tests
 add_subdirectory(test)

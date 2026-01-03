@@ -61,7 +61,7 @@ LZ4_FORCE_INLINE int
                  const char* const source,
                  char* const dest,
                  const int inputSize,
-                 int *inputConsumed, /* only written when outputDirective == fillOutput */
+                 int*  inputConsumed, /* only written when outputDirective == fillOutput */
                  const int maxOutputSize,
                  const limitedOutput_directive outputDirective,
                  const tableType_t tableType,
@@ -71,10 +71,10 @@ LZ4_FORCE_INLINE int
                  @AOCL_LZ4_CGV_ADDITIONAL_PARAMS@)
 {
     int result;
-    const BYTE* ip = (const BYTE*) source;
+    const BYTE* ip = (const BYTE*)source;
 
     U32 const startIndex = cctx->currentOffset;
-    const BYTE* base = (const BYTE*) source - startIndex;
+    const BYTE* base = (const BYTE*)source - startIndex;
     const BYTE* lowLimit;
 
     const LZ4_stream_t_internal* dictCtx = (const LZ4_stream_t_internal*) cctx->dictCtx;
@@ -82,7 +82,8 @@ LZ4_FORCE_INLINE int
         dictDirective == usingDictCtx ? dictCtx->dictionary : cctx->dictionary;
     const U32 dictSize =
         dictDirective == usingDictCtx ? dictCtx->dictSize : cctx->dictSize;
-    const U32 dictDelta = (dictDirective == usingDictCtx) ? startIndex - dictCtx->currentOffset : 0;   /* make indexes in dictCtx comparable with index in current context */
+    const U32 dictDelta =
+        (dictDirective == usingDictCtx) ? startIndex - dictCtx->currentOffset : 0;   /* make indexes in dictCtx comparable with indexes in current context */
 
     int const maybe_extMem = (dictDirective == usingExtDict) || (dictDirective == usingDictCtx);
     U32 const prefixIdxLimit = startIndex - dictSize;   /* used when dictDirective == dictSmall */
@@ -105,14 +106,14 @@ LZ4_FORCE_INLINE int
     U32 offset = 0;
     U32 forwardH;
 
-    LOG_FORMATTED(INFO, logCtx, "srcSize=%i, maxOutputSize=%i tableType=%u", inputSize, maxOutputSize, tableType);
+    LOG_FORMATTED(DEBUG, logCtx, "srcSize=%i, maxOutputSize=%i tableType=%u", inputSize, maxOutputSize, tableType);
     DEBUGLOG(5, "@AOCL_LZ4_COMPRESS_GENERIC_VALIDATED_FUNC@: srcSize=%i, tableType=%u", inputSize, tableType);
     assert(ip != NULL);
+    if (tableType == byU16) assert(inputSize<LZ4_64Klimit);  /* Size too large (not within 64K limit) */
+    if (tableType == byPtr) assert(dictDirective==noDict);   /* only supported use case with byPtr */
     /* If init conditions are not met, we don't have to mark stream
      * as having dirty context, since no action was taken yet */
     if (outputDirective == fillOutput && maxOutputSize < 1) { return 0; } /* Impossible to store anything */
-    if ((tableType == byU16) && (inputSize>=LZ4_64Klimit)) { return 0; }  /* Size too large (not within 64K limit) */
-    if (tableType==byPtr) assert(dictDirective==noDict);      /* only supported use case with byPtr */
     assert(acceleration >= 1);
 
     lowLimit = (const BYTE*)source - (dictDirective == withPrefix64k ? dictSize : 0);
@@ -129,8 +130,7 @@ LZ4_FORCE_INLINE int
     cctx->currentOffset += (U32)inputSize;
     cctx->tableType = (U32)tableType;
 
-    if (inputSize < LZ4_minLength) 
-        goto _last_literals;        /* Input too small, no compression (all literals) */
+    if (inputSize<LZ4_minLength) goto _last_literals;        /* Input too small, no compression (all literals) */
 
     @AOCL_LZ4_CGV_INIT_START_BYTE@
 
@@ -169,9 +169,9 @@ LZ4_FORCE_INLINE int
                 if (unlikely(forwardIp > mflimitPlusOne)) goto _last_literals;
                 assert(ip < mflimitPlusOne);
 
-                match = LZ4_getPositionOnHash(h, cctx->hashTable, tableType, base);
+                match = LZ4_getPositionOnHash(h, cctx->hashTable, tableType);
                 forwardH = AOCL_LZ4_hashPosition(forwardIp, tableType);
-                LZ4_putPositionOnHash(ip, h, cctx->hashTable, tableType, base);
+                LZ4_putPositionOnHash(ip, h, cctx->hashTable, tableType);
 
             } while ( (match+LZ4_DISTANCE_MAX < ip)
                    || (LZ4_read32(match) != LZ4_read32(ip)) );
@@ -230,7 +230,7 @@ LZ4_FORCE_INLINE int
                         match = base + matchIndex;
                         lowLimit = (const BYTE*)source;
                     }
-                } else if (dictDirective==usingExtDict) {
+                } else if (dictDirective == usingExtDict) {
                     if (matchIndex < startIndex) {
                         DEBUGLOG(7, "extDict candidate: matchIndex=%5u  <  startIndex=%5u", matchIndex, startIndex);
                         assert(startIndex - matchIndex >= MINMATCH);
@@ -317,18 +317,25 @@ LZ4_FORCE_INLINE int
 
         /* Catch up */
         filledIp = ip;
+        assert(ip > anchor); /* this is always true as ip has been advanced before entering the main loop */
 #ifdef AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
         prevOffset--;
-        while ((prevOffset > -1) && ((ip>anchor) & (match > lowLimit)) && (unlikely(ipPrevData.c[prevOffset]==match[-1])))
-        {
-            ip--; match--; prevOffset--;
+        if ((tableType != byPtr) && ((match > lowLimit) && (ipPrevData.c[prevOffset] == match[-1]))) {
+            do {
+                ip--; match--; prevOffset--;
+            } while ((prevOffset > -1) && ((ip>anchor) & (match > lowLimit)) && (unlikely(ipPrevData.c[prevOffset]==match[-1])));
+            
+            while (((ip>anchor) & (match > lowLimit)) && (unlikely(ip[-1]==match[-1])))
+            {
+                ip--; match--; 
+            }    
+        }   else {
+#endif
+        if ((match > lowLimit) && unlikely(ip[-1] == match[-1])) {
+            do { ip--; match--; } while (((ip > anchor) & (match > lowLimit)) && (unlikely(ip[-1] == match[-1])));
         }
-        while (((ip>anchor) & (match > lowLimit)) && (unlikely(ip[-1]==match[-1])))
-        {
-            ip--; match--; 
-        }
-#else
-        while (((ip > anchor) & (match > lowLimit)) && (unlikely(ip[-1] == match[-1]))) { ip--; match--; }
+#ifdef AOCL_LZ4_DATA_ACCESS_OPT_PREFETCH_BACKWARDS
+    }
 #endif
 
         /* Encode Literals */
@@ -339,7 +346,7 @@ LZ4_FORCE_INLINE int
                 if(op + litLength + (2 + 1 + LASTLITERALS) + (litLength/255)> olimit)
                     return 0;
                 if (litLength >= RUN_MASK) {
-                    int len = (int)(litLength - RUN_MASK);
+                    unsigned len = litLength - RUN_MASK;
                     *token = (RUN_MASK<<ML_BITS);
                     for(; len >= 255 ; len-=255) *op++ = 255;
                     *op++ = (BYTE)len;
@@ -350,11 +357,11 @@ LZ4_FORCE_INLINE int
             }
             if ((outputDirective == fillOutput) &&
                 (unlikely(op + (litLength+240)/255 /* litlen */ + litLength /* literals */ + 2 /* offset */ + 1 /* token */ + MFLIMIT - MINMATCH /* min last literals so last match is <= end - MFLIMIT */ > olimit))) {
-                    op--;
-                    goto _last_literals;
+                op--;
+                goto _last_literals;
             }
             if (litLength >= RUN_MASK) {
-                int len = (int)(litLength - RUN_MASK);
+                unsigned len = litLength - RUN_MASK;
                 *token = (RUN_MASK<<ML_BITS);
                 for(; len >= 255 ; len-=255) *op++ = 255;
                 *op++ = (BYTE)len;
@@ -471,13 +478,19 @@ _next_match:
         if (ip >= mflimitPlusOne) break;
 
         /* Fill table */
-        AOCL_LZ4_putPosition(ip-2, cctx->hashTable, tableType, base);
+        {   U32 const h = AOCL_LZ4_hashPosition(ip-2, tableType);
+            if (tableType == byPtr) {
+                LZ4_putPositionOnHash(ip-2, h, cctx->hashTable, byPtr);
+            } else {
+                U32 const idx = (U32)((ip-2) - base);
+                LZ4_putIndexOnHash(idx, h, cctx->hashTable, tableType);
+        }   }
 
         /* Test next position */
         if (tableType == byPtr) {
 
-            match = AOCL_LZ4_getPosition(ip, cctx->hashTable, tableType, base);
-            AOCL_LZ4_putPosition(ip, cctx->hashTable, tableType, base);
+            match = AOCL_LZ4_getPosition(ip, cctx->hashTable, tableType);
+            AOCL_LZ4_putPosition(ip, cctx->hashTable, tableType);
             if ( (match+LZ4_DISTANCE_MAX >= ip)
               && (LZ4_read32(match) == LZ4_read32(ip)) )
             { token=op++; *token=0; goto _next_match; }
@@ -491,6 +504,7 @@ _next_match:
             if (dictDirective == usingDictCtx) {
                 if (matchIndex < startIndex) {
                     /* there was no match, try the dictionary */
+                    assert(tableType == byU32);
                     matchIndex = LZ4_getIndexOnHash(h, dictCtx->hashTable, byU32);
                     match = dictBase + matchIndex;
                     lowLimit = dictionary;   /* required for match length counter */

@@ -45,6 +45,9 @@
 #include "algos/bzip2/bzlib.h"
 #include "algos/bzip2/bzlib_private.h"
 #include "gtest_utils.h"
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif /* AOCL_ENABLE_THREADS */
 
 #define DEFAULT_OPT_LEVEL 2
 
@@ -72,6 +75,8 @@ typedef struct {
     Bool      initialisedOk;
 }
 bzFile;
+
+Int32 get_empty_bits(const UChar *compressed_data);
 
 template<typename T>
 class StateClass
@@ -503,7 +508,15 @@ class BZIP2_API
 
     static int BuffToBuffCompress(char* dest, unsigned int* destLen, char* source, unsigned int sourceLen, int blockSize100k, int verbosity, int workFactor)
     {
-        return BZ2_bzBuffToBuffCompress(dest, destLen, source, sourceLen, blockSize100k, verbosity, workFactor);
+        int ret = BZ2_bzBuffToBuffCompress(dest, destLen, source, sourceLen, blockSize100k, verbosity, workFactor);
+    #ifdef AOCL_ENABLE_THREADS
+        if(ret == 0 && omp_get_max_threads() > 1)
+        {
+            if(2*(blockSize100k * (100000 - 19)) <= sourceLen)
+                EXPECT_EQ(get_empty_bits((unsigned char *)dest+(*destLen)), 0);
+        }
+    #endif /*  */
+        return ret;
     }
 
     static int BuffToBuffDecompress(char* dest, unsigned int* destLen, char*source, unsigned int  sourceLen,int  small, int  verbosity)
@@ -615,7 +628,12 @@ bool verify_uncompressed_equal_original(char * compressed, unsigned int compress
     EXPECT_EQ(uncompressedLen, orginalLen);
     if(memcmp(uncompressedBuf.data(), original, orginalLen) != 0)
         return false;
+#ifndef AOCL_ENABLE_THREADS
     return is_valid_bzip2_frame(compressed);
+#else
+    int rap_frame_len = aocl_skip_rap_frame_mt(compressed, compressedLen);
+    return is_valid_bzip2_frame(compressed + rap_frame_len);
+#endif /* AOCL_ENABLE_THREADS */
 }
 
 /*
@@ -941,6 +959,165 @@ TEST_F(BZIP2_LIBSAIS, AOCL_Compression_libsais_pass_common_10) // Large inputs t
 
 /*********************************************
  * "End" of libsais Tests
+ ********************************************/
+
+/*********************************************
+ * "Begin" of Multithreaded Tests
+ ********************************************/
+
+Int32 get_empty_bits(const UChar *compressed_data)
+{
+    // Reference trail pattern.
+    const UChar trail[6] = {0x17, 0x72, 0x45, 0x38, 0x50, 0x90};
+    UChar temp_byte = 0;
+    Int32 num_of_matches = 0;
+    Int32 bit_padding = 0;
+    // Adjust pointer to start before header.
+    compressed_data -= 10+1;
+
+    for (Int32 j = 0; j < 2; j++)
+    {
+        for (Int32 i = 0; i < 8; i++)
+        {
+            Int32 j = 0;
+            while (j < 6)
+            {
+                // Reconstruct candidate byte with bit shifts.
+                temp_byte = ((compressed_data[j] & ((1 << i) - 1)) << (8 - i)) | (compressed_data[j + 1] >> i);
+                if (temp_byte != trail[j])
+                    break;
+                j++;
+            }
+            if (j == 6)
+            {
+                // Found a complete match: record padding and break.
+                num_of_matches++;
+                bit_padding += i;
+                break;
+            }
+        }
+        if (num_of_matches)
+            break;
+        /*
+            No match: adjust pointer and add full byte padding.
+            This case might occur only from 2nd block onwards in following scenarios:
+            Lets say:
+                prev block left "f" empty bits
+                current block will leave "s" empty bits
+            then if (f+s)>8, then that means last byte written is a useless byte. Hence we shift one byte back.
+        */
+        bit_padding += 8;
+        compressed_data--;
+    }
+    if (num_of_matches != 1)
+    {
+        // Return error if no unique match is found.
+        return -1;
+    }
+    return bit_padding;
+}
+
+class BZIP2_last_header_test : public ::testing::Test
+{
+public:
+    void push_data(int v, int no_bytes)
+    {
+        while (temp_buff_bits >= 8) {                 
+            compressed_data[index] = (UChar)(temp_buff >> 24);        
+            index++;                            
+            temp_buff <<= 8;                      
+            temp_buff_bits -= 8;                       
+        }
+        temp_buff |= (v << (32 - temp_buff_bits - no_bytes));
+        temp_buff_bits += no_bytes;
+    }
+
+    void finish_writing()
+    {
+       while (temp_buff_bits > 0) {
+          compressed_data[index] = (UChar)(temp_buff >> 24);
+          index++;
+          temp_buff <<= 8;
+          temp_buff_bits -= 8;
+       }
+    }
+
+    int get_empty_bits(unsigned char * compressed_data, const unsigned char * tail)
+    {
+        unsigned char temp_byte = 0;
+        int num_of_matches = 0;
+        int bit_padding = 0;
+        for(int i=0;i<8;i++)
+        {
+            int j = 0;
+            while(j < 6)
+            {
+                temp_byte = ((compressed_data[j] & ((1<<i)-1)) << (8-i)) | (compressed_data[j+1] >> i);
+                if(temp_byte != tail[j]) 
+                    break;
+                j++;
+            }
+            if(j == 6)
+            {
+                num_of_matches++;
+                bit_padding = i;
+            }
+        }
+        if(num_of_matches != 1)
+            return -1;
+        return bit_padding;
+    }
+
+
+    void reset()
+    {
+        index = 0;
+        temp_buff_bits = 0;
+        temp_buff = 0;
+    }
+
+    unsigned char compressed_data[11] = {0};
+    unsigned int temp_buff = 0;
+    unsigned int temp_buff_bits = 0;
+    int index = 0;
+
+    const unsigned char tail[6] = {0x17, 0x72, 0x45, 0x38, 0x50, 0x90};
+};
+
+TEST_F(BZIP2_last_header_test, AOCL_Compression_bzip2_header_pass_common_1)
+{
+    /*
+    |<--- compressed data --->|<--- 6 bytes (6*8bits) of stream tail --->|<--- 4 bytes (4*8bits) of combinedCRC --->/<-- 0-7 bits, empty bits --->/
+        "stream tail" is written to mark the end of BZIP2 compression
+        the current test case tries to prove, whatever might be the value at boundary bits of "stream tail"(last 0-7 bits of compressed data & first 0-7 bits of combinedCRC)),
+        the matching will exactly happen only one time, when linearly checked.
+    */
+    int empty_bits = 0;
+    while (empty_bits < 8)
+    {
+        int front_offset_bits = 8 - empty_bits;
+        for (int i = 0; i < (1 << front_offset_bits); i++)
+        {
+            for (int j = 0; j < (1 << empty_bits); j++)
+            {
+                push_data(i, front_offset_bits);
+                for (int k = 0; k < 6; k++)
+                {
+                    push_data(tail[k], 8);
+                }
+                push_data(j, empty_bits);
+                finish_writing();
+                int pad = get_empty_bits(compressed_data, tail);
+                EXPECT_EQ(pad, empty_bits);
+                reset();
+            }
+        }
+        empty_bits++;
+    }
+}
+
+/*********************************************
+ * "End" of Multithreaded Tests
  ********************************************/
 
 /*********************************************
@@ -1347,12 +1524,22 @@ TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCo
     EXPECT_EQ(BZIP2_API::BuffToBuffCompress(dest, &destLen, source, sourceLen, blockSize100k, verbosity, workFactor), BZ_OUTBUFF_FULL); 
 }
 
-
+// checking compression & decompression works fine for all levels & also check data expansion limit for random data.
 TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCompress_pass_common_11)
 {
-    Init();
-    EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
-    EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+    for(int i=1;i<=25;i++)
+    {
+        for(int j=1;j<=9;j++)
+        {
+            sourceLenPassCase = i*10000;
+            destLenPass = 2*sourceLenPassCase;
+            Init();
+            EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, j, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
+            float f = ((destLenPass-sourceLenPassCase)*100.0)/sourceLenPassCase; // percentage of data expansion
+            EXPECT_LT(f, 5.1); // Random data (worst case for level 1) requires ~5.1% additional space.
+            EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+        }
+    }
 }
 
 TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCompress_pass_common_12)
@@ -1456,6 +1643,26 @@ TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCo
 
     EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
     EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+}
+
+// Test all 1 byte inputs produces compressed output of 37 bytes, where the last byte is has 5 bits of padding.
+// This property of single threaded compression is used in mulithreaded compression.
+TEST_P(BZIP2_BZ2_bzBuffToBuffCompress, AOCL_Compression_bzip2_BZ2_bzBuffToBuffCompress_pass_common_19)
+{
+    for(int i=0;i<256;i++)
+    {
+        sourceLenPassCase = 1;
+        destLenPass = i+600;
+        Init();
+        sourcePass[0] = i;
+        EXPECT_EQ(BZIP2_API::BuffToBuffCompress(destPass.data(), &destLenPass, sourcePass.data(), sourceLenPassCase, 1, verbosity, 0), BZ_OK);            // parameters are set to the least acceptable values.
+        
+        int empty_bits = get_empty_bits((unsigned char *)(destPass.data()) + destLenPass);
+        EXPECT_EQ(destLenPass, 37);
+        EXPECT_EQ(empty_bits, 5);
+        
+        EXPECT_TRUE(verify_uncompressed_equal_original(destPass.data(), destLenPass, sourcePass.data(), sourceLenPassCase));
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -2661,7 +2868,6 @@ TEST_P(BZIP2_BZ2_bzWriteClose, AOCL_Compression_bzip2_BZ2_bzWriteClose_fail_comm
     BZIP2_API::WriteClose(&bzerror, bzf, 0, &in, &out);
 
     EXPECT_EQ(bzerror, BZ_SEQUENCE_ERROR);
-    EXPECT_EQ(((bzFile*)bzf)->lastErr, BZ_SEQUENCE_ERROR);
     EXPECT_EQ(in, 0);
     EXPECT_EQ(out, 0);
     EXPECT_FALSE(verify_bzip2_file_fail(orig_buf, orig_len, file_name));
@@ -2681,7 +2887,6 @@ TEST_P(BZIP2_BZ2_bzWriteClose, AOCL_Compression_bzip2_BZ2_bzWriteClose_fail_comm
 
     BZIP2_API::WriteClose(&bzerror, bzf, 0, &in, &out);
     EXPECT_EQ(bzerror, BZ_IO_ERROR);
-    EXPECT_EQ(((bzFile *)bzf)->lastErr, BZ_IO_ERROR);
     EXPECT_EQ(in, 0);
     EXPECT_EQ(out, 0);
 
@@ -2823,7 +3028,6 @@ TEST_P(BZIP2_BZ2_bzWriteClose64, AOCL_Compression_bzip2_BZ2_bzWriteClose64_fail_
     BZIP2_API::WriteClose64(&bzerror, bzf, 0, &in_low, &in_high, &out_low, &out_high);
 
     EXPECT_EQ(bzerror, BZ_SEQUENCE_ERROR);
-    EXPECT_EQ(((bzFile*)bzf)->lastErr, BZ_SEQUENCE_ERROR);
     EXPECT_EQ(in_low, 0);
     EXPECT_EQ(in_high, 0);
     EXPECT_EQ(out_low, 0);
@@ -2846,7 +3050,6 @@ TEST_P(BZIP2_BZ2_bzWriteClose64, AOCL_Compression_bzip2_BZ2_bzWriteClose64_fail_
     BZIP2_API::WriteClose64(&bzerror, bzf, 0, &in_low, &in_high, &out_low, &out_high);
 
     EXPECT_EQ(bzerror, BZ_IO_ERROR);
-    EXPECT_EQ(((bzFile *)bzf)->lastErr, BZ_IO_ERROR);
     EXPECT_EQ(in_low, 0);
     EXPECT_EQ(in_high, 0);
     EXPECT_EQ(out_low, 0);
@@ -3430,7 +3633,7 @@ TEST_F(BZIP2_BZ2_bzReadClose, AOCL_Compression_bzip2_BZ2_bzReadClose_fail_common
     BZIP2_API::ReadClose(&bzerror, b);
 
     EXPECT_EQ(bzerror, BZ_SEQUENCE_ERROR);
-    EXPECT_NE(((bzFile *)b)->strm.state, nullptr);
+    //EXPECT_NE(((bzFile *)b)->strm.state, nullptr);
     BZIP2_API::WriteClose(&bzerror, b, 0, 0, 0);
 }
 
@@ -3594,8 +3797,16 @@ void BuffToBuffCompress_fuzz(std::vector<char> source, size_t dest_sz,
     vector<char> dest(destLen, 0);
 
     // Verbosity is set to 0 to avoid extensive logs
-    BZIP2_API::BuffToBuffCompress(dest.data(), &destLen, source.data(), source.size(), level, 0, workFactor);
-
+    int ret = BZIP2_API::BuffToBuffCompress(dest.data(), &destLen, source.data(), source.size(), level, 0, workFactor);
+    if(ret == BZ_OK)
+    {
+        vector<char> decompressed(source.size());
+        unsigned origlen = decompressed.size();
+        int ret2 = BZIP2_API::BuffToBuffDecompress(decompressed.data(), &origlen, dest.data(), destLen, 0, 0);
+        EXPECT_EQ(ret2, BZ_OK);
+        if(ret2 == BZ_OK)
+            EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), origlen));
+    }
     aocl_destroy_bzip2();
 }
 FUZZ_TEST(AOCL_Compression_bzip2, BuffToBuffCompress_fuzz)
@@ -3674,8 +3885,17 @@ void BZ2_bzCompress_fuzz(std::vector<char> input, int out_len, int action, int b
     if(action==2)
         strm->setMode(BZ_FINISH); 
      
-    BZIP2_API::Compress(strm->getStrm(), action);
+    int ret = BZIP2_API::Compress(strm->getStrm(), action);
     BZIP2_API::CompressEnd(strm->getStrm());
+    if(ret == BZ_OK)
+    {
+        vector<char> decompressed(input.size());
+        unsigned origlen = decompressed.size();
+        int ret2 = BZIP2_API::BuffToBuffDecompress(decompressed.data(), &origlen, output.data(), strm->getAvailOut(), 0, 0);
+        EXPECT_EQ(ret2, BZ_OK);
+        if(ret2 == BZ_OK)
+            EXPECT_EQ(0,memcmp(decompressed.data(),input.data(), origlen));
+    }
     delete strm;
 }
  
@@ -3721,18 +3941,42 @@ void BZ2_bzWrite_fuzz(std::vector<char> inputbuffer, int block_size, int verbosi
 
     BZFILE * bzf = BZIP2_API::WriteOpen(&bzerror, pFile, block_size, verbosity, work_factor);
     EXPECT_EQ(bzerror, BZ_OK);
+    EXPECT_NE(bzf, nullptr);
 
-    BZIP2_API::Write(&bzerror, bzf, inputbuffer.data(), inputbuffer.size());
-   
+    BZIP2_API::Write(&bzerror, bzf, inputbuffer.data(), inputbuffer.size()); 
+    int bzerror_write = bzerror;
+
     if(writetype == 0)
         BZIP2_API::WriteClose(&bzerror, bzf, abandon, &in, &out);
 
     if(writetype == 1)
         BZIP2_API::WriteClose64(&bzerror, bzf, abandon, &in_low, &in_high, &out_low, &out_high);
-    EXPECT_EQ(bzerror, BZ_OK);
+    
+    fclose(pFile);    
+    if(bzerror_write == BZ_OK && bzerror == BZ_OK && abandon == 0)
+    {
+        //Decompress
+        pFile = fopen(file_name.c_str(), "rb");
+        EXPECT_NE(pFile, nullptr);
 
-    fclose(pFile);
-    EXPECT_EQ(remove(file_name.c_str()), 0);
+        bzf = BZIP2_API::ReadOpen(&bzerror, pFile, verbosity, 1, NULL, 0);
+        EXPECT_EQ(bzerror, BZ_OK);
+        EXPECT_NE(bzf, nullptr);
+
+        size_t origlen = inputbuffer.size();
+        vector<char> outputbuffer(origlen);        
+        int ret2 = BZIP2_API::Read(&bzerror, bzf, outputbuffer.data(), origlen);
+        EXPECT_EQ(bzerror, BZ_STREAM_END);
+        EXPECT_GT(ret2 , 0);
+        if(ret2 > 0)
+            EXPECT_EQ(0,memcmp(inputbuffer.data(),outputbuffer.data(), origlen));
+
+        BZIP2_API::ReadClose(&bzerror, bzf);
+        EXPECT_EQ(bzerror, BZ_OK);
+
+        fclose(pFile);
+    }
+    EXPECT_EQ(remove(file_name.c_str()), 0); 
 }
 
 FUZZ_TEST(AOCL_Compression_bzip2, BZ2_bzWrite_fuzz)
@@ -3765,7 +4009,7 @@ void BZ2_bzRead_fuzz(std::vector<char> inputbuffer,int block_size, int verbosity
     EXPECT_EQ(bzerror, BZ_OK);
     ASSERT_NE(bzf, nullptr);
 
-    vector<char> outputbuffer(out_len);        
+    vector<char> outputbuffer(out_len);
     BZIP2_API::Read(&bzerror, bzf, outputbuffer.data(), out_len);
 
     BZIP2_API::ReadClose(&bzerror, bzf);

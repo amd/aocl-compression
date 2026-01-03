@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -109,7 +109,7 @@ AOCL_VOID print_user_options (AOCL_VOID)
     printf("-d          File to dump output data. Based on -r, saves compressed/decompressed data.\n");
     printf("-f          Input uncompressed file to be used for validation in -rdecompress mode.\n");
     printf("-c          Run IPP library methods. Provide the path for the IPP library path after the -c option.\n");
-    printf("-n          Use Native APIs for compression/decompression.\n");
+    printf("-n          Use Native APIs for compression/decompression. Additional options like stream and dict are supported for ZSTD only.\n");
     printf("-y          External dictionary file to be used in compress and decompress for supported native APIs. Ignored if -n is not set.\n");
 }
 
@@ -119,20 +119,24 @@ const char* print_bool(AOCL_INTP val) {
 
 AOCL_VOID print_supported_compressors (AOCL_VOID)
 {
-   printf("\nSupported compression/decompression methods along with their supported levels are:\n");
-   printf("===========================================================================================\n");
-   printf("Method Name\tLower Level\tUpper Level\tNative API ST\tNative API MT\tNative dict ST\n");
-   printf("===========================================================================================\n");
+   printf("\nSupport matrix for compression/decompression methods:\n");
+   printf("===============================================================================================================================\n");
+   printf("Method Name\tLower Level\tUpper Level\tAOCL ST\t\tAOCL MT\t\tNative ST\tNative MT\tNative dict ST\n");
+   printf("===============================================================================================================================\n");
    for (int i = 0; i < AOCL_COMPRESSOR_ALGOS_NUM; ++i) {
        printf("%s\t\t", codec_list[i].codec_name);
        if (codec_list[i].lower_level == codec_list[i].upper_level)
            printf("NA\t\tNA\t\t");
        else
            printf("%td\t\t%td\t\t", codec_list[i].lower_level, codec_list[i].upper_level);
-       printf("%s\t\t%s\t\t%s\n", print_bool(codec_list[i].native_st_support),
+       printf("%s\t\t%s\t\t%s\t\t%s\t\t%s\n", print_bool(codec_list[i].aocl_st_support),
+       print_bool(codec_list[i].aocl_mt_support),
+        print_bool(codec_list[i].native_st_support),
                                   print_bool(codec_list[i].native_mt_support), 
                                   print_bool(codec_list[i].dict_support));
    }
+   printf("===============================================================================================================================\n");
+   printf("Note: Library needs to be built with AOCL_ENABLE_THREADS for AOCL MT support and NATIVE_ENABLE_THREADS for Native MT support respectively for supported methods.\n");
 }
 
 AOCL_VOID *allocMem(AOCL_UINTP size, AOCL_INTP zeroInit)
@@ -345,12 +349,12 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
     codec_bench_handle->decompPtr = NULL;
     codec_bench_handle->optOff = 0;
     codec_bench_handle->useIPP = 0;
-    codec_bench_handle->useNAPI = 0;
+    codec_bench_handle->NapiType = INVALID;
     codec_bench_handle->dumpFp = NULL;
     codec_bench_handle->dumpFile = NULL;
     codec_bench_handle->valFp = NULL;
     codec_bench_handle->runOperation = RUN_OPERATION_DEFAULT;
-    
+
     while (cnt < argc)
     {
         option = argv[cnt][0];
@@ -410,7 +414,23 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                 break;
 
                 case 'n':
-                    codec_bench_handle->useNAPI = 1;
+                    if (strcasecmp(&argv[cnt][2], "stream") == 0)
+                    {
+                        codec_bench_handle->NapiType = STREAM_TYPE;
+                    }
+                    else if (strcasecmp(&argv[cnt][2], "dict") == 0)
+                    {
+                        codec_bench_handle->NapiType = DICT_TYPE;
+                    }
+                    else if (strcasecmp(&argv[cnt][2], "") == 0)
+                    {
+                        codec_bench_handle->NapiType = FILE_TYPE;
+                    }
+                    else
+                    {
+                        LOG_BENCH(ERR, "Invalid API Type used. Allowed are stream and dict.\n");
+                        ret = ERR_CODEC_BENCH_ARGS;
+                    }
                 break;
                 case 'o':
                     codec_bench_handle->optOff = 1;
@@ -483,7 +503,7 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                     }
                     useDict = 1;
                     break;
- 
+
                 default:
                     ret = ERR_CODEC_BENCH_ARGS;
                 break;
@@ -524,6 +544,12 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
         codec_bench_handle->codec_method = -1;
     }
 
+    //dictionary and stream APIs are supported only for ZSTD(6)
+    if((codec_bench_handle->NapiType != INVALID) && (codec_bench_handle->codec_method != ZSTD) && ((codec_bench_handle->NapiType == DICT_TYPE) || (codec_bench_handle->NapiType == STREAM_TYPE) ))
+    {
+        LOG_BENCH(ERR, "dictionary and stream APIs are supported for ZSTD only\n");
+        return ERR_CODEC_BENCH_ARGS;
+    }    
     LOG_UNFORMATTED(TRACE, log_ctx, "Exit");
     return ret;
 }
@@ -942,7 +968,10 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
             if (error != 0) goto exit_with_error;
         }
     }
-    for (AOCL_INTP k = 0; k < codec_bench_handle->iterations; k++)
+
+    memset(codec_bench_handle->outPtr, 0, codec_bench_handle->outSize);
+
+    for (AOCL_INTP iteration_count = 0; iteration_count < codec_bench_handle->iterations; iteration_count++)
     {
         AOCL_UINT64 temp_cTime = 0;
         AOCL_UINT64 temp_dTime = 0;
@@ -973,7 +1002,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     break;
                 }
 
-                if (dumpEnabled && k == 0 /* dump only during 1st iteration */) 
+                if (dumpEnabled && iteration_count == 0 /* dump only during 1st iteration */) 
                 {
                     if(folder_created){
                         error = dump_to_file(codec_bench_handle, codec, level, chunk_cnt, aocl_codec_handle->outBuf, resultComp);
@@ -1010,7 +1039,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                         break;
                     }
 
-                    if (codec_bench_handle->verify) // verification supported only if decompress is enabled
+                    if (codec_bench_handle->verify && iteration_count == codec_bench_handle->iterations - 1 /* verify only during last iteration */) // verification supported only if decompress is enabled
                     {
                         if (memcmp(codec_bench_handle->inPtr,
                             codec_bench_handle->decompPtr, inSize) != 0)
@@ -1083,7 +1112,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     break;
                 }
 
-                if (dumpEnabled && k == 0 /* dump only during 1st iteration */)
+                if (dumpEnabled && iteration_count == 0 /* dump only during 1st iteration */)
                 {
                     // dump decompressed data to file
                     AOCL_UINTP written = fwrite(aocl_codec_handle->outBuf, sizeof(AOCL_CHAR), resultDecomp,
@@ -1096,7 +1125,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
                     }
                 }
 
-                if (codec_bench_handle->verify)
+                if (codec_bench_handle->verify && iteration_count == codec_bench_handle->iterations - 1 /* verify only during last iteration */)
                 {
                     if (valFp == NULL) 
                     {
@@ -1142,7 +1171,7 @@ AOCL_INTP aocl_bench_codec_run(aocl_compression_desc* aocl_codec_handle,
 
             } while (1);
 
-            if (isFolder && (k < codec_bench_handle->iterations - 1))
+            if (isFolder && (iteration_count < codec_bench_handle->iterations - 1))
             {
                 close_file_in_folder(codec_bench_handle); //close prev file if open
                 // codec_bench_handle->fp is made to point to first file in the folder for next iteration
@@ -1520,7 +1549,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
         result = ipp_bench_run(aocl_codec_handle, &codec_bench_handle);
 #endif
     }
-    else if (codec_bench_handle.useNAPI)
+    else if (codec_bench_handle.NapiType != INVALID)
     {
         result = native_api_bench_run(aocl_codec_handle, &codec_bench_handle);
     }

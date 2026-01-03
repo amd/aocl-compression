@@ -1,6 +1,6 @@
 /* inflate.c -- zlib decompression
  * Copyright (C) 1995-2022 Mark Adler
- * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -87,8 +87,9 @@
 #include "inflate.h"
 
 #ifdef AOCL_ZLIB_SSE2_OPT
-#include "inffast_chunk.h"
+#include "inffast.h"
 #include "chunkcopy.h"
+#include "zlib-ng/zlib_ng_include.h"
 #else
 #include "inffast.h"
 #endif
@@ -98,6 +99,9 @@
 #include "aocl_zlib_setup.h"
 
 static int setup_ok_zlib_inflate = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_zlib_inflate = ATOMIC_FLAG_INIT;
+#endif
 
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
@@ -238,6 +242,7 @@ int ZEXPORT inflateInit2_(z_streamp strm, int windowBits,
     strm->state = (struct internal_state FAR *)state;
     state->strm = strm;
     state->window = Z_NULL;
+    state->wbufsize = INFLATE_ADJUST_WINDOW_SIZE((1 << MAX_WBITS) + 64);
     state->mode = HEAD;     /* to pass state test in inflateReset2() */
     ret = inflateReset2(strm, windowBits);
     if (ret != Z_OK) {
@@ -1159,8 +1164,8 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
                 /* fallthrough */
         case LEN:
 #ifdef AOCL_ZLIB_SSE2_OPT
-            if (have >= INFLATE_FAST_MIN_INPUT &&
-                left >= INFLATE_FAST_MIN_OUTPUT) {
+            if (have >= INFLATE_FAST_MIN_HAVE &&
+                left >= INFLATE_FAST_MIN_LEFT) {
                 RESTORE();
                 inflate_fast_fp(strm, out);
         
@@ -1647,7 +1652,7 @@ int ZEXPORT inflateSync(z_streamp strm) {
     /* if first time, start search in bit buffer */
     if (state->mode != SYNC) {
         state->mode = SYNC;
-        state->hold <<= state->bits & 7;
+        state->hold >>= state->bits & 7;
         state->bits -= state->bits & 7;
         len = 0;
         while (state->bits >= 8) {
@@ -1815,10 +1820,21 @@ static void aocl_setup_inflate_fmv(int optOff, int optLevel)
             case 1://SSE version
             case 2://AVX version
             case 3://AVX2 version
-            default://AVX512 and other versions
 #ifdef AOCL_ZLIB_SSE2_OPT
                 updatewindow_fp = aocl_updatewindow;
-                inflate_fast_fp = inflate_fast_chunk_;
+                inflate_fast_fp = inflate_fast_sse2;
+#else
+                updatewindow_fp = updatewindow;
+                inflate_fast_fp = inflate_fast;
+#endif /* AOCL_ZLIB_SSE2_OPT */
+            break;
+            default://AVX512 and other versions
+#ifdef AOCL_ZLIB_AVX512_OPT
+                updatewindow_fp = aocl_updatewindow;
+                inflate_fast_fp = inflate_fast_avx512;
+#elif defined (AOCL_ZLIB_SSE2_OPT)
+                updatewindow_fp = aocl_updatewindow;
+                inflate_fast_fp = inflate_fast_sse2;
 #else
                 updatewindow_fp = updatewindow;
                 inflate_fast_fp = inflate_fast;

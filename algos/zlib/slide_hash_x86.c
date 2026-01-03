@@ -1,5 +1,5 @@
 /**
- * Modifications Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -35,6 +35,9 @@
 #include "aocl_zlib_setup.h"
 
 static int setup_ok_zlib_slide = 0; // flag to indicate status of dynamic dispatcher setup
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag setup_zlib_slide = ATOMIC_FLAG_INIT;
+#endif /* AOCL_ENABLE_THREADS */
 
 static inline void slide_hash_c_opt(deflate_state *s)
 {

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -59,6 +59,7 @@ using namespace std;
 #define kLzmaMaxHistorySize ((UInt32)15 << 28)
 #endif
 
+void LzmaDecode_fuzz(std::vector<Byte> source, size_t dest_sz, int optOff, int optLevel);
 
 #ifdef AOCL_LZMA_OPT
 void aocl_setup_lzma_test() {
@@ -4669,10 +4670,27 @@ void LzmaEncode_fuzz(std::vector<Byte> source, size_t dest_sz,
     SizeT outLen = destLen - LZMA_PROPS_SIZE;
     LzmaEncProps_Init(&encProps);
     encProps.level = level;
+    
+    vector<Byte> decompressed(srcLen, 0);
+    SizeT origLen = source.size();
 
-    LzmaEncode(dest.data() + LZMA_PROPS_SIZE, &outLen, source.data(),
+    int ret = LzmaEncode(dest.data() + LZMA_PROPS_SIZE, &outLen, source.data(),
         srcLen, &encProps, dest.data(), &headerSize, 0, NULL,
         &g_Alloc, &g_Alloc);
+    if( ret == SZ_OK)
+    {
+        aocl_setup_lzma_decode(optOff, optLevel, 0, 0, 0);
+        if (dest.size() < LZMA_PROPS_SIZE) return;      
+
+        ELzmaStatus status;
+        int ret2 = LzmaDecode(decompressed.data(), &origLen, dest.data() + LZMA_PROPS_SIZE,
+                    &outLen, dest.data(), LZMA_PROPS_SIZE, LZMA_FINISH_END,
+                    &status, &g_Alloc);
+        EXPECT_EQ(ret2, SZ_OK);       
+        if(ret2 == SZ_OK)       
+          EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), origLen));
+        aocl_destroy_lzma_decode();
+    }
 
     aocl_destroy_lzma_encode();
 }

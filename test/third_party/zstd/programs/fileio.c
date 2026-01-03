@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -424,7 +424,7 @@ void FIO_setTestMode(FIO_prefs_t* const prefs, int testMode) {
 
 void FIO_setLiteralCompressionMode(
         FIO_prefs_t* const prefs,
-        ZSTD_paramSwitch_e mode) {
+        ZSTD_ParamSwitch_e mode) {
     prefs->literalCompressionMode = mode;
 }
 
@@ -486,7 +486,7 @@ void FIO_setPassThroughFlag(FIO_prefs_t* const prefs, int value) {
     prefs->passThrough = (value != 0);
 }
 
-void FIO_setMMapDict(FIO_prefs_t* const prefs, ZSTD_paramSwitch_e value)
+void FIO_setMMapDict(FIO_prefs_t* const prefs, ZSTD_ParamSwitch_e value)
 {
     prefs->mmapDict = value;
 }
@@ -1101,11 +1101,12 @@ static void FIO_adjustParamsForPatchFromMode(FIO_prefs_t* const prefs,
         FIO_setLdmFlag(prefs, 1);
     }
     if (cParams.strategy >= ZSTD_btopt) {
-        DISPLAYLEVEL(3, "[Optimal parser notes] Consider the following to improve patch size at the cost of speed:\n");
-        DISPLAYLEVEL(3, "- Use --single-thread mode in the zstd cli\n");
-        DISPLAYLEVEL(3, "- Set a larger targetLength (e.g. --zstd=targetLength=4096)\n");
-        DISPLAYLEVEL(3, "- Set a larger chainLog (e.g. --zstd=chainLog=%u)\n", ZSTD_CHAINLOG_MAX);
-        DISPLAYLEVEL(3, "Also consider playing around with searchLog and hashLog\n");
+        DISPLAYLEVEL(4, "[Optimal parser notes] Consider the following to improve patch size at the cost of speed:\n");
+        DISPLAYLEVEL(4, "- Set a larger targetLength (e.g. --zstd=targetLength=4096)\n");
+        DISPLAYLEVEL(4, "- Set a larger chainLog (e.g. --zstd=chainLog=%u)\n", ZSTD_CHAINLOG_MAX);
+        DISPLAYLEVEL(4, "- Set a larger LDM hashLog (e.g. --zstd=ldmHashLog=%u)\n", ZSTD_LDM_HASHLOG_MAX);
+        DISPLAYLEVEL(4, "- Set a smaller LDM rateLog (e.g. --zstd=ldmHashRateLog=%u)\n", ZSTD_LDM_HASHRATELOG_MIN);
+        DISPLAYLEVEL(4, "Also consider playing around with searchLog and hashLog\n");
     }
 }
 
@@ -1495,7 +1496,7 @@ FIO_compressZstdFrame(FIO_ctx_t* const fCtx,
                       int compressionLevel, U64* readsize)
 {
     cRess_t const ress = *ressPtr;
-    IOJob_t *writeJob = AIO_WritePool_acquireJob(ressPtr->writeCtx);
+    IOJob_t* writeJob = AIO_WritePool_acquireJob(ressPtr->writeCtx);
 
     U64 compressedfilesize = 0;
     ZSTD_EndDirective directive = ZSTD_e_continue;
@@ -1527,8 +1528,7 @@ FIO_compressZstdFrame(FIO_ctx_t* const fCtx,
       CHECK( ZSTD_CCtx_setPledgedSrcSize(ress.cctx, prefs->streamSrcSize) );
     }
 
-    {
-        int windowLog;
+    {   int windowLog;
         UTIL_HumanReadableSize_t windowSize;
         CHECK(ZSTD_CCtx_getParameter(ress.cctx, ZSTD_c_windowLog, &windowLog));
         if (windowLog == 0) {
@@ -1543,7 +1543,6 @@ FIO_compressZstdFrame(FIO_ctx_t* const fCtx,
         windowSize = UTIL_makeHumanReadableSize(MAX(1ULL, MIN(1ULL << windowLog, pledgedSrcSize)));
         DISPLAYLEVEL(4, "Decompression will require %.*f%s of memory\n", windowSize.precision, windowSize.value, windowSize.suffix);
     }
-    (void)srcFileName;
 
     /* Main compression loop */
     do {
@@ -2404,7 +2403,7 @@ FIO_zstdErrorHelp(const FIO_prefs_t* const prefs,
                   size_t err,
                   const char* srcFileName)
 {
-    ZSTD_frameHeader header;
+    ZSTD_FrameHeader header;
 
     /* Help message only for one specific error */
     if (ZSTD_getErrorCode(err) != ZSTD_error_frameParameter_windowTooLarge)
@@ -2440,12 +2439,14 @@ FIO_decompressZstdFrame(FIO_ctx_t* const fCtx, dRess_t* ress,
                         U64 alreadyDecoded)  /* for multi-frames streams */
 {
     U64 frameSize = 0;
-    IOJob_t *writeJob = AIO_WritePool_acquireJob(ress->writeCtx);
+    const char* srcFName20 = srcFileName;
+    IOJob_t* writeJob = AIO_WritePool_acquireJob(ress->writeCtx);
+    assert(writeJob);
 
     /* display last 20 characters only when not --verbose */
     {   size_t const srcFileLength = strlen(srcFileName);
         if ((srcFileLength>20) && (g_display_prefs.displayLevel<3))
-            srcFileName += srcFileLength-20;
+            srcFName20 += srcFileLength-20;
     }
 
     ZSTD_DCtx_reset(ress->dctx, ZSTD_reset_session_only);
@@ -2472,19 +2473,12 @@ FIO_decompressZstdFrame(FIO_ctx_t* const fCtx, dRess_t* ress,
         AIO_WritePool_enqueueAndReacquireWriteJob(&writeJob);
         frameSize += outBuff.pos;
         if (fCtx->nbFilesTotal > 1) {
-            size_t srcFileNameSize = strlen(srcFileName);
-            if (srcFileNameSize > 18) {
-                const char* truncatedSrcFileName = srcFileName + srcFileNameSize - 15;
-                DISPLAYUPDATE_PROGRESS(
-                        "\rDecompress: %2u/%2u files. Current: ...%s : %.*f%s...    ",
-                        fCtx->currFileIdx+1, fCtx->nbFilesTotal, truncatedSrcFileName, hrs.precision, hrs.value, hrs.suffix);
-            } else {
-                DISPLAYUPDATE_PROGRESS("\rDecompress: %2u/%2u files. Current: %s : %.*f%s...    ",
-                            fCtx->currFileIdx+1, fCtx->nbFilesTotal, srcFileName, hrs.precision, hrs.value, hrs.suffix);
-            }
+            DISPLAYUPDATE_PROGRESS(
+                        "\rDecompress: %2u/%2u files. Current: %s : %.*f%s...    ",
+                        fCtx->currFileIdx+1, fCtx->nbFilesTotal, srcFName20, hrs.precision, hrs.value, hrs.suffix);
         } else {
             DISPLAYUPDATE_PROGRESS("\r%-20.20s : %.*f%s...     ",
-                            srcFileName, hrs.precision, hrs.value, hrs.suffix);
+                            srcFName20, hrs.precision, hrs.value, hrs.suffix);
         }
 
         AIO_ReadPool_consumeBytes(ress->readCtx, inBuff.pos);
@@ -3209,7 +3203,7 @@ FIO_analyzeFrames(fileInfo_t* info, FILE* const srcFile)
         {   U32 const magicNumber = MEM_readLE32(headerBuffer);
             /* Zstandard frame */
             if (magicNumber == ZSTD_MAGICNUMBER) {
-                ZSTD_frameHeader header;
+                ZSTD_FrameHeader header;
                 U64 const frameContentSize = ZSTD_getFrameContentSize(headerBuffer, numBytesRead);
                 if ( frameContentSize == ZSTD_CONTENTSIZE_ERROR
                   || frameContentSize == ZSTD_CONTENTSIZE_UNKNOWN ) {

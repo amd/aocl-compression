@@ -1,7 +1,7 @@
 /* chunkcopy.h -- fast chunk copy and set operations
  * Copyright (C) 2017 ARM, Inc.
  * Copyright 2017 The Chromium Authors
- * Modifications Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * Use of this source code is governed by a BSD-style license that can be
  * found in the Chromium source repository LICENSE file.
  */
@@ -42,7 +42,7 @@ Z_STATIC_ASSERT(vector_128_bits_wide,
  * Ask the compiler to perform a wide, unaligned load with a machine
  * instruction appropriate for the z_vec128i_t type.
  */
-static inline z_vec128i_t loadchunk(
+static inline z_vec128i_t loadchunk_128(
     const unsigned char FAR* s) Z_DISABLE_MSAN {
   z_vec128i_t v;
   Z_BUILTIN_MEMCPY(&v, s, sizeof(v));
@@ -52,7 +52,7 @@ static inline z_vec128i_t loadchunk(
  * Ask the compiler to perform a wide, unaligned store with a machine
  * instruction appropriate for the z_vec128i_t type.
  */
-static inline void storechunk(
+static inline void storechunk_128(
     unsigned char FAR* d,
     const z_vec128i_t v) {
   Z_BUILTIN_MEMCPY(d, &v, sizeof(v));
@@ -76,12 +76,12 @@ static inline unsigned char FAR* chunkcopy_core(
     const unsigned char FAR* from,
     unsigned len) Z_DISABLE_MSAN {
   const int bump = (--len % CHUNKCOPY_CHUNK_SIZE) + 1;
-  storechunk(out, loadchunk(from));
+  storechunk_128(out, loadchunk_128(from));
   out += bump;
   from += bump;
   len /= CHUNKCOPY_CHUNK_SIZE;
   while (len-- > 0) {
-    storechunk(out, loadchunk(from));
+    storechunk_128(out, loadchunk_128(from));
     out += CHUNKCOPY_CHUNK_SIZE;
     from += CHUNKCOPY_CHUNK_SIZE;
   }
@@ -145,7 +145,7 @@ static inline unsigned char FAR* chunkunroll_relaxed(
     unsigned FAR* len) Z_DISABLE_MSAN {
   const unsigned char FAR* from = out - *dist;
   while (*dist < *len && *dist < CHUNKCOPY_CHUNK_SIZE) {
-    storechunk(out, loadchunk(from));
+    storechunk_128(out, loadchunk_128(from));
     out += *dist;
     *len -= *dist;
     *dist += *dist;

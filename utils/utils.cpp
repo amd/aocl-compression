@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2023, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -228,6 +228,9 @@ AOCL_INTP get_disable_opt_flags(int printDebugLogs)
 using namespace std;
 
 unordered_map<string, size_t> unit_test_log_counter;
+#ifndef AOCL_ENABLE_THREADS
+static atomic_flag unit_test_log_counter_update = ATOMIC_FLAG_INIT;
+#endif
 
 #ifdef WIN32
 #define SET_ENV_VAR(var) 

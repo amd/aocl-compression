@@ -1,4 +1,3 @@
-
 /*-------------------------------------------------------------*/
 /*--- Private header file for the library.                  ---*/
 /*---                                       bzlib_private.h ---*/
@@ -194,6 +193,22 @@ extern UInt32 BZ2_crc32Table[256];
 
 #define ALPHABET_SIZE   (1 << CHAR_BIT)
 
+#ifdef AOCL_ENABLE_THREADS
+
+#include <omp.h>
+
+typedef struct mt_checksum_node {
+   UInt32 checksum;
+   struct mt_checksum_node * next;
+} mt_checksum_node;
+
+typedef struct mt_data_list {
+   UInt32 padding_bits;
+   mt_checksum_node * head;
+   mt_checksum_node * current;
+} mt_data_list;
+
+#endif /* AOCL_ENABLE_THREADS */
 
 /*-- Structure holding all the compression-side stuff. --*/
 
@@ -277,8 +292,11 @@ typedef
       Int32 sa_index;   // Index for SA.
       Int32 n_block;    // Total characters
 #endif /* AOCL_BZIP2_OPT */
-   }
-   EState;
+#ifdef AOCL_ENABLE_THREADS
+      mt_data_list* mt_head_node;
+#endif /* AOCL_ENABLE_THREADS */
+}
+EState;
 
 
 
@@ -348,7 +366,24 @@ BZ2_hbMakeCodeLengths ( UChar*, Int32*, Int32, Int32 );
 #define BZ_X_CCRC_3      49
 #define BZ_X_CCRC_4      50
 
+#ifdef AOCL_BZIP2_OPT
+/*
+  Defines the bit width of the primary lookup table used in the two-tier Huffman 
+  decoding optimization. The primary table directly decodes Huffman codes of 
+  length <= AOCL_BS_BUFF_BITS, while longer codes use secondary tables.
+  
+  Value: 10 bits = 2^10 = 1024 entries in the primary lookup table
+*/
+#define AOCL_BS_BUFF_BITS 10
 
+/*
+   Threshold for switching between different decompression algorithms (level 3).
+   Blocks which are:
+      - larger than this size use optimized algorithms, two-pass BWT reconstruction.
+      - smaller than this size use simpler, single-pass algorithms.
+*/
+#define AOCL_RANGE_THRESHOLD (3 * 100000 - 19)
+#endif /* AOCL_BZIP2_OPT */
 
 /*-- Constants for the fast MTF decoder. --*/
 
@@ -374,7 +409,16 @@ typedef
       BZ_RAND_DECLS;
 
       /* the buffer for bit stream reading */
+#ifdef AOCL_BZIP2_OPT
+      ULong64   bsBuff;
+      /* buffers for creating huffman decoding tables */
+      Int32 huffman_lookup_table[6][1<<AOCL_BS_BUFF_BITS];  // Primary lookup table for fast huffman decoding
+      Int32 * secondary_tables[6];                          // Secondary tables for codes longer than AOCL_BS_BUFF_BITS
+      Int32 secondary_table_size[6];                        // Size of each secondary table (2^remaining_bits)
+      Int32 secondary_shift_bits[6];                        // Number of bits for secondary table indexing
+#else
       UInt32   bsBuff;
+#endif /* AOCL_BZIP2_OPT */
       Int32    bsLive;
 
       /* misc administratium */
@@ -394,6 +438,9 @@ typedef
 
       /* for undoing the Burrows-Wheeler transform (FAST) */
       UInt32   *tt;
+#ifdef AOCL_BZIP2_OPT
+      UInt32   *temp_tt;
+#endif /* AOCL_BZIP2_OPT */
 
       /* for undoing the Burrows-Wheeler transform (SMALL) */
       UInt16   *ll16;
@@ -448,7 +495,9 @@ typedef
       Int32*   save_gLimit;
       Int32*   save_gBase;
       Int32*   save_gPerm;
-
+#ifdef AOCL_ENABLE_THREADS
+      mt_data_list* mt_head_node;
+#endif /* AOCL_ENABLE_THREADS */
    }
    DState;
 
@@ -532,7 +581,37 @@ extern int AOCL_use_libsais;
    So total extra elements required is "m_d*temp_n=20*2"
 */
 #define AOCL_LIBSAIS_FS 20*2
-#endif
+
+#ifdef AOCL_ENABLE_THREADS
+#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC) \
+do { \
+      mt_data_list* mt_head_node = s->mt_head_node; \
+      if(mt_head_node) \
+      { \
+         /* Creating a checksum node and assigning a checksum value. */ \
+         mt_checksum_node * current = (mt_checksum_node *)malloc(sizeof(mt_checksum_node)); \
+         current->checksum = blockCRC; \
+         current->next = NULL; \
+         /* Head of the list would be stored in mt_head_node. */ \
+         if(mt_head_node->head == NULL) \
+         { \
+            mt_head_node->current = current; \
+            mt_head_node->head = current; \
+         } \
+         else \
+         { \
+            mt_head_node->current->next = current; \
+            mt_head_node->current = current; \
+         } \
+      } \
+} while (0)
+#else
+#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC)
+#endif /* AOCL_ENABLE_THREADS */
+#else
+#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC)
+#endif /* AOCL_BZIP2_OPT */
+
 extern void aocl_register_mainSimpleSort_fmv (int optOff, int optLevel);
 
 /*-------------------------------------------------------------*/

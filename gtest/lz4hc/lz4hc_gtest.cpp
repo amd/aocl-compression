@@ -444,9 +444,40 @@ TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common
     }
 }
 
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_11) // Test case for `m2 = nomatch;  /* do not search further */`
+{
+    const int test_level = 6;
+    
+    // Create specific data pattern that can trigger the edge case:
+    // - A pattern that creates matches near the end of input
+    // - This increases chances of hitting mflimit conditions where start2 stays NULL
+    const int test_size = 200;
+    char test_data[test_size];
+    char compressed_buf[test_size * 2];
+    
+    // Create a pattern with repeating sequences that will create matches near the boundary conditions
+    for (int i = 0; i < test_size; i++) {
+            test_data[i] = (char)('A');
+    }
+    
+    int compressed_size = LZ4_compress_HC(test_data, compressed_buf, test_size, test_size * 2, test_level);
+    
+    EXPECT_GT(compressed_size, 0);  // Should not crash and return a valid result
+    
+    // If compression was successful, verify decompression works
+    if (compressed_size > 0) {
+        char decompressed_buf[test_size];
+        int decompressed_size = LZ4_decompress_safe(compressed_buf, decompressed_buf, compressed_size, test_size);
+        EXPECT_EQ(decompressed_size, test_size);
+        if (decompressed_size == test_size) {
+            EXPECT_EQ(memcmp(test_data, decompressed_buf, test_size), 0);
+        }
+    }
+}
+
 #ifdef AOCL_ENABLE_THREADS
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_11) // pass_case_mt
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_12) // pass_case_mt
 {
     for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
     {
@@ -458,7 +489,7 @@ TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common
     }
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common_12) // dstCapacity_inadequate_mt
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common_13) // dstCapacity_inadequate_mt
 {
     for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
     {
@@ -470,7 +501,7 @@ TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common
     }
 }
 
-TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_13) // mt_compression_st_decompression
+TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_14) // mt_compression_st_decompression
 {
     for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
     {
@@ -740,7 +771,7 @@ public:
     {
         free_stream();
         compression_level = _compression_level;
-        create_stream();
+        is_stream_created = create_stream();
     }
 
     int get_compression_level()
@@ -921,7 +952,8 @@ class LZ4HC_LZ4_compress_HC_extStateHC_fastReset : public LZ4HC_LZ4_compress_HC_
 
     bool initialize_stream()
     {
-        memset(strm, 0, sizeof(strm));
+        if(strm != nullptr)
+            memset(strm, 0, sizeof(*((LZ4_streamHC_t*)strm)));
 #ifdef AOCL_LZ4HC_OPT
         if (use_AOCL_LZ4_streamHC(opt_off, compression_level))
         {
@@ -2231,363 +2263,6 @@ TEST_F(LZ4HC_LZ4_saveDictHC, AOCL_Compression_lz4hc_LZ4_saveDictHC_fail_common_6
 
 #ifdef AOCL_LZ4HC_OPT
 /*********************************************
- * "Begin" of AOCL_LZ4HC_countBack Tests
- *********************************************/
-class LZ4HC_AOCL_LZ4HC_countBack : public AOCL_setup_lz4hc
-{
-protected:
-    
-    LZ4_byte* ip = NULL;;
-    LZ4_byte* match = NULL;
-    LZ4_byte *iMin = NULL;
-    LZ4_byte *mMin = NULL;
-    
-    // Initialize pointers.
-    void SetUp() override
-    {
-        ip = NULL;
-        match = NULL;
-        iMin = ip;
-        mMin = match;
-    }
-    
-    // Initialize or reset a `ip` buffer.
-    LZ4_byte* initialise_ip_string(int sz, const char *c)
-    {
-        if(ip)
-            free(ip);
-        ip = (LZ4_byte *)malloc(sz);
-        memcpy(ip, c, sz);
-        return ip;
-    }
-    
-    // Initialize or reset a `matchPtr` buffer.
-    LZ4_byte* initialise_match_string(int sz, const char *c)
-    {
-        if(match)
-            free(match);
-        match = (LZ4_byte *)malloc(sz);
-        memcpy(match, c, sz);
-        return match;
-    }
-    // Destructor function of `LZ4HC_AOCL_LZ4HC_countBack` class.
-    ~LZ4HC_AOCL_LZ4HC_countBack()
-    {
-        if (ip)
-            free(ip);
-        if (match)
-            free(match);
-    }
-};
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_1)  // 7 Bytes reverse match
-{
-    const char *p = "abcdefgh";
-    const char *m = "abcdefgh";
-
-    int sz = 8; // size is 8 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_2)  // 7 Bytes reverse match(last byte mismatch)
-{
-    const char *p = "abcdefgh";
-    const char *m = "Abcdefgh";
-
-    int sz = 8; // size is 8 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_3)  // 8 Bytes reverse match
-{
-    const char *p = "abcdefghi";
-    const char *m = "abcdefghi";
-
-    int sz = 9;  // size is 9 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_4)  // 8 Bytes reverse match(last byte mismatch)
-{
-    const char *p = "abcdefghi";
-    const char *m = "Abcdefghi";
-
-    int sz = 9; // size is 9 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_5)  // 9 Bytes reverse match
-{
-    const char *p = "abcdefghij";
-    const char *m = "abcdefghij";
-
-    int sz = 10;  // size is 10 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_6)  // 9 Bytes reverse match(last byte mismatch)
-{
-    const char *p = "abcdefghij";
-    const char *m = "Abcdefghij";
-
-    int sz = 10; // size is 10 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_7)  // 10 Bytes reverse match
-{
-    const char *p = "abcdefghijk";
-    const char *m = "abcdefghijk";
-
-    int sz = 11;  // size is 11 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_8)  // 10 Bytes reverse match(last byte mismatch)
-{
-    const char *p = "abcdefghijk";
-    const char *m = "Abcdefghijk";
-
-    int sz = 11; // size is 11 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), -9);
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_9)  // 11 Bytes reverse match
-{
-    const char *p = "abcdefghijkl";
-    const char *m = "abcdefghijkl";
-
-    int sz = 12;  // size is 12 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_10)  // 11 Bytes reverse match(last byte mismatch)
-{
-    const char *p = "abcdefghijkl";
-    const char *m = "Abcdefghijkl";
-
-    int sz = 12; // size is 12 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_11)  // 12 Bytes reverse match
-{
-    const char *p = "abcdefghijklm";
-    const char *m = "abcdefghijklm";
-
-    int sz = 13;  // size is 13 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_12)  // 12 Bytes reverse match(last byte mismatch)
-{
-    const char *p = "abcdefghijklm";
-    const char *m = "Abcdefghijklm";
-
-    int sz = 13; // size is 12 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_13)  // 13 Bytes reverse match
-{
-    const char *p = "abcdefghijklmn";
-    const char *m = "abcdefghijklmn";
-
-    int sz = 14;  // size is 14 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_14)  // 13 Bytes reverse match(last byte mismatch)
-{
-    const char *p = "abcdefghijklmn";
-    const char *m = "Abcdefghijklmn";
-
-    int sz = 14; // size is 14 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_15)  // long string reverse match to check loop iterations
-{
-    const char *p = "abcdefghijklmnopqrstuvwx";
-    const char *m = "Abcdefghijklmnopqrstuvwx";
-
-    int sz = 24;  // size is 24 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_16)  // iMin < limit
-{
-    const char *p = "abcdefghijklmnopqrstuvwx";
-    const char *m = "abcdefghijklmnopqrstuvwx";
-
-    int sz = 24; // size is 24 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip - 2;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_17)  // mMin < limit
-{
-    const char *p = "abcdefghijklmnopqrstuvwx";
-    const char *m = "abcdefghijklmnopqrstuvwx";
-
-    int sz = 24; // size is 24 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match - 2;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_18)  // mMin != match and iMin != ip
-{
-    const char *p = "abcdefghijklmnopqrstuvwx";
-    const char *m = "abcdefghijklmnopqrstuvwx";
-
-    int sz = 24; // size is 24 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip + 9;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match + 4;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-
-TEST_F(LZ4HC_AOCL_LZ4HC_countBack, AOCL_Compression_lz4hc_AOCL_LZ4HC_countBack_pass_common_19)  // mMin > match and iMin > ip
-{
-    const char *p = "abcdefghijklmnopqrstuvwx";
-    const char *m = "abcdefghijklmnopqrstuvwx";
-
-    int sz = 14; // size is 14 Bytes
-    ip = initialise_ip_string(sz, p);
-    iMin = ip + sz + 3;
-    LZ4_byte* ip2 = ip + sz - 1;
-    match = initialise_match_string(sz, m);
-    mMin = match + sz + 4;
-    LZ4_byte* match2 = match + sz - 1;
-    
-    EXPECT_EQ(Test_AOCL_LZ4HC_countBack(ip2, match2, iMin, mMin), Test_LZ4HC_countBack(ip2, match2, iMin, mMin));
-}
-/*********************************************
- * "End" of AOCL_LZ4HC_countBack Tests
- *********************************************/
-
- /*********************************************
   * "Begin" of AOCL_LZ4HC_insert Tests
   *********************************************/
 
@@ -2702,21 +2377,19 @@ TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4H
     Test_AOCL_LZ4HC_init_internal(hc4, src);
     Test_AOCL_LZ4HC_Insert(hc4, src + 25, hash_chain_max, hash_chain_slot_sz); /* insert upto second occurence of sub-string "ABCDM" */
 
-    const LZ4_byte* ref = NULL;
-    const LZ4_byte* startpos = ip;
     int longest = 3;
 
     /* setting iHighLimit to ensure that pointer does not read memory beyond limit during byte comparison. */
     const LZ4_byte* iHighLimit = src + strlen(str) - 3;
 
-    int result = Test_AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, ip, iHighLimit, longest, &ref, &startpos, 
+    LZ4HC_match_t result = Test_AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, ip, iHighLimit, longest, 
         32 /* maxNbAttempts */, 0 /* patternAnalysis */, 0 /*chainSwap*/, noDictCtx, favorCompressionRatio, hash_chain_max, hash_chain_slot_sz);
-    EXPECT_EQ(result, 5);             /* length of match */
-    EXPECT_EQ(ref, src + 8);          /* ref is match position */
-    EXPECT_EQ(startpos, src + 25);    /* startpos is the point in the string for which match is searched. */
+    EXPECT_EQ(result.len, 5);           /* length of match */
+    EXPECT_EQ(result.off, 17);          /* offset */
+    EXPECT_EQ(result.back, 0);
 }
 
-TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4HC_InsertAndGetWiderMatch_pass_common_2) // Enabled Pattern Analysis
+TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4HC_InsertAndGetWiderMatch_pass_common_2) // Enabled Pattern Analysis, iLowLimit=ip
 {
 
     /* Test case to determine hashchain for particular hash value
@@ -2725,31 +2398,108 @@ TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4H
     int hash_chain_slot_sz = 16;
     int hash_chain_max = 15;
 
-    const char* str = "aaaaaaaaaaaaaaaaaaaEDCBaaaaaaaaaaaa123";
+    const char* str = "aaaaaaacdeaaaaaaaaaEDCBcdeaaaaaaaaa123";
     LZ4_byte* src = (LZ4_byte*)str;
-    LZ4_byte* ip = (LZ4_byte*)str + 23;
+    LZ4_byte* ip = (LZ4_byte*)str + 26;
 
     Test_AOCL_LZ4HC_init_internal(hc4, src);
-    Test_AOCL_LZ4HC_Insert(hc4, src + 23, hash_chain_max, hash_chain_slot_sz); /* insert till the occurence of sub-string EDCA */
+    Test_AOCL_LZ4HC_Insert(hc4, src + 26, hash_chain_max, hash_chain_slot_sz); /* insert till the occurence of sub-string EDCA */
 
-    const LZ4_byte* ref = NULL;
-    const LZ4_byte* startpos = ip;
     int longest = 3;
 
     /* setting iHighLimit to ensure that pointer does not read memory beyond limit during byte comparison. */
     const LZ4_byte *iHighLimit = src + strlen(str) - 3; 
     
-    int result = Test_AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, ip, iHighLimit, longest, &ref, &startpos,
+    LZ4HC_match_t result = Test_AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, ip, iHighLimit, longest,
         32 /* maxNbAttempts */, 1 /* patternAnalysis */, 0 /*chainSwap*/, noDictCtx, favorCompressionRatio, hash_chain_max, hash_chain_slot_sz);
-    EXPECT_EQ(result, 12);            /* length of match */
-    EXPECT_EQ(ref, src + 7);          /* ref is match position */
-    EXPECT_EQ(startpos, src + 23);    /*startpos is the point in the string for which match is searched. */
+    EXPECT_EQ(result.len, 9);            /* length of match */
+    EXPECT_EQ(result.off, 16);            /* Offset */
+    EXPECT_EQ(result.back, 0);
+}
+
+TEST_F(LZ4HC_AOCL_LZ4HC_InsertAndGetWiderMatch, AOCL_Compression_lz4hc_AOCL_LZ4HC_InsertAndGetWiderMatch_pass_common_3) // Enabled Pattern Analysis, iLowLimit<ip
+{
+
+    /* Test case to determine hashchain for particular hash value
+     * and check latest index matched string in accessed with hcHead. */
+     // level 6
+    int hash_chain_slot_sz = 16;
+    int hash_chain_max = 15;
+
+    const char* str = "aaaaaaacdeaaaaaaaaaEDCBcdeaaaaaaaaa123";
+    LZ4_byte* src = (LZ4_byte*)str;
+    LZ4_byte* ip = (LZ4_byte*)str + 26;
+
+    Test_AOCL_LZ4HC_init_internal(hc4, src);
+    Test_AOCL_LZ4HC_Insert(hc4, src + 26, hash_chain_max, hash_chain_slot_sz); /* insert till the occurence of sub-string EDCA */
+
+    int longest = 3;
+
+    /* setting iHighLimit to ensure that pointer does not read memory beyond limit during byte comparison. */
+    const LZ4_byte *iHighLimit = src + strlen(str) - 3; 
+    const LZ4_byte *iLowLimit = ip - 3;
+    
+    LZ4HC_match_t result = Test_AOCL_LZ4HC_InsertAndGetWiderMatch(hc4, ip, iLowLimit, iHighLimit, longest,
+        32 /* maxNbAttempts */, 1 /* patternAnalysis */, 0 /*chainSwap*/, noDictCtx, favorCompressionRatio, hash_chain_max, hash_chain_slot_sz);
+    EXPECT_EQ(result.len, 12);            /* length of match */
+    EXPECT_EQ(result.off, 16);            /* Offset */
+    EXPECT_EQ(result.back, -3);
 }
 
 /*****************************************************
  * "End" of AOCL_LZ4HC_insertAndGetWiderMatch Tests
  *****************************************************/
 #endif
+
+/*****************************************************
+ * "Begin" of LZ4_attach_HC_dictionary Tests
+ *****************************************************/
+class LLZ4_attach_HC_dictionary : public ::testing::Test
+{
+protected:    
+    LZ4_streamHC_t *dictionaryStream = NULL;
+    LZ4_streamHC_t *workingStream = NULL;
+
+    void SetUp() override
+    {
+        workingStream = LZ4_createStreamHC();
+        ASSERT_NE(workingStream, nullptr);
+        
+        dictionaryStream = LZ4_createStreamHC();
+        ASSERT_NE(dictionaryStream, nullptr);
+
+        int dictLen = 1024;
+        char dict[1024] = {0};
+        for(int i=0; i<dictLen; i++)
+        {
+            dict[i] = i % 255;
+        }
+        EXPECT_NE(LZ4_loadDictHC(dictionaryStream, dict, dictLen), -1);
+        
+    }
+
+    ~LLZ4_attach_HC_dictionary()
+    {
+        LZ4_freeStreamHC(workingStream);
+        LZ4_freeStreamHC(dictionaryStream);
+    }
+};
+
+TEST_F(LLZ4_attach_HC_dictionary, AOCL_Compression_lz4hc_LZ4_attach_HC_dictionary_pass_common_1) // dictionaryStream_NULL
+{
+    LZ4_attach_HC_dictionary(workingStream, /* dictionaryStream */ NULL);
+    EXPECT_EQ(workingStream->internal_donotuse.dictCtx, nullptr);
+}
+
+TEST_F(LLZ4_attach_HC_dictionary, AOCL_Compression_lz4hc_LZ4_attach_HC_dictionary_pass_common_2) // simple_pass_case
+{
+    LZ4_attach_HC_dictionary(workingStream, dictionaryStream);
+    EXPECT_NE(workingStream->internal_donotuse.dictCtx, nullptr);
+}
+
+/*****************************************************
+ * "End" of LZ4_attach_HC_dictionary Tests
+ *****************************************************/
 
 /*********************************************
  * Begin fuzz tests for lz4hc
@@ -2762,10 +2512,19 @@ void LZ4_compress_HC_fuzz(vector<char> source, size_t dest_sz,
 
   int destLen = dest_sz > INT_MAX ? INT_MAX : dest_sz;
   int srcLen = source.size();
-  vector<char> dest(destLen, 0);
-
-  LZ4_compress_HC((const char*)source.data(), dest.data(), srcLen, destLen, level);
-
+  vector<char> dest(destLen);
+  
+  int OrigLen = source.size();
+  vector<char> decompressed(OrigLen);
+  int ret = LZ4_compress_HC((const char*)source.data(), dest.data(), srcLen, destLen, level);
+  //When source size is zero , compress function generates empty block which cannot be decompressed.
+  if(ret > 0 && source.size() != 0 )
+  {
+      int ret2 = LZ4_decompress_safe(dest.data(), decompressed.data(), ret, OrigLen);
+      EXPECT_GT(ret2, 0);
+      if(ret2 > 0 )       
+          EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+  }
   aocl_destroy_lz4hc();
 }
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_fuzz)
@@ -2808,8 +2567,19 @@ static void destroy_LZ4HC_stream(void* stream, int optOff, int compressionLevel)
 void LZ4_compress_HC_continue_fuzz(vector<char> src, int out_len)
 {
     vector<char> dst(out_len);
-    LZ4_streamHC_t* stream = LZ4_createStreamHC();   
-    LZ4_compress_HC_continue (stream, src.data(), dst.data(), src.size(), out_len);
+    LZ4_streamHC_t* stream = LZ4_createStreamHC();
+
+    int OrigLen = src.size();
+    vector<char> decompressed(OrigLen);
+    int ret = LZ4_compress_HC_continue (stream, src.data(), dst.data(), src.size(), out_len);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.
+    if(ret > 0 && src.size() != 0 )
+    {
+      int ret2 = LZ4_decompress_safe(dst.data(), decompressed.data(), ret, OrigLen);
+      EXPECT_GT(ret2, 0); 
+      if(ret2 > 0)       
+          EXPECT_EQ(0,memcmp(decompressed.data(),src.data(), src.size()));
+    }
     LZ4_freeStreamHC(stream);
 }
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_continue_fuzz)
@@ -2820,8 +2590,18 @@ void LZ4_compress_HC_continue_destSize_fuzz(vector<char> src, int out_len)
 {
     int src_size = src.size();     
     vector<char> dst(out_len);
-    LZ4_streamHC_t* stream = LZ4_createStreamHC();    
-    LZ4_compress_HC_continue_destSize(stream,  src.data(), dst.data(),&src_size, out_len);
+    LZ4_streamHC_t* stream = LZ4_createStreamHC(); 
+    int OrigLen = src.size();
+    vector<char> decompressed(OrigLen);   
+    int ret = LZ4_compress_HC_continue_destSize(stream,  src.data(), dst.data(),&src_size, out_len);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.
+    if(ret > 0 && src_size != 0 )
+    {
+      int ret2 = LZ4_decompress_safe(dst.data(), decompressed.data(), ret, OrigLen);
+      EXPECT_GT(ret2, 0); 
+      if(ret2 > 0)       
+          EXPECT_EQ(0,memcmp(decompressed.data(),src.data(), src_size));
+    }
     LZ4_freeStreamHC(stream);
 }
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_continue_destSize_fuzz)
@@ -2832,7 +2612,17 @@ void LZ4_compress_HC_extStateHC_fuzz(vector<char> src, int out_len, int compress
 {
     vector<char> dst(out_len);
     void *stream = setup_LZ4HC_stream(optOff, compressionLevel, optLevel);
-    LZ4_compress_HC_extStateHC(stream, src.data(), dst.data(), src.size(), out_len, compressionLevel);
+    int OrigLen = src.size();
+    vector<char> decompressed(OrigLen);
+    int ret = LZ4_compress_HC_extStateHC(stream, src.data(), dst.data(), src.size(), out_len, compressionLevel);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.
+    if(ret > 0 && src.size() != 0 )
+    {
+      int ret2 = LZ4_decompress_safe(dst.data(), decompressed.data(), ret, OrigLen);
+      EXPECT_GT(ret2, 0); 
+      if(ret2 > 0)       
+          EXPECT_EQ(0,memcmp(decompressed.data(),src.data(), src.size()));
+    }
     destroy_LZ4HC_stream(stream, optOff,compressionLevel);
 }
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_extStateHC_fuzz)
@@ -2847,7 +2637,17 @@ void LZ4_compress_HC_destSize_fuzz(vector<char> src, int out_len, int compressio
     int srcSize = src.size();
     vector<char> dst(out_len);
     void *stream = setup_LZ4HC_stream(optOff, compressionLevel, optLevel);
-    LZ4_compress_HC_destSize(stream, src.data(), dst.data(), &srcSize, out_len, compressionLevel);
+    int OrigLen = src.size();
+    vector<char> decompressed(OrigLen);
+    int ret = LZ4_compress_HC_destSize(stream, src.data(), dst.data(), &srcSize, out_len, compressionLevel);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.  
+    if(ret > 0 && srcSize != 0 )
+    {
+      int ret2 = LZ4_decompress_safe(dst.data(), decompressed.data(), ret, OrigLen);
+      EXPECT_GT(ret2, 0);  
+      if(ret2 > 0)       
+          EXPECT_EQ(0,memcmp(decompressed.data(),src.data(), srcSize));
+    }
     destroy_LZ4HC_stream(stream, optOff,compressionLevel);
 }
 FUZZ_TEST(AOCL_Compression_lz4hc, LZ4_compress_HC_destSize_fuzz)

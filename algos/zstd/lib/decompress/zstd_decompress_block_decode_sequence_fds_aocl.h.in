@@ -87,9 +87,7 @@ FORCE_INLINE_TEMPLATE seq_t
         if (llBits > 0)
             seq.litLength += BIT_readBitsFast(&seqState->DStream, llBits/*>0*/);
 
-        {
-        @AOCL_ZSTD_DSF2_UPDATE_FSE_STATE@
-        }
+    @AOCL_ZSTD_DSF2_UPDATE_FSE_STATE@
     }
 
     return seq;

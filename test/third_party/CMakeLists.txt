@@ -26,7 +26,7 @@
  
 # @author Ashish Sriram
 
-cmake_minimum_required(VERSION 3.26.0)
+cmake_minimum_required(VERSION 3.13.0)
 
 set (ALGOS_PATH ../../algos)
 
@@ -38,6 +38,57 @@ if (NOT BUILD_STATIC_LIBS)
 
     message(WARNING "BUILD_STATIC_LIBS must be ON to build zstd utility and third party tests")
 endif ()
+
+# Function to add and run a compress and decompress test sequence
+function(tp_eval_compress_decompress PREFIX SRC_FILE DECOMPRESS_EXT)
+    set(options COMPRESS_DUMP DECOMPRESS_DUMP)
+    set(multiValueArgs COMPRESS_CMD DECOMPRESS_CMD)
+    cmake_parse_arguments(TP "${options}" "" "${multiValueArgs}" ${ARGN})
+
+    string(TIMESTAMP TP_EVAL_TESTDIR "${PREFIX}_test_%Y%m%d%H%M%S")
+    set(TP_EVAL_TEST_DIR "${CMAKE_BINARY_DIR}/${TP_EVAL_TESTDIR}")
+    set(FIXTURE_NAME "${PREFIX}_FIXTURE")
+    get_filename_component(TEST_FILENAME "${SRC_FILE}" NAME)
+    set(COMPRESS_INPUT "${TP_EVAL_TEST_DIR}/${TEST_FILENAME}")
+    set(DECOMPRESS_INPUT "${TP_EVAL_TEST_DIR}/${TEST_FILENAME}.${DECOMPRESS_EXT}")
+
+    # Create a copy of SRC_FILE and run test on it
+    add_test(NAME ${PREFIX}_MKDIR COMMAND ${CMAKE_COMMAND} -E make_directory "${TP_EVAL_TEST_DIR}")
+    set_tests_properties(${PREFIX}_MKDIR PROPERTIES FIXTURES_SETUP ${FIXTURE_NAME})
+    add_test(NAME ${PREFIX}_COPY COMMAND ${CMAKE_COMMAND} -E copy "${SRC_FILE}" "${TP_EVAL_TEST_DIR}")
+    set_tests_properties(${PREFIX}_COPY PROPERTIES FIXTURES_SETUP ${FIXTURE_NAME} DEPENDS ${PREFIX}_MKDIR)
+
+    # Compress
+    if(TP_COMPRESS_DUMP) # Optionally add -d<COMPRESS_INPUT> to compress command if COMPRESS_DUMP is set
+        set(EXTRA_DUMP_ARG "-d${COMPRESS_INPUT}")
+        set(COMPRESS_CMD_WITH_DUMP ${TP_COMPRESS_CMD} ${EXTRA_DUMP_ARG})
+    else()
+        set(COMPRESS_CMD_WITH_DUMP ${TP_COMPRESS_CMD})
+    endif()
+    add_test(NAME ${PREFIX}_COMPRESS COMMAND ${COMPRESS_CMD_WITH_DUMP} ${COMPRESS_INPUT})
+    set_tests_properties(${PREFIX}_COMPRESS PROPERTIES FIXTURES_REQUIRED ${FIXTURE_NAME} DEPENDS ${PREFIX}_COPY)
+
+    # Decompress if DECOMPRESS_CMD is provided
+    if(TP_DECOMPRESS_DUMP) # Optionally add -d<COMPRESS_INPUT> to decompress command if DECOMPRESS_DUMP is set
+        set(EXTRA_DUMP_ARG "-d${COMPRESS_INPUT}")
+        set(DECOMPRESS_CMD_WITH_DUMP ${TP_DECOMPRESS_CMD} ${EXTRA_DUMP_ARG})
+        set(VALIDATE_OUTPUT ${COMPRESS_INPUT}.decomp)
+    else()
+        set(DECOMPRESS_CMD_WITH_DUMP ${TP_DECOMPRESS_CMD})
+        set(VALIDATE_OUTPUT ${COMPRESS_INPUT})
+    endif()
+    if(TP_DECOMPRESS_CMD)
+        add_test(NAME ${PREFIX}_DECOMPRESS COMMAND ${DECOMPRESS_CMD_WITH_DUMP} ${DECOMPRESS_INPUT})
+        set_tests_properties(${PREFIX}_DECOMPRESS PROPERTIES FIXTURES_REQUIRED ${FIXTURE_NAME} DEPENDS ${PREFIX}_COMPRESS)
+        add_test(NAME ${PREFIX}_VALIDATE COMMAND ${CMAKE_BINARY_DIR}/aocl_third_party_bench -v "${SRC_FILE}" "${VALIDATE_OUTPUT}")
+        set_tests_properties(${PREFIX}_VALIDATE PROPERTIES FIXTURES_REQUIRED ${FIXTURE_NAME} DEPENDS ${PREFIX}_DECOMPRESS)
+        add_test(NAME ${PREFIX}_CLEANUP COMMAND ${CMAKE_COMMAND} -E remove_directory "${TP_EVAL_TEST_DIR}")
+        set_tests_properties(${PREFIX}_CLEANUP PROPERTIES FIXTURES_CLEANUP ${FIXTURE_NAME} DEPENDS ${PREFIX}_VALIDATE)
+    else()
+        add_test(NAME ${PREFIX}_CLEANUP COMMAND ${CMAKE_COMMAND} -E remove_directory "${TP_EVAL_TEST_DIR}")
+        set_tests_properties(${PREFIX}_CLEANUP PROPERTIES FIXTURES_CLEANUP ${FIXTURE_NAME} DEPENDS ${PREFIX}_COMPRESS)
+    endif()
+endfunction()
 
 # Build third party tests
 if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
@@ -52,6 +103,7 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
                             ${ZSTD_TP_PATH}/programs/datagen.c
                             ${ZSTD_TP_PATH}/programs/timefn.c
                             ${ZSTD_TP_PATH}/programs/util.c
+                            ${ZSTD_TP_PATH}/programs/lorem.c
                             ${ZSTD_TP_PATH}/tests/bigdict.c
                             ${ZSTD_TP_PATH}/tests/external_matchfinder.c
                             ${ZSTD_TP_PATH}/tests/invalidDictionaries.c
@@ -81,6 +133,7 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
             ${ZLIB_TP_SRC_FILES}
             third_party_bench.c
     )
+    set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_UNIT_TEST")
     if (THIRD_PARTY_INTERNAL_TEST)
         set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DTHIRD_PARTY_INTERNAL_TEST")
     endif ()
@@ -91,6 +144,9 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
     if (AOCL_DECOMPRESS_FAST)
         set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
     endif ()
+    if (AOCL_COMPRESS_FAST)
+        set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_COMPRESS_FAST=${AOCL_COMPRESS_FAST}")
+    endif ()
     if (AOCL_EXCLUDE_ZLIB)
         set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
     endif ()
@@ -98,6 +154,12 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
     if (AOCL_ENABLE_THREADS)
         set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
     endif ()
+    if (NATIVE_ENABLE_THREADS)
+        set_property(SOURCE ${TP_SRC_FILES}  APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_MULTITHREAD")
+    endif()
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUG_ASSERT_ENABLED")
+    endif()
 
     set_property(SOURCE ${TP_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_NO_REL_INC_PATH")
 
@@ -140,10 +202,8 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
         add_test(TP_ZSTD_LONGMATCH            ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_LONGMATCH)
         add_test(TP_ZSTD_PARAMGRILL           ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_PARAMGRILL -v -S)
         add_test(TP_ZSTD_ROUNDTRIPCRASH       ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_ROUNDTRIPCRASH ${CMAKE_BINARY_DIR}/silesia/dickens)
-    if (AOCL_DECOMPRESS_FAST STREQUAL "OFF")
         add_test(TP_ZSTD_ZSTREAMTEST_1        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_ZSTREAMTEST -i1 -v)
         add_test(TP_ZSTD_ZSTREAMTEST_2        ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_ZSTREAMTEST --newapi -t1 -i1)
-    endif ()
     if (THIRD_PARTY_INTERNAL_TEST)
         add_test(TP_ZSTD_FULLBENCH            ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_FULLBENCH -i1)
         add_test(TP_ZSTD_DECODECORPUS         ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_DECODECORPUS -t -T1mn)
@@ -169,7 +229,10 @@ if (BUILD_UTILITY)
   
           # Set the path to the zstd program directory
           file(GLOB ZSTD_PROGRAM_SRCS "${BU_ZSTD_PROGRAMS_DIR}/*.c")
-  
+          if (AOCL_ENABLE_THREADS)
+            set_property(SOURCE ${ZSTD_PROGRAM_SRCS} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
+          endif ()
+
           # Create testbench zstd_utility
           set (zstd_utility zstd_utility) 
           add_executable(${zstd_utility} ${ZSTD_PROGRAM_SRCS}) 
@@ -186,6 +249,45 @@ if (BUILD_UTILITY)
          
           target_link_libraries(${zstd_utility} ${lib_name})
           target_link_libraries(${zstd_utility} ${CMAKE_DL_LIBS})
+
+          if (TEST_COVERAGE_THIRD_PARTY)
+            find_program(CMAKE_COMMAND cmake)
+            set (bench_utility aocl_compression_bench)
+            set (TP_ZU_SRC_FILE "${CMAKE_BINARY_DIR}/silesia/dickens")
+            # Mixed utility/API tests
+            foreach(TP_ZU_LEVEL RANGE 1 13)
+                tp_eval_compress_decompress(TP_ZSTD_UTILITY_BB_L${TP_ZU_LEVEL} "${TP_ZU_SRC_FILE}" "zst"
+                    COMPRESS_CMD "${CMAKE_BINARY_DIR}/${bench_utility}" -ezstd:${TP_ZU_LEVEL} -i1 -rcompress
+                    DECOMPRESS_CMD "${CMAKE_BINARY_DIR}/${bench_utility}" -ezstd:${TP_ZU_LEVEL} -i1 -rdecompress
+                    COMPRESS_DUMP
+                    DECOMPRESS_DUMP
+                )
+                tp_eval_compress_decompress(TP_ZSTD_UTILITY_BF_L${TP_ZU_LEVEL} "${TP_ZU_SRC_FILE}" "zst"
+                    COMPRESS_CMD "${CMAKE_BINARY_DIR}/${bench_utility}" -ezstd:${TP_ZU_LEVEL} -i1 -rcompress
+                    DECOMPRESS_CMD "${CMAKE_BINARY_DIR}/${zstd_utility}" -${TP_ZU_LEVEL}kfd
+                    COMPRESS_DUMP
+                )
+                tp_eval_compress_decompress(TP_ZSTD_UTILITY_BS_L${TP_ZU_LEVEL} "${TP_ZU_SRC_FILE}" "zst"
+                    COMPRESS_CMD "${CMAKE_BINARY_DIR}/${bench_utility}" -ezstd:${TP_ZU_LEVEL} -i1 -rcompress
+                    DECOMPRESS_CMD "${CMAKE_BINARY_DIR}/${zstd_utility}" -b${TP_ZU_LEVEL}qdi1
+                    COMPRESS_DUMP
+                )
+                #TP_ZSTD_UTILITY_FB, TP_ZSTD_UTILITY_FS are not possible as dump is not supported in -b*qi1 mode
+                tp_eval_compress_decompress(TP_ZSTD_UTILITY_FF_L${TP_ZU_LEVEL} "${TP_ZU_SRC_FILE}" "zst"
+                    COMPRESS_CMD "${CMAKE_BINARY_DIR}/${zstd_utility}" -b${TP_ZU_LEVEL}qi1
+                )
+                #TP_ZSTD_UTILITY_SF is expected to fail with "Decompressed size cannot be determined"
+                tp_eval_compress_decompress(TP_ZSTD_UTILITY_SB_L${TP_ZU_LEVEL} "${TP_ZU_SRC_FILE}" "zst"
+                    COMPRESS_CMD "${CMAKE_BINARY_DIR}/${zstd_utility}" -${TP_ZU_LEVEL}kf
+                    DECOMPRESS_CMD "${CMAKE_BINARY_DIR}/${bench_utility}" -ezstd:${TP_ZU_LEVEL} -i1 -rdecompress
+                    DECOMPRESS_DUMP
+                )
+                tp_eval_compress_decompress(TP_ZSTD_UTILITY_SS_L${TP_ZU_LEVEL} "${TP_ZU_SRC_FILE}" "zst"
+                    COMPRESS_CMD "${CMAKE_BINARY_DIR}/${zstd_utility}" -${TP_ZU_LEVEL}kf
+                    DECOMPRESS_CMD "${CMAKE_BINARY_DIR}/${zstd_utility}" -${TP_ZU_LEVEL}kfd
+                )
+            endforeach()
+          endif()
       endif()
     endif()
     # Build minigzip utility

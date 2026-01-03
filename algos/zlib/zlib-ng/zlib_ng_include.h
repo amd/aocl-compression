@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,37 +26,23 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
- /** @file aoclThreadUtils.h
- *
- *  @brief Common routines used in multithreaded implementations.
- *
- *  This file contains common routines and definitions used in multithreaded 
- *  implementations across methods.
- *
- *  @author Ashish Sriram
- */
+#ifndef ZLIB_NG_INCLUDE_H
+#define ZLIB_NG_INCLUDE_H
+#include "algos/common/aoclAlgoOpt.h"
 
-#ifndef __COMMON_THREAD_UTILS_H
-#define __COMMON_THREAD_UTILS_H
+/********************** inflate_p.h **********************/
+#  define INFLATE_ADJUST_WINDOW_SIZE(n) (n)
 
-#define AOCL_MT_NO_PARTITIONS(thread_group_handle) (thread_group_handle.threads_info_list == NULL) /* no partitions found after setup */
+#define INFLATE_FAST_MIN_HAVE 15
+#define INFLATE_FAST_MIN_LEFT 260
 
-#define AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur) ti_cur->thread_id /* serialized id of partition associated with a thread */
+/****************** zlib-ng impl wrappers ****************/
+#ifdef AOCL_ZLIB_SSE2_OPT
+void ZLIB_INTERNAL inflate_fast_sse2(z_streamp strm, unsigned start);
+#endif
 
-#define AOCL_MT_IS_FIRST_PARTITION(ti_cur) \
-        (AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur) == 0) /* is first partition of first thread? */
+#ifdef AOCL_ZLIB_AVX512_OPT
+void ZLIB_INTERNAL inflate_fast_avx512(z_streamp strm, unsigned start);
+#endif
 
-#define AOCL_MT_IS_LAST_PARTITION(thread_group_handle, ti_cur, thread_id) ( /* is last partition of last thread? */ \
-        (thread_id == (thread_group_handle.num_threads - 1) /* last thread */) \
-        && ti_cur->next == NULL /* last partition for this thread */)
-
-#define AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id) /* processing partitions serially. loop start */ \
-        aocl_thread_info_t* ti_cur = &thread_group_handle.threads_info_list[thread_id]; \
-        while (ti_cur) {
-
-
-#define AOCL_MT_PROCESS_PARTITION_END(ti_cur) /* processing partitions serially. loop end */ \
-        ti_cur = ti_cur->next; /* next linked partition */ \
-        }
-
-#endif /* __COMMON_THREAD_UTILS_H */
+#endif /* ZLIB_NG_INCLUDE_H */ 

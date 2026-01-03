@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -87,6 +87,8 @@ typedef struct
     AOCL_INTP max_block_size_param;
     AOCL_INTP native_st_support; // single-threaded native APIs supported
     AOCL_INTP native_mt_support; // multi-threaded native APIs supported
+    AOCL_INTP aocl_st_support; // single-threaded unified APIs supported
+    AOCL_INTP aocl_mt_support; // multi-threaded unified APIs supported
     AOCL_INTP dict_support; // native APIs with external dictionary supported
     AOCL_UINTP max_dst_size;
     const AOCL_CHAR* extension;
@@ -96,14 +98,21 @@ typedef struct
 //The list is ordered as per the enum aocl_compression_type
 static const codec_list_t codec_list[AOCL_COMPRESSOR_ALGOS_NUM] =
 {
-    {"LZ4",    0, 0,  0, 0, 1, 0, 0, INT_MAX  , ".lz4"},
-    {"LZ4HC",  1, 12, 0, 0, 1, 0, 0, INT_MAX  , ".lz4"},
-    {"LZMA",   0, 9,  0, 0, 1, 0, 0, SIZE_MAX , ".lzma"},
-    {"BZIP2",  1, 9,  0, 0, 1, 0, 0, SIZE_MAX , ".bz2"},
-    {"SNAPPY", 0, 0,  0, 0, 1, 0, 0, SIZE_MAX , ".snappy"},
-    {"ZLIB",   1, 9,  0, 0, 1, 0, 0, ULONG_MAX, ".zlib"},
-    {"ZSTD",   1, 22, 0, 0, 1, 1, 1, SIZE_MAX , ".zst"}
+    {"LZ4",    0, 0,  0, 0, 1, 0, 1, 1, 0, INT_MAX  , ".lz4"},
+    {"LZ4HC",  1, 12, 0, 0, 1, 0, 1, 1, 0, INT_MAX  , ".lz4"},
+    {"LZMA",   0, 9,  0, 0, 1, 0, 1, 0, 0, SIZE_MAX , ".lzma"},
+    {"BZIP2",  1, 9,  0, 0, 1, 0, 1, 1, 0, UINT_MAX , ".bz2"},
+    {"SNAPPY", 0, 0,  0, 0, 1, 0, 1, 1, 0, SIZE_MAX , ".snappy"},
+    {"ZLIB",   1, 9,  0, 0, 1, 0, 1, 1, 0, ULONG_MAX, ".zlib"},
+    {"ZSTD",   1, 22, 0, 0, 1, 1, 1, 1, 1, SIZE_MAX , ".zst"}
 };
+
+typedef enum {
+    FILE_TYPE = 0,  
+    STREAM_TYPE,  
+    DICT_TYPE,  
+    INVALID  
+} APIType;
 
 //Main data structure for Test bench functionality
 typedef struct
@@ -127,7 +136,7 @@ typedef struct
     AOCL_UINTP file_size;
     AOCL_INTP useIPP;
     AOCL_CHAR *ippDir;
-    AOCL_INTP useNAPI;
+    APIType NapiType;
     FILE *fp;                    //file pointer for input data
     FILE *fpDict;                //file pointer for dictionary data
     AOCL_CHAR *fName;

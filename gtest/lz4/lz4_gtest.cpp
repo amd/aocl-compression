@@ -139,7 +139,7 @@ public:
 */
 bool check_uncompressed_equal_to_original(char *src, unsigned srcSize, char *compressed, unsigned compressedLen)
 {
-    int uncompressedLen = srcSize + 10;
+    int uncompressedLen = srcSize;
     char* uncompressed = (char*)malloc(uncompressedLen * sizeof(char));
 
     int uncompressedLenRes = LZ4_decompress_safe(compressed, uncompressed, compressedLen, uncompressedLen);
@@ -181,7 +181,6 @@ TEST(LZ4_versionString, AOCL_Compression_lz4_LZ4_versionString_pass_common_1) //
  *********************************************/
 class LZ4_compress_default_test : public AOCL_setup_lz4 {
 };
-
 TEST_P(LZ4_compress_default_test, AOCL_Compression_lz4_LZ4_compress_default_fail_common_1) // compressFail_src_NULL
 {
     TestLoad d(800);
@@ -2510,7 +2509,7 @@ TEST_P(LLZ4_decompress_safe_continue, AOCL_Compression_lz4_LZ4_decompress_safe_c
     LZ4_streamDecode_t *decode = LZ4_createStreamDecode();
     
     // This line is for making prefixSize != 0.
-    ASSERT_EQ(LZ4_decompress_safe_continue(decode, src, output, srcLen, 800), origLen);
+    EXPECT_EQ(LZ4_decompress_safe_continue(decode, src, output, srcLen, 800), origLen);
     EXPECT_EQ(memcmp(original, output, origLen), 0);
     
     int uncompressed_len = LZ4_decompress_safe_continue(decode, src, output, srcLen, 100);
@@ -2705,9 +2704,10 @@ TEST_P(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
     EXPECT_NE(LZ4_loadDict(stream, dict, dictLen), -1);
     
     srcLen = LZ4_compress_fast_continue(stream, original, src, origLen, srcLen, 5000);
-    memcpy(out, dict, dictLen);
+    if(out)
+        memcpy(out, dict, dictLen);
     
-    ASSERT_EQ(LZ4_decompress_safe_usingDict(NULL, output, srcLen, outLen, dict, dictLen), -1);
+    EXPECT_EQ(LZ4_decompress_safe_usingDict(NULL, output, srcLen, outLen, dict, dictLen), -1);
     free(out);
 }
 
@@ -2746,10 +2746,13 @@ TEST_P(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
     
     EXPECT_NE(LZ4_loadDict(stream, dict, dictLen), -1);
     srcLen = LZ4_compress_fast_continue(stream, original, src, origLen, srcLen, 5000);
-    memcpy(out, dict, dictLen);
+    if(out && srcLen >= 0)
+    {
+        memcpy(out, dict, dictLen);
     
-    ASSERT_EQ(LZ4_decompress_safe_usingDict(src, out + dictLen, srcLen, outLen, out, dictLen), origLen);
-    EXPECT_EQ(memcmp(out + dictLen, original, origLen), 0);
+        EXPECT_EQ(LZ4_decompress_safe_usingDict(src, out + dictLen, srcLen, outLen, out, dictLen), origLen);
+        EXPECT_EQ(memcmp(out + dictLen, original, origLen), 0);
+    }
     free(out);
 }
 
@@ -2760,10 +2763,13 @@ TEST_P(LLZ4_decompress_safe_usingDict, AOCL_Compression_lz4_LZ4_decompress_safe_
 
     EXPECT_NE(LZ4_loadDict(stream, dict, dictLen), -1);
     srcLen = LZ4_compress_fast_continue(stream, original, src, origLen, srcLen, 5000);
-    memcpy(out, dict, dictLen);
+    if(out != NULL && srcLen > 0)
+    {
+        memcpy(out, dict, dictLen);
     
-    ASSERT_EQ(LZ4_decompress_safe_usingDict(src, out + dictLen, srcLen, outLen, out, dictLen), origLen);
-    EXPECT_EQ(memcmp(out + dictLen, original, origLen), 0);
+        EXPECT_EQ(LZ4_decompress_safe_usingDict(src, out + dictLen, srcLen, outLen, out, dictLen), origLen);
+        EXPECT_EQ(memcmp(out + dictLen, original, origLen), 0);
+    }
     free(out);
 }
 
@@ -3335,10 +3341,20 @@ void LZ4_compress_default_fuzz(vector<char> source, size_t dest_sz,
 
     int destLen = dest_sz > INT_MAX ? INT_MAX : dest_sz;
     int srcLen = source.size();
-    vector<char> dest(destLen, 0);
+    vector<char> dest(destLen);
 
-    LZ4_compress_default((const char*)source.data(), dest.data(), srcLen, destLen);
+    int ret = LZ4_compress_default((const char*)source.data(), dest.data(), srcLen, destLen);
 
+    int OrigLen = source.size();
+    vector<char> decompressed(OrigLen);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.
+    if(ret > 0 && source.size() != 0 )
+    {
+        int ret2 = LZ4_decompress_safe(dest.data(), decompressed.data(), ret, OrigLen);
+        EXPECT_GT(ret2, 0); 
+        if(ret2 > 0)       
+            EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+    }
     aocl_destroy_lz4();
 }
 FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_default_fuzz)
@@ -3387,7 +3403,17 @@ FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_fuzz)
 void LZ4_compress_fast_fuzz(int dest_len, vector<char> source, int acceleration)
 {
     vector<char> dest(dest_len);
-    LZ4_compress_fast((const char *)source.data(), dest.data(), source.size(), dest_len, acceleration);
+    int ret = LZ4_compress_fast((const char *)source.data(), dest.data(), source.size(), dest_len, acceleration);
+    int OrigLen = source.size();
+    vector<char> decompressed(OrigLen, 0);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.
+    if(ret > 0 && source.size() != 0)
+    {
+        int ret2 = LZ4_decompress_safe(dest.data(), decompressed.data(), ret, OrigLen);
+        EXPECT_GT(ret2, 0);        
+        if(ret2 > 0 )       
+            EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+    }
 }
 FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_fast_fuzz)
 .WithDomains(fuzztest::InRange<int>(1,10000),
@@ -3398,7 +3424,17 @@ void LZ4_compress_destSize_fuzz(int dest_len, vector<char> source)
 {
     int srcLen = source.size();
     vector<char> dest(dest_len);
-    LZ4_compress_destSize(source.data(), dest.data(), &srcLen, dest_len);
+    int ret = LZ4_compress_destSize(source.data(), dest.data(), &srcLen, dest_len);
+    int OrigLen = source.size();
+    vector<char> decompressed(OrigLen, 0);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.
+    if(ret > 0 && srcLen != 0)
+    {
+        int ret2 = LZ4_decompress_safe(dest.data(), decompressed.data(), ret, OrigLen);
+        EXPECT_GT(ret2, 0);      
+        if(ret2 > 0 )       
+            EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), srcLen));
+    }
 }
 FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_destSize_fuzz)
     .WithDomains(fuzztest::InRange<int>(1,10000),
@@ -3410,7 +3446,17 @@ void LZ4_compress_fast_continue_fuzz(vector<char> dict, vector<char> source, int
     vector<char> dest(dest_len);
     LZ4_stream_t *stream = LZ4_createStream();
     LZ4_loadDict(stream, dict.data(), dict.size());
-    LZ4_compress_fast_continue(stream, source.data(), dest.data(), source.size(), dest.capacity(), acceleration);
+    int ret = LZ4_compress_fast_continue(stream, source.data(), dest.data(), source.size(), dest.capacity(), acceleration);
+    int OrigLen = source.size();
+    vector<char> decompressed(OrigLen, 0);
+    //When source size is zero , compress function generates empty block which cannot be decompressed.
+    if(ret > 0 && source.size() != 0)
+    {
+        int ret2 = LZ4_decompress_safe(dest.data(), decompressed.data(), ret, OrigLen);
+        EXPECT_GT(ret2, 0);        
+        if(ret2 > 0 )       
+            EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
+    }
     free(stream);
 }
 FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_fast_continue_fuzz)
@@ -3423,9 +3469,9 @@ FUZZ_TEST(AOCL_Compression_lz4, LZ4_compress_fast_continue_fuzz)
 void LZ4_decompress_safe_continue_fuzz(vector<char> dict, int orig_len, vector<char> source)
 {
     LZ4_streamDecode_t *decode = LZ4_createStreamDecode();
-    vector<char> original(orig_len);
+    vector<char> decompressed(orig_len);
     LZ4_setStreamDecode(decode, dict.data(), dict.size());    
-    LZ4_decompress_safe_continue(decode, source.data(), original.data(), source.size(), orig_len);
+    LZ4_decompress_safe_continue(decode, source.data(), decompressed.data(), source.size(), orig_len);
     LZ4_freeStreamDecode(decode);
 }
 FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_continue_fuzz)
@@ -3481,6 +3527,7 @@ FUZZ_TEST(AOCL_Compression_lz4, LZ4_decompress_safe_partial_usingDict_prefixmode
                 fuzztest::Arbitrary<std::vector<char>>(),
                 fuzztest::InRange<int>(1,10000)
                 );
+
 #endif /* AOCL_TEST_FUZZER */
 /*********************************************
  * End fuzz tests for lz4

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -69,6 +69,7 @@ AOCL_VOID print_user_options(AOCL_VOID)
     printf("-h | --help Print help info\n");
     printf("-l    List all the available third party test benches\n");
     printf("-e<>  Third party test bench identifier\n");
+    printf("-v <file1> <file2> Compare if files are equal\n");
     printf("followed by <test_bench_options> options for the specific test bench\n");
 }
 
@@ -106,6 +107,63 @@ int unsupported_method_test(int argc, char** argv) {
 int unsupported_internal_test(int argc, char** argv) {
     LOG_UNSUPPORTED_INTERNAL_TEST(logCtx);
     return ERR_TP_BENCH_TEST;
+}
+
+/* File validation function
+ * Compare two files for equality
+ * Can be extended to validate specific patterns like compression format compliance, etc. */
+int validate(const char* file1, const char* file2) {
+    FILE *f1 = fopen(file1, "rb");
+    FILE *f2 = fopen(file2, "rb");
+    if (!f1 || !f2) {
+        printf("Error: Could not open one or both files for validation.\n");
+        if (f1) fclose(f1);
+        if (f2) fclose(f2);
+        return ERR_TP_BENCH_TEST;
+    }
+    fseek(f1, 0, SEEK_END);
+    fseek(f2, 0, SEEK_END);
+    size_t size1 = ftell(f1);
+    size_t size2 = ftell(f2);
+    rewind(f1);
+    rewind(f2);
+    if (size1 != size2) {
+        printf("Validation failed: File sizes differ (%zu vs %zu bytes)\n", size1, size2);
+        fclose(f1);
+        fclose(f2);
+        return ERR_TP_BENCH_TEST;
+    }
+    unsigned char buf1[4096], buf2[4096];
+    size_t total = 0;
+    int mismatch = 0;
+    while (!feof(f1) && !feof(f2)) {
+        size_t r1 = fread(buf1, 1, sizeof(buf1), f1);
+        size_t r2 = fread(buf2, 1, sizeof(buf2), f2);
+        if (r1 != r2) {
+            printf("Validation failed: Read size mismatch at offset %zu\n", total);
+            mismatch = 1;
+            break;
+        }
+        int cmp = memcmp(buf1, buf2, r1);
+        if (cmp != 0) {
+            for (size_t i = 0; i < r1; ++i) {
+                if (buf1[i] != buf2[i]) {
+                    printf("Validation failed: Mismatch at byte %zu of %zu (0x%02x != 0x%02x)\n", total + i, size1, buf1[i], buf2[i]);
+                    mismatch = 1;
+                    break;
+                }
+            }
+            break;
+        }
+        total += r1;
+    }
+    fclose(f1);
+    fclose(f2);
+    if (mismatch) {
+        return ERR_TP_BENCH_TEST;
+    }
+    printf("Validation succeeded: Files are identical (%zu bytes)\n", size1);
+    return 0;
 }
 
 AOCL_INT32 main(AOCL_INT32 argc, AOCL_CHAR** argv)
@@ -176,6 +234,19 @@ AOCL_INT32 main(AOCL_INT32 argc, AOCL_CHAR** argv)
                     }
                     return ret;
                 }
+                break;
+            }
+            case 'v': // validate two files
+            {
+                if (cnt + 2 >= argc) {
+                    printf("Error: -v requires two file arguments\n");
+                    ret = ERR_TP_BENCH_ARGS;
+                    break;
+                }
+                const char* file1 = argv[cnt + 1];
+                const char* file2 = argv[cnt + 2];
+                ret = validate(file1, file2);
+                cnt += 2; // skip file arguments
                 break;
             }
             }
