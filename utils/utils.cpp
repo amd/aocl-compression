@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -40,6 +40,7 @@
 #include "api/types.h"
 #include "api/aocl_compression.h"
 #include "utils/utils.h"
+#include "dispatcher.h"
 
 #ifdef AOCL_ENABLE_LOG_FEATURE
 
@@ -55,121 +56,12 @@ aocl_log_ctx logCtx = {-1};
 
 #endif /* AOCL_ENABLE_LOG_FEATURE */
 
-AOCL_INTP is_SSE2_supported(AOCL_VOID)
-{
-    AOCL_INTP ret;
-    AOCL_INTP eax, ebx, ecx, edx;
-    cpu_features_detection(0x00000001, 0, &eax, &ebx, &ecx, &edx);
-    ret = ((edx & (1 << 26)) != 0);
-    LOG_FORMATTED(INFO, logCtx,
-        "SSE2 SIMD %s supported", (ret ? "is" : "is not"));
-    return ret;
-}
-
-AOCL_INTP is_AVX_supported(AOCL_VOID)
-{
-    AOCL_INTP ret;
-    AOCL_INTP eax, ebx, ecx, edx;
-    cpu_features_detection(0x00000001, 0, &eax, &ebx, &ecx, &edx);
-    ret = ((ecx & 0x18000000) == 0x18000000);
-    LOG_FORMATTED(INFO, logCtx,
-        "AVX SIMD %s supported", (ret ? "is" : "is not"));
-    return ret;
-}
-
-AOCL_INTP is_AVX2_supported(AOCL_VOID)
-{
-    AOCL_INTP ret;
-    AOCL_INTP eax, ebx, ecx, edx;
-    cpu_features_detection(0x00000007, 0, &eax, &ebx, &ecx, &edx);
-    ret = ((ebx & (1 << 5)) != 0);
-    LOG_FORMATTED(INFO, logCtx,
-        "AVX2 SIMD %s supported", (ret ? "is" : "is not"));
-    return ret;
-}
-
-static inline AOCL_INTP xgetbv(AOCL_INTP opt)
-{
-    int eax, edx;
-    __asm__(".byte 0x0f, 0x01, 0xd0" : "=a"(eax), "=d"(edx) : "c" (opt));
-    return eax;
-}
-
-AOCL_INTP is_AVX512_supported(AOCL_VOID)
-{
-    AOCL_INTP ret = 0;
-    AOCL_INTP eax, ebx, ecx, edx;
-    //Below is the set of checks for AVX512 detection
-    //1. Check CPU support for ZMM state management using OSXSAVE 
-    //Its support also implies that XGETBV is enabled for application use
-    cpu_features_detection(0x1, 0, &eax, &ebx, &ecx, &edx);
-    if ((ecx & 0x08000000) == 0x08000000)
-    {
-        //2. Check OS support for XGETBV instruction and ZMM register state
-        AOCL_INTP reg_support_bits = (7 << 5) | (1 << 2) | (1 << 1);
-        if ((xgetbv(0) & reg_support_bits) == reg_support_bits)
-        {
-            //3. Check CPU support for AVX-512 Foundation instructions
-            cpu_features_detection(7, 0, &eax, &ebx, &ecx, &edx);
-            if (ebx & (1 << 16))
-            {
-                ret = 1;
-            }
-        }
-    }
-    LOG_FORMATTED(INFO, logCtx,
-        "AVX512 SIMD %s supported", (ret ? "is" : "is not"));
-    return ret;
-}
-
-static inline AOCL_INTP get_enabled_inst(AOCL_VOID) {
-    AOCL_INTP enable_inst = 4;
-    const char* AOCL_Enable_Inst = getenv("AOCL_ENABLE_INSTRUCTIONS");
-    if (AOCL_Enable_Inst != NULL) {
-        if (strcmp(AOCL_Enable_Inst, "AVX512") == 0)
-            enable_inst = 4;
-        else if (strcmp(AOCL_Enable_Inst, "AVX2") == 0)
-            enable_inst = 3;
-        else if (strcmp(AOCL_Enable_Inst, "AVX") == 0)
-            enable_inst = 2;
-        else if (strcmp(AOCL_Enable_Inst, "SSE2") == 0)
-            enable_inst = 1;
-        else
-            enable_inst = 0;
-    }
-#ifndef AOCL_DYNAMIC_DISPATCHER
-    else {
-        enable_inst = -1; //when AOCL_ENABLE_INSTRUCTIONS is not set and AOCL_DYNAMIC_DISPATCHER is disabled, no dynamic isa selection
-    }
-#endif
-    return enable_inst;
-}
-
 AOCL_VOID set_cpu_opt_flags(AOCL_VOID* handle)
 {
     aocl_compression_desc* aocl_codec_handle = (aocl_compression_desc*)handle;
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
 
-    AOCL_INTP enable_inst = get_enabled_inst();
-
-    aocl_codec_handle->optLevel = 0;
-    switch (enable_inst) {
-    case 4:
-        aocl_codec_handle->optLevel += is_AVX512_supported();
-    case 3:
-        aocl_codec_handle->optLevel += is_AVX2_supported();
-    case 2:
-        aocl_codec_handle->optLevel += is_AVX_supported();
-    case 1:
-        aocl_codec_handle->optLevel += is_SSE2_supported();
-        break;
-    case 0:
-        aocl_codec_handle->optLevel = 0;
-        break;
-    default:
-        aocl_codec_handle->optLevel = -1; // undecided. use defaults
-        break;
-    }
+    aocl_codec_handle->optLevel = (AOCL_INTP) Dispatcher_GetEnvRequestedLevel();
 
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 }
@@ -177,31 +69,9 @@ AOCL_VOID set_cpu_opt_flags(AOCL_VOID* handle)
 AOCL_INTP get_cpu_opt_flags(int printDebugLogs)
 {
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-
-    AOCL_INTP enable_inst = get_enabled_inst();
-
-    AOCL_INTP optLevel = 0;
-    switch (enable_inst) {
-    case 4:
-        optLevel += is_AVX512_supported();
-    case 3:
-        optLevel += is_AVX2_supported();
-    case 2:
-        optLevel += is_AVX_supported();
-    case 1:
-        optLevel += is_SSE2_supported();
-        break;
-    case 0:
-        optLevel = 0;
-        break;
-    default:
-        optLevel = -1; // undecided. use defaults
-        break;
-    }
-    
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");
 
-    return optLevel;
+    return (AOCL_INTP) Dispatcher_GetEnvRequestedLevel();
 }
 
 AOCL_INTP get_disable_opt_flags(int printDebugLogs)
@@ -317,6 +187,6 @@ int set_opt_level(int optLevel) {
 }
 
 int test_get_enabled_inst(void) {
-    return get_enabled_inst();
+    return (int) Dispatcher_GetEnvRequestedLevel();
 }
 #endif

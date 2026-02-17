@@ -98,7 +98,8 @@ endif()
 
 set(INTERNAL_INC_FILES  ${INC_FILES}
                         api/types.h
-                        utils/utils.h)
+                        utils/utils.h
+                        utils/dispatcher.h)
 list(TRANSFORM INTERNAL_INC_FILES PREPEND ${CMAKE_SOURCE_DIR}/)
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/include/types.h

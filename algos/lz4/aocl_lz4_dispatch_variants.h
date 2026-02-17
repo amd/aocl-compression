@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,31 +25,40 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef AOCL_ZLIB_SETUP_H
-#define AOCL_ZLIB_SETUP_H
 
-#ifdef AOCL_ZLIB_OPT
+#ifndef AOCL_LZ4_DISPATCH_VARIANTS_H
+#define AOCL_LZ4_DISPATCH_VARIANTS_H
 
 #include "utils/dispatcher.h"
 
-extern void aocl_register_slide_hash(int optOff, CpuFeatures cpuFeatures);
-extern void aocl_destroy_slide_hash(void);
+/*
+ * Shared variant entry layouts used by lz4/lz4hc FMV registration tables.
+ *
+ * Notes:
+ *  - required_features is kept as the first field in each variant entry.
+ *  - Tables are expected to be ordered from highest-priority to fallback.
+ */
 
-extern void aocl_register_longest_match(int optOff, CpuFeatures cpuFeatures);
-extern void aocl_destroy_longest_match(void);
+typedef enum {
+    AOCL_LZ4_PROFILE_BASELINE = 0,
+    AOCL_LZ4_PROFILE_OPT,
+    AOCL_LZ4_PROFILE_AVX
+} AoclLz4DispatchProfile;
 
-extern void aocl_setup_adler32(int optOff, CpuFeatures cpuFeatures);
-extern void aocl_destroy_adler32(void);
+typedef struct {
+    CpuFeatures required_features;
+    AoclLz4DispatchProfile profile;
+} AoclLz4DispatchVariant;
 
-extern void aocl_setup_deflate(int optOff, CpuFeatures cpuFeatures);
-extern void aocl_destroy_deflate(void);
+typedef enum {
+    AOCL_LZ4HC_PROFILE_BASELINE = 0,
+    AOCL_LZ4HC_PROFILE_OPT,
+    AOCL_LZ4HC_PROFILE_AVX
+} AoclLz4hcDispatchProfile;
 
-extern void aocl_setup_tree(int optOff, CpuFeatures cpuFeatures);
-extern void aocl_destroy_tree(void);
+typedef struct {
+    CpuFeatures required_features;
+    AoclLz4hcDispatchProfile profile;
+} AoclLz4hcDispatchVariant;
 
-extern void aocl_setup_inflate(int optOff, CpuFeatures cpuFeatures);
-extern void aocl_destroy_inflate(void);
-
-#endif /* AOCL_ZLIB_OPT */
-
-#endif /* AOCL_ZLIB_SETUP_H */
+#endif /* AOCL_LZ4_DISPATCH_VARIANTS_H */

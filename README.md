@@ -84,7 +84,6 @@ GNU Make based build is provided for Linux systems with limited functional featu
    ```
 4. Run tests when enabled:
    ```
-   make AOCL_TEST_COVERAGE=1
    make test AOCL_TEST_COVERAGE=1
    ```
 5. Install and uninstall using make targets:
@@ -92,6 +91,8 @@ GNU Make based build is provided for Linux systems with limited functional featu
    make install PREFIX=/usr/local
    make uninstall PREFIX=/usr/local
    ```
+* NOTE: <br>
+   1. **GoogleTest**: Required to build and execute the test suite
 
 GNU Make Example
 ----------------
@@ -99,7 +100,6 @@ Build a Debug static library with OpenMP threading support and run tests:
 ```
 make clean
 make BUILD_TYPE=Debug BUILD_STATIC_LIBS=1 AOCL_ENABLE_THREADS=1 -j
-make AOCL_TEST_COVERAGE=1 -j
 make test AOCL_TEST_COVERAGE=1
 ```
 

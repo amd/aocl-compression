@@ -7,7 +7,7 @@
  */
 
 /**
- * Modifications Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -40,6 +40,10 @@
 
 #ifdef AOCL_ZLIB_OPT
 #include "aocl_zlib_setup.h"
+#include "aocl_zlib_fmv_utils.h"
+#include "aocl_zlib_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_zlib_fmv_utils.h and aocl_zlib_dispatch_variants.h. */
 
 static int setup_ok_zlib_longest = 0; // flag to indicate status of dynamic dispatcher setup
 #ifndef AOCL_ENABLE_THREADS
@@ -372,7 +376,7 @@ uInt ZLIB_INTERNAL longest_match_lazy_x86(deflate_state *s, IPos cur_match)
     return longest_match_lazy_fp(s, cur_match);
 }
 
-static inline void aocl_register_longest_match_fmv(int optOff, int optLevel)
+static inline void aocl_register_longest_match_fmv(int optOff, CpuFeatures cpuFeatures)
 {
     if (UNLIKELY(optOff == 1))
     {
@@ -382,51 +386,39 @@ static inline void aocl_register_longest_match_fmv(int optOff, int optLevel)
     }
     else
     {
-        switch (optLevel)
-        {
-        case 0://C version
-        case 1://SSE version
-            longest_match_fp = longest_match_c_opt;
-            longest_match_lazy_fp = longest_match_c_opt;
-            aocl_compare256_fp = compare256_c;
-            break;
-        case 2://AVX version
-#ifdef AOCL_ZLIB_AVX_OPT
-            longest_match_fp = longest_match_avx_opt;
-            longest_match_lazy_fp = longest_match_avx_opt_lazy;
-            aocl_compare256_fp = compare256_avx;
-#else
-            longest_match_fp = longest_match_c_opt;
-            longest_match_lazy_fp = longest_match_c_opt;
-            aocl_compare256_fp = compare256_c;
-#endif
-            break;
-        case -1: // undecided. use defaults based on compiler flags
-        case 3://AVX2 version
-        default://AVX512 and other versions
+        /* FMV variant table (highest priority first). */
+        static const AoclZlibLongestMatchVariant longest_match_variants[] = {
 #if defined(AOCL_ZLIB_AVX2_OPT) && defined(HAVE_BUILTIN_CTZ)
-            longest_match_fp = longest_match_avx2_opt;
-            longest_match_lazy_fp = longest_match_avx2_opt_lazy;
-            aocl_compare256_fp = compare256_avx2;
-#elif defined(AOCL_ZLIB_AVX_OPT)
-            longest_match_fp = longest_match_avx_opt;
-            longest_match_lazy_fp = longest_match_avx_opt_lazy;
-            aocl_compare256_fp = compare256_avx;
-#else
-            longest_match_fp = longest_match_c_opt;
-            longest_match_lazy_fp = longest_match_c_opt;
-            aocl_compare256_fp = compare256_c;
+            { FEATURE_AVX2, longest_match_avx2_opt, longest_match_avx2_opt_lazy, compare256_avx2 },
 #endif
-            break;
+#ifdef AOCL_ZLIB_AVX_OPT
+            { FEATURE_AVX, longest_match_avx_opt, longest_match_avx_opt_lazy, compare256_avx },
+#endif
+            { 0, longest_match_c_opt, longest_match_c_opt, compare256_c }
+        };
+
+        /* Select first compatible FMV variant for detected CPU features. */
+        size_t variant_index = aocl_zlib_select_fmv_variant(
+            longest_match_variants,
+            AOCL_ZLIB_ARRAY_SIZE(longest_match_variants),
+            sizeof(longest_match_variants[0]),
+            offsetof(AoclZlibLongestMatchVariant, required_features),
+            cpuFeatures);
+
+        if (variant_index < AOCL_ZLIB_ARRAY_SIZE(longest_match_variants)) {
+            longest_match_fp = longest_match_variants[variant_index].longest_match_impl;
+            longest_match_lazy_fp = longest_match_variants[variant_index].longest_match_lazy_impl;
+            aocl_compare256_fp = longest_match_variants[variant_index].compare256_impl;
+            return;
         }
     }
 }
 
-void ZLIB_INTERNAL aocl_register_longest_match(int optOff, int optLevel){
+void ZLIB_INTERNAL aocl_register_longest_match(int optOff, CpuFeatures cpuFeatures) {
     AOCL_ENTER_CRITICAL(setup_zlib_longest)
     if (!setup_ok_zlib_longest) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_longest_match_fmv(optOff, optLevel);
+        aocl_register_longest_match_fmv(optOff, cpuFeatures);
         setup_ok_zlib_longest = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_longest)

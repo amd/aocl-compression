@@ -2,7 +2,7 @@
 2021-04-01 : Igor Pavlov : Public domain */
 
 /**
-* Modifications Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+* Modifications Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -37,6 +37,11 @@
 #include "LzmaDec.h"
 
 #include "utils/utils.h"
+#include "utils/dispatcher.h"
+#include "aocl_lzma_fmv_utils.h"
+#include "aocl_lzma_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_lzma_fmv_utils.h and aocl_lzma_dispatch_variants.h. */
 
 #include <limits.h>
 
@@ -2058,38 +2063,47 @@ SRes LzmaDecode(Byte* dest, SizeT* destLen, const Byte* src, SizeT* srcLen,
     return res;
 }
 
-static void aocl_register_lzma_decode_fmv(int optOff, int optLevel)
+static void aocl_register_lzma_decode_fmv(int optOff, CpuFeatures cpuFeatures)
 {
     if (optOff)
     {
-        //C version
+        /* C baseline profile */
         Lzma_Decode_Real_fp = LZMA_DECODE_REAL;
+        return;
     }
-    else
-    {
-        switch (optLevel)
-        {
-            case -1: // undecided. use defaults based on compiler flags
-    #ifdef AOCL_LZMA_OPT
-                Lzma_Decode_Real_fp = AOCL_LZMA_DECODE_REAL;
-    #else
-                Lzma_Decode_Real_fp = LZMA_DECODE_REAL;
-    #endif
-                break;
+
+    /* FMV variant table (highest priority first). */
+    static const AoclLzmaDecodeDispatchVariant variants[] = {
 #ifdef AOCL_LZMA_OPT
-            case 0://C version
-            case 1://SSE version
-            case 2://AVX version
-            case 3://AVX2 version
-            default://AVX512 and other versions
-                Lzma_Decode_Real_fp = AOCL_LZMA_DECODE_REAL;
-                break;
+        { 0, AOCL_LZMA_DECODE_PROFILE_OPT }
 #else
-            default:
-                Lzma_Decode_Real_fp = LZMA_DECODE_REAL;
-                break;
+        { 0, AOCL_LZMA_DECODE_PROFILE_BASELINE }
 #endif
-        }
+    };
+
+    /* Select first compatible FMV variant for detected CPU features. */
+    size_t variant_index = aocl_lzma_select_fmv_variant(
+        variants,
+        AOCL_LZMA_ARRAY_SIZE(variants),
+        sizeof(variants[0]),
+        offsetof(AoclLzmaDecodeDispatchVariant, required_features),
+        cpuFeatures);
+
+    if (variant_index >= AOCL_LZMA_ARRAY_SIZE(variants)) {
+        return;
+    }
+
+    switch (variants[variant_index].profile) {
+        case AOCL_LZMA_DECODE_PROFILE_OPT:
+#ifdef AOCL_LZMA_OPT
+            Lzma_Decode_Real_fp = AOCL_LZMA_DECODE_REAL;
+#endif
+            break;
+
+        case AOCL_LZMA_DECODE_PROFILE_BASELINE:
+        default:
+            Lzma_Decode_Real_fp = LZMA_DECODE_REAL;
+            break;
     }
 }
 
@@ -2098,8 +2112,9 @@ void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
 {
     AOCL_ENTER_CRITICAL(setup_lzmadec)
     if (!setup_ok_lzma_decode) {
+        CpuFeatures cpuFeatures = Dispatcher_GetSupportedFeaturesForLevel(Dispatcher_IntToLevel((int)optLevel));
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_lzma_decode_fmv(optOff, optLevel);
+        aocl_register_lzma_decode_fmv(optOff, cpuFeatures);
         setup_ok_lzma_decode = 1;
     }
     AOCL_EXIT_CRITICAL(setup_lzmadec)
@@ -2109,9 +2124,9 @@ void aocl_setup_lzma_decode(int optOff, int optLevel, size_t insize,
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_lzmadec)
     if (!setup_ok_lzma_decode) {
-        int optLevel = get_cpu_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         int optOff = get_disable_opt_flags(0);
-        aocl_register_lzma_decode_fmv(optOff, optLevel);
+        aocl_register_lzma_decode_fmv(optOff, cpuFeatures);
         setup_ok_lzma_decode = 1;
     }
     AOCL_EXIT_CRITICAL(setup_lzmadec)

@@ -384,7 +384,10 @@ set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h
                       ${ALGOS_PATH}/common/aoclPrefix.h)
 set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.cpp
-						utils/utils.h)
+                        utils/dispatcher.cpp
+                        utils/cpu_features.cpp
+						utils/utils.h
+                        utils/dispatcher.h)
 # Source files utilizing AVX-512 and higher ISA extensions
 set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
                       ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)

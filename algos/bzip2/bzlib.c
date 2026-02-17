@@ -9,7 +9,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
-   Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -32,6 +32,11 @@
 #include "algos/common/aoclAlgoLog.h"
 #include "bzlib_private.h"
 #include "libsais.h"
+#include "utils/dispatcher.h"
+#include "aocl_bzip2_fmv_utils.h"
+#include "aocl_bzip2_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_bzip2_fmv_utils.h and aocl_bzip2_dispatch_variants.h. */
 
 #ifdef AOCL_BZIP2_OPT
 /* Dynamic dispatcher setup function for native APIs.
@@ -135,92 +140,73 @@ static Bool AOCL_copy_output_until_stop_avx ( EState* s );
  Bool  (*AOCL_copy_input_until_stop_fp) ( EState* s) = copy_input_until_stop;
  Bool  (*AOCL_copy_output_until_stop_fp) ( EState* s) = copy_output_until_stop;
 
-void aocl_register_decompress_fmv(int optOff, int optLevel)
+void aocl_register_decompress_fmv(int optOff, CpuFeatures cpuFeatures)
 {
-   if (optOff)
-   {
-      AOCL_BZ2_decompress_fp = BZ2_decompress;
-   }
-   else
-   {
-      switch (optLevel)
-      {
-         case -1: // undecided. use defaults based on compiler flags
+    if (optOff == 1)
+    {
+        AOCL_BZ2_decompress_fp = BZ2_decompress;
+    }
+    else
+    {
+        // FMV variant table (highest priority first)
+        static const AoclBzip2DecompressVariant variants[] = {
 #ifdef AOCL_BZIP2_OPT
-            AOCL_BZ2_decompress_fp = AOCL_BZ2_decompress;
+            { 0, AOCL_BZ2_decompress }
 #else
-            AOCL_BZ2_decompress_fp = BZ2_decompress;
+            { 0,  BZ2_decompress }
 #endif
-            break;
-#ifdef AOCL_BZIP2_OPT
-         case 0://C version
-         case 1://SSE version
-         case 2://AVX version
-         case 3://AVX2 version
-         default://AVX512 and other versions
-             AOCL_BZ2_decompress_fp = AOCL_BZ2_decompress;
-            break;
-#else
-         default:
-             AOCL_BZ2_decompress_fp = BZ2_decompress;
-             break;
-#endif
-      }
-   }
+        };
+
+        // Select first compatible FMV variant for detected CPU features
+        size_t variant_index = aocl_select_fmv_variant(
+            variants,
+            AOCL_ARRAY_SIZE(variants),
+            sizeof(variants[0]),
+            offsetof(AoclBzip2DecompressVariant, required_features),
+            cpuFeatures);
+
+        if (variant_index < AOCL_ARRAY_SIZE(variants)) {
+            AOCL_BZ2_decompress_fp = variants[variant_index].impl;
+            return;
+        }
+    }
 }
 
-void aocl_register_copy_fmv(int optOff, int optLevel)
+void aocl_register_copy_fmv(int optOff, CpuFeatures cpuFeatures)
 {
-   if (optOff)
-   {
-      AOCL_copy_input_until_stop_fp = copy_input_until_stop;
-      AOCL_copy_output_until_stop_fp = copy_output_until_stop;
-   }
-   else
-   {
-      switch (optLevel)
-      {
-         case -1: // undecided. use defaults based on compiler flags
+    if (optOff == 1)
+    {
+        AOCL_copy_input_until_stop_fp = copy_input_until_stop;
+        AOCL_copy_output_until_stop_fp = copy_output_until_stop;
+    }
+    else
+    {
+        // FMV variant table (highest priority first)
+        static const AoclBzip2CopyVariant variants[] = {
 #ifdef AOCL_BZIP2_AVX_OPT
-            AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
-            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop_avx;
-#elif defined(AOCL_BZIP2_OPT)
-            AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
-            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop;
-#else
-            AOCL_copy_input_until_stop_fp = copy_input_until_stop;
-            AOCL_copy_output_until_stop_fp = copy_output_until_stop;
+            { FEATURE_AVX,  AOCL_copy_input_until_stop, AOCL_copy_output_until_stop_avx },
 #endif
-            break;
 #ifdef AOCL_BZIP2_OPT
-         case 0://C version
-         case 1://SSE version
-            AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
-            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop;
-            break;
-         case 2://AVX version
-         case 3://AVX2 version
-         default://AVX512 and other versions
-#ifdef AOCL_BZIP2_AVX_OPT
-             AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
-            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop_avx;
-#elif defined(AOCL_BZIP2_OPT)
-            AOCL_copy_input_until_stop_fp = AOCL_copy_input_until_stop;
-            AOCL_copy_output_until_stop_fp = AOCL_copy_output_until_stop;
+            { 0, AOCL_copy_input_until_stop, AOCL_copy_output_until_stop }
 #else
-            AOCL_copy_input_until_stop_fp = copy_input_until_stop;
-            AOCL_copy_output_until_stop_fp = copy_output_until_stop;
+            { 0, copy_input_until_stop, copy_output_until_stop }
 #endif
-            
-            break;
-#else
-         default:
-             AOCL_copy_input_until_stop_fp = copy_input_until_stop;
-             AOCL_copy_output_until_stop_fp = copy_output_until_stop;
-             break;
-#endif
-      }
-   }
+        };
+
+        // Select first compatible FMV variant for detected CPU features
+        size_t variant_index = aocl_select_fmv_variant(
+            variants,
+            AOCL_ARRAY_SIZE(variants),
+            sizeof(variants[0]),
+            offsetof(AoclBzip2CopyVariant, required_features),
+            cpuFeatures);
+
+        if (variant_index < AOCL_ARRAY_SIZE(variants)) {
+            AOCL_copy_input_until_stop_fp = variants[variant_index].copy_input_impl;
+            AOCL_copy_output_until_stop_fp = variants[variant_index].copy_output_impl;
+            return;
+        }
+    }
 }
 
 #ifdef AOCL_BZIP2_OPT
@@ -242,11 +228,12 @@ BZ_EXTERN char * BZ_API(aocl_setup_bzip2)
 {
     AOCL_ENTER_CRITICAL(setup_bzip2)
     if (!setup_ok_bzip2) {
+        CpuFeatures cpuFeatures = Dispatcher_GetSupportedFeaturesForLevel(Dispatcher_IntToLevel((int)optLevel));
         optOff = optOff ? 1 : get_disable_opt_flags(0);
         AOCL_REGISTER_BWT
-        aocl_register_decompress_fmv(optOff, optLevel);
-        aocl_register_copy_fmv(optOff, optLevel);
-        aocl_register_mainSimpleSort_fmv(optOff, optLevel);
+        aocl_register_decompress_fmv(optOff, cpuFeatures);
+        aocl_register_copy_fmv(optOff, cpuFeatures);
+        aocl_register_mainSimpleSort_fmv(optOff, cpuFeatures);
         setup_ok_bzip2 = 1;
     }
     AOCL_EXIT_CRITICAL(setup_bzip2)
@@ -257,12 +244,12 @@ BZ_EXTERN char * BZ_API(aocl_setup_bzip2)
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_bzip2)
     if (!setup_ok_bzip2) {
-        int optLevel = get_cpu_opt_flags(0);
         int optOff = get_disable_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         AOCL_REGISTER_BWT
-        aocl_register_decompress_fmv(optOff, optLevel);
-        aocl_register_copy_fmv(optOff, optLevel);
-        aocl_register_mainSimpleSort_fmv(optOff, optLevel);
+        aocl_register_decompress_fmv(optOff, cpuFeatures);
+        aocl_register_copy_fmv(optOff, cpuFeatures);
+        aocl_register_mainSimpleSort_fmv(optOff, cpuFeatures);
         setup_ok_bzip2 = 1;
     }
     AOCL_EXIT_CRITICAL(setup_bzip2)

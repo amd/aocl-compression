@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,6 +33,10 @@
 
 #ifdef AOCL_ZLIB_OPT
 #include "aocl_zlib_setup.h"
+#include "aocl_zlib_fmv_utils.h"
+#include "aocl_zlib_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_zlib_fmv_utils.h and aocl_zlib_dispatch_variants.h. */
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
  * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
@@ -339,7 +343,7 @@ uint32_t ZLIB_INTERNAL adler32_x86_internal_with_copy(uint32_t sum_A, Bytef *dst
     return adler32_with_copy(sum_A, dst, buf, len, copy);
 }
 
-static inline void aocl_setup_adler32_fmv(int optOff, int optLevel)
+static inline void aocl_setup_adler32_fmv(int optOff, CpuFeatures cpuFeatures)
 {
     if (UNLIKELY(optOff == 1))
     {
@@ -347,39 +351,38 @@ static inline void aocl_setup_adler32_fmv(int optOff, int optLevel)
     }
     else
     {
-        switch (optLevel)
-        {
-        case 0://C version
-        case 1://SSE version
-            adler32_x86_with_copy_fp = adler32_with_copy;
-            break;
-        case 2://AVX version
-#ifdef AOCL_ZLIB_AVX_OPT
-            adler32_x86_with_copy_fp = adler32_x86_avx_with_copy;
-#else
-            adler32_x86_with_copy_fp = adler32_with_copy;
-#endif
-            break;
-        case -1: // undecided. use defaults based on compiler flags
-        case 3://AVX2 version
-        default://AVX512 and other versions
+        /* FMV variant table (highest priority first). */
+        static const AoclZlibAdler32Variant adler32_variants[] = {
 #ifdef AOCL_ZLIB_AVX2_OPT
-            adler32_x86_with_copy_fp = adler32_x86_avx2_with_copy;
-#elif defined(AOCL_ZLIB_AVX_OPT)
-            adler32_x86_with_copy_fp = adler32_x86_avx_with_copy;
-#else
-            adler32_x86_with_copy_fp = adler32_with_copy;
+            { FEATURE_AVX2, adler32_x86_avx2_with_copy },
 #endif
-            break;
+#ifdef AOCL_ZLIB_AVX_OPT
+            { FEATURE_AVX,  adler32_x86_avx_with_copy },
+#endif
+            { 0,            adler32_with_copy }
+        };
+
+        /* Select first compatible FMV variant for detected CPU features. */
+        size_t variant_index = aocl_zlib_select_fmv_variant(
+            adler32_variants,
+            AOCL_ZLIB_ARRAY_SIZE(adler32_variants),
+            sizeof(adler32_variants[0]),
+            offsetof(AoclZlibAdler32Variant, required_features),
+            cpuFeatures);
+
+        if (variant_index < AOCL_ZLIB_ARRAY_SIZE(adler32_variants)) {
+            adler32_x86_with_copy_fp = adler32_variants[variant_index].impl;
+            return;
         }
     }
 }
 
-void ZLIB_INTERNAL aocl_setup_adler32(int optOff, int optLevel){
+
+void ZLIB_INTERNAL aocl_setup_adler32(int optOff, CpuFeatures cpuFeatures){
     AOCL_ENTER_CRITICAL(setup_zlib_adler)
     if (!setup_ok_zlib_adler) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_setup_adler32_fmv(optOff, optLevel);
+        aocl_setup_adler32_fmv(optOff, cpuFeatures);
         setup_ok_zlib_adler = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_adler)
@@ -388,9 +391,9 @@ void ZLIB_INTERNAL aocl_setup_adler32(int optOff, int optLevel){
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_zlib_adler)
     if (!setup_ok_zlib_adler) {
-        int optLevel = get_cpu_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         int optOff = get_disable_opt_flags(0);
-        aocl_setup_adler32_fmv(optOff, optLevel);
+        aocl_setup_adler32_fmv(optOff, cpuFeatures);
         setup_ok_zlib_adler = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_adler)

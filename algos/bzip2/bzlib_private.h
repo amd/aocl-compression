@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include "aoclAlgoOpt.h"
 #include <limits.h>
+#include "utils/dispatcher.h"
 
 #ifndef BZ_NO_STDIO
 #include <stdio.h>
@@ -612,7 +613,7 @@ do { \
 #define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC)
 #endif /* AOCL_BZIP2_OPT */
 
-extern void aocl_register_mainSimpleSort_fmv (int optOff, int optLevel);
+extern void aocl_register_mainSimpleSort_fmv (int optOff, CpuFeatures optLevel);
 
 /*-------------------------------------------------------------*/
 /*--- end                                   bzlib_private.h ---*/

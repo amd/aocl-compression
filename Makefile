@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -895,10 +895,13 @@ endif # NATIVE_ENABLE_THREADS
 
 # Utils source files
 UTILS_SOURCES := utils/code_alignment.cpp \
-                 utils/utils.cpp
+                 utils/utils.cpp \
+                 utils/dispatcher.cpp \
+                 utils/cpu_features.cpp
 
 # Utils header files
-UTILS_HEADERS := utils/utils.h
+UTILS_HEADERS := utils/utils.h \
+                 utils/dispatcher.h
 
 # Add to global lists
 ALL_SOURCES += $(UTILS_SOURCES)

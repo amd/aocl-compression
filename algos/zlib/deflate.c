@@ -1,6 +1,6 @@
 /* deflate.c -- compress data using the deflation algorithm
  * Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -50,10 +50,15 @@
 
 /* @(#) $Id$ */
 #include "utils/utils.h"
+#include "utils/dispatcher.h"
 #include "algos/common/aoclAlgoLog.h"
 #include "deflate.h"
 #include "aocl_zlib_x86.h"
 #include "aocl_zlib_setup.h"
+#include "aocl_zlib_fmv_utils.h"
+#include "aocl_zlib_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_zlib_fmv_utils.h and aocl_zlib_dispatch_variants.h. */
 #include "aocl_zlib_utils.h"
 
 #ifdef AOCL_ZLIB_OPT
@@ -2396,11 +2401,11 @@ void (*check_match_fp) (deflate_state *s, IPos start, IPos match,
 #ifdef AOCL_ZLIB_OPT
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
 *  AMD optimized zlib routines depending upon the CPU features. */
-static void aocl_setup_deflate_fmv(int optOff, int optLevel)
+static void aocl_setup_deflate_fmv(int optOff, CpuFeatures cpuFeatures)
 {
-    aocl_register_slide_hash(optOff, optLevel);
-    aocl_register_longest_match(optOff, optLevel);
-    
+    aocl_register_slide_hash(optOff, cpuFeatures);
+    aocl_register_longest_match(optOff, cpuFeatures);
+
     if (!setup_ok_zlib_deflate) {
         const char* AOCL_enable_quick = getenv("AOCL_ZLIB_QUICK_MODE");
         if (AOCL_enable_quick != NULL && (strcmp(AOCL_enable_quick, "ON") == 0))
@@ -2417,40 +2422,61 @@ static void aocl_setup_deflate_fmv(int optOff, int optLevel)
         aocl_deflate_fast_fp = deflate_fast_ref;
         aocl_deflate_slow_fp = deflate_slow_ref;
         aocl_deflateInit2__fp = deflateInit2__ref;
+        return;
     }
-    else
-    {
-        switch (optLevel)
-        {
-            case 0://C version
-            case 1://SSE version
-            case -1: // undecided. use defaults based on compiler flags
-            case 2://AVX version
-            case 3://AVX2 version
-            default://AVX512 and other versions
-                if(aocl_zlib_get_enable_dquick())
-                    config_table = configuration_table_quick;
-                else
-                    config_table = configuration_table_opt;
-                deflate_slide_hash_fp = slide_hash_x86;
-                aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_opt;
-                aocl_fill_window_fp = aocl_fill_window_opt;
-                aocl_deflate_fast_fp = aocl_deflate_fast_opt;
-                aocl_deflate_slow_fp = aocl_deflate_slow_opt;
-                aocl_deflateInit2__fp = aocl_deflateInit2__opt;
+
+    /* FMV variant table (highest priority first). */
+    static const AoclZlibDeflateDispatchVariant deflate_variants[] = {
+        { 0, AOCL_ZLIB_DEFLATE_PROFILE_OPT }
+    };
+
+    /* Select first compatible FMV variant for detected CPU features. */
+    size_t variant_index = aocl_zlib_select_fmv_variant(
+        deflate_variants,
+        AOCL_ZLIB_ARRAY_SIZE(deflate_variants),
+        sizeof(deflate_variants[0]),
+        offsetof(AoclZlibDeflateDispatchVariant, required_features),
+        cpuFeatures);
+
+    if (variant_index >= AOCL_ZLIB_ARRAY_SIZE(deflate_variants)) {
+        return;
+    }
+
+    switch (deflate_variants[variant_index].profile) {
+        case AOCL_ZLIB_DEFLATE_PROFILE_OPT:
+            if (aocl_zlib_get_enable_dquick())
+                config_table = configuration_table_quick;
+            else
+                config_table = configuration_table_opt;
+            deflate_slide_hash_fp = slide_hash_x86;
+            aocl_deflateSetDictionary_fp = aocl_deflateSetDictionary_opt;
+            aocl_fill_window_fp = aocl_fill_window_opt;
+            aocl_deflate_fast_fp = aocl_deflate_fast_opt;
+            aocl_deflate_slow_fp = aocl_deflate_slow_opt;
+            aocl_deflateInit2__fp = aocl_deflateInit2__opt;
             break;
-        }
+
+        case AOCL_ZLIB_DEFLATE_PROFILE_BASELINE:
+        default:
+            config_table = configuration_table;
+            deflate_slide_hash_fp = slide_hash;
+            aocl_deflateSetDictionary_fp = deflateSetDictionary_ref;
+            aocl_fill_window_fp = fill_window_ref;
+            aocl_deflate_fast_fp = deflate_fast_ref;
+            aocl_deflate_slow_fp = deflate_slow_ref;
+            aocl_deflateInit2__fp = deflateInit2__ref;
+            break;
     }
 }
 
-void ZLIB_INTERNAL aocl_setup_deflate(int _optOff, int optLevel)
+void ZLIB_INTERNAL aocl_setup_deflate(int _optOff, CpuFeatures cpuFeatures)
 {
     AOCL_ENTER_CRITICAL(setup_zlib_deflate)
     if (!setup_ok_zlib_deflate) {
         optOff = _optOff ? 1 : get_disable_opt_flags(0);
         zlibOptOff = optOff;
-        aocl_setup_tree(optOff, optLevel);
-        aocl_setup_deflate_fmv(optOff, optLevel);
+        aocl_setup_tree(optOff, cpuFeatures);
+        aocl_setup_deflate_fmv(optOff, cpuFeatures);
         setup_ok_zlib_deflate = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_deflate)
@@ -2471,11 +2497,11 @@ void ZLIB_INTERNAL aocl_destroy_deflate(void) {
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_zlib_deflate)
     if (!setup_ok_zlib_deflate) {
-        optLevel = get_cpu_opt_flags(0);
         optOff = get_disable_opt_flags(0);
         zlibOptOff = optOff;
-        aocl_setup_tree(optOff, optLevel);
-        aocl_setup_deflate_fmv(optOff, optLevel);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
+        aocl_setup_tree(optOff, cpuFeatures);
+        aocl_setup_deflate_fmv(optOff, cpuFeatures);
         setup_ok_zlib_deflate = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_deflate)

@@ -69,7 +69,7 @@ size_t ZSTD_decompressBlock_deprecated(ZSTD_DCtx* dctx,
                             void* dst, size_t dstCapacity,
                       const void* src, size_t srcSize);
 
-void aocl_setup_zstd_decompress_block(int optOff, int optLevel);
+void aocl_setup_zstd_decompress_block(int optOff, uint64_t cpuFeatures);
 
 void aocl_setup_zstd_decompress_block_native(void);
 

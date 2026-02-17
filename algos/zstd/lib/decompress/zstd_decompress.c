@@ -9,7 +9,7 @@
  */
 
 /**
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -115,6 +115,7 @@ void AOCL_ZSTD_readFdsFrame(ZSTD_DCtx* dctx, void const* src, size_t srcSize);
 
 #ifdef AOCL_ZSTD_OPT
 #include "utils/utils.h"
+#include "utils/dispatcher.h"
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
  * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
@@ -2622,15 +2623,16 @@ size_t ZSTD_decompressStream_simpleArgs (
 char* aocl_setup_zstd_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog)
 {
-    aocl_setup_zstd_decompress_block(optOff, optLevel);
+    CpuFeatures cpuFeatures = Dispatcher_GetSupportedFeaturesForLevel(Dispatcher_IntToLevel((int)optLevel));
+    aocl_setup_zstd_decompress_block(optOff, (uint64_t)cpuFeatures);
     return NULL;
 }
 
 #ifdef AOCL_ZSTD_OPT
 static void aocl_setup_native(void) {
-    int optLevel = get_cpu_opt_flags(0);
+    CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
     int optOff = get_disable_opt_flags(0);
-    aocl_setup_zstd_decompress_block(optOff, optLevel);
+    aocl_setup_zstd_decompress_block(optOff, (uint64_t)cpuFeatures);
 }
 #endif
 

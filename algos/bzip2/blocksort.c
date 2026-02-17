@@ -10,7 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
-   Modifications Copyright (C) 2023, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -21,6 +21,11 @@
 
 #include "utils/utils.h"
 #include "bzlib_private.h"
+#include "utils/dispatcher.h"
+#include "aocl_bzip2_fmv_utils.h"
+#include "aocl_bzip2_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_bzip2_fmv_utils.h and aocl_bzip2_dispatch_variants.h. */
 
 /*---------------------------------------------*/
 /*--- Fallback O(N log(N)^2) sorting        ---*/
@@ -771,38 +776,36 @@ void AOCL_mainSimpleSort ( UInt32* ptr,
                       Int32   d,
                       Int32*  budget ) = mainSimpleSort;
 
-void aocl_register_mainSimpleSort_fmv(int optOff, int optLevel)
+void aocl_register_mainSimpleSort_fmv(int optOff, CpuFeatures cpuFeatures)
 {
-   if (optOff)
-   {
-      AOCL_mainSimpleSort_fp = mainSimpleSort;
-   }
-   else
-   {
-      switch (optLevel)
-      {
-         case -1: // undecided. use defaults based on compiler flags
+    if (optOff == 1)
+    {
+        AOCL_mainSimpleSort_fp = mainSimpleSort;
+    }
+    else
+    {
+        // FMV variant table (highest priority first)
+        static const AoclBzip2MainSimpleSortVariant variants[] = {
 #ifdef AOCL_BZIP2_OPT
-            AOCL_mainSimpleSort_fp = AOCL_mainSimpleSort;
-#else
-            AOCL_mainSimpleSort_fp = mainSimpleSort;
+            { FEATURE_AVX2, AOCL_mainSimpleSort },
+            { FEATURE_AVX,  AOCL_mainSimpleSort },
 #endif
-            break;
-#ifdef AOCL_BZIP2_OPT
-         case 0://C version
-         case 1://SSE version
-         case 2://AVX version
-         case 3://AVX2 version
-         default://AVX512 and other versions
-            AOCL_mainSimpleSort_fp = AOCL_mainSimpleSort;
-            break;
-#else
-         default:
-            AOCL_mainSimpleSort_fp = mainSimpleSort;
-            break;
-#endif
-      }
-   }
+            { 0,            mainSimpleSort }
+        };
+
+        // Select first compatible FMV variant for detected CPU features
+        size_t variant_index = aocl_select_fmv_variant(
+            variants,
+            AOCL_ARRAY_SIZE(variants),
+            sizeof(variants[0]),
+            offsetof(AoclBzip2MainSimpleSortVariant, required_features),
+            cpuFeatures);
+
+        if (variant_index < AOCL_ARRAY_SIZE(variants)) {
+            AOCL_mainSimpleSort_fp = variants[variant_index].impl;
+            return;
+        }
+    }
 }
 
 /*---------------------------------------------*/
