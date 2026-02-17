@@ -198,5 +198,210 @@
 
 /**** ZLIB ****/
 
+/**** LZ4 ****/
+/* LZ4 core functions */
+#  define LZ4_compress                    AOCL_LLC_LZ4_compress
+#  define LZ4_decompress_safe             AOCL_LLC_LZ4_decompress_safe
+#  define LZ4_decompress_fast             AOCL_LLC_LZ4_decompress_fast
+#  define LZ4_compress_default            AOCL_LLC_LZ4_compress_default
+#  define LZ4_compress_fast               AOCL_LLC_LZ4_compress_fast
+#  define LZ4_compress_fast_extState      AOCL_LLC_LZ4_compress_fast_extState
+#  define LZ4_compress_fast_extState_fastReset  AOCL_LLC_LZ4_compress_fast_extState_fastReset
+#  define LZ4_compress_destSize           AOCL_LLC_LZ4_compress_destSize
+#  define LZ4_compressBound               AOCL_LLC_LZ4_compressBound
+#  define LZ4_sizeofState                 AOCL_LLC_LZ4_sizeofState
+#  define LZ4_decompress_safe_partial     AOCL_LLC_LZ4_decompress_safe_partial
+
+/* LZ4 streaming functions */
+#  define LZ4_createStream                AOCL_LLC_LZ4_createStream
+#  define LZ4_freeStream                  AOCL_LLC_LZ4_freeStream
+#  define LZ4_resetStream                 AOCL_LLC_LZ4_resetStream
+#  define LZ4_resetStream_fast            AOCL_LLC_LZ4_resetStream_fast
+#  define LZ4_loadDict                    AOCL_LLC_LZ4_loadDict
+#  define LZ4_compress_fast_continue      AOCL_LLC_LZ4_compress_fast_continue
+#  define LZ4_saveDict                    AOCL_LLC_LZ4_saveDict
+#  define LZ4_createStreamDecode          AOCL_LLC_LZ4_createStreamDecode
+#  define LZ4_freeStreamDecode            AOCL_LLC_LZ4_freeStreamDecode
+#  define LZ4_setStreamDecode             AOCL_LLC_LZ4_setStreamDecode
+#  define LZ4_decompress_safe_continue    AOCL_LLC_LZ4_decompress_safe_continue
+#  define LZ4_decompress_fast_continue    AOCL_LLC_LZ4_decompress_fast_continue
+#  define LZ4_decompress_safe_usingDict   AOCL_LLC_LZ4_decompress_safe_usingDict
+#  define LZ4_decompress_fast_usingDict   AOCL_LLC_LZ4_decompress_fast_usingDict
+
+/* LZ4 version and utility functions */
+#  define LZ4_versionNumber               AOCL_LLC_LZ4_versionNumber
+#  define LZ4_versionString               AOCL_LLC_LZ4_versionString
+
+/* LZ4 HC (High Compression) functions */
+#  define LZ4_compress_HC                 AOCL_LLC_LZ4_compress_HC
+#  define LZ4_compress_HC_extStateHC      AOCL_LLC_LZ4_compress_HC_extStateHC
+#  define LZ4_compress_HC_extStateHC_fastReset  AOCL_LLC_LZ4_compress_HC_extStateHC_fastReset
+#  define LZ4_sizeofStateHC               AOCL_LLC_LZ4_sizeofStateHC
+#  define LZ4_compress_HC_destSize        AOCL_LLC_LZ4_compress_HC_destSize
+#  define LZ4_createStreamHC              AOCL_LLC_LZ4_createStreamHC
+#  define LZ4_freeStreamHC                AOCL_LLC_LZ4_freeStreamHC
+#  define LZ4_resetStreamHC               AOCL_LLC_LZ4_resetStreamHC
+#  define LZ4_resetStreamHC_fast          AOCL_LLC_LZ4_resetStreamHC_fast
+#  define LZ4_loadDictHC                  AOCL_LLC_LZ4_loadDictHC
+#  define LZ4_compress_HC_continue        AOCL_LLC_LZ4_compress_HC_continue
+#  define LZ4_compress_HC_continue_destSize  AOCL_LLC_LZ4_compress_HC_continue_destSize
+#  define LZ4_saveDictHC                  AOCL_LLC_LZ4_saveDictHC
+#  define LZ4_initStreamHC                AOCL_LLC_LZ4_initStreamHC
+#  define LZ4_setCompressionLevel         AOCL_LLC_LZ4_setCompressionLevel
+#  define LZ4_favorDecompressionSpeed     AOCL_LLC_LZ4_favorDecompressionSpeed
+
+/* LZ4 deprecated/legacy functions */
+#  define LZ4_compress_limitedOutput      AOCL_LLC_LZ4_compress_limitedOutput
+#  define LZ4_compress_limitedOutput_withState  AOCL_LLC_LZ4_compress_limitedOutput_withState
+#  define LZ4_compress_withState          AOCL_LLC_LZ4_compress_withState
+#  define LZ4_compress_limitedOutput_continue  AOCL_LLC_LZ4_compress_limitedOutput_continue
+#  define LZ4_compress_continue           AOCL_LLC_LZ4_compress_continue
+#  define LZ4_uncompress                  AOCL_LLC_LZ4_uncompress
+#  define LZ4_uncompress_unknownOutputSize  AOCL_LLC_LZ4_uncompress_unknownOutputSize
+#  define LZ4_create                      AOCL_LLC_LZ4_create
+#  define LZ4_sizeofStreamState           AOCL_LLC_LZ4_sizeofStreamState
+#  define LZ4_resetStreamState            AOCL_LLC_LZ4_resetStreamState
+#  define LZ4_slideInputBuffer            AOCL_LLC_LZ4_slideInputBuffer
+#  define LZ4_compressHC                  AOCL_LLC_LZ4_compressHC
+#  define LZ4_compressHC_limitedOutput    AOCL_LLC_LZ4_compressHC_limitedOutput
+#  define LZ4_compressHC2                 AOCL_LLC_LZ4_compressHC2
+#  define LZ4_compressHC2_limitedOutput   AOCL_LLC_LZ4_compressHC2_limitedOutput
+#  define LZ4_compressHC_withStateHC      AOCL_LLC_LZ4_compressHC_withStateHC
+#  define LZ4_compressHC_limitedOutput_withStateHC  AOCL_LLC_LZ4_compressHC_limitedOutput_withStateHC
+#  define LZ4_compressHC2_withStateHC     AOCL_LLC_LZ4_compressHC2_withStateHC
+#  define LZ4_compressHC2_limitedOutput_withStateHC  AOCL_LLC_LZ4_compressHC2_limitedOutput_withStateHC
+#  define LZ4_compressHC_continue         AOCL_LLC_LZ4_compressHC_continue
+#  define LZ4_compressHC_limitedOutput_continue  AOCL_LLC_LZ4_compressHC_limitedOutput_continue
+#  define LZ4_compressHC2_continue        AOCL_LLC_LZ4_compressHC2_continue
+#  define LZ4_compressHC2_limitedOutput_continue  AOCL_LLC_LZ4_compressHC2_limitedOutput_continue
+#  define LZ4_createHC                    AOCL_LLC_LZ4_createHC
+#  define LZ4_freeHC                      AOCL_LLC_LZ4_freeHC
+#  define LZ4_slideInputBufferHC          AOCL_LLC_LZ4_slideInputBufferHC
+#  define LZ4_sizeofStreamStateHC         AOCL_LLC_LZ4_sizeofStreamStateHC
+#  define LZ4_resetStreamStateHC          AOCL_LLC_LZ4_resetStreamStateHC
+
+/* LZ4 internal/static functions */
+#  define LZ4_initStream                  AOCL_LLC_LZ4_initStream
+#  define LZ4_attach_dictionary           AOCL_LLC_LZ4_attach_dictionary
+#  define LZ4_compress_destSize_extState  AOCL_LLC_LZ4_compress_destSize_extState
+#  define LZ4_compress_forceExtDict       AOCL_LLC_LZ4_compress_forceExtDict
+#  define LZ4_decompress_safe_withPrefix64k  AOCL_LLC_LZ4_decompress_safe_withPrefix64k
+#  define LZ4_decompress_fast_withPrefix64k  AOCL_LLC_LZ4_decompress_fast_withPrefix64k
+#  define LZ4_decompress_safe_forceExtDict  AOCL_LLC_LZ4_decompress_safe_forceExtDict
+#  define LZ4_decompress_safe_partial_forceExtDict  AOCL_LLC_LZ4_decompress_safe_partial_forceExtDict
+#  define LZ4_decompress_safe_partial_usingDict  AOCL_LLC_LZ4_decompress_safe_partial_usingDict
+#  define LZ4_decoderRingBufferSize       AOCL_LLC_LZ4_decoderRingBufferSize
+#  define LZ4_compressBound_st            AOCL_LLC_LZ4_compressBound_st
+#  define LZ4_loadDict_internal           AOCL_LLC_LZ4_loadDict_internal
+#  define LZ4_loadDictSlow                AOCL_LLC_LZ4_loadDictSlow
+#  define LZ4_attach_HC_dictionary        AOCL_LLC_LZ4_attach_HC_dictionary
+#  define LZ4HC_searchExtDict             AOCL_LLC_LZ4HC_searchExtDict
+
+/* LZ4 internal implementation functions (usually hidden but may be exported) */
+#  define LZ4_compress_fast_continue_internal  AOCL_LLC_LZ4_compress_fast_continue_internal
+#  define LZ4_compress_fast_extState_internal  AOCL_LLC_LZ4_compress_fast_extState_internal
+#  define LZ4_compress_HC_destSize_internal  AOCL_LLC_LZ4_compress_HC_destSize_internal
+#  define LZ4_compress_HC_extStateHC_fastReset_internal  AOCL_LLC_LZ4_compress_HC_extStateHC_fastReset_internal
+#  define LZ4_compress_HC_extStateHC_internal  AOCL_LLC_LZ4_compress_HC_extStateHC_internal
+#  define LZ4_compress_HC_internal        AOCL_LLC_LZ4_compress_HC_internal
+#  define LZ4_decompress_safe_doubleDict_internal  AOCL_LLC_LZ4_decompress_safe_doubleDict_internal
+#  define LZ4_decompress_safe_forceExtDict_internal  AOCL_LLC_LZ4_decompress_safe_forceExtDict_internal
+#  define LZ4_decompress_safe_partial_forceExtDict_internal  AOCL_LLC_LZ4_decompress_safe_partial_forceExtDict_internal
+#  define LZ4_decompress_safe_partial_internal  AOCL_LLC_LZ4_decompress_safe_partial_internal
+#  define LZ4_decompress_safe_withPrefix64k_internal  AOCL_LLC_LZ4_decompress_safe_withPrefix64k_internal
+
+/* LZ4 Frame internal functions */
+#  define LZ4F_getErrorCode               AOCL_LLC_LZ4F_getErrorCode
+#  define LZ4F_getBlockSize               AOCL_LLC_LZ4F_getBlockSize
+#  define LZ4F_createCDict_advanced       AOCL_LLC_LZ4F_createCDict_advanced
+#  define LZ4F_createCompressionContext_advanced  AOCL_LLC_LZ4F_createCompressionContext_advanced
+#  define LZ4F_compressBegin_internal     AOCL_LLC_LZ4F_compressBegin_internal
+#  define LZ4F_compressBegin_usingDict    AOCL_LLC_LZ4F_compressBegin_usingDict
+#  define LZ4F_compressBegin_usingDictOnce  AOCL_LLC_LZ4F_compressBegin_usingDictOnce
+#  define LZ4F_compressFrame_usingCDict   AOCL_LLC_LZ4F_compressFrame_usingCDict
+#  define LZ4F_createDecompressionContext_advanced  AOCL_LLC_LZ4F_createDecompressionContext_advanced
+#  define LZ4F_headerSize                 AOCL_LLC_LZ4F_headerSize
+
+/* LZ4 Frame functions */
+#  define LZ4F_isError                    AOCL_LLC_LZ4F_isError
+#  define LZ4F_getErrorName               AOCL_LLC_LZ4F_getErrorName
+#  define LZ4F_compressionLevel_max       AOCL_LLC_LZ4F_compressionLevel_max
+#  define LZ4F_compressFrameBound         AOCL_LLC_LZ4F_compressFrameBound
+#  define LZ4F_compressFrame              AOCL_LLC_LZ4F_compressFrame
+#  define LZ4F_getVersion                 AOCL_LLC_LZ4F_getVersion
+#  define LZ4F_createCompressionContext   AOCL_LLC_LZ4F_createCompressionContext
+#  define LZ4F_freeCompressionContext     AOCL_LLC_LZ4F_freeCompressionContext
+#  define LZ4F_compressBegin              AOCL_LLC_LZ4F_compressBegin
+#  define LZ4F_compressBound              AOCL_LLC_LZ4F_compressBound
+#  define LZ4F_compressUpdate             AOCL_LLC_LZ4F_compressUpdate
+#  define LZ4F_flush                      AOCL_LLC_LZ4F_flush
+#  define LZ4F_compressEnd                AOCL_LLC_LZ4F_compressEnd
+#  define LZ4F_createDecompressionContext AOCL_LLC_LZ4F_createDecompressionContext
+#  define LZ4F_freeDecompressionContext   AOCL_LLC_LZ4F_freeDecompressionContext
+#  define LZ4F_getFrameInfo               AOCL_LLC_LZ4F_getFrameInfo
+#  define LZ4F_decompress                 AOCL_LLC_LZ4F_decompress
+#  define LZ4F_resetDecompressionContext  AOCL_LLC_LZ4F_resetDecompressionContext
+#  define LZ4F_createCDict                AOCL_LLC_LZ4F_createCDict
+#  define LZ4F_freeCDict                  AOCL_LLC_LZ4F_freeCDict
+#  define LZ4F_compressBegin_usingCDict   AOCL_LLC_LZ4F_compressBegin_usingCDict
+#  define LZ4F_decompress_usingDict       AOCL_LLC_LZ4F_decompress_usingDict
+#  define LZ4F_uncompressedUpdate         AOCL_LLC_LZ4F_uncompressedUpdate
+
+/* LZ4 public typedefs and structs (must be prefixed to avoid conflicts) */
+#  define LZ4_stream_u                    AOCL_LLC_LZ4_stream_u
+#  define LZ4_stream_t                    AOCL_LLC_LZ4_stream_t
+#  define LZ4_stream_t_internal           AOCL_LLC_LZ4_stream_t_internal
+#  define LZ4_streamDecode_u              AOCL_LLC_LZ4_streamDecode_u
+#  define LZ4_streamDecode_t              AOCL_LLC_LZ4_streamDecode_t
+#  define LZ4_streamHC_u                  AOCL_LLC_LZ4_streamHC_u
+#  define LZ4_streamHC_t                  AOCL_LLC_LZ4_streamHC_t
+#  define LZ4HC_CCtx_internal             AOCL_LLC_LZ4HC_CCtx_internal
+
+/* LZ4 Frame typedefs and structs */
+#  define LZ4F_errorCode_t                AOCL_LLC_LZ4F_errorCode_t
+#  define LZ4F_blockSizeID_t              AOCL_LLC_LZ4F_blockSizeID_t
+#  define LZ4F_blockMode_t                AOCL_LLC_LZ4F_blockMode_t
+#  define LZ4F_contentChecksum_t          AOCL_LLC_LZ4F_contentChecksum_t
+#  define LZ4F_blockChecksum_t            AOCL_LLC_LZ4F_blockChecksum_t
+#  define LZ4F_frameType_t                AOCL_LLC_LZ4F_frameType_t
+#  define LZ4F_frameInfo_t                AOCL_LLC_LZ4F_frameInfo_t
+#  define LZ4F_preferences_t              AOCL_LLC_LZ4F_preferences_t
+#  define LZ4F_compressOptions_t          AOCL_LLC_LZ4F_compressOptions_t
+#  define LZ4F_decompressOptions_t        AOCL_LLC_LZ4F_decompressOptions_t
+#  define LZ4F_cctx_s                     AOCL_LLC_LZ4F_cctx_s
+#  define LZ4F_cctx                       AOCL_LLC_LZ4F_cctx
+#  define LZ4F_compressionContext_t       AOCL_LLC_LZ4F_compressionContext_t
+#  define LZ4F_dctx_s                     AOCL_LLC_LZ4F_dctx_s
+#  define LZ4F_dctx                       AOCL_LLC_LZ4F_dctx
+#  define LZ4F_decompressionContext_t     AOCL_LLC_LZ4F_decompressionContext_t
+#  define LZ4F_CDict_s                    AOCL_LLC_LZ4F_CDict_s
+#  define LZ4F_CDict                      AOCL_LLC_LZ4F_CDict
+#  define LZ4F_errorCodes                 AOCL_LLC_LZ4F_errorCodes
+#  define LZ4F_AllocFunction              AOCL_LLC_LZ4F_AllocFunction
+#  define LZ4F_CallocFunction             AOCL_LLC_LZ4F_CallocFunction
+#  define LZ4F_FreeFunction               AOCL_LLC_LZ4F_FreeFunction
+#  define LZ4F_CustomMem                  AOCL_LLC_LZ4F_CustomMem
+
+/* Deprecated type aliases (for backward compatibility) */
+#  define blockSizeID_t                   AOCL_LLC_blockSizeID_t
+#  define blockMode_t                     AOCL_LLC_blockMode_t
+#  define contentChecksum_t               AOCL_LLC_contentChecksum_t
+#  define frameType_t                     AOCL_LLC_frameType_t
+
+/* XXHash types (used by LZ4) */
+#  define XXH_errorcode                   AOCL_LLC_LZ4_XXH_errorcode
+#  define XXH_OK                          AOCL_LLC_LZ4_XXH_OK
+#  define XXH_ERROR                       AOCL_LLC_LZ4_XXH_ERROR
+#  define XXH32_hash_t                    AOCL_LLC_LZ4_XXH32_hash_t
+#  define XXH64_hash_t                    AOCL_LLC_LZ4_XXH64_hash_t
+#  define XXH32_state_t                   AOCL_LLC_LZ4_XXH32_state_t
+#  define XXH64_state_t                   AOCL_LLC_LZ4_XXH64_state_t
+#  define XXH32_canonical_t               AOCL_LLC_LZ4_XXH32_canonical_t
+#  define XXH64_canonical_t               AOCL_LLC_LZ4_XXH64_canonical_t
+#  define XXH32_state_s                   AOCL_LLC_LZ4_XXH32_state_s
+#  define XXH64_state_s                   AOCL_LLC_LZ4_XXH64_state_s
+
+/**** LZ4 ****/
+
 #endif /* AOCL_LLC_PREFIX */
-#endif
+#endif /* __AOCL_PREFIX_H */

@@ -68,9 +68,16 @@ XXH32        6.8 GB/s            6.0 GB/s
 #ifndef XXHASH_H_5627135585666179
 #define XXHASH_H_5627135585666179 1
 
+#include "aoclAlgoOpt.h"
+#include "aoclPrefix.h"
+
 /* Defining namespace here to avoid conflict with other modules using xxhash */
 #ifndef XXH_NAMESPACE
-# define XXH_NAMESPACE LZ4_
+# ifdef AOCL_LLC_PREFIX
+#  define XXH_NAMESPACE AOCL_LLC_LZ4_
+# else
+#  define XXH_NAMESPACE LZ4_
+# endif
 #endif
 
 #if defined (__cplusplus)

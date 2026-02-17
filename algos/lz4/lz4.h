@@ -43,7 +43,7 @@ extern "C" {
 /* --- Dependency --- */
 #include <stddef.h>   /* size_t */
 #include "aoclAlgoOpt.h"
-
+#include "aoclPrefix.h"
 
 /*!
  * \addtogroup LZ4_API
