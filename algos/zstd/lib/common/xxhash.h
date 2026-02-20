@@ -14,9 +14,17 @@
 #ifndef XXH_NO_XXH3
 # define XXH_NO_XXH3
 #endif
+#include "aoclAlgoOpt.h"
+#ifdef AOCL_LLC_PREFIX
+#include "aoclPrefix.h"
+#endif
 
 #ifndef XXH_NAMESPACE
-# define XXH_NAMESPACE ZSTD_
+# ifdef AOCL_LLC_PREFIX
+#  define XXH_NAMESPACE AOCL_LLC_ZSTD_
+# else
+#  define XXH_NAMESPACE ZSTD_
+# endif
 #endif
 
 /*!

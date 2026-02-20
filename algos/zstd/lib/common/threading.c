@@ -16,7 +16,9 @@
  */
 
 #include "threading.h"
-
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 /* create fake symbol to avoid empty translation unit warning */
 int g_ZSTD_threading_useless_symbol;
 

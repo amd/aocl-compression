@@ -41,7 +41,9 @@
 /* **************************************************************
 *  Error Management
 ****************************************************************/
+#ifndef HUF_isError
 #define HUF_isError ERR_isError
+#endif
 #define HUF_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)   /* use only *after* variable declarations */
 
 

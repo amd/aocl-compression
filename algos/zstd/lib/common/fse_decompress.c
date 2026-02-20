@@ -29,7 +29,9 @@
 /* **************************************************************
 *  Error Management
 ****************************************************************/
+#ifndef FSE_isError
 #define FSE_isError ERR_isError
+#endif
 #define FSE_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)   /* use only *after* variable declarations */
 
 

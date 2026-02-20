@@ -14,6 +14,10 @@
 
 /*======  Dependencies  ======*/
 #include <stddef.h>  /* size_t */
+#include "aoclAlgoOpt.h" /* AOCL Optimization flags */
+#ifdef AOCL_LLC_PREFIX
+#include "aoclPrefix.h"
+#endif
 
 #if defined (__cplusplus)
 extern "C" {

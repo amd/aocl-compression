@@ -782,6 +782,10 @@ ifeq ($(BUILD_TYPE),Debug)
     ZSTD_CFLAGS += -DDEBUGLEVEL=1
 endif
 
+# Symbol prefixing support
+ifeq ($(AOCL_LLC_PREFIX),1)
+    ZSTD_CFLAGS += -DAOCL_LLC_PREFIX
+endif
 
 # Per-file flags for ZSTD sources
 $(OBJ_DIR)/algos/zstd/%.o: CFLAGS += $(ZSTD_CFLAGS)

@@ -42,9 +42,15 @@
 
 /* ---- static assert (debug) --- */
 #define ZSTD_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)
-#define ZSTD_isError ERR_isError   /* for inlining */
+/* Internal aliases for error checking */
+#ifdef AOCL_LLC_PREFIX
+/* When prefixing is enabled, don't create internal aliases - use the exported functions */
+#else
+/* When prefixing is disabled, create internal macro aliases for inlining */
+#define ZSTD_isError ERR_isError
 #define FSE_isError  ERR_isError
 #define HUF_isError  ERR_isError
+#endif
 
 
 /*-*************************************

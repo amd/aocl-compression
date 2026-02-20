@@ -3094,6 +3094,10 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
 #  undef z_gzgetc
 #  define z_gzgetc(g) \
           ((g)->have ? ((g)->have--, (g)->pos++, *((g)->next)++) : (gzgetc)(g))
+#elif defined(AOCL_PREFIX_SET)
+#  undef AOCL_LLC_gzgetc
+#  define AOCL_LLC_gzgetc(g) \
+          ((g)->have ? ((g)->have--, (g)->pos++, *((g)->next)++) : (gzgetc)(g))
 #else
 #  define gzgetc(g) \
           ((g)->have ? ((g)->have--, (g)->pos++, *((g)->next)++) : (gzgetc)(g))

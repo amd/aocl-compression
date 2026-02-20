@@ -19,6 +19,9 @@
 *  Dependencies
 ******************************************/
 #include "zstd_deps.h"    /* size_t, ptrdiff_t */
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 
 /*-*****************************************
 *  FSE_PUBLIC_API : control library symbols visibility

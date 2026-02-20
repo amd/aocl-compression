@@ -402,6 +402,8 @@ z_size_t ZEXPORT gzfread(voidp buf, z_size_t size, z_size_t nitems, gzFile file)
 /* -- see zlib.h -- */
 #ifdef Z_PREFIX_SET
 #  undef z_gzgetc
+#elif defined(AOCL_PREFIX_SET)
+#  undef AOCL_LLC_gzgetc
 #else
 #  undef gzgetc
 #endif

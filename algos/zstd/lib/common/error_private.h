@@ -44,6 +44,9 @@
 /* ****************************************
 *  Dependencies
 ******************************************/
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 #include "../zstd_errors.h"  /* enum list */
 #include "compiler.h"
 #include "debug.h"

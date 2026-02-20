@@ -14,6 +14,9 @@
 #include "zstd_deps.h" /* size_t */
 #include "debug.h"     /* assert */
 #include "pool.h"
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 
 /* ======   Compiler specifics   ====== */
 #if defined(_MSC_VER)

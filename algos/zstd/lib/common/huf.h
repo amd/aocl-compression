@@ -19,6 +19,9 @@
 /* *** Dependencies *** */
 #include "zstd_deps.h"    /* size_t */
 #include "mem.h"          /* U32 */
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 #define FSE_STATIC_LINKING_ONLY
 #include "fse.h"
 

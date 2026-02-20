@@ -15,6 +15,9 @@
 
 /* --- dependencies --- */
 #include "../common/zstd_deps.h"   /* size_t */
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 
 
 /* --- simple histogram functions --- */

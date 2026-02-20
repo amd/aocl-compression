@@ -82,6 +82,9 @@
 
 #include "aoclAlgoOpt.h" /* AOCL Optimization flags */
 #include "aoclFds.h" /* AOCL FDS flags */
+#ifdef AOCL_LLC_PREFIX
+#include "aoclPrefix.h"
+#endif
 
 #include "zstd_errors.h" /* list of errors */
 #if defined(ZSTD_STATIC_LINKING_ONLY) && !defined(ZSTD_H_ZSTD_STATIC_LINKING_ONLY)
