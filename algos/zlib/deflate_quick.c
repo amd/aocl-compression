@@ -12,6 +12,9 @@
  */
 
 #include "aocl_zlib_x86.h"
+#ifdef ZLIB_DEBUG
+#include <ctype.h>
+#endif
 
 #ifdef AOCL_ZLIB_OPT
 #define MAX_SEARCH_DIST 32768

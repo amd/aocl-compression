@@ -89,6 +89,7 @@
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
+extern void z_error(char *m);
 #  include <stdio.h>
 #  define Assert(cond, msg) {int _cond = (cond); if (!_cond) z_error(msg);}
 #else

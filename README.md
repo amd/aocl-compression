@@ -69,6 +69,39 @@ Building on Linux
    The option `-v` will print verbose build logs on the console.
 4. To clear or delete the build folder or files, manually remove the build directory or its files.
 
+Building with GNU Make (Linux - Limited Support)
+-------------------------------------------------
+GNU Make based build is provided for Linux systems with limited functional features only.
+
+1. Ensure required tools are available: `make`, `gcc`/`clang`, `g++`/`clang++`, and `bash`.
+2. From the source root, build using default configuration:
+   ```
+   make
+   ```
+3. Configure build options by overriding variables on command line (same options as `config.mk`):
+   ```
+   make BUILD_TYPE=Debug BUILD_STATIC_LIBS=1 AOCL_ENABLE_THREADS=1
+   ```
+4. Run tests when enabled:
+   ```
+   make AOCL_TEST_COVERAGE=1
+   make test AOCL_TEST_COVERAGE=1
+   ```
+5. Install and uninstall using make targets:
+   ```
+   make install PREFIX=/usr/local
+   make uninstall PREFIX=/usr/local
+   ```
+
+GNU Make Example
+----------------
+Build a Debug static library with OpenMP threading support and run tests:
+```
+make clean
+make BUILD_TYPE=Debug BUILD_STATIC_LIBS=1 AOCL_ENABLE_THREADS=1 -j
+make AOCL_TEST_COVERAGE=1 -j
+make test AOCL_TEST_COVERAGE=1
+```
 
 Building on Windows
 -------------------
