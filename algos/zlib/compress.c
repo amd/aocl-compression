@@ -85,7 +85,16 @@ ZEXTERN void ZEXPORT test_aocl_zlib_set_enable_dquick(int val) {
     else
         unset_env_var("AOCL_ZLIB_QUICK_MODE");
 }
-#endif
+
+#ifdef AOCL_ZLIB_OPT
+/* Getter function for zlibOptOff variable for unit tests */
+ZEXTERN int ZEXPORT test_aocl_zlib_get_zlibOptOff(void)
+{
+    return zlibOptOff;
+}
+#endif /* AOCL_ZLIB_OPT */
+
+#endif /* AOCL_UNIT_TEST */
 
 #ifdef AOCL_ENABLE_THREADS
 #define ZLIB_MT_WINDOW_LEN (32768 << 1)

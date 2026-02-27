@@ -1848,6 +1848,7 @@ void ZLIB_INTERNAL aocl_setup_inflate(int optOff, int optLevel) {
     AOCL_ENTER_CRITICAL(setup_zlib_inflate)
     if (!setup_ok_zlib_inflate) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
+        zlibOptOff = optOff;
         aocl_setup_inflate_fmv(optOff, optLevel);
         setup_ok_zlib_inflate = 1;
     }
@@ -1859,6 +1860,7 @@ static void aocl_setup_native(void) {
     if (!setup_ok_zlib_inflate) {
         int optLevel = get_cpu_opt_flags(0);
         int optOff = get_disable_opt_flags(0);
+        zlibOptOff = optOff;
         aocl_setup_inflate_fmv(optOff, optLevel);
         setup_ok_zlib_inflate = 1;
     }

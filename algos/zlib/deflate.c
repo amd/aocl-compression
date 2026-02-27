@@ -2448,6 +2448,7 @@ void ZLIB_INTERNAL aocl_setup_deflate(int _optOff, int optLevel)
     AOCL_ENTER_CRITICAL(setup_zlib_deflate)
     if (!setup_ok_zlib_deflate) {
         optOff = _optOff ? 1 : get_disable_opt_flags(0);
+        zlibOptOff = optOff;
         aocl_setup_tree(optOff, optLevel);
         aocl_setup_deflate_fmv(optOff, optLevel);
         setup_ok_zlib_deflate = 1;
@@ -2472,6 +2473,7 @@ static void aocl_setup_native(void) {
     if (!setup_ok_zlib_deflate) {
         optLevel = get_cpu_opt_flags(0);
         optOff = get_disable_opt_flags(0);
+        zlibOptOff = optOff;
         aocl_setup_tree(optOff, optLevel);
         aocl_setup_deflate_fmv(optOff, optLevel);
         setup_ok_zlib_deflate = 1;

@@ -501,6 +501,9 @@ extern "C" {
 
 #if defined(AOCL_UNIT_TEST)
 ZEXTERN void ZEXPORT test_aocl_zlib_set_enable_dquick(int val);
+#ifdef AOCL_ZLIB_OPT
+ZEXTERN int ZEXPORT test_aocl_zlib_get_zlibOptOff(void);
+#endif
 #endif
 
 #ifdef __cplusplus
