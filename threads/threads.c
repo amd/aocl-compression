@@ -138,6 +138,12 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
     //Allocate threads list to hold references to threads_info
     thread_grp->threads_info_list = (aocl_thread_info_t*)malloc(
                     sizeof(aocl_thread_info_t) * thread_grp->num_threads);
+                    
+    if (thread_grp->threads_info_list == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
+        return ERR_MEMORY_ALLOC;
+    }
+    
     memset(thread_grp->threads_info_list, 0, 
                     sizeof(aocl_thread_info_t) * thread_grp->num_threads);
     for (AOCL_UINT32 thread_id = 0; thread_id < thread_grp->num_threads; ++thread_id)
@@ -145,10 +151,6 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
         /* Set to 1 by default.
          * Reset to 0 when thread gets spawned and completes its task successfully.*/
         thread_grp->threads_info_list[thread_id].is_error = 1;
-    }
-    if (thread_grp->threads_info_list == NULL) {
-        LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
-        return ERR_MEMORY_ALLOC;
     }
 
     rap_frame_len = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(thread_grp->num_threads, 0);
@@ -300,6 +302,13 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
         //Allocate threads list to hold references to threads_info
         thread_grp->threads_info_list = (aocl_thread_info_t*)malloc(
             sizeof(aocl_thread_info_t) * num_main_threads);
+        
+        if (thread_grp->threads_info_list == NULL) 
+            {
+                LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
+                return ERR_MEMORY_ALLOC;
+            }
+        
         memset(thread_grp->threads_info_list, 0, //needed to ensure pointer related checks behave as expected
             sizeof(aocl_thread_info_t) * num_main_threads);
 
@@ -375,11 +384,6 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
             assert(ti_ptr == (thread_grp->threads_info_list + num_main_threads));
         }
 
-        if (thread_grp->threads_info_list == NULL) 
-        {
-            LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
-            return ERR_MEMORY_ALLOC;
-        }
     }
     return rap_metadata_len;
 }
