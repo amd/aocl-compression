@@ -46,6 +46,7 @@
 #endif
 
 #include "utils/utils.h" // Note: include this before deflate.h
+#include "utils/dispatcher.h"
 #include "algos/zlib/zlib.h"
 #include "algos/zlib/zutil.h"
 #include "algos/zlib/inftrees.h"

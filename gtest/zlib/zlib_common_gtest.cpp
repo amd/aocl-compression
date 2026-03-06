@@ -273,14 +273,15 @@ TEST_P(AOCL_Compression_zlib, uncompress_common)
 }
 
 void test_crc32_x86(uLong crc, const Bytef* buf, uInt len) {
-    int highest_supported_level = get_cpu_opt_flags(0);
+    int user_selected_level = get_cpu_opt_flags(0);
+    CpuFeatures features = Dispatcher_GetSupportedFeaturesForLevel((OptimizationLevel)user_selected_level);
     uLong ref = crc32_z_c(crc, buf, len);
 #ifdef AOCL_ZLIB_AVX_OPT
-    if (highest_supported_level >= 2) // >= AVX
+    if ((features & (FEATURE_AVX | FEATURE_PCLMUL)) == (FEATURE_AVX | FEATURE_PCLMUL)) // >= AVX
         EXPECT_EQ(crc32_z_impl_x86_avx(crc, buf, len), ref);
 #endif /* AOCL_ZLIB_AVX_OPT */
 #ifdef AOCL_ZLIB_AVX512_OPT
-    if (highest_supported_level >= 4) // >= AVX512
+    if ((features & (FEATURE_AVX | FEATURE_PCLMUL | FEATURE_AVX512F | FEATURE_VPCLMULQDQ)) == (FEATURE_AVX | FEATURE_PCLMUL | FEATURE_AVX512F | FEATURE_VPCLMULQDQ)) // >= AVX512
         EXPECT_EQ(crc32_z_impl_x86_avx512(crc, buf, len), ref);
 #endif /* AOCL_ZLIB_AVX512_OPT */
 }

@@ -31,6 +31,15 @@
 
 #include <stdint.h>
 
+#if defined(WIN32) && defined(AOCL_UNIT_TEST)
+#define EXPORT_UTILS_DYN_TEST __declspec(dllexport)
+#else
+/**
+ * For Linux EXPORT_UTILS_DYN_TEST is NULL, by default the symbols are publicly exposed.
+ */
+#define EXPORT_UTILS_DYN_TEST
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -103,7 +112,7 @@ OptimizationLevel Dispatcher_IntToLevel(int level);
  * Cross-tier features:
  * - BMI2 and PCLMUL are included whenever supported, independent of AVX tier.
  */
-CpuFeatures Dispatcher_GetSupportedFeaturesForLevel(OptimizationLevel level);
+EXPORT_UTILS_DYN_TEST CpuFeatures Dispatcher_GetSupportedFeaturesForLevel(OptimizationLevel level);
 
 
 /* ============================================================================
