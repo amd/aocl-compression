@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -217,6 +217,20 @@ AOCL_INT32 aocl_llc_skip_rap_frame(AOCL_CHAR* src, AOCL_INT32 src_size)
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");
     return ret;
 
+}
+
+AOCL_INT32 aocl_llc_set_max_threads(AOCL_INT32 max_threads)
+{
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+
+#ifdef AOCL_ENABLE_THREADS
+    AOCL_INT32 ret = aocl_set_max_threads_mt(max_threads);
+#else
+    AOCL_INT32 ret = ERR_UNSUPPORTED_METHOD;
+#endif
+
+    LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+    return ret;
 }
 
 //API to return the compression library version string

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -275,6 +275,30 @@ EXPORT_SYM_DYN const char *aocl_llc_version(void);
  *
  */
 EXPORT_SYM_DYN int32_t aocl_llc_skip_rap_frame(char* src, int32_t src_size);
+
+/**
+ * @brief Interface API to set maximum number of OpenMP threads used by AOCL
+ * multithreaded compression/decompression flow for the calling application
+ * thread.
+ *
+ * @note  This API does not validate or prevent thread oversubscription.
+ *        Application-level thread orchestration remains the caller's
+ *        responsibility.
+ * 
+ * If this API is not called, thread selection defaults to `omp_get_max_threads()`.
+ *
+ * | Parameters      | Direction   | Description |
+ * |:----------------|:-----------:|:------------|
+ * |    max_threads  | in          | Maximum threads to use. Must be > 0. |
+ *
+ * @return
+ * | Result     | Description |
+ * |:-----------|:------------|
+ * | Success    | 0 |
+ * | Fail       | `ERR_INVALID_INPUT` |
+ * | ^          | `ERR_UNSUPPORTED_METHOD` when AOCL is built without thread support |
+ */
+EXPORT_SYM_DYN int32_t aocl_llc_set_max_threads(int32_t max_threads);
 
 /**
  * @}

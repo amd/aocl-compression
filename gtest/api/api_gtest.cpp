@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -39,6 +39,10 @@
 #include <string>
 #include <limits>
 #include <vector>
+#ifdef AOCL_ENABLE_THREADS
+#include <thread>
+#include <atomic>
+#endif /* AOCL_ENABLE_THREADS */
 #include "gtest/gtest.h"
 #include "gtest_utils.h"
 
@@ -1067,6 +1071,167 @@ TEST(API_get_rap_frame_bound_MT, AOCL_Compression_api_aocl_get_rap_frame_bound_m
 *********************************************/
 
 /*********************************************
+* Begin set max threads Tests
+*********************************************/
+TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_1) {
+    EXPECT_EQ(aocl_llc_set_max_threads(0), ERR_INVALID_INPUT);
+}
+
+TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_2) {
+    const AOCL_INT32 runtime_max = omp_get_max_threads();
+    EXPECT_EQ(aocl_llc_set_max_threads(1), 0);
+    EXPECT_EQ(aocl_llc_set_max_threads(runtime_max), 0);
+}
+
+
+TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_4)
+{
+    // What this test checks (in simple words):
+    // Two different application threads set two different "max thread" limits.
+    // Each thread should keep and use its own limit, without affecting the other.
+
+    // Ask OpenMP how many threads this machine/runtime can provide right now.
+    const AOCL_UINT32 runtime_max_threads = omp_get_max_threads();
+
+    // Worker 1 always requests a limit of 1 thread.
+    const AOCL_INT32 requested_thread_limit_worker_one = 1;
+
+    // Worker 2 tries to request 2 threads, but if the runtime has fewer than 2,
+    // fall back to 1 so the test remains valid on low-thread environments.
+    const AOCL_INT32 requested_thread_limit_worker_two = (runtime_max_threads >= 2) ? 2 : 1;
+
+    // Input size chosen to be large enough so partitioning logic is exercised
+    // like in realistic workloads (avoids tiny-input corner behavior).
+    const AOCL_UINTP input_size_bytes = 4096 * 64; // Keeps partitioning away from tiny-input edge cases.
+
+    // Window size used by partition-stat calculation.
+    const AOCL_INT32 window_length = 1024;
+
+    // Shared result holders (atomics are used because two std::thread workers
+    // write values concurrently).
+    // Initial values (-1 / 0) make it obvious if something was never written.
+    std::atomic<AOCL_INT32> set_max_threads_result_worker_one(-1), set_max_threads_result_worker_two(-1);
+    std::atomic<AOCL_INT32> rap_frame_bound_worker_one(-1), rap_frame_bound_worker_two(-1);
+    std::atomic<AOCL_UINT32> partition_threads_worker_one(0), partition_threads_worker_two(0);
+
+    // Worker routine:
+    // 1) Set thread-local maximum thread cap.
+    // 2) Read RAP frame bound derived from that cap.
+    // 3) Build partition stats and verify selected worker-count path.
+    auto worker = [input_size_bytes, window_length](AOCL_INT32 requested_thread_limit,
+                                                    std::atomic<AOCL_INT32>& set_max_threads_result,
+                                                    std::atomic<AOCL_INT32>& rap_frame_bound,
+                                                    std::atomic<AOCL_UINT32>& partition_threads) {
+        // Apply this worker's requested max-thread cap.
+        set_max_threads_result.store(aocl_llc_set_max_threads(requested_thread_limit));
+
+        // Read RAP frame bound, which should reflect the cap set above.
+        rap_frame_bound.store(aocl_get_rap_frame_bound_mt());
+
+        aocl_thread_group_t partition_thread_group;
+        AOCL_INT32 partition_stats_status =
+            aocl_set_partition_stats_mt(&partition_thread_group, input_size_bytes, window_length, WINDOW_FACTOR);
+
+        // If partition stats were computed successfully, capture the actual
+        // internal thread count chosen by the library.
+        if (partition_stats_status == 0)
+            partition_threads.store(partition_thread_group.num_threads);
+    };
+
+    // Start two application threads with two different requested limits.
+    std::thread worker_thread_one(worker,
+                                  requested_thread_limit_worker_one,
+                                  std::ref(set_max_threads_result_worker_one),
+                                  std::ref(rap_frame_bound_worker_one),
+                                  std::ref(partition_threads_worker_one));
+    std::thread worker_thread_two(worker,
+                                  requested_thread_limit_worker_two,
+                                  std::ref(set_max_threads_result_worker_two),
+                                  std::ref(rap_frame_bound_worker_two),
+                                  std::ref(partition_threads_worker_two));
+
+    // Wait for both threads to complete before checking results.
+    worker_thread_one.join();
+    worker_thread_two.join();
+
+    // Both calls should have succeeded.
+    EXPECT_EQ(set_max_threads_result_worker_one.load(), 0);
+    EXPECT_EQ(set_max_threads_result_worker_two.load(), 0);
+
+    // RAP frame bounds should match each thread's own requested cap.
+    EXPECT_EQ(rap_frame_bound_worker_one.load(), RAP_FRAME_LEN_WITH_DECOMP_LENGTH(requested_thread_limit_worker_one, 0));
+    EXPECT_EQ(rap_frame_bound_worker_two.load(), RAP_FRAME_LEN_WITH_DECOMP_LENGTH(requested_thread_limit_worker_two, 0));
+
+    // Partitioning should also honor each thread's own cap independently.
+    EXPECT_EQ(partition_threads_worker_one.load(), (AOCL_UINT32)requested_thread_limit_worker_one);
+    EXPECT_EQ(partition_threads_worker_two.load(), (AOCL_UINT32)requested_thread_limit_worker_two);
+}
+
+
+TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_5)
+{
+    // What this test checks (in simple words):
+    // In an OpenMP parallel region, every app thread sets the same limit (1).
+    // We then verify every thread observes and uses that same limit correctly.
+
+    // Use 2 app threads when possible, otherwise 1 (portable on small systems).
+    const AOCL_INT32 application_thread_count = (omp_get_max_threads() >= 2) ? 2 : 1;
+
+    // Every OpenMP worker requests a max limit of 1.
+    const AOCL_INT32 requested_thread_limit = 1;
+
+    // Input/work parameters for partition-stat API.
+    const AOCL_UINTP input_size_bytes = 4096 * 64;
+    const AOCL_INT32 window_length = 1024;
+
+    // Per-thread storage indexed by OpenMP thread id.
+    // Initialize with sentinel values to detect missing writes.
+    std::vector<AOCL_INT32> set_max_threads_result_per_thread(application_thread_count, -1);
+    std::vector<AOCL_INT32> rap_frame_bound_per_thread(application_thread_count, -1);
+    std::vector<AOCL_INT32> partition_stats_result_per_thread(application_thread_count, -1);
+    std::vector<AOCL_UINT32> partition_thread_count_per_thread(application_thread_count, 0);
+
+    // Each OpenMP thread performs the same sequence independently.
+#pragma omp parallel num_threads(application_thread_count)
+    {
+        // Unique index of this OpenMP worker inside the parallel block.
+        AOCL_INT32 thread_index = omp_get_thread_num();
+
+        // 1) Set thread-local max-thread limit.
+        set_max_threads_result_per_thread[thread_index] = aocl_llc_set_max_threads(requested_thread_limit);
+
+        // 2) Read RAP frame bound corresponding to that limit.
+        rap_frame_bound_per_thread[thread_index] = aocl_get_rap_frame_bound_mt();
+
+        aocl_thread_group_t partition_thread_group;
+        // 3) Build partition statistics and capture internal thread usage.
+        partition_stats_result_per_thread[thread_index] =
+            aocl_set_partition_stats_mt(&partition_thread_group, input_size_bytes, window_length, WINDOW_FACTOR);
+        if (partition_stats_result_per_thread[thread_index] == 0)
+            partition_thread_count_per_thread[thread_index] = partition_thread_group.num_threads;
+    }
+
+    // Validate outcomes for each OpenMP app thread.
+    for (AOCL_INT32 thread_index = 0; thread_index < application_thread_count; ++thread_index)
+    {
+        // API call should succeed.
+        EXPECT_EQ(set_max_threads_result_per_thread[thread_index], 0);
+
+        // RAP frame bound should be computed from requested_thread_limit (1).
+        EXPECT_EQ(rap_frame_bound_per_thread[thread_index], RAP_FRAME_LEN_WITH_DECOMP_LENGTH(requested_thread_limit, 0));
+
+        // Partition-stat API should succeed.
+        EXPECT_EQ(partition_stats_result_per_thread[thread_index], 0);
+
+        // Library should honor requested_thread_limit for partitioning.
+        EXPECT_EQ(partition_thread_count_per_thread[thread_index], (AOCL_UINT32)requested_thread_limit);
+    }
+}
+/*********************************************
+* End set max threads Tests
+*********************************************/
+
+/*********************************************
 * Begin skip rap frame Tests
 *********************************************/
 class API_skip_rap_frame : public ::testing::Test {
@@ -1140,6 +1305,17 @@ TEST_F(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_5
 *********************************************/
 
 #else /* !AOCL_ENABLE_THREADS */
+
+/*********************************************
+* Begin set max threads Tests
+*********************************************/
+TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_3)
+{
+    EXPECT_EQ(aocl_llc_set_max_threads(1), ERR_UNSUPPORTED_METHOD);
+}
+/*********************************************
+* End set max threads Tests
+*********************************************/
 
 /*********************************************
 * Begin skip rap frame Tests
