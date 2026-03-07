@@ -1,4 +1,4 @@
-# Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -230,7 +230,10 @@ if (BUILD_UTILITY)
           # Set the path to the zstd program directory
           file(GLOB ZSTD_PROGRAM_SRCS "${BU_ZSTD_PROGRAMS_DIR}/*.c")
           if (AOCL_ENABLE_THREADS)
-            set_property(SOURCE ${ZSTD_PROGRAM_SRCS} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
+            set_property(SOURCE ${ZSTD_PROGRAM_SRCS} APPEND PROPERTY COMPILE_DEFINITIONS "AOCL_ENABLE_THREADS")
+          endif ()
+          if (NATIVE_ENABLE_THREADS)
+            set_property(SOURCE ${ZSTD_PROGRAM_SRCS} APPEND PROPERTY COMPILE_DEFINITIONS "ZSTD_MULTITHREAD")
           endif ()
 
           # Create testbench zstd_utility
