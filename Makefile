@@ -288,11 +288,9 @@ LZ4_HEADERS := algos/lz4/lz4.h \
 
 # Add LZ4 frame format support if enabled
 ifeq ($(LZ4_FRAME_FORMAT_SUPPORT),1)
-    LZ4_SOURCES += algos/lz4/lz4frame.c \
-                   algos/lz4/lz4file.c
+    LZ4_SOURCES += algos/lz4/lz4frame.c
     LZ4_HEADERS += algos/lz4/lz4frame.h \
-                   algos/lz4/lz4frame_static.h \
-                   algos/lz4/lz4file.h
+                   algos/lz4/lz4frame_static.h
     
     # If LZ4HC is excluded but frame format is enabled, include lz4hc sources
     ifeq ($(AOCL_EXCLUDE_LZ4HC),1)
