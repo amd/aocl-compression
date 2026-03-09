@@ -876,7 +876,7 @@ void AOCL_build_huffman_lookup_table( DState* s,
       memset(secondary_tables[gSel], 0, sizeof(int)*secondary_table_size[gSel]*cnt);
       
       int index = -1;    // Current secondary table index
-      int prev = 0;      // Previous main table index
+      int prev = -1;      // Previous main table index
       // Process remaining long codes
       while(n <= maxLen)
       {
