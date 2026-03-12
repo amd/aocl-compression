@@ -2,7 +2,7 @@
  *  LZ4 - Fast LZ compression algorithm
  *  Header File
  *  Copyright (C) 2011-2023, Yann Collet.
- *  Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
+ *  Modifications Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 

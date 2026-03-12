@@ -2,7 +2,7 @@
    LZ4F - LZ4-Frame library
    Header File
    Copyright (C) 2011-2020, Yann Collet.
-   Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
    Redistribution and use in source and binary forms, with or without

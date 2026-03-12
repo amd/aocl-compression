@@ -1,6 +1,8 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  * All rights reserved.
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
+ *
  *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found

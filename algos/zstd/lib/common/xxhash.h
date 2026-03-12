@@ -2,6 +2,7 @@
  * xxHash - Extremely Fast Hash algorithm
  * Header File
  * Copyright (c) Yann Collet - Meta Platforms, Inc
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found

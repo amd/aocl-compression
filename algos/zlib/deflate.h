@@ -1,6 +1,6 @@
 /* deflate.h -- internal compression state
  * Copyright (C) 1995-2024 Jean-loup Gailly
- * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
