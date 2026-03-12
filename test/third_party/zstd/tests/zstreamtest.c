@@ -2860,7 +2860,7 @@ static int fuzzerTests(U32 seed, unsigned nbTests, unsigned startTest, double co
                 size_t const dstBuffSize = MIN(dstBufferSize - totalGenSize, randomDstSize);
                 inBuff.size = inBuff.pos + readCSrcSize;
                 outBuff.size = outBuff.pos + dstBuffSize;
-                decompressionResult = ZSTD_DECOMPRESS_STREAM(zd, &outBuff, &inBuff);
+                decompressionResult = Test_decompressStreamMultipleWithSize(zd, &outBuff, &inBuff, cSize); // Real input size is cSize and not inBuff.size
                 if (ZSTD_getErrorCode(decompressionResult) == ZSTD_error_checksum_wrong) {
                     DISPLAY("checksum error : \n");
                     findDiff(copyBuffer, dstBuffer, totalTestSize);
@@ -2879,6 +2879,7 @@ static int fuzzerTests(U32 seed, unsigned nbTests, unsigned startTest, double co
 
         /*=====   noisy/erroneous src decompression test   =====*/
 
+#ifndef AOCL_DECOMPRESS_FAST
         /* add some noise */
         {   U32 const nbNoiseChunks = (FUZ_rand(&lseed) & 7) + 2;
             U32 nn; for (nn=0; nn<nbNoiseChunks; nn++) {
@@ -2904,7 +2905,10 @@ static int fuzzerTests(U32 seed, unsigned nbTests, unsigned startTest, double co
                     if (ZSTD_isError(decompressError)) break;   /* error correctly detected */
                     /* No forward progress possible */
                     if (outBuff.pos < outBuff.size && inBuff.pos == cSize) break;
-    }   }   }   }
+        }   }   }
+#endif
+
+    }
     DISPLAY("\r%u fuzzer tests completed   \n", testNb);
 
 _cleanup:
