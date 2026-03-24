@@ -1,4 +1,4 @@
-# Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -209,6 +209,10 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             endif()
             if (CMAKE_BUILD_TYPE STREQUAL "Debug")
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUG_ASSERT_ENABLED")
+            endif()
+
+            if(SYSTEM_AVAILABLE_MEMORY_MB GREATER_EQUAL AOCL_MIN_MEMORY_INTENSIVE_TEST_MB)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_MEM_INT_TEST")
             endif()
 
             # Non API function tests

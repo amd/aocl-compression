@@ -691,6 +691,14 @@ endif()
 if (AOCL_LLC_PREFIX)
     add_compile_definitions(AOCL_LLC_PREFIX)
 endif()
+    
+# Function to get available system memory in MB
+function(get_available_memory OUTPUT_VAR)
+    cmake_host_system_information(RESULT AVAILABLE_MEMORY_MB QUERY AVAILABLE_PHYSICAL_MEMORY)
+    set(${OUTPUT_VAR} ${AVAILABLE_MEMORY_MB} PARENT_SCOPE)
+endfunction()
+get_available_memory(SYSTEM_AVAILABLE_MEMORY_MB)
+set(AOCL_MIN_MEMORY_INTENSIVE_TEST_MB 4608 CACHE STRING "Minimum required memory (in MB) to enable memory intensive tests") # 4.5 GB in MB
 
 #setup CTest for GoogleTest and aocl_compression_bench test
 if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)

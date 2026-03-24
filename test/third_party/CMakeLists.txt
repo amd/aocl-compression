@@ -196,7 +196,15 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
     # Each test runs aocl_third_party_bench by passing a specific test bench target passed via -e option.
     # Subsequent options are specific to the selected test bench target and are forwarded to them.
     if (NOT AOCL_EXCLUDE_ZSTD)
-        add_test(TP_ZSTD_BIGDICT              ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_BIGDICT)
+        # Check available memory for BIGDICT test (requires ~4.5 GB)
+        
+        if(SYSTEM_AVAILABLE_MEMORY_MB GREATER_EQUAL AOCL_MIN_MEMORY_INTENSIVE_TEST_MB)
+            add_test(TP_ZSTD_BIGDICT              ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_BIGDICT)
+            message(STATUS "TP_ZSTD_BIGDICT test enabled (available memory: ${SYSTEM_AVAILABLE_MEMORY_MB}MB >= ${AOCL_MIN_MEMORY_INTENSIVE_TEST_MB}MB)")
+        else()
+            message(STATUS "TP_ZSTD_BIGDICT test skipped: insufficient memory (available: ${SYSTEM_AVAILABLE_MEMORY_MB}MB, required: ${AOCL_MIN_MEMORY_INTENSIVE_TEST_MB}MB)")
+        endif()
+        
         add_test(TP_ZSTD_FUZZER               ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_FUZZER -i1 -v)
         add_test(TP_ZSTD_INVALIDDICTIONARIES  ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_INVALIDDICTIONARIES)
         add_test(TP_ZSTD_LONGMATCH            ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_LONGMATCH)

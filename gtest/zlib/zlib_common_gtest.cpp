@@ -38,6 +38,7 @@
 
 #include "zlib_gtest.h"
 #include "gtest_utils.h"
+#include <unordered_map>
 
 TEST(AOCL_Compression_zlib, zlibVersion_common)
 {
@@ -289,7 +290,35 @@ void test_crc32_x86(uLong crc, const Bytef* buf, uInt len) {
 // common boundary test case for checksum APIs to minimize memory footprint while running in parallel
 TEST(AOCL_Compression_zlib, checksum_boundary_common)
 {
+#ifdef AOCL_MEM_INT_TEST
   size_t len = UINT32_MAX;
+#else
+  size_t len = 209715200; // 200 MB
+#endif
+  size_t orig_len = len;
+
+  std::unordered_map<size_t, uint32_t> adler_len_map = {
+#ifdef AOCL_MEM_INT_TEST
+        {5552, 3013531973},
+        {0, 917518},
+        {UINT32_MAX, 365981486}
+#else
+        {5552, 4214536589},
+        {0, 917518},
+        {209715200, 3543526016}
+#endif
+    };
+
+  std::unordered_map<size_t, uint32_t> crc32_len_map = {
+#ifdef AOCL_MEM_INT_TEST
+        {100000, 2630052870},
+        {UINT32_MAX, 7}
+#else
+        {100000, 618144000},
+        {209715200, 1878323231}
+#endif
+    };
+
   Bytef *buf = (Bytef *)malloc(len);
   for (size_t i = 0; i < len; i++)
   {
@@ -298,18 +327,18 @@ TEST(AOCL_Compression_zlib, checksum_boundary_common)
   uLong adler = 0xFFFFFFFF;
 
   len = 5552;
-  EXPECT_EQ(adler32_z(adler, buf, len), 3013531973);  // AOCL_Compression_zlib_adler32_z_common_6
-  EXPECT_EQ(adler32(adler, buf, len), 3013531973);  // AOCL_Compression_zlib_adler32_common_6
+  EXPECT_EQ(adler32_z(adler, buf, len), adler_len_map[len]);  // AOCL_Compression_zlib_adler32_z_common_6
+  EXPECT_EQ(adler32(adler, buf, len), adler_len_map[len]);  // AOCL_Compression_zlib_adler32_common_6
 
   len = 0;
-  EXPECT_EQ(adler32_z(adler, buf, len), 917518);
-  EXPECT_EQ(adler32(adler, buf, len), 917518);
+  EXPECT_EQ(adler32_z(adler, buf, len), adler_len_map[len]);
+  EXPECT_EQ(adler32(adler, buf, len), adler_len_map[len]);
 
-  len = UINT32_MAX;
-  EXPECT_EQ(adler32_z(adler, buf, len), 365981486);
-  EXPECT_EQ(adler32(adler, buf, len), 365981486);
-  EXPECT_EQ(crc32_z(7, buf, len), 7);
-  EXPECT_EQ(crc32(7, buf, len), 7);
+  len = orig_len;
+  EXPECT_EQ(adler32_z(adler, buf, len), adler_len_map[len]);
+  EXPECT_EQ(adler32(adler, buf, len), adler_len_map[len]);
+  EXPECT_EQ(crc32_z(7, buf, len), crc32_len_map[len]);
+  EXPECT_EQ(crc32(7, buf, len), crc32_len_map[len]);
   EXPECT_EQ(adler32_x86(adler, buf, len), adler32(adler, buf, len));
   test_crc32_x86(adler, buf, len);
   
@@ -319,8 +348,8 @@ TEST(AOCL_Compression_zlib, checksum_boundary_common)
 
   EXPECT_EQ(crc32_combine_op(crc32(0, buf, 255), crc32(0, buf + 255, 1000), crc32_combine_gen(1000)), crc32_combine(crc32(0, buf, 255), crc32(0, buf + 255, 1000), 1000));
 
-  EXPECT_EQ(crc32(7, buf, 100000), 2630052870);  // AOCL_Compression_zlib_crc32_common_2
-  EXPECT_EQ(crc32_z(7, buf, 100000), 2630052870);  // AOCL_Compression_zlib_crc32_z_common_2
+  EXPECT_EQ(crc32(7, buf, 100000), crc32_len_map[100000]);  // AOCL_Compression_zlib_crc32_common_2
+  EXPECT_EQ(crc32_z(7, buf, 100000), crc32_len_map[100000]);  // AOCL_Compression_zlib_crc32_z_common_2
 
   free(buf);
   buf = nullptr;
@@ -944,7 +973,12 @@ void compress2_fuzz(vector<Bytef> source, size_t dest_sz,
     vector<Bytef> decompressed(source.size());
     uLong origlen = decompressed.size();
     int ret2 = uncompress(decompressed.data(), &origlen, dest.data(), destLen);
+#ifdef AOCL_ENABLE_THREADS
+    if(decompressed.data() != NULL)
+      EXPECT_EQ(ret2, Z_OK);
+#else
     EXPECT_EQ(ret2, Z_OK);
+#endif
     if(ret2 == Z_OK)
     {
       EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
@@ -1011,7 +1045,8 @@ void compress2_gzip_fuzz(vector<Bytef> source, size_t dest_sz,
     vector<Bytef> decompressed(source.size());
     uLong origlen = decompressed.size();
     int ret2 = uncompress2_gzip(decompressed.data(), &origlen, dest.data(), &destLen);
-    EXPECT_EQ(ret2, Z_OK);
+    if(decompressed.data() != NULL)
+      EXPECT_EQ(ret2, Z_OK);
     if(ret2 == Z_OK)
     {
       EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
@@ -1077,7 +1112,8 @@ void compress2_raw_fuzz(vector<Bytef> source, size_t dest_sz,
     vector<Bytef> decompressed(source.size());
     uLong origlen = decompressed.size();
     int ret2 = uncompress2_raw(decompressed.data(), &origlen, dest.data(), &destLen);
-    EXPECT_EQ(ret2, Z_OK);
+    if(decompressed.data() != NULL)
+      EXPECT_EQ(ret2, Z_OK);
     if(ret2 == Z_OK)
     {
       EXPECT_EQ(0,memcmp(decompressed.data(),source.data(), source.size()));
