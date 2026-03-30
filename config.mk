@@ -94,7 +94,7 @@ AOCL_LZ4_HASH_BITS_USED ?= LOW
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS ?= 1
 
 # Enable LZ4 frame format and API support
-LZ4_FRAME_FORMAT_SUPPORT ?= 1
+LZ4_FRAME_FORMAT_SUPPORT ?= 0
 
 # ==============================================================================
 # SNAPPY OPTIMIZATIONS

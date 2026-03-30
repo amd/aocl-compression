@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -46,7 +46,7 @@
 #ifdef AOCL_LZ4_OPT
     #define AOCL_LZ4_AVX_OPT
     /* LZ4HC */
-    #define AOCL_LZ4HC_OPT
+    @AOCL_LZ4HC_OPT@
 #endif /* AOCL_LZ4_OPT */
 
 /* LZMA */

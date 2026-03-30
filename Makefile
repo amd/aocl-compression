@@ -87,6 +87,9 @@ OBJ_DIR := $(BUILD_DIR)/obj
 DEP_DIR := $(BUILD_DIR)/deps
 GEN_DIR := $(BUILD_DIR)/generated
 
+# Generated common header path
+GEN_AOCL_ALGO_OPT := $(GEN_DIR)/algos/common/aoclAlgoOpt.h
+
 # Library output
 ifeq ($(BUILD_STATIC_LIBS),1)
     LIB_TARGET := $(LIB_DIR)/$(LIB_PREFIX)$(LIB_NAME)$(LIB_STATIC_EXT)
@@ -806,7 +809,7 @@ endif # AOCL_EXCLUDE_ZSTD
 # Common header files (always included)
 COMMON_SOURCES := algos/common/aoclHashChain.h
 
-COMMON_HEADERS := algos/common/aoclAlgoOpt.h \
+COMMON_HEADERS := $(GEN_AOCL_ALGO_OPT) \
                   algos/common/aoclFds.h \
                   algos/common/aoclPrefix.h \
                   algos/common/aoclAlgoLog.h
@@ -816,7 +819,7 @@ ALL_SOURCES += $(COMMON_SOURCES)
 ALL_HEADERS += $(COMMON_HEADERS)
 
 # These headers are always installed
-INSTALL_HEADERS += algos/common/aoclAlgoOpt.h \
+INSTALL_HEADERS += $(GEN_AOCL_ALGO_OPT) \
                    algos/common/aoclFds.h \
                    algos/common/aoclPrefix.h
 # ---- END INLINE: mk/algos/common.mk ----
@@ -921,7 +924,8 @@ $(OBJ_DIR)/utils/%.o: CXXFLAGS += $(UTILS_CXXFLAGS)
 PUBLIC_INCLUDE_DIRS := -I$(ROOT_DIR) \
                        -I$(ROOT_DIR)/api \
                        -I$(ROOT_DIR)/algos/common \
-                       -I$(ROOT_DIR)/utils
+                       -I$(ROOT_DIR)/utils \
+                       -I$(GEN_DIR)/algos/common
 
 ifneq ($(AOCL_EXCLUDE_BZIP2),1)
     PUBLIC_INCLUDE_DIRS += -I$(ROOT_DIR)/algos/bzip2
@@ -1062,6 +1066,8 @@ endif
 # Add generated-headers include path (template outputs under build tree)
 CFLAGS += -I$(GEN_DIR)
 CXXFLAGS += -I$(GEN_DIR)
+CFLAGS += -I$(GEN_DIR)/algos/common
+CXXFLAGS += -I$(GEN_DIR)/algos/common
 
 # Add unit test flag when test coverage is enabled
 ifeq ($(AOCL_TEST_COVERAGE),1)
@@ -1139,11 +1145,23 @@ endif
 # ==============================================================================
 
 # Template inputs and stamp file
-TEMPLATE_SOURCES := $(wildcard mk/templates/*.in) $(wildcard algos/lz4/*.in) $(wildcard algos/zstd/lib/compress/*.in) $(wildcard algos/zstd/lib/decompress/*.in)
+TEMPLATE_SOURCES := $(wildcard mk/templates/*.in) $(wildcard algos/lz4/*.in) $(wildcard algos/zstd/lib/compress/*.in) $(wildcard algos/zstd/lib/decompress/*.in) algos/common/aoclAlgoOpt.h.in
 TEMPLATE_STAMP   := $(BUILD_DIR)/.templates.stamp
 .PHONY: templates
+
+$(GEN_AOCL_ALGO_OPT): algos/common/aoclAlgoOpt.h.in config.mk | $(GEN_DIR)/algos/common
+	@echo "Generating aoclAlgoOpt.h (LZ4_FRAME_FORMAT_SUPPORT=$(LZ4_FRAME_FORMAT_SUPPORT))..."
+ifeq ($(LZ4_FRAME_FORMAT_SUPPORT),1)
+	@sed 's|@AOCL_LZ4HC_OPT@|// #define AOCL_LZ4HC_OPT|g' $< > $@
+else
+	@sed 's|@AOCL_LZ4HC_OPT@|#define AOCL_LZ4HC_OPT|g' $< > $@
+endif
+
+$(GEN_DIR)/algos/common: | $(GEN_DIR)
+	@mkdir -p $@
+
 # Internal rule: generate all templates and update stamp
-$(TEMPLATE_STAMP): $(TEMPLATE_SOURCES) mk/templates/lz4_templates.mk mk/templates/zstd_templates.mk | $(BUILD_DIR)
+$(TEMPLATE_STAMP): $(TEMPLATE_SOURCES) config.mk $(GEN_AOCL_ALGO_OPT) mk/templates/lz4_templates.mk mk/templates/zstd_templates.mk | $(BUILD_DIR)
 	@echo "Generating templates..."
 	@$(MAKE) -f mk/templates/lz4_templates.mk
 	@$(MAKE) -f mk/templates/zstd_templates.mk
