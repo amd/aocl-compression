@@ -68,7 +68,7 @@ if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 else()
     option (SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS "Enable Snappy branchless decompression optimization (Enabled by default for non-GCC compilers)" ON)
 endif()
-option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Enabled by default)" ON)
+option (LZ4_FRAME_FORMAT_SUPPORT "Enable building LZ4 with Frame format and API support (Disabled by default)" OFF)
 option (AOCL_ZSTD_SEARCH_SKIP_OPT "Enable ZSTD match skipping optimization that steps more aggresively when matches are not found (Enabled by default)" ON)
 option (AOCL_ZSTD_DYN_BLOCK_SIZE "Enable ZSTD dynamic block size determination  (Disabled by default)" OFF)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
@@ -241,6 +241,22 @@ set (API_SRC_FILES  api/code_alignment.cpp
 
 set (ALGOS_PATH algos)
 set (CMAKE_CONFIG_PATH cmake)
+
+# Generate aoclAlgoOpt.h in build tree so LZ4HC optimization macro follows
+# LZ4_FRAME_FORMAT_SUPPORT.
+set(AOCL_GENERATED_COMMON_INC_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/algos/common)
+set(AOCL_GENERATED_ALGO_OPT_H ${AOCL_GENERATED_COMMON_INC_DIR}/aoclAlgoOpt.h)
+file(RELATIVE_PATH REL_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
+file(MAKE_DIRECTORY ${AOCL_GENERATED_COMMON_INC_DIR})
+if (LZ4_FRAME_FORMAT_SUPPORT)
+    set(AOCL_LZ4HC_OPT "// #define AOCL_LZ4HC_OPT")
+else()
+    set(AOCL_LZ4HC_OPT "#define AOCL_LZ4HC_OPT")
+endif()
+configure_file(${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/common/aoclAlgoOpt.h.in
+               ${AOCL_GENERATED_ALGO_OPT_H}
+               @ONLY)
+
 if (NOT AOCL_EXCLUDE_BZIP2)
 set (BZIP2_SRC_FILES    ${ALGOS_PATH}/bzip2/code_alignment.c
                         ${ALGOS_PATH}/bzip2/blocksort.c
@@ -379,7 +395,6 @@ else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
 set (COMMON_SRC_FILES ${ALGOS_PATH}/common/aoclHashChain.h
-                      ${ALGOS_PATH}/common/aoclAlgoOpt.h
                       ${ALGOS_PATH}/common/aoclFds.h
                       ${ALGOS_PATH}/common/aoclPrefix.h)
 set (UTILS_SRC_FILES	utils/code_alignment.cpp
@@ -409,7 +424,7 @@ set(DEST_EXAMPLES_PATH examples)
 #set(DEST_BIN_PATH bin)
 
 set(INC_FILES api/aocl_compression.h
-              ${ALGOS_PATH}/common/aoclAlgoOpt.h
+              ${REL_BUILD_DIR}/generated/algos/common/aoclAlgoOpt.h
               ${ALGOS_PATH}/common/aoclFds.h
               ${ALGOS_PATH}/common/aoclPrefix.h)
 if (NOT AOCL_EXCLUDE_BZIP2)
@@ -780,6 +795,7 @@ set_target_properties(${lib_name} PROPERTIES PUBLIC_HEADER "${INC_FILES}")
 target_include_directories(${lib_name}
                             PRIVATE ${CMAKE_SOURCE_DIR}
                             PRIVATE ${PROJECT_BINARY_DIR} # required for files generated from .in templates
+                            PRIVATE ${AOCL_GENERATED_COMMON_INC_DIR}
                             PRIVATE ${ALGOS_PATH}/common
                             PRIVATE api)
 if (AOCL_ENABLE_THREADS)

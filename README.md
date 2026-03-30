@@ -143,7 +143,7 @@ AOCL_LZ4_OPT_PREFETCH_BACKWARDS     |  Enable LZ4 optimizations related to backw
 SNAPPY_MATCH_SKIP_OPT               |  Enable Snappy match skipping optimization (Enabled by default)
 SNAPPY_HIGH_COMPRESSION             |  Enable Snappy high compression to get better ratio by compromising on speed (Disabled by default)
 SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS |  Enable Snappy branchless decompression optimization (Disabled by default for GCC and enabled for all other compilers)
-LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Enabled by default)
+LZ4_FRAME_FORMAT_SUPPORT            |  Enable building LZ4 with Frame format and API support (Disabled by default)
 AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS |  Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)
 AOCL_ZSTD_SEARCH_SKIP_OPT           |  Enable ZSTD match skipping optimization that steps more aggresively when matches are not found (Enabled by default)
 AOCL_ZSTD_DYN_BLOCK_SIZE            |  Enable ZSTD dynamic block size determination (Disabled by default)
@@ -177,6 +177,7 @@ AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supporte
 ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
 BUILD_UTILITY                       |  Enable third party utility build: minigzip(zlib), zstd_utility(zstd) (Disabled by default)
 AOCL_BZIP2_HUFFMAN_ITERATIONS       |  Control number of BZIP2 Huffman tables refinement iterations (1-4). Lower values are faster but reduce compression ratio. (Default: 3)
+AOCL_LLC_PREFIX                     |  Prefix library symbols (Disabled by default)
 
 * NOTE: <br>
    1. ZLIB supports quicker compression strategy for Level 1 by trading off compression ratio. Enable it by
@@ -186,6 +187,7 @@ AOCL_BZIP2_HUFFMAN_ITERATIONS       |  Control number of BZIP2 Huffman tables re
    `NATIVE_ENABLE_THREADS` will be automatically disabled to avoid conflicts. <br>
    3. **BUILD_UTILITY Forces Static Build**: When `BUILD_UTILITY=ON`, the build system automatically forces 
    `BUILD_STATIC_LIBS=ON` as some utilities cannot link to shared libraries. <br>
+   4. AOCL LZ4HC optimizations are disabled when `LZ4_FRAME_FORMAT_SUPPORT` is enabled. <br>
 
 
 Running AOCL-Compression Test Bench On Linux

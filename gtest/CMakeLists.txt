@@ -221,6 +221,7 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             target_include_directories(${GTEST_CUR_EXE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}
                                                 PRIVATE ${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/common
                                                 PRIVATE ${CMAKE_SOURCE_DIR}/api
+                                                PRIVATE ${AOCL_GENERATED_COMMON_INC_DIR}
                                                 PRIVATE ${GTEST_SRC_PATH})
             if(AOCL_TEST_FUZZER)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_TEST_FUZZER")

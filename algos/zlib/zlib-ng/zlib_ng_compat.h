@@ -29,7 +29,7 @@
 #ifndef ZLIB_NG_COMPAT_H
 #define ZLIB_NG_COMPAT_H
 /* DO NOT include any zlib headers here */
-#include "algos/common/aoclAlgoOpt.h"
+#include "aoclAlgoOpt.h"
 
 #include <stddef.h>
 #include <string.h>

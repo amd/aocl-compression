@@ -65,13 +65,13 @@ install-lib: $(LIB_TARGET)
 # INSTALL HEADERS
 # ==============================================================================
 
-install-headers:
+install-headers: $(GEN_AOCL_ALGO_OPT)
 	@echo "Installing headers to $(INSTALL_INC_DIR)..."
 	@mkdir -p $(INSTALL_INC_DIR)
 	@# Install main API header
 	@install -m 644 api/aocl_compression.h $(INSTALL_INC_DIR)/
 	@# Install common headers (always)
-	@install -m 644 algos/common/aoclAlgoOpt.h $(INSTALL_INC_DIR)/
+	@install -m 644 $(GEN_AOCL_ALGO_OPT) $(INSTALL_INC_DIR)/
 	@install -m 644 algos/common/aoclFds.h $(INSTALL_INC_DIR)/
 	@install -m 644 algos/common/aoclPrefix.h $(INSTALL_INC_DIR)/
 	@# Install algorithm-specific headers (conditional)
