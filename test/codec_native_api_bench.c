@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,8 @@
  */
  
 
-#ifndef _WINDOWS
+#include "aocl_compression.h"
+#ifndef _WIN32
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #endif
@@ -37,7 +38,6 @@
 
 
 #include "types.h"
-#include "aocl_compression.h"
 #include "codec_bench.h"
 
 //Include the LZ4 and LZ4HC headers
@@ -730,7 +730,7 @@ typedef AOCL_INT64  (*native_decompress)(AOCL_CHAR *,  AOCL_UINTP, AOCL_CHAR *, 
 /* Perform the native compression through a function pointer */
 AOCL_INT64 native_run_compress(aocl_compression_desc* aocl_codec_handle, native_compress compress)
 {
-    #ifdef WIN32
+    #ifdef _WIN32
         timer clkTick;
     #endif
         timeVal startTime, endTime;
@@ -747,7 +747,7 @@ AOCL_INT64 native_run_compress(aocl_compression_desc* aocl_codec_handle, native_
 /* Perform the native decompression through a function pointer */
 AOCL_INT64 native_run_decompress(aocl_compression_desc* aocl_codec_handle, native_decompress decompress)
 {
-    #ifdef WIN32
+    #ifdef _WIN32
         timer clkTick;
     #endif
         timeVal startTime, endTime;

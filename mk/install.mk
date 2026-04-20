@@ -59,6 +59,13 @@ install-lib: $(LIB_TARGET)
 	@mkdir -p $(INSTALL_LIB_DIR)
 	@cp -f $(LIB_TARGET) $(INSTALL_LIB_DIR)/
 	@chmod 755 $(INSTALL_LIB_DIR)/$(notdir $(LIB_TARGET))
+ifeq ($(OS_TYPE),windows)
+ifneq ($(BUILD_STATIC_LIBS),1)
+	@# MinGW shared build: also install the import library so downstream link-time consumers can find it.
+	@cp -f $(LIB_LINK_TARGET) $(INSTALL_LIB_DIR)/
+	@chmod 644 $(INSTALL_LIB_DIR)/$(notdir $(LIB_LINK_TARGET))
+endif
+endif
 	@echo "✓ Library installed"
 
 # ==============================================================================
@@ -175,6 +182,9 @@ endif
 # ==============================================================================
 
 install-symlinks:
+ifeq ($(OS_TYPE),windows)
+	@echo "Skipping library symlinks on Windows (not applicable for DLL/import-lib builds)"
+else
 ifeq ($(filter 1 ON on TRUE true YES yes,$(BUILD_STATIC_LIBS)),)
 	@echo "Creating library symbolic links..."
 	@mkdir -p $(INSTALL_LIB_DIR)
@@ -208,6 +218,7 @@ ifneq ($(AOCL_EXCLUDE_ZLIB),1)
 endif
 	@echo "✓ Symbolic links created"
 endif
+endif
 
 # ==============================================================================
 # UNINSTALL TARGET
@@ -220,6 +231,12 @@ uninstall: clean
 	@# Remove library
 	@rm -f $(INSTALL_LIB_DIR)/$(LIB_PREFIX)$(LIB_NAME)$(LIB_EXT)
 	@rm -f $(INSTALL_LIB_DIR)/$(LIB_PREFIX)$(LIB_NAME)$(LIB_STATIC_EXT)
+ifeq ($(OS_TYPE),windows)
+ifneq ($(BUILD_STATIC_LIBS),1)
+	@# MinGW shared build: also remove the import library installed alongside the DLL.
+	@rm -f $(INSTALL_LIB_DIR)/$(LIB_PREFIX)$(LIB_NAME).dll.a
+endif
+endif
 	@# Remove symbolic links
 	@rm -f $(INSTALL_LIB_DIR)/$(LIB_PREFIX)bz2$(LIB_EXT)
 	@rm -f $(INSTALL_LIB_DIR)/$(LIB_PREFIX)lz4$(LIB_EXT)

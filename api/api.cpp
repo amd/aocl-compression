@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -69,7 +69,7 @@ AOCL_INT64 aocl_llc_compress(aocl_compression_desc *handle,
                         aocl_compression_type codec_type)
 {
     AOCL_INT64 ret;
-#ifdef WIN32
+#ifdef _WIN32
     timer clkTick;
 #endif
     timeVal startTime, endTime;
@@ -110,7 +110,7 @@ AOCL_INT64 aocl_llc_decompress(aocl_compression_desc *handle,
                           aocl_compression_type codec_type)
 {
     AOCL_INT64 ret;
-#ifdef WIN32
+#ifdef _WIN32
     timer clkTick;
 #endif
     timeVal startTime, endTime;

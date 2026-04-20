@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -203,7 +203,7 @@ typedef struct thread_group
 
 #ifndef EXPORT_SYM_THREADS
 #ifdef AOCL_UNIT_TEST
-#ifdef _WINDOWS
+#ifdef _WIN32
 /**
  * You can export data, functions, classes, or class member functions from a DLL
  * using the __declspec(dllexport) keyword. __declspec(dllexport) adds the export

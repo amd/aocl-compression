@@ -39,7 +39,7 @@
 #ifndef CODEC_BENCH_H
 #define CODEC_BENCH_H
 
-#ifdef _WINDOWS
+#ifdef _WIN32
 #include <windows.h>
 #define strtok_r strtok_s
 #define strcasecmp _stricmp

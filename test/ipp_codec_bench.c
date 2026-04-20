@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -36,7 +36,8 @@
  *  @author S. Biplab Raut
  */
 
-#ifndef _WINDOWS
+
+#ifndef _WIN32
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #endif

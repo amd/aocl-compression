@@ -69,9 +69,10 @@ Building on Linux
    The option `-v` will print verbose build logs on the console.
 4. To clear or delete the build folder or files, manually remove the build directory or its files.
 
-Building with GNU Make (Linux - Limited Support)
--------------------------------------------------
-GNU Make based build is provided for Linux systems with limited functional features only.
+Building with GNU Make (Linux and Windows - Limited Support)
+------------------------------------------------------------
+GNU Make based build is provided for Linux and Windows systems with limited functional features only.
+On Windows, the build is supported under MSYS2 with the MinGW-w64 toolchain (`make`, `gcc`/`clang`, `g++`/`clang++`, and `bash` available via MSYS2).
 
 1. Ensure required tools are available: `make`, `gcc`/`clang`, `g++`/`clang++`, and `bash`.
 2. From the source root, build using default configuration:
