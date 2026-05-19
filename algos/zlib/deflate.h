@@ -1,6 +1,6 @@
 /* deflate.h -- internal compression state
  * Copyright (C) 1995-2024 Jean-loup Gailly
- * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -501,6 +501,9 @@ extern "C" {
 
 #if defined(AOCL_UNIT_TEST)
 ZEXTERN void ZEXPORT test_aocl_zlib_set_enable_dquick(int val);
+#ifdef AOCL_ZLIB_OPT
+ZEXTERN int ZEXPORT test_aocl_zlib_get_zlibOptOff(void);
+#endif
 #endif
 
 #ifdef __cplusplus

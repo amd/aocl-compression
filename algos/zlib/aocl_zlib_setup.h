@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,22 +30,24 @@
 
 #ifdef AOCL_ZLIB_OPT
 
-extern void aocl_register_slide_hash(int optOff, int optLevel);
+#include "utils/dispatcher.h"
+
+extern void aocl_register_slide_hash(int optOff, CpuFeatures cpuFeatures);
 extern void aocl_destroy_slide_hash(void);
 
-extern void aocl_register_longest_match(int optOff, int optLevel);
+extern void aocl_register_longest_match(int optOff, CpuFeatures cpuFeatures);
 extern void aocl_destroy_longest_match(void);
 
-extern void aocl_setup_adler32(int optOff, int optLevel);
+extern void aocl_setup_adler32(int optOff, CpuFeatures cpuFeatures);
 extern void aocl_destroy_adler32(void);
 
-extern void aocl_setup_deflate(int optOff, int optLevel);
+extern void aocl_setup_deflate(int optOff, CpuFeatures cpuFeatures);
 extern void aocl_destroy_deflate(void);
 
-extern void aocl_setup_tree(int optOff, int optLevel);
+extern void aocl_setup_tree(int optOff, CpuFeatures cpuFeatures);
 extern void aocl_destroy_tree(void);
 
-extern void aocl_setup_inflate(int optOff, int optLevel);
+extern void aocl_setup_inflate(int optOff, CpuFeatures cpuFeatures);
 extern void aocl_destroy_inflate(void);
 
 #endif /* AOCL_ZLIB_OPT */

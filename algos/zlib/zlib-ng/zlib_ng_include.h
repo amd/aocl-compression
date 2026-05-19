@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2025-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -28,7 +28,7 @@
 
 #ifndef ZLIB_NG_INCLUDE_H
 #define ZLIB_NG_INCLUDE_H
-#include "algos/common/aoclAlgoOpt.h"
+#include "aoclAlgoOpt.h"
 
 /********************** inflate_p.h **********************/
 #  define INFLATE_ADJUST_WINDOW_SIZE(n) (n)

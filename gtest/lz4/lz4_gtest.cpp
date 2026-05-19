@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -2200,6 +2200,31 @@ TEST_P(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_conti
     LZ4_loadDict(state, dict, dictSize);
     int compressedLen = LZ4_compress_fast_continue (state, src_ptr, dst, src_len, src_len-1, 1);
     
+    EXPECT_EQ(compressedLen, 0);
+}
+
+TEST_P(LLZ4_compress_fast_continue, AOCL_Compression_lz4_LZ4_compress_fast_continue_fail_common_19) // corrupted_extDict_NULL_dictionary
+{
+
+    char dict[1024] = {0};
+    for(int i = 0; i < 1024; i++) {
+        dict[i] = (char)(i % 256);
+    }
+    ASSERT_GT(LZ4_loadDict(state, dict, 1024), 0);
+    
+    // Corrupt the dictionary pointer
+    state->internal_donotuse.dictionary = NULL;
+    // dictSize remains non-zero from loadDict
+    
+    setSrcSize(1024);
+    setDstSize(10000);
+    for(int i = 0; i < srcSize; i++) {
+        src[i] = (char)((i + 100) % 256);
+    }
+    
+    int compressedLen = LZ4_compress_fast_continue(state, src, dst, srcSize, dstSize, 1);
+    
+    // Fail gracefully and returns 0 due to NULL dictBase in usingExtDict path
     EXPECT_EQ(compressedLen, 0);
 }
 

@@ -1,6 +1,6 @@
 /* zconf.h -- configuration of the zlib compression library
  * Copyright (C) 1995-2024 Jean-loup Gailly, Mark Adler
- * Modifications Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -15,6 +15,9 @@
  * Even better than compiling with -DZ_PREFIX would be to use configure to set
  * this permanently in zconf.h using "./configure --zprefix".
  */
+#include "aoclAlgoOpt.h"
+#include "aoclPrefix.h"
+
 #ifdef Z_PREFIX     /* may be set to #if 1 by ./configure */
 #  define Z_PREFIX_SET
 
@@ -540,7 +543,6 @@ typedef uLong FAR uLongf;
 #endif
 
 /* AOCL optimization flags */
-#include "aoclAlgoOpt.h"
 #ifdef AOCL_ZLIB_OPT
      #include <stdint.h>
 #endif /* AOCL_ZLIB_OPT */

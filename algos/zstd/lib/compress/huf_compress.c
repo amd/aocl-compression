@@ -1,7 +1,7 @@
 /* ******************************************************************
  * Huffman encoder, part of New Generation Entropy library
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  *  You can contact the author at :
  *  - FSE+HUF source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -41,7 +41,9 @@
 /* **************************************************************
 *  Error Management
 ****************************************************************/
+#ifndef HUF_isError
 #define HUF_isError ERR_isError
+#endif
 #define HUF_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)   /* use only *after* variable declarations */
 
 
@@ -272,8 +274,11 @@ size_t HUF_writeCTable_wksp(void* dst, size_t maxDstSize,
     wksp->bitsToWeight[0] = 0;
     for (n=1; n<huffLog+1; n++)
         wksp->bitsToWeight[n] = (BYTE)(huffLog + 1 - n);
-    for (n=0; n<maxSymbolValue; n++)
-        wksp->huffWeight[n] = wksp->bitsToWeight[HUF_getNbBits(ct[n])];
+    for (n=0; n<maxSymbolValue; n++) {
+        size_t nbBits = HUF_getNbBits(ct[n]);
+        if (nbBits > huffLog) return ERROR(corruption_detected);
+        wksp->huffWeight[n] = wksp->bitsToWeight[nbBits];
+    }
 
     /* attempt weights compression by FSE */
     if (maxDstSize < 1) return ERROR(dstSize_tooSmall);

@@ -9,7 +9,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
-   Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include "aoclAlgoOpt.h"
 #include <limits.h>
+#include "utils/dispatcher.h"
 
 #ifndef BZ_NO_STDIO
 #include <stdio.h>
@@ -283,7 +284,7 @@ typedef
 
       /* these variables are used for fused RLE and LMS count gather computation */
 #ifdef AOCL_BZIP2_OPT
-      UInt32 *SA;       // LMS characters & buckets are stored in this buffer.
+      Int32 *SA;       // LMS characters & buckets are stored in this buffer.
       Int32 c;          // Past character.
       Int32 repeat;     // Number of times c character has been repeated.
       Int32 sw;         // Switch statement helper.
@@ -612,7 +613,7 @@ do { \
 #define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC)
 #endif /* AOCL_BZIP2_OPT */
 
-extern void aocl_register_mainSimpleSort_fmv (int optOff, int optLevel);
+extern void aocl_register_mainSimpleSort_fmv (int optOff, CpuFeatures optLevel);
 
 /*-------------------------------------------------------------*/
 /*--- end                                   bzlib_private.h ---*/

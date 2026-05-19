@@ -2,6 +2,7 @@
  * huff0 huffman decoder,
  * part of Finite State Entropy library
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  *
  *  You can contact the author at :
  *  - FSE+HUF source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -75,7 +76,9 @@
 /* **************************************************************
 *  Error Management
 ****************************************************************/
+#ifndef HUF_isError
 #define HUF_isError ERR_isError
+#endif
 
 
 /* **************************************************************
@@ -1208,7 +1211,13 @@ size_t HUF_readDTableX2_wksp(HUF_DTable* DTable,
     if (tableLog <= HUF_DECODER_FAST_TABLELOG && maxTableLog > HUF_DECODER_FAST_TABLELOG) maxTableLog = HUF_DECODER_FAST_TABLELOG;
 
     /* find maxWeight */
-    for (maxW = tableLog; wksp->rankStats[maxW]==0; maxW--) {}  /* necessarily finds a solution before 0 */
+    maxW = tableLog;
+    while (maxW > 0 && wksp->rankStats[maxW] == 0) {
+        maxW--;
+    }
+    if (wksp->rankStats[maxW] == 0) {  /* all weights are 0, corrupted data */
+        return ERROR(corruption_detected);
+    }
 
     /* Get start index of each weight */
     {   U32 w, nextRankStart = 0;

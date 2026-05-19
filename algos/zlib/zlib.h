@@ -2,7 +2,7 @@
   version 1.3.1, January 22nd, 2024
 
   Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler
-  Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
+  Modifications Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -2854,6 +2854,20 @@ ZEXTERN int ZEXPORT inflateBackInit_(z_streamp strm, int windowBits,
 #  define z_inflateBackInit(strm, windowBits, window) \
           inflateBackInit_((strm), (windowBits), (window), \
                            ZLIB_VERSION, (int)sizeof(z_stream))
+#elif defined(AOCL_PREFIX_SET)
+#  define AOCL_LLC_deflateInit(strm, level) \
+          deflateInit_((strm), (level), ZLIB_VERSION, (int)sizeof(z_stream))
+#  define AOCL_LLC_inflateInit(strm) \
+          inflateInit_((strm), ZLIB_VERSION, (int)sizeof(z_stream))
+#  define AOCL_LLC_deflateInit2(strm, level, method, windowBits, memLevel, strategy) \
+          deflateInit2_((strm),(level),(method),(windowBits),(memLevel),\
+                        (strategy), ZLIB_VERSION, (int)sizeof(z_stream))
+#  define AOCL_LLC_inflateInit2(strm, windowBits) \
+          inflateInit2_((strm), (windowBits), ZLIB_VERSION, \
+                        (int)sizeof(z_stream))
+#  define AOCL_LLC_inflateBackInit(strm, windowBits, window) \
+          inflateBackInit_((strm), (windowBits), (window), \
+                           ZLIB_VERSION, (int)sizeof(z_stream))
 #else
 /**
  * @name Basic Functions
@@ -3079,6 +3093,10 @@ ZEXTERN int ZEXPORT gzgetc_(gzFile file);       /* backward compatibility */
 #ifdef Z_PREFIX_SET
 #  undef z_gzgetc
 #  define z_gzgetc(g) \
+          ((g)->have ? ((g)->have--, (g)->pos++, *((g)->next)++) : (gzgetc)(g))
+#elif defined(AOCL_PREFIX_SET)
+#  undef AOCL_LLC_gzgetc
+#  define AOCL_LLC_gzgetc(g) \
           ((g)->have ? ((g)->have--, (g)->pos++, *((g)->next)++) : (gzgetc)(g))
 #else
 #  define gzgetc(g) \

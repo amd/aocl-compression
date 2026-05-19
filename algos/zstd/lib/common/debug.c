@@ -2,6 +2,7 @@
  * debug
  * Part of FSE library
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  *
  * You can contact the author at :
  * - Source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -19,6 +20,9 @@
  * such as DEBUGLOG and RAWLOG
  */
 
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 #include "debug.h"
 #if !defined(ZSTD_LINUX_KERNEL) || (DEBUGLEVEL>=2)
 /* We only use this when DEBUGLEVEL>=2, but we get -Werror=pedantic errors if a

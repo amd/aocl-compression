@@ -1,6 +1,7 @@
 /**
  * Copyright (c) 2016 Tino Reichardt
  * All rights reserved.
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  *
  * You can contact the author at:
  * - zstdmt source repository: https://github.com/mcmilk/zstdmt
@@ -16,7 +17,9 @@
  */
 
 #include "threading.h"
-
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 /* create fake symbol to avoid empty translation unit warning */
 int g_ZSTD_threading_useless_symbol;
 

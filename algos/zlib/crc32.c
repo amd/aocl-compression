@@ -1,6 +1,6 @@
 /* crc32.c -- compute the CRC-32 of a data stream
  * Copyright (C) 1995-2022 Mark Adler
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  *
  * This interleaved implementation of a CRC makes use of pipelined multiple
@@ -153,6 +153,10 @@ local z_word_t byte_swap(z_word_t word) {
 #ifdef AOCL_ZLIB_OPT
 #include "utils/utils.h"
 #include "aocl_zlib_setup.h"
+#include "aocl_zlib_fmv_utils.h"
+#include "aocl_zlib_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_zlib_fmv_utils.h and aocl_zlib_dispatch_variants.h. */
 
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
@@ -1088,7 +1092,7 @@ uLong ZEXPORT crc32_combine_op(uLong crc1, uLong crc2, uLong op) {
 }
 
 #ifdef AOCL_ZLIB_OPT
-static inline void aocl_setup_crc32_fmv(int optOff, int optLevel)
+static inline void aocl_setup_crc32_fmv(int optOff, CpuFeatures cpuFeatures)
 {
     if (UNLIKELY(optOff == 1))
     {
@@ -1096,39 +1100,37 @@ static inline void aocl_setup_crc32_fmv(int optOff, int optLevel)
     }
     else
     {
-        switch (optLevel)
-        {
-        case 0://C version
-        case 1://SSE version
-            crc32_z_impl_fp = crc32_z_impl;
-            break;
-        case 2://AVX version
-        case 3://AVX2 version
-#ifdef AOCL_ZLIB_AVX_OPT
-            crc32_z_impl_fp = crc32_z_impl_x86_avx;
-#else
-            crc32_z_impl_fp = crc32_z_impl;
-#endif
-            break;
-        case -1: // undecided. use defaults based on compiler flags
-        default://AVX512 and other versions
+        /* FMV variant table (highest priority first). */
+        static const AoclZlibCrc32Variant crc32_variants[] = {
 #ifdef AOCL_ZLIB_AVX512_OPT
-            crc32_z_impl_fp = crc32_z_impl_x86_avx512;
-#elif defined(AOCL_ZLIB_AVX_OPT)
-            crc32_z_impl_fp = crc32_z_impl_x86_avx;
-#else
-            crc32_z_impl_fp = crc32_z_impl;
+            { FEATURE_AVX | FEATURE_PCLMUL | FEATURE_AVX512F | FEATURE_VPCLMULQDQ, crc32_z_impl_x86_avx512 },
 #endif
-            break;
+#ifdef AOCL_ZLIB_AVX_OPT
+            { FEATURE_AVX | FEATURE_PCLMUL, crc32_z_impl_x86_avx },
+#endif
+            { 0, crc32_z_impl }
+        };
+
+        /* Select first compatible FMV variant for detected CPU features. */
+        size_t variant_index = aocl_zlib_select_fmv_variant(
+            crc32_variants,
+            AOCL_ZLIB_ARRAY_SIZE(crc32_variants),
+            sizeof(crc32_variants[0]),
+            offsetof(AoclZlibCrc32Variant, required_features),
+            cpuFeatures);
+
+        if (variant_index < AOCL_ZLIB_ARRAY_SIZE(crc32_variants)) {
+            crc32_z_impl_fp = crc32_variants[variant_index].impl;
+            return;
         }
     }
 }
 
-void ZLIB_INTERNAL aocl_setup_crc32(int optOff, int optLevel) {
+void ZLIB_INTERNAL aocl_setup_crc32(int optOff, CpuFeatures cpuFeatures) {
     AOCL_ENTER_CRITICAL(setup_zlib_crc)
     if (!setup_ok_zlib_crc) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_setup_crc32_fmv(optOff, optLevel);
+        aocl_setup_crc32_fmv(optOff, cpuFeatures);
         setup_ok_zlib_crc = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_crc)
@@ -1137,9 +1139,9 @@ void ZLIB_INTERNAL aocl_setup_crc32(int optOff, int optLevel) {
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_zlib_crc)
     if (!setup_ok_zlib_crc) {
-        int optLevel = get_cpu_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         int optOff = get_disable_opt_flags(0);
-        aocl_setup_crc32_fmv(optOff, optLevel);
+        aocl_setup_crc32_fmv(optOff, cpuFeatures);
         setup_ok_zlib_crc = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_crc)

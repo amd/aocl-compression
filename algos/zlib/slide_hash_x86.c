@@ -1,5 +1,5 @@
 /**
- * Modifications Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,6 +33,10 @@
 
 #ifdef AOCL_ZLIB_OPT
 #include "aocl_zlib_setup.h"
+#include "aocl_zlib_fmv_utils.h"
+#include "aocl_zlib_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_zlib_fmv_utils.h and aocl_zlib_dispatch_variants.h. */
 
 static int setup_ok_zlib_slide = 0; // flag to indicate status of dynamic dispatcher setup
 #ifndef AOCL_ENABLE_THREADS
@@ -98,7 +102,7 @@ void ZLIB_INTERNAL slide_hash_x86(deflate_state *s)
     slide_hash_fp(s);
 }
 
-void aocl_register_slide_hash_fmv(int optOff, int optLevel)
+void aocl_register_slide_hash_fmv(int optOff, CpuFeatures cpuFeatures)
 {
     if (UNLIKELY(optOff == 1))
     {
@@ -106,31 +110,35 @@ void aocl_register_slide_hash_fmv(int optOff, int optLevel)
     }
     else
     {
-        switch (optLevel)
-        {
-        case 0://C version
-        case 1://SSE version
-        case 2://AVX version
-            slide_hash_fp = slide_hash_c_opt;
-            break;
-        case -1: // undecided. use defaults based on compiler flags
-        case 3://AVX2 version
-        default://AVX512 and other versions
+        /* FMV variant table (highest priority first). */
+        static const AoclZlibSlideHashVariant slide_hash_variants[] = {
 #ifdef AOCL_ZLIB_AVX2_OPT
-            slide_hash_fp = slide_hash_avx2;
-#else
-            slide_hash_fp = slide_hash_c_opt;
+            { FEATURE_AVX2, slide_hash_avx2 },
 #endif
-            break;
+            { 0,            slide_hash_c_opt }
+        };
+
+        /* Select first compatible FMV variant for detected CPU features. */
+        size_t variant_index = aocl_zlib_select_fmv_variant(
+            slide_hash_variants,
+            AOCL_ZLIB_ARRAY_SIZE(slide_hash_variants),
+            sizeof(slide_hash_variants[0]),
+            offsetof(AoclZlibSlideHashVariant, required_features),
+            cpuFeatures);
+
+        if (variant_index < AOCL_ZLIB_ARRAY_SIZE(slide_hash_variants)) {
+            slide_hash_fp = slide_hash_variants[variant_index].impl;
+            return;
         }
     }
 }
 
-void ZLIB_INTERNAL aocl_register_slide_hash(int optOff, int optLevel){
+
+void ZLIB_INTERNAL aocl_register_slide_hash(int optOff, CpuFeatures cpuFeatures){
     AOCL_ENTER_CRITICAL(setup_zlib_slide)
     if (!setup_ok_zlib_slide) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_slide_hash_fmv(optOff, optLevel);
+        aocl_register_slide_hash_fmv(optOff, cpuFeatures);
         setup_ok_zlib_slide = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_slide)

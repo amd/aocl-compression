@@ -1,6 +1,6 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
- *
+ * Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
@@ -26,55 +26,37 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
- /** @file aoclAlgoOpt.h
+#ifndef AOCL_LZMA_DISPATCH_VARIANTS_H
+#define AOCL_LZMA_DISPATCH_VARIANTS_H
+
+#include "utils/dispatcher.h"
+
+/*
+ * Shared variant entry layouts used by lzma FMV registration tables.
  *
- *  @brief AOCL Optimization flags.
- *
- *  For native compilation comment out below flags based on ISA support
- *
- *  @author Ashish Sriram
+ * Notes:
+ *  - required_features is kept as the first field in each variant entry.
+ *  - Tables are expected to be ordered from highest-priority to fallback.
  */
 
-/* BZIP2 */
-#define AOCL_BZIP2_OPT
-#ifdef AOCL_BZIP2_OPT
-    #define AOCL_BZIP2_AVX_OPT
-#endif
+typedef enum {
+    AOCL_LZMA_ENCODE_PROFILE_BASELINE = 0,
+    AOCL_LZMA_ENCODE_PROFILE_OPT
+} AoclLzmaEncodeDispatchProfile;
 
-/* LZ4 */
-#define AOCL_LZ4_OPT
-#ifdef AOCL_LZ4_OPT
-    #define AOCL_LZ4_AVX_OPT
-    /* LZ4HC */
-    #define AOCL_LZ4HC_OPT
-#endif /* AOCL_LZ4_OPT */
+typedef struct {
+    CpuFeatures required_features;
+    AoclLzmaEncodeDispatchProfile profile;
+} AoclLzmaEncodeDispatchVariant;
 
-/* LZMA */
-#define AOCL_LZMA_OPT
+typedef enum {
+    AOCL_LZMA_DECODE_PROFILE_BASELINE = 0,
+    AOCL_LZMA_DECODE_PROFILE_OPT
+} AoclLzmaDecodeDispatchProfile;
 
-/* SNAPPY */
-#define AOCL_SNAPPY_OPT
-#ifdef AOCL_SNAPPY_OPT
-    #define AOCL_SNAPPY_AVX_OPT
-    #ifdef AOCL_SNAPPY_AVX_OPT
-        #define AOCL_SNAPPY_AVX2_OPT
-    #endif /* AOCL_SNAPPY_AVX_OPT */
-#endif /* AOCL_SNAPPY_OPT */
+typedef struct {
+    CpuFeatures required_features;
+    AoclLzmaDecodeDispatchProfile profile;
+} AoclLzmaDecodeDispatchVariant;
 
-/* ZSTD */
-#define AOCL_ZSTD_OPT
-
-/* ZLIB */
-#define AOCL_ZLIB_OPT
-#ifdef AOCL_ZLIB_OPT
-     #define AOCL_ZLIB_SSE2_OPT
-     #ifdef AOCL_ZLIB_SSE2_OPT
-          #define AOCL_ZLIB_AVX_OPT
-          #ifdef AOCL_ZLIB_AVX_OPT
-               #define AOCL_ZLIB_AVX2_OPT
-               #ifdef AOCL_ZLIB_AVX2_OPT
-                    #define AOCL_ZLIB_AVX512_OPT
-               #endif /* AOCL_ZLIB_AVX2_OPT */
-          #endif /* AOCL_ZLIB_AVX_OPT */
-     #endif /* AOCL_ZLIB_SSE2_OPT */
-#endif /* AOCL_ZLIB_OPT */
+#endif /* AOCL_LZMA_DISPATCH_VARIANTS_H */

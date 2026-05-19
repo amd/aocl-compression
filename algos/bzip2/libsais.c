@@ -22,7 +22,7 @@ Please see the file LICENSE for full copyright information.
 --*/
 
 /**
- * Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -6971,7 +6971,7 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
         fs / k <  2
     */
 #ifdef AOCL_BWT
-    if (1)
+    if (k > 0)
 #else
     if (k > 0 && ((fs / k >= 6) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 6)))
 #endif /* AOCL_BWT */

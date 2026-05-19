@@ -9,7 +9,7 @@
  */
 
 /**
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -115,6 +115,7 @@ void AOCL_ZSTD_readFdsFrame(ZSTD_DCtx* dctx, void const* src, size_t srcSize);
 
 #ifdef AOCL_ZSTD_OPT
 #include "utils/utils.h"
+#include "utils/dispatcher.h"
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
  * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
@@ -298,6 +299,28 @@ static size_t ZSTD_startingInputLength(ZSTD_format_e format)
     return startingInputLength;
 }
 
+#if AOCL_DECOMPRESS_FAST > 1
+/* If compressor switched from FDS to non-FDS mode (forced due to parameter change / ZSTD level change
+ * made outside the compress API, and such levels not having AOCL optimizations), and this occurred 
+ * mid-way when compressing a stream, there is no feedback via the compressed stream to inform the 
+ * decompressor not to use FDS for next frame. Enforcing this will required complex state management
+ * within the compressor.
+ * 
+ * A simpler and more foolproof strategy is adopted here on the decompressor instead. 
+ * After processing each frame, decompressor resets fds flag. So every new ZSTD frame is fresh start. 
+ * If decompressor encounters an FDS skip frame, it will use FDS path to process the subsequent ZSTD frame.
+*  If not stick to default.
+* 
+* Even in dynamic FDS mode, switches in FDS states will always have FDS skip frame markers when such switches occur.
+* If same FDS state persists, data is generally stored in the same ZSTD frame. Hence, in most use cases, we
+* won't have scenarios where suboptimal non-FDS path gets taken in decompressor when compressor had processed 
+* the same with FDS>
+ */
+#define MARK_FDS_REGION_END(ctx) ctx->fds = 0 /* Mark FDS constrained region / frame as ended */
+#else
+#define MARK_FDS_REGION_END(ctx) ((void)(ctx))
+#endif /* AOCL_DECOMPRESS_FAST */
+
 static void ZSTD_DCtx_resetParameters(ZSTD_DCtx* dctx)
 {
     assert(dctx->streamStage == zdss_init);
@@ -308,9 +331,7 @@ static void ZSTD_DCtx_resetParameters(ZSTD_DCtx* dctx)
     dctx->refMultipleDDicts = ZSTD_rmd_refSingleDDict;
     dctx->disableHufAsm = 0;
     dctx->maxBlockSizeParam = 0;
-#if AOCL_DECOMPRESS_FAST > 1
-    dctx->fds = 0;
-#endif /* AOCL_DECOMPRESS_FAST */
+    MARK_FDS_REGION_END(dctx);
 }
 
 static void ZSTD_initDCtx_internal(ZSTD_DCtx* dctx)
@@ -1158,6 +1179,7 @@ static size_t ZSTD_decompressFrame(ZSTD_DCtx* dctx,
         remainingSrcSize -= 4;
     }
     ZSTD_DCtx_trace_end(dctx, (U64)(op-ostart), (U64)(ip-istart), /* streaming */ 0);
+    MARK_FDS_REGION_END(dctx);
     /* Allow caller to get size read */
     LOG_FORMATTED(DEBUG, logCtx, "ZSTD_decompressFrame: decompressed frame of size %i, consuming %i bytes of input", (int)(op-ostart), (int)(ip - (const BYTE*)*srcPtr));
     DEBUGLOG(4, "ZSTD_decompressFrame: decompressed frame of size %i, consuming %i bytes of input", (int)(op-ostart), (int)(ip - (const BYTE*)*srcPtr));
@@ -1543,6 +1565,7 @@ size_t ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, c
                     dctx->expected = 0;   /* ends here */
                     dctx->stage = ZSTDds_getFrameHeaderSize;
                 }
+                MARK_FDS_REGION_END(dctx);
             } else {
                 dctx->stage = ZSTDds_decodeBlockHeader;
                 dctx->expected = ZSTD_blockHeaderSize;
@@ -1561,6 +1584,7 @@ size_t ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, c
                 RETURN_ERROR_IF(check32 != h32, checksum_wrong, "");
             }
             ZSTD_DCtx_trace_end(dctx, dctx->decodedSize, dctx->processedCSize, /* streaming */ 1);
+            MARK_FDS_REGION_END(dctx);
             dctx->expected = 0;
             dctx->stage = ZSTDds_getFrameHeaderSize;
             return 0;
@@ -2324,7 +2348,10 @@ size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inB
                 RETURN_ERROR_IF(zds->staticSize, memory_allocation,
                     "legacy support is incompatible with static dctx");
                 {   size_t const hint = ZSTD_decompressLegacyStream(zds->legacyContext, zds->legacyVersion, output, input);
-                    if (hint==0) zds->streamStage = zdss_init;
+                if (hint == 0) {
+                    MARK_FDS_REGION_END(zds);
+                    zds->streamStage = zdss_init;
+                }
                     return hint;
             }   }
 #endif
@@ -2347,7 +2374,10 @@ size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inB
                                     dict, dictSize), "");
                         zds->legacyVersion = zds->previousLegacyVersion = legacyVersion;
                         {   size_t const hint = ZSTD_decompressLegacyStream(zds->legacyContext, legacyVersion, output, input);
-                            if (hint==0) zds->streamStage = zdss_init;   /* or stay in stage zdss_loadHeader */
+                        if (hint == 0) {
+                            MARK_FDS_REGION_END(zds);
+                            zds->streamStage = zdss_init;   /* or stay in stage zdss_loadHeader */
+                        }
                             return hint;
                     }   }
 #endif
@@ -2390,6 +2420,7 @@ size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inB
                     ip = istart + cSize;
                     op = op ? op + decompressedSize : op; /* can occur if frameContentSize = 0 (empty frame) */
                     zds->expected = 0;
+                    MARK_FDS_REGION_END(zds);
                     zds->streamStage = zdss_init;
                     someMoreWork = 0;
                     break;
@@ -2480,6 +2511,7 @@ size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inB
             {   size_t const neededInSize = ZSTD_nextSrcSizeToDecompressWithInputSize(zds, (size_t)(iend - ip));
                 DEBUGLOG(5, "neededInSize = %u", (U32)neededInSize);
                 if (neededInSize==0) {  /* end of frame */
+                    MARK_FDS_REGION_END(zds);
                     zds->streamStage = zdss_init;
                     someMoreWork = 0;
                     break;
@@ -2622,15 +2654,16 @@ size_t ZSTD_decompressStream_simpleArgs (
 char* aocl_setup_zstd_decode(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog)
 {
-    aocl_setup_zstd_decompress_block(optOff, optLevel);
+    CpuFeatures cpuFeatures = Dispatcher_GetSupportedFeaturesForLevel(Dispatcher_IntToLevel((int)optLevel));
+    aocl_setup_zstd_decompress_block(optOff, (uint64_t)cpuFeatures);
     return NULL;
 }
 
 #ifdef AOCL_ZSTD_OPT
 static void aocl_setup_native(void) {
-    int optLevel = get_cpu_opt_flags(0);
+    CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
     int optOff = get_disable_opt_flags(0);
-    aocl_setup_zstd_decompress_block(optOff, optLevel);
+    aocl_setup_zstd_decompress_block(optOff, (uint64_t)cpuFeatures);
 }
 #endif
 
@@ -2780,13 +2813,14 @@ size_t AOCL_ZSTD_decompressDCtx_mt(ZSTD_DCtx* dctx, void* dst, size_t dstCapacit
             if (ti_cur->is_error)
             {
                 result = ti_cur->dst_trap_size; //dst_trap_size holds error code on failure
+                int error_type = ti_cur->is_error; // Save error type before destruction
                 aocl_destroy_parallel_decompress_mt(&thread_group_handle);
 #ifdef AOCL_THREADS_LOG
                 printf("Decompress Thread [id: %d] : Encountered ERROR\n", thread_id);
 #endif
                 LOG_FORMATTED(ERR, logCtx, "Decompress Thread [id: %d] : Encountered ERROR", thread_id);
                 LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-                if(ti_cur->is_error == 2)
+                if(error_type == 2)
                     return ERROR(dstSize_tooSmall);
                 return result;
             }

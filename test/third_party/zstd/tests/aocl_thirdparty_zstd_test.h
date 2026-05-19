@@ -62,6 +62,24 @@ static size_t Test_decompressStreamMultiple(ZSTD_DStream* zds, ZSTD_outBuffer* o
     return ret;
 }
 
+/* Same as Test_decompressStreamMultiple but with input_size provided externally */
+static size_t Test_decompressStreamMultipleWithSize(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input,
+    size_t input_size) {
+    size_t ret = 0;
+    while (!ret && input->pos < input_size) {
+        ret = ZSTD_decompressStream(zds, output, input);
+        if (ZSTD_isError(ret)) {
+            LOG_FORMATTED(ERR, logCtx, "%s", ZSTD_getErrorName(ret));
+            return ret;
+        }
+        if (!ret && input->pos < input_size &&
+            !ZSTD_isFrame(input->src + input->pos, input_size - input->pos)) {
+            return ret;
+        }
+    }
+    return ret;
+}
+
 /* Skip skippable frames if any until a zstd frame is found. */
 static size_t Test_skipSkippableFrames(const BYTE* src, size_t srcSize) {
     const BYTE* cur = src;
@@ -84,5 +102,12 @@ static size_t Test_refCompress(void* dst, size_t dstCapacity, const void* src, s
     return g_cSize;
 }
 
+#else
+ /* Wrapper ZSTD_decompressStream */
+static size_t Test_decompressStreamMultipleWithSize(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input,
+    size_t input_size) {
+    (void)input_size;
+    return ZSTD_decompressStream(zds, output, input);
+}
 #endif /* AOCL_FDS_CORRECTION */
 #endif /* AOCL_THIRDPARTY_ZSTD_TEST_H */

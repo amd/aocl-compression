@@ -2,7 +2,7 @@
    LZ4 HC - High Compression Mode of LZ4
    Header File
    Copyright (C) 2011-2020, Yann Collet.
-   Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -166,7 +166,11 @@ LZ4LIB_API int LZ4_compress_HC_extStateHC(void* stateHC, const char* src, char* 
  *  | success| The number of bytes written into `dst` (necessarily <= targetDstSize) |
  *  | ^      | `*srcSizePtr` is updated to indicate how much bytes were read from `src` |
  *  | Fail   |  0                                     |
- *
+ * 
+ * @note `stateHC` When environment variable AOCL_DISABLE_OPT is ON, size of stateHC must be provided by LZ4_sizeofStateHC(). 
+ *               When AOCL_DISABLE_OPT is OFF, size of stateHC must be provided by AOCL_LZ4_sizeofStateHC() for compression level 6, 7, 8, 9 and
+ *               LZ4_sizeofStateHC() for other levels respectively.
+ * @note Memory segment must be aligned on 8-bytes boundaries (which a normal `malloc()` should do properly).
  * @warning Requires v1.9.0+
  */
 LZ4LIB_API int LZ4_compress_HC_destSize(void* stateHC,

@@ -6,12 +6,15 @@
  * 
  * Portions are Copyright (C) 2016 12Sided Technology, LLC.
  * 
- * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * 
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
 #include "aocl_zlib_x86.h"
+#ifdef ZLIB_DEBUG
+#include <ctype.h>
+#endif
 
 #ifdef AOCL_ZLIB_OPT
 #define MAX_SEARCH_DIST 32768

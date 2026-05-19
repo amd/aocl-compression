@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -42,9 +42,15 @@
 
 /* ---- static assert (debug) --- */
 #define ZSTD_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)
-#define ZSTD_isError ERR_isError   /* for inlining */
+/* Internal aliases for error checking */
+#ifdef AOCL_LLC_PREFIX
+/* When prefixing is enabled, don't create internal aliases - use the exported functions */
+#else
+/* When prefixing is disabled, create internal macro aliases for inlining */
+#define ZSTD_isError ERR_isError
 #define FSE_isError  ERR_isError
 #define HUF_isError  ERR_isError
+#endif
 
 
 /*-*************************************

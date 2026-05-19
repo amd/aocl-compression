@@ -10,7 +10,7 @@
 
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
-   Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -876,7 +876,7 @@ void AOCL_build_huffman_lookup_table( DState* s,
       memset(secondary_tables[gSel], 0, sizeof(int)*secondary_table_size[gSel]*cnt);
       
       int index = -1;    // Current secondary table index
-      int prev = 0;      // Previous main table index
+      int prev = -1;      // Previous main table index
       // Process remaining long codes
       while(n <= maxLen)
       {

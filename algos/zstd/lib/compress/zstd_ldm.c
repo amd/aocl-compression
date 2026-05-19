@@ -1,6 +1,7 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  * All rights reserved.
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
@@ -36,6 +37,11 @@ static void ZSTD_ldm_gear_init(ldmRollingHashState_t* state, ldmParams_t const* 
 
     state->rolling = ~(U32)0;
 
+    /* Ensure hashRateLog is within valid shift range for 64-bit values.
+     * Clamp to maximum safe value (63) to prevent Undefined Behavior. */
+    if (hashRateLog >= 64) {
+        hashRateLog = 63;  /* Maximum safe shift for 64-bit type */
+    }
     /* The choice of the splitting criterion is subject to two conditions:
      *   1. it has to trigger on average every 2^(hashRateLog) bytes;
      *   2. ideally, it has to depend on a window of minMatchLength bytes.

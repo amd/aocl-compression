@@ -1,6 +1,6 @@
 /* trees.c -- output deflated data using Huffman coding
  * Copyright (C) 1995-2024 Jean-loup Gailly
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * detect_data_type() function provided freely by Cosmin Truta, 2006
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
@@ -36,6 +36,7 @@
 /* #define GEN_TREES_H */
 
 #include "utils/utils.h"
+#include "utils/dispatcher.h"
 #include "deflate.h"
 #include "aocl_send_bits.h"
 
@@ -341,8 +342,9 @@ void (*bi_windup_fp)(deflate_state *s) = bi_windup;
 #endif /* AOCL_ZLIB_OPT */
 
 #ifdef AOCL_ZLIB_OPT
-static inline void aocl_setup_tree_fmv(int optOff, int optLevel)
+static inline void aocl_setup_tree_fmv(int optOff, CpuFeatures cpuFeatures)
 {
+    (void)cpuFeatures;
     if (UNLIKELY(optOff == 1)) {
         bi_flush_fp = bi_flush;
         bi_windup_fp = bi_windup;
@@ -353,12 +355,12 @@ static inline void aocl_setup_tree_fmv(int optOff, int optLevel)
     }
 }
 
-void ZLIB_INTERNAL aocl_setup_tree(int optOff, int optLevel) 
+void ZLIB_INTERNAL aocl_setup_tree(int optOff, CpuFeatures cpuFeatures) 
 {
     AOCL_ENTER_CRITICAL(setup_zlib_tree)
     if (!setup_ok_zlib_tree) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_setup_tree_fmv(optOff, optLevel);
+        aocl_setup_tree_fmv(optOff, cpuFeatures);
         setup_ok_zlib_tree = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_tree)

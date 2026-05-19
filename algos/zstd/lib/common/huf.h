@@ -2,7 +2,7 @@
  * huff0 huffman codec,
  * part of Finite State Entropy library
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2025-2026, Advanced Micro Devices. All rights reserved.
  *
  * You can contact the author at :
  * - Source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -19,6 +19,9 @@
 /* *** Dependencies *** */
 #include "zstd_deps.h"    /* size_t */
 #include "mem.h"          /* U32 */
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 #define FSE_STATIC_LINKING_ONLY
 #include "fse.h"
 

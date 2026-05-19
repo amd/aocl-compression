@@ -1,7 +1,7 @@
 /*
    LZ4 - Fast LZ compression algorithm
    Copyright (C) 2011-2023, Yann Collet.
-   Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -117,6 +117,11 @@
 #include "lz4.h"
 #include "utils/utils.h"
 #include "algos/common/aoclAlgoLog.h"
+#include "utils/dispatcher.h"
+#include "aocl_lz4_fmv_utils.h"
+#include "aocl_lz4_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_lz4_fmv_utils.h and aocl_lz4_dispatch_variants.h. */
 /* see also "memory routines" below */
 
 
@@ -1302,7 +1307,10 @@ LZ4_FORCE_INLINE int LZ4_compress_generic_validated(
     assert(acceleration >= 1);
 
     lowLimit = (const BYTE*)source - (dictDirective == withPrefix64k ? dictSize : 0);
-
+    
+    /* External dictionary mode with corrupted dictionary context (NULL dictBase) */
+    if (maybe_extMem && (dictBase == NULL)) { return 0; }
+    
     /* Update context state */
     if (dictDirective == usingDictCtx) {
         /* Subsequent linked blocks can't use the dictionary. */
@@ -4201,42 +4209,61 @@ int LZ4_decompress_fast_usingDict(const char* source, char* dest, int originalSi
 }
 #endif /* AOCL_EXCLUDE_DEPRECATED_APIS */
 
-static void aocl_register_lz4_fmv(int optOff, int optLevel)
+static void aocl_register_lz4_fmv(int optOff, CpuFeatures cpuFeatures)
 {
-    if (optOff)
+    if (optOff == 1)
     {
-        //C version
+        /* C baseline profile */
         SET_LZ4_COMPRESS_DEFAULT_FUNCTIONS
         SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
+        return;
     }
-    else
-    {
-        switch (optLevel)
-        {
-#ifdef AOCL_LZ4_OPT
-        case 0://C version
-        case 1://SSE version
-            SET_LZ4_COMPRESS_OPT_FUNCTIONS
-            SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
-            break;
-        case 2://AVX version
-        case 3://AVX2 version
-        default://AVX512 and other versions
-            SET_LZ4_COMPRESS_OPT_FUNCTIONS
+
+    /* FMV variant table (highest priority first). */
+    static const AoclLz4DispatchVariant variants[] = {
 #ifdef AOCL_LZ4_AVX_OPT
+        { FEATURE_AVX, AOCL_LZ4_PROFILE_AVX },
+#endif
+#ifdef AOCL_LZ4_OPT
+        { 0, AOCL_LZ4_PROFILE_OPT }
+#else
+        { 0, AOCL_LZ4_PROFILE_BASELINE }
+#endif
+    };
+
+    /* Select first compatible FMV variant for detected CPU features. */
+    size_t variant_index = aocl_lz4_select_fmv_variant(
+        variants,
+        AOCL_LZ4_ARRAY_SIZE(variants),
+        sizeof(variants[0]),
+        offsetof(AoclLz4DispatchVariant, required_features),
+        cpuFeatures);
+
+    if (variant_index >= AOCL_LZ4_ARRAY_SIZE(variants)) {
+        return;
+    }
+
+    switch (variants[variant_index].profile) {
+        case AOCL_LZ4_PROFILE_AVX:
+#ifdef AOCL_LZ4_AVX_OPT
+            SET_LZ4_COMPRESS_OPT_FUNCTIONS
             SET_LZ4_DECOMPRESS_AVX_OPT_FUNCTIONS
             SET_LZ4_MT_FUNCTIONS
-#else       
+#endif
+            break;
+
+        case AOCL_LZ4_PROFILE_OPT:
+#ifdef AOCL_LZ4_OPT
+            SET_LZ4_COMPRESS_OPT_FUNCTIONS
             SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
 #endif
             break;
-#else /* !AOCL_LZ4_OPT */
+
+        case AOCL_LZ4_PROFILE_BASELINE:
         default:
             SET_LZ4_COMPRESS_DEFAULT_FUNCTIONS
             SET_LZ4_DECOMPRESS_DEFAULT_FUNCTIONS
             break;
-#endif /* AOCL_LZ4_OPT */
-        }
     }
 }
 
@@ -4246,7 +4273,8 @@ char* aocl_setup_lz4(int optOff, int optLevel, size_t insize,
     AOCL_ENTER_CRITICAL(setup_lz4)
     if (!setup_ok_lz4) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_lz4_fmv(optOff, optLevel);
+        CpuFeatures cpuFeatures = Dispatcher_GetSupportedFeaturesForLevel(Dispatcher_IntToLevel((int)optLevel));
+        aocl_register_lz4_fmv(optOff, cpuFeatures);
         setup_ok_lz4 = 1;
     }
     AOCL_EXIT_CRITICAL(setup_lz4)
@@ -4263,9 +4291,9 @@ void aocl_destroy_lz4(void){
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_lz4)
     if (!setup_ok_lz4) {
-        int optLevel = get_cpu_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         int optOff = get_disable_opt_flags(0);
-        aocl_register_lz4_fmv(optOff, optLevel);
+        aocl_register_lz4_fmv(optOff, cpuFeatures);
         setup_ok_lz4 = 1;
     }
     AOCL_EXIT_CRITICAL(setup_lz4)

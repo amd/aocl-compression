@@ -1,7 +1,7 @@
 /*
    LZ4 - Fast LZ compression algorithm
    Copyright (C) 2011-2020, Yann Collet.
-   Modifications Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
+   Modifications Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
 
    BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -117,7 +117,10 @@ LZ4_FORCE_INLINE int
     assert(acceleration >= 1);
 
     lowLimit = (const BYTE*)source - (dictDirective == withPrefix64k ? dictSize : 0);
-
+    
+    /* External dictionary mode with corrupted dictionary context (NULL dictBase) */
+    if (maybe_extMem && (dictBase == NULL)) { return 0; }
+    
     /* Update context state */
     if (dictDirective == usingDictCtx) {
         /* Subsequent linked blocks can't use the dictionary. */

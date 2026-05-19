@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -266,38 +266,6 @@ extern "C" {
 #endif
 #endif
 
-//CPU Features detection using CPUID
-#ifdef AOCL_CL_CPUID_SIMD_DETECTION
-#ifndef _WINDOWS
-inline AOCL_VOID cpu_features_detection(AOCL_INTP fn, AOCL_INTP optVal,
-                                   AOCL_INTP *eax, AOCL_INTP *ebx,
-                                   AOCL_INTP *ecx, AOCL_INTP *edx)
-{
-    *eax = fn;
-    *ecx = optVal;
-    *ebx = 0;
-    *edx = 0;
-    __asm__ ("cpuid            \n\t"
-             : "+a" (*eax), "+b" (*ebx), "+c" (*ecx), "+d" (*edx));
-}
-#else
-#include <intrin.h>
-inline AOCL_VOID cpu_features_detection(AOCL_INTP fn, AOCL_INTP optVal,
-    AOCL_INTP* eax, AOCL_INTP* ebx,
-    AOCL_INTP* ecx, AOCL_INTP* edx)
-{
-    AOCL_INT32 CPUInfo[4];
-
-    __cpuid(CPUInfo, fn);
-
-    *eax = CPUInfo[0];
-    *ebx = CPUInfo[1];
-    *ecx = CPUInfo[2];
-    *edx = CPUInfo[3];
-}
-#endif
-#endif
-
 #if defined(WIN32) && defined(AOCL_UNIT_TEST)
 #define EXPORT_UTILS_DYN_TEST __declspec(dllexport)
 #else
@@ -311,16 +279,24 @@ inline AOCL_VOID cpu_features_detection(AOCL_INTP fn, AOCL_INTP optVal,
 extern "C" {
 #endif
 
-    /* Similar to get_cpu_opt_flags, but sets handle->optLevel
-     * instead of returning it. */
+    /* Similar to get_cpu_opt_flags(), but stores the selected
+     * optimization level in handle->optLevel. */
     EXPORT_UTILS_DYN_TEST AOCL_VOID set_cpu_opt_flags(AOCL_VOID* handle);
 
-    /* Reads cpuid to determine instruction sets supported
-     * Also, reads AOCL_ENABLE_INSTRUCTIONS environment variable
-     * Determines optLevel based on this
-     * return
-     *        -1 if undecided
-     *        optLevel otherwise */
+    /* Returns requested optimization level derived from
+     * AOCL_ENABLE_INSTRUCTIONS.
+     *
+     * Mapping:
+     *   OPTLEVEL_AUTO   (-1) : variable not set
+     *                          (or OPTLEVEL_AVX512 when
+     *                           AOCL_DYNAMIC_DISPATCHER is enabled)
+     *   OPTLEVEL_SCALAR (0)  : unknown/unsupported value
+     *   OPTLEVEL_SSE2   (1)  : SSE2
+     *   OPTLEVEL_AVX    (2)  : AVX
+     *   OPTLEVEL_AVX2   (3)  : AVX2
+     *   OPTLEVEL_AVX512 (4)  : AVX512
+     *
+     * printDebugLogs is currently unused. */
     EXPORT_UTILS_DYN_TEST ptrdiff_t get_cpu_opt_flags(int printDebugLogs);
 
     /* Reads the value of AOCL_DISABLE_OPT environment variable

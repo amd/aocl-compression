@@ -1,7 +1,7 @@
 /*
     LZ4 HC - High Compression Mode of LZ4
     Copyright (C) 2011-2020, Yann Collet.
-    Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+    Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
 
     BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
 
@@ -245,6 +245,11 @@ int LZ4HC_countBack(const BYTE* const ip, const BYTE* const match,
 #define kEmptyValue 0
 
 #include "utils/utils.h"
+#include "utils/dispatcher.h"
+#include "aocl_lz4_fmv_utils.h"
+#include "aocl_lz4_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_lz4_fmv_utils.h and aocl_lz4_dispatch_variants.h. */
 
 #ifdef AOCL_LZ4HC_OPT
 /* Dynamic dispatcher setup function for native APIs.
@@ -1207,6 +1212,21 @@ LZ4_FORCE_INLINE int LZ4HC_compress_hashChain (
     const int inputSize = *srcSizePtr;
     const int patternAnalysis = (maxNbAttempts > 128);   /* levels 9+ */
 
+    /* init */
+    DEBUGLOG(5, "LZ4HC_compress_hashChain (dict?=>%i)", dict);
+    *srcSizePtr = 0;
+    
+    /* Handle empty input case: source can be NULL if inputSize == 0 */
+    if (inputSize == 0) {
+        if (limit != notLimited && maxOutputSize <= 0) return 0;  /* no output buffer space */
+        DEBUGLOG(5, "Generating an empty block");
+        assert(limit == notLimited || maxOutputSize >= 1);
+        assert(dest != NULL);
+        dest[0] = 0;  /* LZ4 empty block marker */
+        return 1;
+    }
+
+    /* Now safe to use pointers - inputSize > 0,  source is not NULL */
     const BYTE* ip = (const BYTE*) source;
     const BYTE* anchor = ip;
     const BYTE* const iend = ip + inputSize;
@@ -1223,9 +1243,6 @@ LZ4_FORCE_INLINE int LZ4HC_compress_hashChain (
     LZ4HC_match_t m0, m1, m2, m3;
     const LZ4HC_match_t nomatch = {0, 0, 0};
 
-    /* init */
-    DEBUGLOG(5, "LZ4HC_compress_hashChain (dict?=>%i)", dict);
-    *srcSizePtr = 0;
     if (limit == fillOutput) oend -= LASTLITERALS;                  /* Hack for support LZ4 format restriction */
     if (inputSize < LZ4_minLength) goto _last_literals;             /* Input too small, no compression (all literals) */
 
@@ -2740,6 +2757,22 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
     const int patternAnalysis = (maxNbAttempts > 128);   /* levels 9+ */
 #endif
 
+    /* init */
+    DEBUGLOG(5, "AOCL_LZ4HC_compress_hashChain (dict?=>%i)", dict);
+    *srcSizePtr = 0;
+    
+    /* Handle empty input case: source can be NULL if inputSize == 0 */
+    if (inputSize == 0) {
+        if (limit != notLimited && maxOutputSize <= 0) return 0;  /* no output buffer space */
+        DEBUGLOG(5, "Generating an empty block");
+        LOG_UNFORMATTED(DEBUG, logCtx, "Generating an empty block");
+        assert(limit == notLimited || maxOutputSize >= 1);
+        assert(dest != NULL);
+        dest[0] = 0;  /* LZ4 empty block marker */
+        return 1;
+    }
+
+    /* Now safe to use pointers - inputSize > 0,  source is not NULL */
     const BYTE* ip = (const BYTE*)source;
     const BYTE* anchor = ip;
     const BYTE* const iend = ip + inputSize;
@@ -2756,9 +2789,6 @@ LZ4_FORCE_INLINE int AOCL_LZ4HC_compress_hashChain(
     LZ4HC_match_t m0, m1, m2, m3;
     const LZ4HC_match_t nomatch = {0, 0, 0};
 
-    /* init */
-    DEBUGLOG(5, "AOCL_LZ4HC_compress_hashChain (dict?=>%i)", dict);
-    *srcSizePtr = 0;
     if (limit == fillOutput) oend -= LASTLITERALS;                  /* Hack for support LZ4 format restriction */
     if (inputSize < LZ4_minLength) goto _last_literals;             /* Input too small, no compression (all literals) */
 
@@ -3605,6 +3635,23 @@ LZ4_FORCE_INLINE int LZ4HC_compress_hashChain_mt(
     const int inputSize = *srcSizePtr;
     const int patternAnalysis = (maxNbAttempts > 128);   /* levels 9+ */
 
+    /* init */
+    DEBUGLOG(5, "LZ4HC_compress_hashChain_mt (dict?=>%i)", dict);
+    *srcSizePtr = 0;
+    
+    /* Handle empty input case: source can be NULL if inputSize == 0 */
+    if (inputSize == 0) {
+        if (limit != notLimited && maxOutputSize <= 0) return 0;  /* no output buffer space */
+        DEBUGLOG(5, "Generating an empty block");
+        assert(limit == notLimited || maxOutputSize >= 1);
+        assert(dest != NULL);
+        dest[0] = 0;  /* LZ4 empty block marker */
+        if (last_anchor_ptr) *last_anchor_ptr = NULL;
+        if (last_bytes_len) *last_bytes_len = 0;
+        return 1;
+    }
+
+    /* Now safe to use pointers - inputSize > 0,  source is not NULL */
     const BYTE* ip = (const BYTE*) source;
     const BYTE* anchor = ip;
     const BYTE* const iend = ip + inputSize;
@@ -3623,9 +3670,6 @@ LZ4_FORCE_INLINE int LZ4HC_compress_hashChain_mt(
     int result;
     BYTE* dst_without_lastLiterals;
 
-    /* init */
-    DEBUGLOG(5, "LZ4HC_compress_hashChain_mt (dict?=>%i)", dict);
-    *srcSizePtr = 0;
     if (limit == fillOutput) oend -= LASTLITERALS;                  /* Hack for support LZ4 format restriction */
     if (inputSize < LZ4_minLength) goto _last_literals;             /* Input too small, no compression (all literals) */
 
@@ -4467,35 +4511,58 @@ LZ4_compress_HC_extStateHC_fp = AOCL_LZ4_compress_HC_extStateHC_internal; \
 LZ4_compress_HC_extStateHC_fastReset_fp = AOCL_LZ4_compress_HC_extStateHC_fastReset_internal; \
 LZ4_compress_HC_destSize_fp = AOCL_LZ4_compress_HC_destSize_internal;
 
-static void aocl_register_lz4hc_fmv(int optOff, int optLevel) {
-    if (optOff)
+static void aocl_register_lz4hc_fmv(int optOff, CpuFeatures cpuFeatures) {
+    if (optOff == 1)
     {
+        /* C baseline profile */
         SET_LZ4HC_COMPRESS_DEFAULT_FUNCTIONS
+        return;
     }
-    else
-    {
-        switch (optLevel)
-        {
+
+    /* FMV variant table (highest priority first). */
+    static const AoclLz4hcDispatchVariant variants[] = {
 #ifdef AOCL_LZ4HC_OPT
-        case 0://C version
-        case 1://SSE version
-            SET_LZ4HC_COMPRESS_OPT_FUNCTIONS
-            break;
-        case 2://AVX version
-        case 3://AVX2 version
-        default://AVX512 and other versions
+#ifdef AOCL_LZ4_AVX_OPT
+        { FEATURE_AVX, AOCL_LZ4HC_PROFILE_AVX },
+#endif
+        { 0, AOCL_LZ4HC_PROFILE_OPT }
+#else
+        { 0, AOCL_LZ4HC_PROFILE_BASELINE }
+#endif
+    };
+
+    /* Select first compatible FMV variant for detected CPU features. */
+    size_t variant_index = aocl_lz4_select_fmv_variant(
+        variants,
+        AOCL_LZ4_ARRAY_SIZE(variants),
+        sizeof(variants[0]),
+        offsetof(AoclLz4hcDispatchVariant, required_features),
+        cpuFeatures);
+
+    if (variant_index >= AOCL_LZ4_ARRAY_SIZE(variants)) {
+        return;
+    }
+
+    switch (variants[variant_index].profile) {
+        case AOCL_LZ4HC_PROFILE_AVX:
+#ifdef AOCL_LZ4HC_OPT
             SET_LZ4HC_COMPRESS_OPT_FUNCTIONS
 #ifdef AOCL_ENABLE_THREADS_LZ4HC
-            // Set only for >= AVX as AOCL_LZ4_decompress_safe_mt is supported only for >= AVX
             LZ4_compress_HC_internal_mt_fp = LZ4_compress_HC_internal_mt;
 #endif /* AOCL_ENABLE_THREADS_LZ4HC */
+#endif
             break;
-#else /* !AOCL_LZ4HC_OPT */
+
+        case AOCL_LZ4HC_PROFILE_OPT:
+#ifdef AOCL_LZ4HC_OPT
+            SET_LZ4HC_COMPRESS_OPT_FUNCTIONS
+#endif
+            break;
+
+        case AOCL_LZ4HC_PROFILE_BASELINE:
         default:
             SET_LZ4HC_COMPRESS_DEFAULT_FUNCTIONS
             break;
-#endif /* AOCL_LZ4HC_OPT */
-        }
     }
 }
 
@@ -4503,7 +4570,8 @@ char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize, size_t level, si
     AOCL_ENTER_CRITICAL(setup_lz4hc)
     if (!setup_ok_lz4hc) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_lz4hc_fmv(optOff, optLevel);
+        CpuFeatures cpuFeatures = Dispatcher_GetSupportedFeaturesForLevel(Dispatcher_IntToLevel((int)optLevel));
+        aocl_register_lz4hc_fmv(optOff, cpuFeatures);
         setup_ok_lz4hc = 1;
     }
     AOCL_EXIT_CRITICAL(setup_lz4hc)
@@ -4514,9 +4582,9 @@ char* aocl_setup_lz4hc(int optOff, int optLevel, size_t insize, size_t level, si
 static void aocl_setup_native_hc(void) {
     AOCL_ENTER_CRITICAL(setup_lz4hc)
     if (!setup_ok_lz4hc) {
-        int optLevel = get_cpu_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         int optOff = get_disable_opt_flags(0);
-        aocl_register_lz4hc_fmv(optOff, optLevel);
+        aocl_register_lz4hc_fmv(optOff, cpuFeatures);
         setup_ok_lz4hc = 1;
     }
     AOCL_EXIT_CRITICAL(setup_lz4hc)

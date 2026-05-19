@@ -1,6 +1,7 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  * All rights reserved.
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
@@ -29,7 +30,10 @@ const char* ZSTD_versionString(void) { return ZSTD_VERSION_STRING; }
 /*-****************************************
 *  ZSTD Error Management
 ******************************************/
+#ifndef AOCL_LLC_PREFIX
+/* Only undef internal alias when not using symbol prefixing */
 #undef ZSTD_isError   /* defined within zstd_internal.h */
+#endif
 /*! ZSTD_isError() :
  *  tells if a return value is an error code
  *  symbol is required for external callers */

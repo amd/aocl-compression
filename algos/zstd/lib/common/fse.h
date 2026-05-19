@@ -2,6 +2,7 @@
  * FSE : Finite State Entropy codec
  * Public Prototypes declaration
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  *
  * You can contact the author at :
  * - Source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -19,6 +20,9 @@
 *  Dependencies
 ******************************************/
 #include "zstd_deps.h"    /* size_t, ptrdiff_t */
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 
 /*-*****************************************
 *  FSE_PUBLIC_API : control library symbols visibility

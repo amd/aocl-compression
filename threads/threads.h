@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -416,6 +416,43 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_get_rap_frame_bound_mt(void);
  *
  */
 EXPORT_SYM_THREADS AOCL_INT32 aocl_skip_rap_frame_mt(AOCL_CHAR* src, AOCL_UINTP src_size);
+
+/**
+ * @brief Set maximum number of OpenMP threads for AOCL MT flow for the
+ * calling application thread.
+ *
+ * If this API is not called for a calling thread, AOCL MT flow defaults to
+ * `omp_get_max_threads()`.
+ *
+ * @param max_threads Maximum threads to use. Must be > 0.
+ *
+ * @return
+ * | Result           | Description                        |
+ * |:-----------------|:-----------------------------------|
+ * | Success          | 0                                  |
+ * | `ERR_INVALID_INPUT` | Invalid \p max_threads value   |
+ */
+EXPORT_SYM_THREADS AOCL_INT32 aocl_set_max_threads_mt(AOCL_INT32 max_threads);
+
+/**
+ * @brief Get effective maximum number of OpenMP threads for AOCL MT flow.
+ *
+ * Returns the effective maximum number of threads for the calling application
+ * thread. If a per-thread maximum has been configured via
+ * `aocl_set_max_threads_mt()`, the effective value is
+ * `min(configured_max, omp_get_max_threads())`. If no per-thread maximum has
+ * been configured, this is equivalent to `omp_get_max_threads()`.
+ *
+ * Note: Setting `configured_max` greater than or equal to
+ * `omp_get_max_threads()` effectively disables the cap, since the effective
+ * value will then be `omp_get_max_threads()`.
+ *
+ * @return
+ * | Result  | Description |
+ * |:--------|:------------|
+ * | Success | Effective maximum thread count for the calling application thread. |
+ */
+EXPORT_SYM_THREADS AOCL_UINT32 aocl_get_max_threads_mt(void);
 
 /**
  * Function to set the following thread_grp data structure members:

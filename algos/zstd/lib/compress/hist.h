@@ -2,6 +2,7 @@
  * hist : Histogram functions
  * part of Finite State Entropy project
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  *
  *  You can contact the author at :
  *  - FSE source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -15,6 +16,9 @@
 
 /* --- dependencies --- */
 #include "../common/zstd_deps.h"   /* size_t */
+#ifdef AOCL_LLC_PREFIX
+#include "../../../common/aoclPrefix.h"
+#endif
 
 
 /* --- simple histogram functions --- */

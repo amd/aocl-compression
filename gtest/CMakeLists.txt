@@ -42,8 +42,57 @@ if (NOT googletest_POPULATED)
   add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
+
 if(AOCL_TEST_FUZZER)
-    set(ANTLR_BUILD_CPP_TESTS OFF) # Disable dependency project test suite
+    # Detect filesystem library requirements for older Clang when fuzzing is enabled.
+    # Only check when using Clang < 14 with libstdc++ or libc++.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14.0)
+        include(CheckCXXSourceCompiles)
+        
+        # Save current state
+        set(_CMAKE_REQUIRED_LIBRARIES_SAVE ${CMAKE_REQUIRED_LIBRARIES})
+        set(_CMAKE_REQUIRED_FLAGS_SAVE ${CMAKE_REQUIRED_FLAGS})
+        set(_CMAKE_REQUIRED_QUIET_SAVE ${CMAKE_REQUIRED_QUIET})
+        set(CMAKE_REQUIRED_QUIET TRUE)
+        
+        # Append C++17 flag to existing flags (portable approach)
+        if(MSVC)
+            set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} /std:c++17")
+        else()
+            set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++17")
+        endif()
+        
+        # Test for stdc++fs (libstdc++)
+        set(CMAKE_REQUIRED_LIBRARIES stdc++fs)
+        check_cxx_source_compiles("
+            #include <filesystem>
+            int main() {
+                std::filesystem::path p(\"/tmp\");
+                std::filesystem::exists(p);
+                return 0;
+            }
+        " HAVE_STDCXXFS)
+        
+        # Test for c++fs (libc++)
+        set(CMAKE_REQUIRED_LIBRARIES c++fs)
+        check_cxx_source_compiles("
+            #include <filesystem>
+            int main() {
+                std::filesystem::path p(\"/tmp\");
+                std::filesystem::exists(p);
+                return 0;
+            }
+        " HAVE_CXXFS)
+        
+        # Restore state
+        set(CMAKE_REQUIRED_LIBRARIES ${_CMAKE_REQUIRED_LIBRARIES_SAVE})
+        set(CMAKE_REQUIRED_FLAGS ${_CMAKE_REQUIRED_FLAGS_SAVE})
+        set(CMAKE_REQUIRED_QUIET ${_CMAKE_REQUIRED_QUIET_SAVE})
+        unset(_CMAKE_REQUIRED_LIBRARIES_SAVE)
+        unset(_CMAKE_REQUIRED_FLAGS_SAVE)
+        unset(_CMAKE_REQUIRED_QUIET_SAVE)
+    endif()
+    
     FetchContent_Declare(
         googlefuzztest
         QUIET
@@ -172,11 +221,23 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             target_include_directories(${GTEST_CUR_EXE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}
                                                 PRIVATE ${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/common
                                                 PRIVATE ${CMAKE_SOURCE_DIR}/api
+                                                PRIVATE ${AOCL_GENERATED_COMMON_INC_DIR}
                                                 PRIVATE ${GTEST_SRC_PATH})
             if(AOCL_TEST_FUZZER)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_TEST_FUZZER")
                 target_link_libraries(${GTEST_CUR_EXE_NAME} PRIVATE ${lib_name})
                 link_fuzztest(${GTEST_CUR_EXE_NAME})
+                # Older Clang with some libstdc++/libc++ setups requires explicit
+                # linking of a separate filesystem library (stdc++fs or c++fs).
+                # Only link it when the compiler version suggests it *may* be needed
+                # and when the corresponding library is actually available.
+                if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14.0)
+                    if(HAVE_STDCXXFS)
+                        target_link_libraries(${GTEST_CUR_EXE_NAME} PRIVATE stdc++fs)
+                    elseif(HAVE_CXXFS)
+                        target_link_libraries(${GTEST_CUR_EXE_NAME} PRIVATE c++fs)
+                    endif()
+                endif()
             else()
                 target_link_libraries(${GTEST_CUR_EXE_NAME} ${lib_name} GTest::gtest_main)
             endif()

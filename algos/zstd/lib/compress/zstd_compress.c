@@ -9,7 +9,7 @@
  */
 
 /**
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -63,6 +63,7 @@
 *  AOCL declarations
 *****************************************************************/
 #include "utils/utils.h"
+#include "utils/dispatcher.h"
 #ifdef AOCL_ZSTD_OPT
 static void aocl_setup_native(void);
 #define AOCL_SETUP_NATIVE() aocl_setup_native()
@@ -6648,10 +6649,11 @@ static size_t ZSTD_compressStream_generic(ZSTD_CStream* zcs,
             DEBUGLOG(5, "flush stage");
             assert(zcs->appliedParams.outBufferMode == ZSTD_bm_buffered);
             {   size_t const toFlush = zcs->outBuffContentSize - zcs->outBuffFlushedSize;
-                size_t const flushed = ZSTD_limitCopy(op, (size_t)(oend-op),
+                size_t const outputCapacity = (op != NULL) ? (size_t)(oend-op) : 0;
+                size_t const flushed = ZSTD_limitCopy(op, outputCapacity, 
                             zcs->outBuff + zcs->outBuffFlushedSize, toFlush);
                 DEBUGLOG(5, "toFlush: %u into %u ==> flushed: %u",
-                            (unsigned)toFlush, (unsigned)(oend-op), (unsigned)flushed);
+                            (unsigned)toFlush, (unsigned)outputCapacity, (unsigned)flushed);
                 if (flushed)
                     op += flushed;
                 zcs->outBuffFlushedSize += flushed;
@@ -8319,8 +8321,9 @@ static size_t(*ZSTD_compressContinue_internal_fp)(ZSTD_CCtx* cctx, void* dst, si
     const void* src, size_t srcSize, U32 frame, U32 lastFrameChunk) = ZSTD_compressContinue_internal;
 
 /* Dynamic dispatcher that sets up the optimized AMD function variant */
-static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
+static void aocl_register_zstd_compress_fmv(int optOff, CpuFeatures cpuFeatures)
 {
+    (void)cpuFeatures;
     if (optOff)
     {
         //Unoptimized C version
@@ -8331,34 +8334,26 @@ static void aocl_register_zstd_compress_fmv(int optOff, int optLevel)
     }
     else
     {
-        switch (optLevel)
-        {
-            case 0://Optimized C version
-            case 1://SSE version
-            case 2://AVX version
-            case 3://AVX2 version
-            default://AVX512 and other versions
+
 #ifdef AOCL_ZSTD_OPT
-                aoclOptFlag = 1;
-                AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
+        aoclOptFlag = 1;
+        AOCL_ZSTD_defaultCParameters_used = AOCL_ZSTD_defaultCParameters;
 #if AOCL_DECOMPRESS_FAST > 1
-                ZSTD_compressContinue_internal_fp = AOCL_ZSTD_compressContinue_internal;
+        ZSTD_compressContinue_internal_fp = AOCL_ZSTD_compressContinue_internal;
 #else
-                ZSTD_compressContinue_internal_fp = ZSTD_compressContinue_internal;
+        ZSTD_compressContinue_internal_fp = ZSTD_compressContinue_internal;
 #endif
 #ifdef AOCL_ZSTD_DYN_BLOCK_SIZE
-                ZSTD_optimalBlockSize_fp = ZSTD_optimalBlockSize;
+        ZSTD_optimalBlockSize_fp = ZSTD_optimalBlockSize;
 #else
-                ZSTD_optimalBlockSize_fp = AOCL_ZSTD_optimalBlockSize;
+        ZSTD_optimalBlockSize_fp = AOCL_ZSTD_optimalBlockSize;
 #endif /* AOCL_ZSTD_DYN_BLOCK_SIZE */
 #else
-                aoclOptFlag = 0;
-                AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
-                ZSTD_compressContinue_internal_fp = ZSTD_compressContinue_internal;
-                ZSTD_optimalBlockSize_fp = ZSTD_optimalBlockSize;
+        aoclOptFlag = 0;
+        AOCL_ZSTD_defaultCParameters_used = ZSTD_defaultCParameters;
+        ZSTD_compressContinue_internal_fp = ZSTD_compressContinue_internal;
+        ZSTD_optimalBlockSize_fp = ZSTD_optimalBlockSize;
 #endif /* AOCL_ZSTD_OPT */
-                break;
-        }
     }
 }
 
@@ -8369,7 +8364,8 @@ char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,
     AOCL_ENTER_CRITICAL(setup_zstd_encode)
     if (!setup_ok_zstd_encode) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_zstd_compress_fmv(optOff, optLevel);
+        CpuFeatures cpuFeatures = Dispatcher_GetSupportedFeaturesForLevel(Dispatcher_IntToLevel((int)optLevel));
+        aocl_register_zstd_compress_fmv(optOff, cpuFeatures);
         setup_ok_zstd_encode = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zstd_encode)
@@ -8380,9 +8376,9 @@ char* aocl_setup_zstd_encode(int optOff, int optLevel, size_t insize,
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_zstd_encode)
     if (!setup_ok_zstd_encode) {
-        int optLevel = get_cpu_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         int optOff = get_disable_opt_flags(0);
-        aocl_register_zstd_compress_fmv(optOff, optLevel);
+        aocl_register_zstd_compress_fmv(optOff, cpuFeatures);
         setup_ok_zstd_encode = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zstd_encode)

@@ -1,5 +1,5 @@
 // Copyright 2005 Google Inc. All Rights Reserved.
-// Modifications Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+// Modifications Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -112,6 +112,7 @@
 
 #include "utils/utils.h"
 #include "algos/common/aoclAlgoLog.h"
+#include "utils/dispatcher.h"
 
 #ifdef AOCL_ENABLE_THREADS
 #include "threads/threads.h"
@@ -1356,7 +1357,7 @@ class SnappyDecompressor {
 
  public:
   explicit SnappyDecompressor(Source* reader)
-      : reader_(reader), ip_(NULL), ip_limit_(NULL), peeked_(0), eof_(false) {}
+      : reader_(reader), ip_(NULL), ip_limit_(NULL), ip_limit_min_maxtaglen_(NULL), peeked_(0), eof_(false) {}
 
   ~SnappyDecompressor() {
     // Advance past any bytes we peeked at from the reader
@@ -2346,6 +2347,7 @@ class SnappyScatteredWriter {
  public:
   inline explicit SnappyScatteredWriter(const Allocator& allocator)
       : allocator_(allocator),
+        expected_(0),
         full_size_(0),
         op_base_(NULL),
         op_ptr_(NULL),
@@ -2602,125 +2604,136 @@ Uncompress_fp                        = Uncompress_avx<with_bmi_avx>;\
 GetUncompressedLengthInternal_fp     = InternalGetUncompressedLength<with_bmi_avx>;\
 SNAPPY_compress_fragment_fp          = internal::CompressFragment_crc32;
 
-static void aocl_register_snappy_fmv(int optOff, int optLevel) {
-    if (optOff)
+static void aocl_register_snappy_fmv(int optOff, CpuFeatures cpuFeatures) {
+    // Derive dispatch tier from runtime CPU feature bits.
+    // Priority: BMI2+AVX2 path > AVX path > C path.
+    int tier = 0; // 0=C, 1=AVX, 2=BMI2+AVX2
+
+#if defined(AOCL_SNAPPY_AVX2_OPT)
+    if ((cpuFeatures & (FEATURE_AVX2 | FEATURE_BMI2)) == (FEATURE_AVX2 | FEATURE_BMI2)) {
+        tier = 2;
+    } else
+#endif
+#if defined(AOCL_SNAPPY_AVX_OPT)
+    if ((cpuFeatures & FEATURE_AVX) == FEATURE_AVX) {
+        tier = 1;
+    } else
+#endif
     {
-        //C version
-        SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress_c;
-        CalculateTableSize_fp          = CalculateTableSize;
+        tier = 0;
+    }
+
+    if (optOff) {
+        // Optimization disabled:
+        // keep reference/raw setup for AOCL-specific hooks, but still allow
+        // ISA-templated decode paths selected from detected CPU capability.
+        SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress_c;
+        CalculateTableSize_fp = CalculateTableSize;
 #ifdef AOCL_ENABLE_THREADS
         SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
 #endif
-        /* bmi2 optimizations are part of reference code.
-        * optLevel is used even when optOff=1 to choose
-        * between bmi2 code or otherwise based on dynamic dispatcher */
-        switch (optLevel)
-        {
-        case 0://C version
-        case 1://SSE version
+
+        if (tier == 0) {
             SET_FP_TO_WITH_C
-                break;
-        case 2://AVX version
-#ifdef AOCL_SNAPPY_AVX_OPT
+        } else if (tier == 1) {
+#if defined(AOCL_SNAPPY_AVX_OPT)
             SET_FP_TO_WITH_AVX
 #else
             SET_FP_TO_WITH_C
 #endif
-            break;
-        case -1:// undecided. use defaults based on compiler flags
-        case 3://AVX2 version
-        default://AVX512 and other versions
-#ifdef AOCL_SNAPPY_AVX2_OPT
+        } else {
+#if defined(AOCL_SNAPPY_AVX2_OPT)
             SET_FP_TO_WITH_BMI_AVX
 #elif defined(AOCL_SNAPPY_AVX_OPT)
             SET_FP_TO_WITH_AVX
 #else
             SET_FP_TO_WITH_C
 #endif
-            break;
         }
+        return;
     }
-    else
-    {
+
+    // Optimization enabled:
+    // first set common AOCL table-size hook where supported.
 #if defined(AOCL_SNAPPY_OPT) && !defined(AOCL_SNAPPY_HIGH_COMPRESSION)
-        CalculateTableSize_fp              = AOCL_CalculateTableSize;
-#endif /* AOCL_SNAPPY_OPT && !AOCL_SNAPPY_HIGH_COMPRESSION */
-        switch (optLevel)
-        {
-        case 0://C version
-        case 1://SSE version
-            SET_FP_TO_WITH_C
+    CalculateTableSize_fp = AOCL_CalculateTableSize;
+#endif
+
+    if (tier == 0) {
+        // C/SSE-equivalent behavior
+        SET_FP_TO_WITH_C
 #ifdef AOCL_SNAPPY_OPT
-            SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment_c;
+        SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment_c;
 #endif
-            SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress_c;
+        SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress_c;
 #ifdef AOCL_ENABLE_THREADS
-            SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
-            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
+        SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+        InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
 #endif
-            break;
-        case 2://AVX version
-#ifdef AOCL_SNAPPY_AVX_OPT
-            SET_FP_TO_WITH_AVX
-            SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment_crc32;
-            SNAPPY_SAW_raw_uncompress_fp = AOCL_SAW_RawUncompress_avx;
-#ifdef AOCL_ENABLE_THREADS
-            SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
-            InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_avx>;
-            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_avx>;
-#endif
-            InternalUncompressAOCLArray_fp = InternalUncompress_avx<AOCL_SnappyArrayWriter_AVX, with_avx>;
-#else /* !AOCL_SNAPPY_AVX_OPT */
-            SET_FP_TO_WITH_C
-            SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress_c;
-#ifdef AOCL_ENABLE_THREADS
-            SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
-            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
-#endif
-#endif
-            break;
-        case -1:// undecided. use defaults based on compiler flags
-        case 3://AVX2 version
-        default://AVX512 and other versions
-#ifdef AOCL_SNAPPY_AVX2_OPT
-            SET_FP_TO_WITH_BMI_AVX
-            SNAPPY_SAW_raw_uncompress_fp = AOCL_SAW_RawUncompress_avx;
-            SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment_crc32;
-#ifdef AOCL_ENABLE_THREADS
-            SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
-            InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_bmi_avx>;
-            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_bmi_avx>;
-#endif
-            InternalUncompressAOCLArray_fp = InternalUncompress_avx<AOCL_SnappyArrayWriter_AVX, with_bmi_avx>;
-#elif defined(AOCL_SNAPPY_AVX_OPT)
-            SET_FP_TO_WITH_AVX
-            SNAPPY_SAW_raw_uncompress_fp   = AOCL_SAW_RawUncompress_avx;
-            SNAPPY_compress_fragment_fp    = internal::AOCL_CompressFragment_crc32;
-#ifdef AOCL_ENABLE_THREADS
-            SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
-            InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_avx>;
-            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_avx>;
-#endif
-            InternalUncompressAOCLArray_fp = InternalUncompress_avx<AOCL_SnappyArrayWriter_AVX, with_avx>;
-#else /* !AOCL_SNAPPY_AVX_OPT */
-            SET_FP_TO_WITH_C
-            SNAPPY_SAW_raw_uncompress_fp   = SAW_RawUncompress_c;
-#ifdef AOCL_ENABLE_THREADS
-            SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
-            InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
-#endif
-#endif
-            break;
-        }
+        return;
     }
+
+    if (tier == 1) {
+        // AVX behavior
+#if defined(AOCL_SNAPPY_AVX_OPT)
+        SET_FP_TO_WITH_AVX
+        SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment_crc32;
+        SNAPPY_SAW_raw_uncompress_fp = AOCL_SAW_RawUncompress_avx;
+#ifdef AOCL_ENABLE_THREADS
+        SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
+        InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_avx>;
+        InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_avx>;
+#endif
+        InternalUncompressAOCLArray_fp = InternalUncompress_avx<AOCL_SnappyArrayWriter_AVX, with_avx>;
+#else
+        SET_FP_TO_WITH_C
+        SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress_c;
+#ifdef AOCL_ENABLE_THREADS
+        SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+        InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
+#endif
+#endif
+        return;
+    }
+
+    // BMI+AVX behavior (also used for AVX2/AVX512-class machines).
+#if defined(AOCL_SNAPPY_AVX2_OPT)
+    SET_FP_TO_WITH_BMI_AVX
+    SNAPPY_SAW_raw_uncompress_fp = AOCL_SAW_RawUncompress_avx;
+    SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment_crc32;
+#ifdef AOCL_ENABLE_THREADS
+    SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
+    InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_bmi_avx>;
+    InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_bmi_avx>;
+#endif
+    InternalUncompressAOCLArray_fp = InternalUncompress_avx<AOCL_SnappyArrayWriter_AVX, with_bmi_avx>;
+#elif defined(AOCL_SNAPPY_AVX_OPT)
+    SET_FP_TO_WITH_AVX
+    SNAPPY_SAW_raw_uncompress_fp = AOCL_SAW_RawUncompress_avx;
+    SNAPPY_compress_fragment_fp = internal::AOCL_CompressFragment_crc32;
+#ifdef AOCL_ENABLE_THREADS
+    SNAPPY_SAW_raw_uncompress_direct_fp = AOCL_SAW_RawUncompressDirect;
+    InternalUncompressDirectAOCLArray_fp = InternalUncompressDirect<AOCL_SnappyArrayWriter_AVX, with_avx>;
+    InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_avx>;
+#endif
+    InternalUncompressAOCLArray_fp = InternalUncompress_avx<AOCL_SnappyArrayWriter_AVX, with_avx>;
+#else
+    SET_FP_TO_WITH_C
+    SNAPPY_SAW_raw_uncompress_fp = SAW_RawUncompress_c;
+#ifdef AOCL_ENABLE_THREADS
+    SNAPPY_SAW_raw_uncompress_direct_fp = SAW_RawUncompressDirect;
+    InternalUncompressDirectArray_fp = InternalUncompressDirect<SnappyArrayWriter, with_c>;
+#endif
+#endif
 }
 
 char* aocl_setup_snappy(int optOff, int optLevel, size_t insize,
     size_t level, size_t windowLog) {
     AOCL_ENTER_CRITICAL(setup_snappy)
     if (!setup_ok_snappy) {
+        CpuFeatures cpuFeatures = Dispatcher_GetSupportedFeaturesForLevel(Dispatcher_IntToLevel((int)optLevel));
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_snappy_fmv(optOff, optLevel);
+        aocl_register_snappy_fmv(optOff, cpuFeatures);
         setup_ok_snappy = 1;
     }
     AOCL_EXIT_CRITICAL(setup_snappy)
@@ -2731,9 +2744,9 @@ char* aocl_setup_snappy(int optOff, int optLevel, size_t insize,
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_snappy)
     if (!setup_ok_snappy) {
-        int optLevel = get_cpu_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         int optOff = get_disable_opt_flags(0);
-        aocl_register_snappy_fmv(optOff, optLevel);
+        aocl_register_snappy_fmv(optOff, cpuFeatures);
         setup_ok_snappy = 1;
     }
     AOCL_EXIT_CRITICAL(setup_snappy)

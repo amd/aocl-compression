@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -46,6 +46,7 @@
 #endif
 
 #include "utils/utils.h" // Note: include this before deflate.h
+#include "utils/dispatcher.h"
 #include "algos/zlib/zlib.h"
 #include "algos/zlib/zutil.h"
 #include "algos/zlib/inftrees.h"

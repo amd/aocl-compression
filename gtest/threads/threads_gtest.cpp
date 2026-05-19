@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -271,6 +271,37 @@ void set_ACD_io_bufs(ACD* desc, TestLoadBase* t) {
 #ifdef AOCL_ENABLE_THREADS
 
  /*********************************************
+ * Begin set/get max threads Tests
+ *********************************************/
+TEST(API_get_set_max_threads_MT, AOCL_Compression_api_aocl_set_get_max_threads_mt_common_1)
+{
+    int max_threads = test_omp_max_threads_get();
+    EXPECT_EQ(aocl_get_max_threads_mt(), (AOCL_UINT32)max_threads);
+}
+
+TEST(API_get_set_max_threads_MT, AOCL_Compression_api_aocl_set_get_max_threads_mt_common_2)
+{
+    int max_threads = test_omp_max_threads_get();
+    int requested = max_threads > 1 ? max_threads - 1 : 1;
+
+    EXPECT_EQ(aocl_set_max_threads_mt(requested), 0);
+    EXPECT_EQ(aocl_get_max_threads_mt(), (AOCL_UINT32)requested);
+
+    EXPECT_EQ(aocl_set_max_threads_mt(max_threads), 0);
+}
+
+TEST(API_get_set_max_threads_MT, AOCL_Compression_api_aocl_set_get_max_threads_mt_common_3)
+{
+    AOCL_UINT32 before = aocl_get_max_threads_mt();
+    EXPECT_EQ(aocl_set_max_threads_mt(0), ERR_INVALID_INPUT);
+    EXPECT_EQ(aocl_get_max_threads_mt(), before);
+}
+
+/*********************************************
+ * End set/get max threads Tests
+ *********************************************/
+
+/*********************************************
   * Begin Multithreaded Compress Tests
   ********************************************/
 

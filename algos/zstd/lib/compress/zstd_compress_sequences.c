@@ -1,6 +1,7 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  * All rights reserved.
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
@@ -206,6 +207,7 @@ ZSTD_selectEncodingType(
         size_t const basicCost = isDefaultAllowed ? ZSTD_crossEntropyCost(defaultNorm, defaultNormLog, count, max) : ERROR(GENERIC);
         size_t const repeatCost = *repeatMode != FSE_repeat_none ? ZSTD_fseBitCost(prevCTable, count, max) : ERROR(GENERIC);
         size_t const NCountCost = ZSTD_NCountCost(count, max, nbSeq, FSELog);
+        FORWARD_IF_ERROR(NCountCost, "Failed to calculate normalized count cost");
         size_t const compressedCost = (NCountCost << 3) + ZSTD_entropyCost(count, max, nbSeq);
 
         if (isDefaultAllowed) {

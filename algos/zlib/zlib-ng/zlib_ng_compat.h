@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2025-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -29,7 +29,7 @@
 #ifndef ZLIB_NG_COMPAT_H
 #define ZLIB_NG_COMPAT_H
 /* DO NOT include any zlib headers here */
-#include "algos/common/aoclAlgoOpt.h"
+#include "aoclAlgoOpt.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -89,6 +89,7 @@
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
+extern void z_error(char *m);
 #  include <stdio.h>
 #  define Assert(cond, msg) {int _cond = (cond); if (!_cond) z_error(msg);}
 #else

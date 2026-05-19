@@ -1,6 +1,6 @@
 /* compress.c -- compress a memory buffer
  * Copyright (C) 1995-2005, 2014, 2016 Jean-loup Gailly, Mark Adler
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -9,6 +9,7 @@
 #define ZLIB_INTERNAL
 #include "zlib.h"
 #include "utils/utils.h"
+#include "utils/dispatcher.h"
 
 #ifdef AOCL_ZLIB_OPT
 #include "aocl_zlib_utils.h"
@@ -41,9 +42,10 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
     if (!setup_ok_zlib) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
         zlibOptOff = optOff;
-        aocl_setup_deflate(optOff, optLevel);
-        aocl_setup_inflate(optOff, optLevel);
-        aocl_setup_adler32(optOff, optLevel);
+        CpuFeatures cpuFeatures = Dispatcher_GetSupportedFeaturesForLevel(Dispatcher_IntToLevel((int)optLevel));
+        aocl_setup_deflate(optOff, cpuFeatures);
+        aocl_setup_inflate(optOff, cpuFeatures);
+        aocl_setup_adler32(optOff, cpuFeatures);
         setup_ok_zlib = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib)
@@ -55,12 +57,12 @@ ZEXTERN char * ZEXPORT aocl_setup_zlib(int optOff, int optLevel, int insize,
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_zlib)
     if (!setup_ok_zlib) {
-        int optLevel = get_cpu_opt_flags(0);
         int optOff = get_disable_opt_flags(0);
         zlibOptOff = optOff;
-        aocl_setup_deflate(optOff, optLevel);
-        aocl_setup_inflate(optOff, optLevel);
-        aocl_setup_adler32(optOff, optLevel);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
+        aocl_setup_deflate(optOff, cpuFeatures);
+        aocl_setup_inflate(optOff, cpuFeatures);
+        aocl_setup_adler32(optOff, cpuFeatures);
         setup_ok_zlib = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib)
@@ -85,7 +87,16 @@ ZEXTERN void ZEXPORT test_aocl_zlib_set_enable_dquick(int val) {
     else
         unset_env_var("AOCL_ZLIB_QUICK_MODE");
 }
-#endif
+
+#ifdef AOCL_ZLIB_OPT
+/* Getter function for zlibOptOff variable for unit tests */
+ZEXTERN int ZEXPORT test_aocl_zlib_get_zlibOptOff(void)
+{
+    return zlibOptOff;
+}
+#endif /* AOCL_ZLIB_OPT */
+
+#endif /* AOCL_UNIT_TEST */
 
 #ifdef AOCL_ENABLE_THREADS
 #define ZLIB_MT_WINDOW_LEN (32768 << 1)

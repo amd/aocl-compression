@@ -2,7 +2,7 @@
 2022-07-15: Igor Pavlov : Public domain */
 
 /**
-* Modifications Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+* Modifications Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are met:
@@ -41,7 +41,12 @@
 #endif
 
 #include "utils/utils.h"
+#include "utils/dispatcher.h"
 #include "algos/common/aoclAlgoLog.h"
+#include "aocl_lzma_fmv_utils.h"
+#include "aocl_lzma_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_lzma_fmv_utils.h and aocl_lzma_dispatch_variants.h. */
 
 #include "LzmaEnc.h"
 
@@ -4592,9 +4597,11 @@ SRes LzmaEncode_ST(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
   return res;
 }
 
+#ifdef AOCL_ENABLE_THREADS
 static SRes (*LzmaEncode_mt_fp) (Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
     ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig) = LzmaEncode_ST;
+#endif
 
 SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
     const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
@@ -5929,24 +5936,46 @@ SRes LzmaEnc_MemEncode_st_2nd_pass(CLzmaEncHandle pp, Byte *dest, SizeT *destLen
 }
 #endif /* AOCL_ENABLE_THREADS */
 
-static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
+static void aocl_register_lzma_encode_fmv(int optOff, CpuFeatures cpuFeatures)
 {
     if (optOff)
     {
-        //C version
+        /* C baseline profile */
         MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
         MatchFinder_Create_fp       = MatchFinder_Create;
         MatchFinder_Free_fp         = MatchFinder_Free;
         GetOptimum_fp               = GetOptimum;
         LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
         LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
+#ifdef AOCL_ENABLE_THREADS
         LzmaEncode_mt_fp            = LzmaEncode_ST;
+#endif
+        return;
     }
-    else
-    {
-        switch (optLevel)
-        {
-        case -1: // undecided. use defaults based on compiler flags
+
+    /* FMV variant table (highest priority first). */
+    static const AoclLzmaEncodeDispatchVariant variants[] = {
+#ifdef AOCL_LZMA_OPT
+        { 0, AOCL_LZMA_ENCODE_PROFILE_OPT }
+#else
+        { 0, AOCL_LZMA_ENCODE_PROFILE_BASELINE }
+#endif
+    };
+
+    /* Select first compatible FMV variant for detected CPU features. */
+    size_t variant_index = aocl_lzma_select_fmv_variant(
+        variants,
+        AOCL_LZMA_ARRAY_SIZE(variants),
+        sizeof(variants[0]),
+        offsetof(AoclLzmaEncodeDispatchVariant, required_features),
+        cpuFeatures);
+
+    if (variant_index >= AOCL_LZMA_ARRAY_SIZE(variants)) {
+        return;
+    }
+
+    switch (variants[variant_index].profile) {
+        case AOCL_LZMA_ENCODE_PROFILE_OPT:
 #ifdef AOCL_LZMA_OPT
             MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
             MatchFinder_Create_fp       = AOCL_MatchFinder_Create;
@@ -5957,35 +5986,10 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
 #ifdef AOCL_ENABLE_THREADS
             LzmaEncode_mt_fp            = AOCL_LzmaEncode_MT;
 #endif
-#else
-            MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
-            MatchFinder_Create_fp       = MatchFinder_Create;
-            MatchFinder_Free_fp         = MatchFinder_Free;
-            GetOptimum_fp               = GetOptimum;
-            LzmaEncProps_Normalize_fp   = LzmaEncProps_Normalize;
-            LzmaEnc_SetProps_fp         = LzmaEnc_SetProps;
-#ifdef AOCL_ENABLE_THREADS
-            LzmaEncode_mt_fp            = LzmaEncode_ST;
-#endif
 #endif
             break;
-#ifdef AOCL_LZMA_OPT
-        case 0://C version
-        case 1://SSE version
-        case 2://AVX version
-        case 3://AVX2 version
-        default://AVX512 and other versions
-            MatchFinder_CreateVTable_fp = AOCL_MatchFinder_CreateVTable;
-            MatchFinder_Create_fp       = AOCL_MatchFinder_Create;
-            MatchFinder_Free_fp         = AOCL_MatchFinder_Free;
-            GetOptimum_fp               = AOCL_GetOptimum;
-            LzmaEncProps_Normalize_fp   = AOCL_LzmaEncProps_Normalize;
-            LzmaEnc_SetProps_fp         = AOCL_LzmaEnc_SetProps;
-#ifdef AOCL_ENABLE_THREADS
-            LzmaEncode_mt_fp            = AOCL_LzmaEncode_MT;
-#endif
-            break;
-#else
+
+        case AOCL_LZMA_ENCODE_PROFILE_BASELINE:
         default:
             MatchFinder_CreateVTable_fp = MatchFinder_CreateVTable;
             MatchFinder_Create_fp       = MatchFinder_Create;
@@ -5997,8 +6001,6 @@ static void aocl_register_lzma_encode_fmv(int optOff, int optLevel)
             LzmaEncode_mt_fp            = LzmaEncode_ST;
 #endif
             break;
-#endif
-        }
     }
 }
 
@@ -6007,8 +6009,9 @@ void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
 {
     AOCL_ENTER_CRITICAL(setup_lzmaenc)
     if (!setup_ok_lzma_encode) {
+        CpuFeatures cpuFeatures = Dispatcher_GetSupportedFeaturesForLevel(Dispatcher_IntToLevel((int)optLevel));
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_lzma_encode_fmv(optOff, optLevel);
+        aocl_register_lzma_encode_fmv(optOff, cpuFeatures);
         setup_ok_lzma_encode = 1;
     }
     AOCL_EXIT_CRITICAL(setup_lzmaenc)
@@ -6018,9 +6021,9 @@ void aocl_setup_lzma_encode(int optOff, int optLevel, size_t insize,
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_lzmaenc)
     if (!setup_ok_lzma_encode) {
-        int optLevel = get_cpu_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         int optOff = get_disable_opt_flags(0);
-        aocl_register_lzma_encode_fmv(optOff, optLevel);
+        aocl_register_lzma_encode_fmv(optOff, cpuFeatures);
         setup_ok_lzma_encode = 1;
     }
     AOCL_EXIT_CRITICAL(setup_lzmaenc)

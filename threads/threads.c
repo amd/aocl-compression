@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -47,6 +47,35 @@
 int(*test_omp_get_max_threads_fp)(void) = omp_get_max_threads;
 #endif
 
+static AOCL_INT32 aocl_user_max_threads_mt = 0;
+#pragma omp threadprivate(aocl_user_max_threads_mt)
+
+AOCL_INT32 aocl_set_max_threads_mt(AOCL_INT32 max_threads)
+{
+    if (max_threads <= 0)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        return ERR_INVALID_INPUT;
+    }
+
+    aocl_user_max_threads_mt = max_threads;
+    return 0;
+}
+
+AOCL_UINT32 aocl_get_max_threads_mt(void)
+{
+#ifndef AOCL_UNIT_TEST
+    AOCL_UINT32 max_threads = omp_get_max_threads();
+#else
+    AOCL_UINT32 max_threads = test_omp_max_threads_get();
+#endif
+
+    if (aocl_user_max_threads_mt > 0 && ((AOCL_UINT32)aocl_user_max_threads_mt < max_threads))
+        return (AOCL_UINT32)aocl_user_max_threads_mt;
+
+    return max_threads;
+}
+
 AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp, 
                                       AOCL_CHAR *src, AOCL_CHAR *dst, AOCL_UINTP in_size,
                                       AOCL_UINTP out_size, AOCL_INT32 window_len,
@@ -59,11 +88,7 @@ AOCL_INT32 aocl_setup_partition_internal(aocl_thread_group_t *thread_grp,
         return ERR_INVALID_INPUT;
     }
 
-#ifndef AOCL_UNIT_TEST
-    AOCL_UINT32 max_threads = omp_get_max_threads();
-#else
-    AOCL_UINT32 max_threads = test_omp_max_threads_get();
-#endif
+    AOCL_UINT32 max_threads = aocl_get_max_threads_mt();
     AOCL_UINTP chunk_size =  (AOCL_UINTP)window_len * window_factor;
 
     thread_grp->src = src;
@@ -138,6 +163,12 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
     //Allocate threads list to hold references to threads_info
     thread_grp->threads_info_list = (aocl_thread_info_t*)malloc(
                     sizeof(aocl_thread_info_t) * thread_grp->num_threads);
+                    
+    if (thread_grp->threads_info_list == NULL) {
+        LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
+        return ERR_MEMORY_ALLOC;
+    }
+    
     memset(thread_grp->threads_info_list, 0, 
                     sizeof(aocl_thread_info_t) * thread_grp->num_threads);
     for (AOCL_UINT32 thread_id = 0; thread_id < thread_grp->num_threads; ++thread_id)
@@ -145,10 +176,6 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
         /* Set to 1 by default.
          * Reset to 0 when thread gets spawned and completes its task successfully.*/
         thread_grp->threads_info_list[thread_id].is_error = 1;
-    }
-    if (thread_grp->threads_info_list == NULL) {
-        LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
-        return ERR_MEMORY_ALLOC;
     }
 
     rap_frame_len = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(thread_grp->num_threads, 0);
@@ -230,11 +257,7 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
 
     AOCL_CHAR* src_base;
     AOCL_UINT32 rap_metadata_len;
-#ifndef AOCL_UNIT_TEST
-    AOCL_UINT32 max_threads = omp_get_max_threads();
-#else
-    AOCL_UINT32 max_threads = test_omp_max_threads_get();
-#endif
+    AOCL_UINT32 max_threads = aocl_get_max_threads_mt();
 
     thread_grp->src = src;
     thread_grp->dst = dst;
@@ -300,6 +323,13 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
         //Allocate threads list to hold references to threads_info
         thread_grp->threads_info_list = (aocl_thread_info_t*)malloc(
             sizeof(aocl_thread_info_t) * num_main_threads);
+        
+        if (thread_grp->threads_info_list == NULL) 
+            {
+                LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
+                return ERR_MEMORY_ALLOC;
+            }
+        
         memset(thread_grp->threads_info_list, 0, //needed to ensure pointer related checks behave as expected
             sizeof(aocl_thread_info_t) * num_main_threads);
 
@@ -375,11 +405,6 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
             assert(ti_ptr == (thread_grp->threads_info_list + num_main_threads));
         }
 
-        if (thread_grp->threads_info_list == NULL) 
-        {
-            LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
-            return ERR_MEMORY_ALLOC;
-        }
     }
     return rap_metadata_len;
 }
@@ -452,7 +477,7 @@ void aocl_destroy_parallel_decompress_mt(aocl_thread_group_t* thread_grp)
 }
 
 AOCL_INT32 aocl_get_rap_frame_bound_mt(void) {
-    AOCL_UINT32 max_threads = omp_get_max_threads();
+    AOCL_UINT32 max_threads = aocl_get_max_threads_mt();
     return RAP_FRAME_LEN_WITH_DECOMP_LENGTH(max_threads, 0); // upper bound of rap frame length in bytes based on max threads possible
 }
 

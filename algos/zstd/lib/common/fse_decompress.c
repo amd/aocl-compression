@@ -1,6 +1,7 @@
 /* ******************************************************************
  * FSE : Finite State Entropy decoder
  * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  *
  *  You can contact the author at :
  *  - FSE source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -29,7 +30,9 @@
 /* **************************************************************
 *  Error Management
 ****************************************************************/
+#ifndef FSE_isError
 #define FSE_isError ERR_isError
+#endif
 #define FSE_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)   /* use only *after* variable declarations */
 
 

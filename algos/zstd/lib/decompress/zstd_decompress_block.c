@@ -9,7 +9,7 @@
  */
 
 /**
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -62,6 +62,8 @@ typedef enum { ZSTD_lo_isRegularOffset, ZSTD_lo_isLongOffset = 1 } ZSTD_longOffs
 *****************************************************************/
 #ifdef AOCL_ZSTD_OPT
 #include "utils/utils.h"
+#include "utils/dispatcher.h"
+
 /* Dynamic dispatcher setup function for native APIs.
  * All native APIs that call aocl optimized functions within their call stack,
  * must call AOCL_SETUP_NATIVE() at the start of the function. This sets up 
@@ -2312,8 +2314,9 @@ size_t ZSTD_decompressBlock(ZSTD_DCtx* dctx,
 /* ***************************************************************
 *  AOCL optimized functions
 *****************************************************************/
-static void aocl_register_zstd_decompress_block_fmv(int optOff, int optLevel)
+static void aocl_register_zstd_decompress_block_fmv(int optOff, CpuFeatures cpuFeatures)
 {
+    (void)cpuFeatures;
     if (optOff)
     {
         //C version
@@ -2324,37 +2327,26 @@ static void aocl_register_zstd_decompress_block_fmv(int optOff, int optLevel)
     }
     else
     {
-        switch (optLevel)
-        {
-        case 0://C version
-        case 1://SSE version
-        case 2://AVX version
-        case 3://AVX2 version
 #ifdef AOCL_ZSTD_OPT
-        default://AVX512 and other versions
 #if DYNAMIC_BMI2
-            ZSTD_decompressSequences_bmi2_fp = AOCL_ZSTD_decompressSequences_bmi2;
+        ZSTD_decompressSequences_bmi2_fp = AOCL_ZSTD_decompressSequences_bmi2;
 #endif
-            ZSTD_decompressSequences_default_fp = AOCL_ZSTD_decompressSequences_default;
-            break;
+        ZSTD_decompressSequences_default_fp = AOCL_ZSTD_decompressSequences_default;
 #else
-        default:
 #if DYNAMIC_BMI2
-            ZSTD_decompressSequences_bmi2_fp = ZSTD_decompressSequences_bmi2;
+        ZSTD_decompressSequences_bmi2_fp = ZSTD_decompressSequences_bmi2;
 #endif
-            ZSTD_decompressSequences_default_fp = ZSTD_decompressSequences_default;
-            break;
+        ZSTD_decompressSequences_default_fp = ZSTD_decompressSequences_default;
 #endif /* AOCL_ZSTD_OPT */
-        }
     }
 }
 
-void aocl_setup_zstd_decompress_block(int optOff, int optLevel)
+void aocl_setup_zstd_decompress_block(int optOff, uint64_t cpuFeatures)
 {
     AOCL_ENTER_CRITICAL(setup_zstd_decode)
     if (!setup_ok_zstd_decode) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_register_zstd_decompress_block_fmv(optOff, optLevel);
+        aocl_register_zstd_decompress_block_fmv(optOff, (CpuFeatures)cpuFeatures);
         setup_ok_zstd_decode = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zstd_decode)
@@ -2364,9 +2356,9 @@ void aocl_setup_zstd_decompress_block(int optOff, int optLevel)
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_zstd_decode)
     if (!setup_ok_zstd_decode) {
-        int optLevel = get_cpu_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         int optOff = get_disable_opt_flags(0);
-        aocl_register_zstd_decompress_block_fmv(optOff, optLevel);
+        aocl_register_zstd_decompress_block_fmv(optOff, cpuFeatures);
         setup_ok_zstd_decode = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zstd_decode)

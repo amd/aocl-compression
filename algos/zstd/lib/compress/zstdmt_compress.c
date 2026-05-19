@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * 
  * All rights reserved.
  *
@@ -1378,7 +1378,7 @@ size_t ZSTDMT_initCStream_internal(
     }
 
     if (ZSTDMT_serialState_reset(&mtctx->serial, mtctx->seqPool, params, mtctx->targetSectionSize,
-                                 dict, dictSize, dictContentType))
+                                 dict, (dict ? dictSize : (size_t)0), dictContentType))
         return ERROR(memory_allocation);
 
 

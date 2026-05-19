@@ -1,5 +1,6 @@
 /* gzread.c -- zlib functions for reading gzip files
  * Copyright (C) 2004-2017 Mark Adler
+ * Modifications Copyright (C) 2026, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -402,6 +403,8 @@ z_size_t ZEXPORT gzfread(voidp buf, z_size_t size, z_size_t nitems, gzFile file)
 /* -- see zlib.h -- */
 #ifdef Z_PREFIX_SET
 #  undef z_gzgetc
+#elif defined(AOCL_PREFIX_SET)
+#  undef AOCL_LLC_gzgetc
 #else
 #  undef gzgetc
 #endif

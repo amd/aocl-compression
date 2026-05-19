@@ -1,4 +1,4 @@
-# Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -171,6 +171,7 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
     # Add additional include directories needed by zstd test benches
     target_include_directories (${tp_exe_name} PRIVATE  ${CMAKE_SOURCE_DIR}/api
                                                         ${CMAKE_SOURCE_DIR}/utils
+                                                        ${AOCL_GENERATED_COMMON_INC_DIR}
                                                         ${ALGOS_PATH}/common)
     if (NOT AOCL_EXCLUDE_ZSTD)
         # Add additional include directories needed by zstd test benches
@@ -230,7 +231,10 @@ if (BUILD_UTILITY)
           # Set the path to the zstd program directory
           file(GLOB ZSTD_PROGRAM_SRCS "${BU_ZSTD_PROGRAMS_DIR}/*.c")
           if (AOCL_ENABLE_THREADS)
-            set_property(SOURCE ${ZSTD_PROGRAM_SRCS} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
+            set_property(SOURCE ${ZSTD_PROGRAM_SRCS} APPEND PROPERTY COMPILE_DEFINITIONS "AOCL_ENABLE_THREADS")
+          endif ()
+          if (NATIVE_ENABLE_THREADS)
+            set_property(SOURCE ${ZSTD_PROGRAM_SRCS} APPEND PROPERTY COMPILE_DEFINITIONS "ZSTD_MULTITHREAD")
           endif ()
 
           # Create testbench zstd_utility
@@ -239,13 +243,14 @@ if (BUILD_UTILITY)
           set_target_properties(${zstd_utility} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
           target_include_directories(${zstd_utility} PRIVATE ${CMAKE_SOURCE_DIR} 
   							${CMAKE_SOURCE_DIR}/api 
-                                              		${CMAKE_SOURCE_DIR}/utils 
+                            ${CMAKE_SOURCE_DIR}/utils
+                            ${AOCL_GENERATED_COMMON_INC_DIR}
   							${BU_ZSTD_LIBRARY_DIR}/common)
           target_include_directories(${zstd_utility} PRIVATE ${BU_ZSTD_LIBRARY_DIR}/zstd/lib 
   							${BU_ZSTD_LIBRARY_DIR}/zstd/lib/common 
-                                              		${BU_ZSTD_LIBRARY_DIR}/zstd/lib/compress 
+                            ${BU_ZSTD_LIBRARY_DIR}/zstd/lib/compress 
   							${BU_ZSTD_LIBRARY_DIR}/zstd/lib/decompress 
-                                              		${LIBRARY_DIR}/zstd/lib/dictBuilder)
+                            ${LIBRARY_DIR}/zstd/lib/dictBuilder)
          
           target_link_libraries(${zstd_utility} ${lib_name})
           target_link_libraries(${zstd_utility} ${CMAKE_DL_LIBS})
@@ -303,6 +308,7 @@ if (BUILD_UTILITY)
             set_property(SOURCE ${ZLIB_MINIGZIP_SRCS} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_THIRD_PARTY_TEST")
         endif()
         target_include_directories (${minigzip} PRIVATE ${ALGOS_PATH}/zlib
+                                                        ${AOCL_GENERATED_COMMON_INC_DIR}
                                                         ${ALGOS_PATH}/common)
         target_link_libraries(${minigzip} ${lib_name})
         target_link_libraries(${minigzip} ${CMAKE_DL_LIBS})

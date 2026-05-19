@@ -1,6 +1,6 @@
 /* inflate.c -- zlib decompression
  * Copyright (C) 1995-2022 Mark Adler
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -97,6 +97,10 @@
 
 #ifdef AOCL_ZLIB_OPT
 #include "aocl_zlib_setup.h"
+#include "aocl_zlib_fmv_utils.h"
+#include "aocl_zlib_dispatch_variants.h"
+/* Shared FMV selection helper and variant entry layouts are centralized in
+ * aocl_zlib_fmv_utils.h and aocl_zlib_dispatch_variants.h. */
 
 static int setup_ok_zlib_inflate = 0; // flag to indicate status of dynamic dispatcher setup
 #ifndef AOCL_ENABLE_THREADS
@@ -451,8 +455,6 @@ local int updatewindow(z_streamp strm, const Bytef *end, unsigned copy) {
 
 
 #ifdef AOCL_ZLIB_OPT
-/* Flag to choose code paths based on dynamic dispatcher settings */
-static int inflateOptLevel = 0;
 /* Function pointers holding the optimized variant as per dynamic dispatcher settings */
 static int (*updatewindow_fp)(z_streamp strm, const Bytef * end, unsigned copy) = updatewindow;
 static void (*inflate_fast_fp)(z_streamp strm, unsigned start) = inflate_fast;
@@ -1280,7 +1282,7 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
             if (left == 0) goto inf_leave;
             copy = out - left;
 #ifdef AOCL_ZLIB_SSE2_OPT
-            if(UNLIKELY(zlibOptOff == 1 || inflateOptLevel <= 0))
+            if(UNLIKELY(zlibOptOff == 1))
             {
                 if (state->offset > copy) {         /* copy from window */
                     copy = state->offset - copy;
@@ -1480,7 +1482,7 @@ int ZEXPORT inflate(z_streamp strm, int flush) {
      * mislead clients relying on undefined behavior (i.e. assuming
      * that the data is over when the buffer has a zero/null value).
      */
-    if(LIKELY(zlibOptOff==0 && inflateOptLevel > 0)) {
+    if(LIKELY(zlibOptOff==0)) {
     if (left >= CHUNKCOPY_CHUNK_SIZE)
        memset(put, 0x55, CHUNKCOPY_CHUNK_SIZE);
     else
@@ -1798,57 +1800,49 @@ unsigned long ZEXPORT inflateCodesUsed(z_streamp strm) {
 
 #ifdef AOCL_ZLIB_OPT
 /* AOCL-Compression defined setup function that sets up ZLIB with the right
-*  AMD optimized zlib routines depending upon the CPU features. */
-static void aocl_setup_inflate_fmv(int optOff, int optLevel)
+ *  AMD optimized zlib routines depending upon the CPU features. */
+static void aocl_setup_inflate_fmv(int optOff, CpuFeatures cpuFeatures)
 {
-    inflateOptLevel = optLevel;
-    
-    if(UNLIKELY(optOff == 1))
+    if (UNLIKELY(optOff == 1))
     {
         updatewindow_fp = updatewindow;
         inflate_fast_fp = inflate_fast;
     }
     else
     {
-        switch (optLevel)
-        {
-            case 0://C version
-                updatewindow_fp = updatewindow;
-                inflate_fast_fp = inflate_fast;
-            break;
-            case -1: // undecided. use defaults based on compiler flags
-            case 1://SSE version
-            case 2://AVX version
-            case 3://AVX2 version
-#ifdef AOCL_ZLIB_SSE2_OPT
-                updatewindow_fp = aocl_updatewindow;
-                inflate_fast_fp = inflate_fast_sse2;
-#else
-                updatewindow_fp = updatewindow;
-                inflate_fast_fp = inflate_fast;
-#endif /* AOCL_ZLIB_SSE2_OPT */
-            break;
-            default://AVX512 and other versions
+        /* FMV variant table (highest priority first). */
+        static const AoclZlibInflateVariant inflate_variants[] = {
 #ifdef AOCL_ZLIB_AVX512_OPT
-                updatewindow_fp = aocl_updatewindow;
-                inflate_fast_fp = inflate_fast_avx512;
-#elif defined (AOCL_ZLIB_SSE2_OPT)
-                updatewindow_fp = aocl_updatewindow;
-                inflate_fast_fp = inflate_fast_sse2;
-#else
-                updatewindow_fp = updatewindow;
-                inflate_fast_fp = inflate_fast;
-#endif /* AOCL_ZLIB_SSE2_OPT */
-            break;
+            { FEATURE_AVX512F | FEATURE_AVX512VL | FEATURE_AVX512VNNI | FEATURE_AVX512BW | FEATURE_BMI2, aocl_updatewindow, inflate_fast_avx512 },
+#endif
+#ifdef AOCL_ZLIB_SSE2_OPT
+            { FEATURE_SSE2, aocl_updatewindow, inflate_fast_sse2 },
+#endif
+            { 0, updatewindow, inflate_fast }
+        };
+
+        /* Select first compatible FMV variant for detected CPU features. */
+        size_t variant_index = aocl_zlib_select_fmv_variant(
+            inflate_variants,
+            AOCL_ZLIB_ARRAY_SIZE(inflate_variants),
+            sizeof(inflate_variants[0]),
+            offsetof(AoclZlibInflateVariant, required_features),
+            cpuFeatures);
+
+        if (variant_index < AOCL_ZLIB_ARRAY_SIZE(inflate_variants)) {
+            updatewindow_fp = inflate_variants[variant_index].updatewindow_impl;
+            inflate_fast_fp = inflate_variants[variant_index].inflate_fast_impl;
+            return;
         }
     }
 }
 
-void ZLIB_INTERNAL aocl_setup_inflate(int optOff, int optLevel) {
+void ZLIB_INTERNAL aocl_setup_inflate(int optOff, CpuFeatures cpuFeatures) {
     AOCL_ENTER_CRITICAL(setup_zlib_inflate)
     if (!setup_ok_zlib_inflate) {
         optOff = optOff ? 1 : get_disable_opt_flags(0);
-        aocl_setup_inflate_fmv(optOff, optLevel);
+        zlibOptOff = optOff;
+        aocl_setup_inflate_fmv(optOff, cpuFeatures);
         setup_ok_zlib_inflate = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_inflate)
@@ -1857,9 +1851,10 @@ void ZLIB_INTERNAL aocl_setup_inflate(int optOff, int optLevel) {
 static void aocl_setup_native(void) {
     AOCL_ENTER_CRITICAL(setup_zlib_inflate)
     if (!setup_ok_zlib_inflate) {
-        int optLevel = get_cpu_opt_flags(0);
+        CpuFeatures cpuFeatures = Dispatcher_GetFeaturesFromEnv();
         int optOff = get_disable_opt_flags(0);
-        aocl_setup_inflate_fmv(optOff, optLevel);
+        zlibOptOff = optOff;
+        aocl_setup_inflate_fmv(optOff, cpuFeatures);
         setup_ok_zlib_inflate = 1;
     }
     AOCL_EXIT_CRITICAL(setup_zlib_inflate)

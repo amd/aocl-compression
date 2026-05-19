@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -2051,7 +2051,13 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
 
 TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_pass_common_13) //compress MT threads < decompress MT threads
 {
-    ASSERT_NE(test_omp_max_threads_set(5), 0); // system must have atleast 5 threads
+    // Check if system has at least 5 threads
+    int max_threads = omp_get_max_threads();
+    if (max_threads < 5) {
+        GTEST_SKIP() << "Insufficient threads available. Required: 5, Available: " << max_threads;
+    }
+
+    ASSERT_NE(test_omp_max_threads_set(5), 0); // system must have at least 5 threads
     TestLoad_2 d((1024 * 1024 * 32) + 5); //use larger input so that compression gets triggered on multiple threads
     int level = 3;
     ZSTD_parameters param;
@@ -2069,6 +2075,12 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
 
 TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_pass_common_14) //compress MT threads > decompress MT threads
 {
+    // Check if system has at least 5 threads
+    int max_threads = omp_get_max_threads();
+    if (max_threads < 5) {
+        GTEST_SKIP() << "Insufficient threads available. Required: 5, Available: " << max_threads;
+    }
+
     test_omp_max_threads_reset();
     TestLoad_2 d((1024 * 1024 * 32) + 5); //use larger input so that compression gets triggered on multiple threads
     int level = 3;
@@ -2080,7 +2092,7 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
     size_t outLen = Test_ZSTD_compress_advanced(getCtx(), d.getCompressedBuff(), d.getCompressedSize(), d.getOrigData(), d.getOrigSize(), NULL, 0, param);
 
     //Decompress using multithreaded decompressor
-    ASSERT_NE(test_omp_max_threads_set(5), 0); // system must have atleast 5 threads
+    ASSERT_NE(test_omp_max_threads_set(5), 0); // system must have at least 5 threads
     EXPECT_TRUE(zstd_check_uncompressed_equal_to_original(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), outLen,
         Test_ZSTD_decompressDCtx));
 }
