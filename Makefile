@@ -66,6 +66,24 @@ ifneq ($(OS_TYPE),unix)
     $(error GNU Make build does not support Windows. Use the CMake build system on Windows.)
 endif
 
+# ==============================================================================
+# ISA LEVEL NUMERIC MAPPING
+# ==============================================================================
+
+# Normalize to uppercase for case-insensitive matching
+AOCL_MAX_ISA_LEVEL := $(shell echo '$(AOCL_MAX_ISA_LEVEL)' | tr '[:lower:]' '[:upper:]')
+
+# Map AOCL_MAX_ISA_LEVEL string to numeric value
+ifeq ($(AOCL_MAX_ISA_LEVEL),SSE2)
+    AOCL_MAX_ISA_LEVEL_NUM := 1
+else ifeq ($(AOCL_MAX_ISA_LEVEL),AVX)
+    AOCL_MAX_ISA_LEVEL_NUM := 2
+else ifeq ($(AOCL_MAX_ISA_LEVEL),AVX2)
+    AOCL_MAX_ISA_LEVEL_NUM := 3
+else
+    AOCL_MAX_ISA_LEVEL_NUM := 4
+endif
+
 # Build rules and patterns
 include mk/rules.mk
 
@@ -630,8 +648,10 @@ ZLIB_SOURCES := algos/zlib/code_alignment.c \
                 algos/zlib/aocl_zlib_utils.c
 
 # ZLIB-NG optimized sources
-ZLIBNG_SOURCES := algos/zlib/zlib-ng/arch/x86/chunkset_sse2.c \
-                  algos/zlib/zlib-ng/arch/x86/chunkset_avx512.c
+ZLIBNG_SOURCES := algos/zlib/zlib-ng/arch/x86/chunkset_sse2.c
+ifeq ($(AOCL_MAX_ISA_LEVEL_NUM),4)
+    ZLIBNG_SOURCES += algos/zlib/zlib-ng/arch/x86/chunkset_avx512.c
+endif
 
 # ZLIB header files
 ZLIB_HEADERS := algos/zlib/zlib.h \
@@ -674,12 +694,14 @@ $(OBJ_DIR)/algos/zlib/%.o: CFLAGS += $(ZLIB_CFLAGS) -I$(ROOT_DIR)/algos/zlib
 # Per-file flags for ZLIB-NG sources (need additional include paths)
 $(OBJ_DIR)/algos/zlib/zlib-ng/%.o: CFLAGS += $(ZLIBNG_CFLAGS) -I$(ROOT_DIR)/algos/zlib/zlib-ng -I$(ROOT_DIR)/algos/zlib
 
-# AVX-512 sources need special flags
+# AVX-512 sources need special flags (only when ISA level includes AVX512)
 AVX512_SOURCES := algos/zlib/crc32_x86_vpclmulqdq.c \
                   algos/zlib/zlib-ng/arch/x86/chunkset_avx512.c
 
+ifeq ($(AOCL_MAX_ISA_LEVEL_NUM),4)
 $(OBJ_DIR)/algos/zlib/crc32_x86_vpclmulqdq.o: CFLAGS += -mpclmul -mvpclmulqdq -mavx512f
 $(OBJ_DIR)/algos/zlib/zlib-ng/arch/x86/chunkset_avx512.o: CFLAGS += -mavx512f -mavx512bw
+endif
 
 # Installation headers
 INSTALL_HEADERS += algos/zlib/zconf.h \
@@ -1052,6 +1074,10 @@ CXXFLAGS += -DAOCL_BUILD_VERSION="\"$(BUILD_VERSION)\""
 # Add dynamic dispatcher flag (always enabled)
 CFLAGS += -DAOCL_DYNAMIC_DISPATCHER
 CXXFLAGS += -DAOCL_DYNAMIC_DISPATCHER
+
+# Pass AOCL_MAX_ISA_LEVEL to all source files
+CFLAGS += -DAOCL_MAX_ISA_LEVEL=$(AOCL_MAX_ISA_LEVEL_NUM)
+CXXFLAGS += -DAOCL_MAX_ISA_LEVEL=$(AOCL_MAX_ISA_LEVEL_NUM)
 
 # Match CMake compile definitions for shared library builds and strict warnings
 ifneq ($(BUILD_STATIC_LIBS),1)

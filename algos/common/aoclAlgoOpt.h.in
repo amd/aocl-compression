@@ -30,21 +30,31 @@
  *
  *  @brief AOCL Optimization flags.
  *
- *  For native compilation comment out below flags based on ISA support
+ *  ISA-specific optimizations are gated by AOCL_MAX_ISA_LEVEL (1=SSE2,
+ *  2=AVX, 3=AVX2, 4=AVX512). The build system passes this as a compiler
+ *  define; the fallback default enables all levels.
  *
  *  @author Ashish Sriram
  */
 
+#ifndef AOCL_MAX_ISA_LEVEL
+#define AOCL_MAX_ISA_LEVEL 4  /* AVX512 - all levels enabled */
+#endif
+
 /* BZIP2 */
 #define AOCL_BZIP2_OPT
 #ifdef AOCL_BZIP2_OPT
-    #define AOCL_BZIP2_AVX_OPT
+    #if AOCL_MAX_ISA_LEVEL >= 2  /* AVX */
+        #define AOCL_BZIP2_AVX_OPT
+    #endif
 #endif
 
 /* LZ4 */
 #define AOCL_LZ4_OPT
 #ifdef AOCL_LZ4_OPT
-    #define AOCL_LZ4_AVX_OPT
+    #if AOCL_MAX_ISA_LEVEL >= 2  /* AVX */
+        #define AOCL_LZ4_AVX_OPT
+    #endif
     /* LZ4HC */
     @AOCL_LZ4HC_OPT@
 #endif /* AOCL_LZ4_OPT */
@@ -55,10 +65,12 @@
 /* SNAPPY */
 #define AOCL_SNAPPY_OPT
 #ifdef AOCL_SNAPPY_OPT
-    #define AOCL_SNAPPY_AVX_OPT
-    #ifdef AOCL_SNAPPY_AVX_OPT
-        #define AOCL_SNAPPY_AVX2_OPT
-    #endif /* AOCL_SNAPPY_AVX_OPT */
+    #if AOCL_MAX_ISA_LEVEL >= 2  /* AVX */
+        #define AOCL_SNAPPY_AVX_OPT
+        #if AOCL_MAX_ISA_LEVEL >= 3  /* AVX2 */
+            #define AOCL_SNAPPY_AVX2_OPT
+        #endif /* AVX2 */
+    #endif /* AVX */
 #endif /* AOCL_SNAPPY_OPT */
 
 /* ZSTD */
@@ -67,14 +79,16 @@
 /* ZLIB */
 #define AOCL_ZLIB_OPT
 #ifdef AOCL_ZLIB_OPT
-     #define AOCL_ZLIB_SSE2_OPT
-     #ifdef AOCL_ZLIB_SSE2_OPT
-          #define AOCL_ZLIB_AVX_OPT
-          #ifdef AOCL_ZLIB_AVX_OPT
-               #define AOCL_ZLIB_AVX2_OPT
-               #ifdef AOCL_ZLIB_AVX2_OPT
+    #if AOCL_MAX_ISA_LEVEL >= 1  /* SSE2 */
+        #define AOCL_ZLIB_SSE2_OPT
+        #if AOCL_MAX_ISA_LEVEL >= 2  /* AVX */
+            #define AOCL_ZLIB_AVX_OPT
+            #if AOCL_MAX_ISA_LEVEL >= 3  /* AVX2 */
+                #define AOCL_ZLIB_AVX2_OPT
+                #if AOCL_MAX_ISA_LEVEL >= 4  /* AVX512 */
                     #define AOCL_ZLIB_AVX512_OPT
-               #endif /* AOCL_ZLIB_AVX2_OPT */
-          #endif /* AOCL_ZLIB_AVX_OPT */
-     #endif /* AOCL_ZLIB_SSE2_OPT */
+                #endif /* AVX512 */
+            #endif /* AVX2 */
+        #endif /* AVX */
+    #endif /* SSE2 */
 #endif /* AOCL_ZLIB_OPT */

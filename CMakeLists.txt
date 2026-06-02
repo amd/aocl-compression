@@ -95,6 +95,15 @@ option (AOCL_TEST_FUZZER_WITH_CORPUS "Run fuzzer tests with corpus (only on Linu
 option (ENABLE_FAST_MATH "Enable fast-math optimizations (Disabled by default)" OFF)
 option (AOCL_LLC_PREFIX "Prefix library symbols (Disabled by default)" OFF)
 
+# Maximum ISA level for compile-time optimization gating (UNIX only)
+set(AOCL_MAX_ISA_LEVEL "AVX512" CACHE STRING
+    "Maximum ISA optimization level to compile (SSE2, AVX, AVX2, AVX512). Default: AVX512 (all levels enabled). UNIX only.")
+set_property(
+    CACHE AOCL_MAX_ISA_LEVEL
+    PROPERTY STRINGS
+    "SSE2" "AVX" "AVX2" "AVX512"
+)
+
 option (AOCL_EXCLUDE_BZIP2 "Exclude BZIP2 compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_LZ4 "Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_LZ4HC "Exclude LZ4HC compression method from the library build (Disabled by default)" OFF)
@@ -155,6 +164,31 @@ if (BUILD_UTILITY AND NOT BUILD_STATIC_LIBS)
     message(WARNING "Building static library to allow all utilities to be built.")
     set(BUILD_STATIC_LIBS ON)
 endif()
+
+# AOCL_MAX_ISA_LEVEL: Platform check and validation
+string(TOUPPER "${AOCL_MAX_ISA_LEVEL}" AOCL_MAX_ISA_LEVEL)
+if (WIN32)
+    if (NOT AOCL_MAX_ISA_LEVEL STREQUAL "AVX512")
+        message(WARNING "AOCL_MAX_ISA_LEVEL is not supported on Windows. Ignoring setting '${AOCL_MAX_ISA_LEVEL}' and using full optimization.")
+        set(AOCL_MAX_ISA_LEVEL "AVX512")
+    endif()
+else()
+    if (NOT AOCL_MAX_ISA_LEVEL MATCHES "^(SSE2|AVX|AVX2|AVX512)$")
+        message(FATAL_ERROR "AOCL_MAX_ISA_LEVEL must be one of SSE2, AVX, AVX2, AVX512. Got: ${AOCL_MAX_ISA_LEVEL}")
+    endif()
+endif()
+
+# Map AOCL_MAX_ISA_LEVEL string to numeric value
+if (AOCL_MAX_ISA_LEVEL STREQUAL "SSE2")
+    set(AOCL_MAX_ISA_LEVEL_NUM 1)
+elseif (AOCL_MAX_ISA_LEVEL STREQUAL "AVX")
+    set(AOCL_MAX_ISA_LEVEL_NUM 2)
+elseif (AOCL_MAX_ISA_LEVEL STREQUAL "AVX2")
+    set(AOCL_MAX_ISA_LEVEL_NUM 3)
+else()
+    set(AOCL_MAX_ISA_LEVEL_NUM 4)
+endif()
+message(STATUS "Maximum ISA level: ${AOCL_MAX_ISA_LEVEL} (numeric: ${AOCL_MAX_ISA_LEVEL_NUM})")
 
 if (AOCL_EXCLUDE_LZ4 AND NOT AOCL_EXCLUDE_LZ4HC)
     # as lz4hc depends on lz4, it should be excluded along with lz4
@@ -346,9 +380,11 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/zutil.c
                     ${ALGOS_PATH}/zlib/zlib.h
                     ${ALGOS_PATH}/zlib/aocl_zlib_utils.c)
-set (ZLIBNG_SRC_FILES        ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
-                             ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_sse2.c
-                             ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
+set (ZLIBNG_SRC_FILES        ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_sse2.c)
+if (AOCL_MAX_ISA_LEVEL_NUM GREATER_EQUAL 4 OR WIN32)
+    list(APPEND ZLIBNG_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
+                            ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
+endif()
 set_property(SOURCE ${ZLIBNG_SRC_FILES} APPEND PROPERTY INCLUDE_DIRECTORIES 
                     "${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/zlib/zlib-ng/;${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/zlib/")
 set_property(SOURCE ${ZLIBNG_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DHAVE_ATTRIBUTE_ALIGNED=1;-DHAVE_HIDDEN=1")
@@ -404,8 +440,10 @@ set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.h
                         utils/dispatcher.h)
 # Source files utilizing AVX-512 and higher ISA extensions
-set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
-                      ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
+if (AOCL_MAX_ISA_LEVEL_NUM GREATER_EQUAL 4 OR WIN32)
+    set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
+                          ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
+endif()
 
 if (AOCL_ENABLE_THREADS)
     set (THREADS_SRC_FILES threads/code_alignment.c
@@ -569,6 +607,7 @@ endif()
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffast-math")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
     endif()
+    add_compile_definitions(AOCL_MAX_ISA_LEVEL=${AOCL_MAX_ISA_LEVEL_NUM})
     set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_ATTRIBUTE_ALWAYS_INLINE=1;-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1;-DHAVE_BUILTIN_PREFETCH=1;-DSNAPPY_HAVE_X86_CRC32=1;")
 endif()
 
