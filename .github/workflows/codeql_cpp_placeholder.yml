@@ -49,7 +49,7 @@ jobs:
       shell: bash
       run: |
         export PATH=/usr/local/bin:$PATH
-        cmake -B build . -DCMAKE_INSTALL_PREFIX=$PWD/amd-compression -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIBS=OFF && cmake --build build -v -j --target uninstall --target install
+        cmake -B build . -DCMAKE_INSTALL_PREFIX=$PWD/amd-compression -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIBS=OFF -DENABLE_STRICT_WARNINGS=OFF && cmake --build build -v -j --target uninstall --target install
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
