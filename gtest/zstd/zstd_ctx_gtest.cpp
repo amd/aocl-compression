@@ -2052,7 +2052,7 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
 TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_pass_common_13) //compress MT threads < decompress MT threads
 {
     // Check if system has at least 5 threads
-    int max_threads = omp_get_max_threads();
+    int max_threads = test_omp_max_threads_get();
     if (max_threads < 5) {
         GTEST_SKIP() << "Insufficient threads available. Required: 5, Available: " << max_threads;
     }
@@ -2076,7 +2076,7 @@ TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanc
 TEST_F(ZSTD_ZSTD_compressed_advanced, AOCL_Compression_zstd_ZSTD_compress_advanced_pass_common_14) //compress MT threads > decompress MT threads
 {
     // Check if system has at least 5 threads
-    int max_threads = omp_get_max_threads();
+    int max_threads = test_omp_max_threads_get();
     if (max_threads < 5) {
         GTEST_SKIP() << "Insufficient threads available. Required: 5, Available: " << max_threads;
     }

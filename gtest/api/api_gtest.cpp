@@ -1064,7 +1064,7 @@ AOCL_INT32 Test_aocl_get_rap_frame_bound_mt() {
 *********************************************/
 TEST(API_get_rap_frame_bound_MT, AOCL_Compression_api_aocl_get_rap_frame_bound_mt_common_1) {
     AOCL_UINT32 max_threads = Test_aocl_get_rap_frame_bound_mt();
-    EXPECT_EQ(max_threads, RAP_FRAME_LEN_WITH_DECOMP_LENGTH(omp_get_max_threads(), 0));
+    EXPECT_EQ(max_threads, RAP_FRAME_LEN_WITH_DECOMP_LENGTH(test_omp_max_threads_get(), 0));
 }
 /*********************************************
 * End rap frame bound Tests
@@ -1078,7 +1078,7 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_1
 }
 
 TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_2) {
-    const AOCL_INT32 runtime_max = omp_get_max_threads();
+    const AOCL_INT32 runtime_max = test_omp_max_threads_get();
     EXPECT_EQ(aocl_llc_set_max_threads(1), 0);
     EXPECT_EQ(aocl_llc_set_max_threads(runtime_max), 0);
 }
@@ -1091,7 +1091,7 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_4
     // Each thread should keep and use its own limit, without affecting the other.
 
     // Ask OpenMP how many threads this machine/runtime can provide right now.
-    const AOCL_UINT32 runtime_max_threads = omp_get_max_threads();
+    const AOCL_UINT32 runtime_max_threads = test_omp_max_threads_get();
 
     // Worker 1 always requests a limit of 1 thread.
     const AOCL_INT32 requested_thread_limit_worker_one = 1;
@@ -1175,7 +1175,7 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_5
     // We then verify every thread observes and uses that same limit correctly.
 
     // Use 2 app threads when possible, otherwise 1 (portable on small systems).
-    const AOCL_INT32 application_thread_count = (omp_get_max_threads() >= 2) ? 2 : 1;
+    const AOCL_INT32 application_thread_count = (test_omp_max_threads_get() >= 2) ? 2 : 1;
 
     // Every OpenMP worker requests a max limit of 1.
     const AOCL_INT32 requested_thread_limit = 1;
@@ -1191,11 +1191,11 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_5
     std::vector<AOCL_INT32> partition_stats_result_per_thread(application_thread_count, -1);
     std::vector<AOCL_UINT32> partition_thread_count_per_thread(application_thread_count, 0);
 
-    // Each OpenMP thread performs the same sequence independently.
-#pragma omp parallel num_threads(application_thread_count)
-    {
-        // Unique index of this OpenMP worker inside the parallel block.
-        AOCL_INT32 thread_index = omp_get_thread_num();
+    // Each application thread performs the same sequence independently. Under
+    // OpenMP this runs inside an omp parallel region; otherwise it runs on
+    // std::thread workers (see aocl_test_parallel_run).
+    aocl_test_parallel_run(application_thread_count, [&](AOCL_UINT32 tid) {
+        AOCL_INT32 thread_index = (AOCL_INT32)tid;
 
         // 1) Set thread-local max-thread limit.
         set_max_threads_result_per_thread[thread_index] = aocl_llc_set_max_threads(requested_thread_limit);
@@ -1209,7 +1209,7 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_5
             aocl_set_partition_stats_mt(&partition_thread_group, input_size_bytes, window_length, WINDOW_FACTOR);
         if (partition_stats_result_per_thread[thread_index] == 0)
             partition_thread_count_per_thread[thread_index] = partition_thread_group.num_threads;
-    }
+    });
 
     // Validate outcomes for each OpenMP app thread.
     for (AOCL_INT32 thread_index = 0; thread_index < application_thread_count; ++thread_index)

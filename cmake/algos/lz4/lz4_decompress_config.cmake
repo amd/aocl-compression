@@ -82,7 +82,7 @@ set(AOCL_LZ4_DGV_ADDITIONAL_PARAMS ",int is_last_thread")
 set(AOCL_LZ4_DGV_LONG_MATCH [[if (is_last_thread) {
                     size_t const addl = read_variable_length(&ip, iend - LASTLITERALS + 1, 0);
                     if (addl == rvl_error) { 
-                        LOG_FORMATTED(ERR, logCtx, AOCL_LZ4_DGV_LOG_PREFIX"Encountered variable_length_error while decoding additional match length.", omp_get_thread_num());
+                        AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional match length.");
                         DEBUGLOG(5, "error reading long match length");
                         goto _output_error; 
                     }
@@ -90,7 +90,7 @@ set(AOCL_LZ4_DGV_LONG_MATCH [[if (is_last_thread) {
                 } else {
                     size_t const addl = read_variable_length(&ip, iend + 1, 0);
                     if (addl == rvl_error) {
-                        LOG_FORMATTED(ERR, logCtx, AOCL_LZ4_DGV_LOG_PREFIX"Encountered variable_length_error while decoding additional match length.", omp_get_thread_num());
+                        AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional match length.");
                         DEBUGLOG(5, "error reading long match length");
                         goto _output_error; 
                     }
@@ -98,8 +98,8 @@ set(AOCL_LZ4_DGV_LONG_MATCH [[if (is_last_thread) {
                 }
 ]])
 set(AOCL_LZ4_DGV_LAST_SEQ_CHECK [[if ((is_last_thread && (ip + length != iend)) || (cpy > oend)) {
-                        LOG_FORMATTED(ERR, logCtx, AOCL_LZ4_DGV_LOG_PREFIX" Must be the last (or invalid) sequence because of the parsing limitations. Error, %s.",
-                        omp_get_thread_num(), (is_last_thread && (ip + length != iend)) ? "exact input not consumed" : "output buffer overflow");
+                        AOCL_LZ4_DGV_LOG_FORMATTED(ERR, logCtx, "Must be the last (or invalid) sequence because of the parsing limitations. Error, %s.",
+                        (is_last_thread && (ip + length != iend)) ? "exact input not consumed" : "output buffer overflow");
 ]])
 set(AOCL_LZ4_DGV_EOF_CHECK "(is_last_thread && !partialDecoding) || (cpy == oend) || (is_last_thread && (ip >= (iend - 2)))")
 set(AOCL_LZ4_DGV_COPY_MATCH [[if (is_last_thread) {

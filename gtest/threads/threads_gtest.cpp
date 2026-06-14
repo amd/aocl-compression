@@ -44,6 +44,7 @@
 #include "threads/threads.h"
 #include "api/aocl_compression.h"
 #include "api/types.h"
+#include "gtest_utils.h" // aocl_test_parallel_run (backend-agnostic parallel test harness)
 
 using namespace std;
 
@@ -315,6 +316,7 @@ TEST(API_get_set_max_threads_MT, AOCL_Compression_api_aocl_set_get_max_threads_m
 class API_compress_MT : public ::testing::TestWithParam<ATP_mt> {
 public:
     void SetUp() override {
+        test_omp_max_threads_reset(); // start each test from the real max-thread default (avoids leaking a prior test's cap)
         atp = GetParam();
         const AOCL_UINTP min_sz = 512;
         AOCL_UINTP src_sz = min_sz << atp.src_sz_factor;
@@ -330,6 +332,7 @@ public:
     void TearDown() override {
         destroy();
         delete cpr;
+        test_omp_max_threads_reset(); // don't leak the cap set by run_compress/run_decompress into later tests
     }
 
     void setup() {
@@ -371,14 +374,14 @@ public:
 
     int64_t run_compress(int num_threads_compr)
     {
-        omp_set_num_threads(num_threads_compr);
+        test_omp_max_threads_set(num_threads_compr); // backend-agnostic thread-count control (works for OpenMP and TBB)
         int64_t csize = compress();
         return csize;
     }
 
     int64_t run_decompress(int num_threads_decompr)
     {
-        omp_set_num_threads(num_threads_decompr);
+        test_omp_max_threads_set(num_threads_decompr);
         int64_t dSize = aocl_llc_decompress(&desc, atp.algo);
         return dSize;
     }
@@ -426,7 +429,7 @@ TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_defaultOptOff_com
 TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_greater_than_decompr_thread_count_common) // compr_thread_count > decompr_thread_count
 {
     reset_ACD(&desc, algo_levels[atp.algo].def);
-    int max_threads = omp_get_max_threads();
+    int max_threads = test_omp_max_threads_get();
     int compr_num_threads = max_threads - 1;
     int decompr_num_threads = max_threads - 2;
     run_test_different_threads(compr_num_threads, decompr_num_threads);
@@ -435,7 +438,7 @@ TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_grea
 TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_less_than_decompr_thread_count_common) // compr_thread_count < decompr_thread_count
 {
     reset_ACD(&desc, algo_levels[atp.algo].def);
-    int max_threads = omp_get_max_threads();
+    int max_threads = test_omp_max_threads_get();
     int compr_num_threads = max_threads - 2;
     int decompr_num_threads = max_threads - 1;
     run_test_different_threads(compr_num_threads, decompr_num_threads);
@@ -444,7 +447,7 @@ TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_thread_count_less
 TEST_P(API_compress_MT, AOCL_Compression_api_aocl_llc_compress_and_decompr_thread_count_greater_than_maximum_available_threads_common) // decompr_thread_count > omp_get_max_threads() & compr_thread_count > omp_get_max_threads()
 {
     reset_ACD(&desc, algo_levels[atp.algo].def);
-    int max_threads = omp_get_max_threads();
+    int max_threads = test_omp_max_threads_get();
     int compr_num_threads = max_threads + 1;
     int decompr_num_threads = max_threads + 2;
     run_test_different_threads(compr_num_threads, decompr_num_threads);
@@ -824,11 +827,9 @@ public:
 };
 
 TEST_F(API_do_partition_compress_MT, AOCL_Compression_api_aocl_do_partition_compress_mt_common_1) { // partition the problem
-    aocl_thread_info_t cur_thread_info;
     const AOCL_UINT32 cmpr_bound_pad = 16;
-    #pragma omp parallel private(cur_thread_info) shared(thread_grp) num_threads(thread_grp.num_threads)
-    {
-        AOCL_UINT32 thread_id = omp_get_thread_num();
+    aocl_test_parallel_run(thread_grp.num_threads, [&](AOCL_UINT32 thread_id) {
+        aocl_thread_info_t cur_thread_info;
         EXPECT_EQ(Test_aocl_do_partition_compress_mt(&thread_grp, &cur_thread_info, cmpr_bound_pad, thread_id), 0);
 
         thread_grp.threads_info_list[thread_id].partition_src         = cur_thread_info.partition_src;
@@ -841,7 +842,7 @@ TEST_F(API_do_partition_compress_MT, AOCL_Compression_api_aocl_do_partition_comp
         thread_grp.threads_info_list[thread_id].is_error              = cur_thread_info.is_error;
         thread_grp.threads_info_list[thread_id].thread_id             = cur_thread_info.thread_id;
         thread_grp.threads_info_list[thread_id].next                  = cur_thread_info.next;
-    } // #pragma omp parallel
+    });
 }
 
 /*********************************************
@@ -1138,10 +1139,8 @@ public:
 };
 
 TEST_F(API_do_partition_decompress_MT, AOCL_Compression_api_aocl_do_partition_decompress_mt_common_1) { // partition the problem
-    aocl_thread_info_t cur_thread_info;
-#pragma omp parallel private(cur_thread_info) shared(thread_grp) num_threads(thread_grp.num_threads)
-    {
-        AOCL_UINT32 thread_id = omp_get_thread_num();
+    aocl_test_parallel_run(thread_grp.num_threads, [&](AOCL_UINT32 thread_id) {
+        aocl_thread_info_t cur_thread_info;
         AOCL_MT_PROCESS_PARTITION_START(thread_grp, ti_cur, thread_id)
         EXPECT_EQ(Test_aocl_do_partition_decompress_mt(&thread_grp,
             &cur_thread_info, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur)), 0);
@@ -1157,7 +1156,7 @@ TEST_F(API_do_partition_decompress_MT, AOCL_Compression_api_aocl_do_partition_de
         ti_cur->thread_id             = cur_thread_info.thread_id;
         ti_cur->next                  = cur_thread_info.next;
         AOCL_MT_PROCESS_PARTITION_END(ti_cur)
-    } // #pragma omp parallel
+    });
 }
 
 /*********************************************

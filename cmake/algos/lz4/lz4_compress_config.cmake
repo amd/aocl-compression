@@ -137,14 +137,22 @@ set(AOCL_LZ4_CGV_SET_RETURN_VALUES [[if (last_bytes_len != NULL)
         result = (int)(((char*)dst_without_lastLiterals) - dest);
         *last_anchor_ptr = (BYTE*)anchor; /* src pointer until which compressed output is written : To support ST decompression on parallel compressed stream */
         *last_bytes_len = (size_t)(iend - anchor);/* length of src bytes pending for compression : To support ST decompression on parallel compressed stream */
+#if defined(AOCL_ENABLE_THREADS) && !defined(AOCL_USE_TBB)
         LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : result=%i, last_bytes_len=%i", omp_get_thread_num(), result, (int)(*last_bytes_len));
+#else
+        LOG_FORMATTED(INFO, logCtx, "result=%i, last_bytes_len=%i", result, (int)(*last_bytes_len));
+#endif
     }
     else
     {
         result = (int)(((char*)op) - dest);
         *last_anchor_ptr = (BYTE*)op; /* Write the complete commpressed chunk */
         /* *last_bytes_len = 0;//Last thread needs no joining with the next chunk */
+#if defined(AOCL_ENABLE_THREADS) && !defined(AOCL_USE_TBB)
         LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : result=%i", omp_get_thread_num(), result);
+#else
+        LOG_FORMATTED(INFO, logCtx, "result=%i", result);
+#endif
     }
     assert(result >= 0); /* result=0 when no match found, (all literals). */
 ]])

@@ -35,7 +35,7 @@
 
 
 #ifdef AOCL_LZ4_OPT
-#ifdef AOCL_ENABLE_THREADS
+#if defined(AOCL_ENABLE_THREADS) && !defined(AOCL_USE_TBB)
 #define AOCL_LZ4_DGV_LOG_PREFIX "Thread [id: %d] : "
 #define AOCL_LZ4_DGV_LOG_UNFORMATTED(logType, logCtx, str) \
         LOG_FORMATTED(logType, logCtx, AOCL_LZ4_DGV_LOG_PREFIX str, omp_get_thread_num())

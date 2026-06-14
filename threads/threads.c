@@ -44,11 +44,24 @@
 #include "utils/utils.h"
 
 #ifdef AOCL_UNIT_TEST
-int(*test_omp_get_max_threads_fp)(void) = omp_get_max_threads;
+static int aocl_get_max_threads_int(void) { return (int)aocl_get_max_threads(); }
+int(*test_omp_get_max_threads_fp)(void) = aocl_get_max_threads_int;
 #endif
 
+/* The user-set max-thread cap is per application thread: two threads must be
+ * able to hold independent caps (see api_gtest set_max_threads_common_4/5).
+ * Under OpenMP this is expressed with threadprivate; under any other backend
+ * (e.g. TBB, where _OPENMP is not defined) we fall back to a thread-local
+ * storage qualifier so the same per-thread semantics hold. Without this, the
+ * cap would become a shared global and concurrent setters would race. */
+#if defined(_OPENMP)
 static AOCL_INT32 aocl_user_max_threads_mt = 0;
 #pragma omp threadprivate(aocl_user_max_threads_mt)
+#elif defined(_MSC_VER)
+static __declspec(thread) AOCL_INT32 aocl_user_max_threads_mt = 0;
+#else
+static __thread AOCL_INT32 aocl_user_max_threads_mt = 0;
+#endif
 
 AOCL_INT32 aocl_set_max_threads_mt(AOCL_INT32 max_threads)
 {
@@ -65,7 +78,7 @@ AOCL_INT32 aocl_set_max_threads_mt(AOCL_INT32 max_threads)
 AOCL_UINT32 aocl_get_max_threads_mt(void)
 {
 #ifndef AOCL_UNIT_TEST
-    AOCL_UINT32 max_threads = omp_get_max_threads();
+    AOCL_UINT32 max_threads = aocl_get_max_threads();
 #else
     AOCL_UINT32 max_threads = test_omp_max_threads_get();
 #endif
@@ -152,8 +165,8 @@ AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t *thread_grp,
 #ifdef AOCL_THREADS_LOG
     printf("Input stream size: [%td], common_part_src_size: [%ld], leftover_part_src_bytes: [%ld]\n",
         thread_grp->src_size, thread_grp->common_part_src_size, thread_grp->leftover_part_src_bytes);
-    printf("Number of max threads: [%d], Number of threads set for execution: [%d]\n",
-        omp_get_max_threads(), thread_grp->num_threads);
+    printf("Number of max threads: [%u], Number of threads set for execution: [%d]\n",
+        aocl_get_max_threads(), thread_grp->num_threads);
 #endif
 
     AOCL_INT32 rap_frame_len = 0;
@@ -587,7 +600,7 @@ AOCL_INT32 aocl_set_partition_stats_mt(aocl_thread_group_t *thread_grp,
 #ifdef AOCL_UNIT_TEST
 /* Functions to override omp_get_max_threads() for unit testing */
 static int test_omp_max_threads = 1;
-#ifndef AOCL_ENABLE_THREADS
+#if !defined(AOCL_ENABLE_THREADS) || defined(AOCL_USE_TBB)
 static atomic_flag setup_test_omp_max_threads = ATOMIC_FLAG_INIT;
 #endif
 int omp_get_max_threads_manual(void) 
@@ -597,7 +610,7 @@ int omp_get_max_threads_manual(void)
 
 int test_omp_max_threads_set(int max_threads) 
 {
-    int max_limit = omp_get_max_threads();
+    int max_limit = (int)aocl_get_max_threads();
     if (max_threads > max_limit) 
     {
         return 0;
@@ -625,7 +638,7 @@ void test_omp_max_threads_reset(void)
 {
     AOCL_ENTER_CRITICAL(setup_test_omp_max_threads)
     test_omp_max_threads = 1;
-    test_omp_get_max_threads_fp = omp_get_max_threads;
+    test_omp_get_max_threads_fp = aocl_get_max_threads_int;
     AOCL_EXIT_CRITICAL(setup_test_omp_max_threads)
 }
 #endif

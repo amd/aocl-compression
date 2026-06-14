@@ -510,7 +510,7 @@ class BZIP2_API
     {
         int ret = BZ2_bzBuffToBuffCompress(dest, destLen, source, sourceLen, blockSize100k, verbosity, workFactor);
     #ifdef AOCL_ENABLE_THREADS
-        if(ret == 0 && omp_get_max_threads() > 1)
+        if(ret == 0 && test_omp_max_threads_get() > 1)
         {
             if(2*(blockSize100k * (100000 - 19)) <= sourceLen)
                 EXPECT_EQ(get_empty_bits((unsigned char *)dest+(*destLen)), 0);

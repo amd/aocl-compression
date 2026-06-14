@@ -98,7 +98,12 @@ AOCL_INTP get_disable_opt_flags(int printDebugLogs)
 using namespace std;
 
 unordered_map<string, size_t> unit_test_log_counter;
-#ifndef AOCL_ENABLE_THREADS
+/* AOCL_ENTER/EXIT_CRITICAL falls back to the atomic_flag implementation for
+ * both the single-threaded build and the TBB backend (only the OpenMP backend
+ * uses '#pragma omp critical', which does not reference this flag). Declare the
+ * flag whenever that atomic path is in effect, matching the guard used by the
+ * per-codec setup flags. */
+#if !defined(AOCL_ENABLE_THREADS) || defined(AOCL_USE_TBB)
 static atomic_flag unit_test_log_counter_update = ATOMIC_FLAG_INIT;
 #endif
 

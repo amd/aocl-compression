@@ -86,7 +86,15 @@ option (AOCL_LZ4_NEW_PRIME_NUMBER "Enable the usage of a new prime number for LZ
 option (AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES "Enable storing of additional potential matches to improve compression ratio. Recommended for higher compressibility use cases (Disabled by default)" OFF)
 option (AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL "Build with xz utils lzma APIs. Experimental feature with limited API support (Disabled by default)" OFF)
 option (AOCL_ENABLE_LOG_FEATURE "Enable logging support in library, for which log level is determined by environement variable AOCL_ENABLE_LOG (go through README.md) (Disabled by default)" OFF)
-option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression using SMP openMP threads (Disabled by default)" OFF)
+option (AOCL_ENABLE_THREADS "Enable multi-threaded compression and decompression (Disabled by default)" OFF)
+set(AOCL_THREADING_BACKEND "OPENMP" CACHE STRING "Threading backend: OPENMP or TBB (OPENMP by default)")
+set_property(CACHE AOCL_THREADING_BACKEND PROPERTY STRINGS "OPENMP" "TBB")
+if(AOCL_ENABLE_THREADS)
+    string(TOUPPER "${AOCL_THREADING_BACKEND}" AOCL_THREADING_BACKEND)
+    if(NOT AOCL_THREADING_BACKEND STREQUAL "OPENMP" AND NOT AOCL_THREADING_BACKEND STREQUAL "TBB")
+        message(FATAL_ERROR "Invalid AOCL_THREADING_BACKEND='${AOCL_THREADING_BACKEND}'. Use OPENMP or TBB.")
+    endif()
+endif()
 option (TEST_COVERAGE_THIRD_PARTY "Enable third party test bench based CTest suite (Disabled by default)" OFF)
 option (BUILD_UTILITY "Enable third party utility build: minigzip(zlib), zstd_utility(zstd) (Disabled by default)" OFF)
 option (NATIVE_ENABLE_THREADS "Enable native multi-threaded compression for supported methods (Disabled by default)" OFF)
@@ -461,7 +469,13 @@ endif()
 if (AOCL_ENABLE_THREADS)
     set (THREADS_SRC_FILES threads/code_alignment.c
                            threads/threads.c
-                           threads/threads.h)
+                           threads/threads.h
+                           threads/aocl_threading.h)
+    if(AOCL_THREADING_BACKEND STREQUAL "TBB")
+        set (THREADS_SRC_FILES ${THREADS_SRC_FILES} threads/aocl_threading_tbb.cpp)
+    else()
+        set (THREADS_SRC_FILES ${THREADS_SRC_FILES} threads/aocl_threading.c)
+    endif()
     if (NOT AOCL_EXCLUDE_BZIP2)
         set(BZIP2_SRC_FILES ${BZIP2_SRC_FILES}  ${ALGOS_PATH}/bzip2/aocl_bzip2_mt_helper.c 
                                                 ${ALGOS_PATH}/bzip2/aocl_bzip2_mt_helper.h)
@@ -558,12 +572,19 @@ message(STATUS "C Compiler used: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ Compiler used: ${CMAKE_CXX_COMPILER}")
 set_source_files_properties(${ZLIB_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1")
 
-if(AOCL_ENABLE_THREADS) # OpenMP dependency for MT feature support
-    if(WIN32 OR NOT OpenMP_libomp_LIBRARY)
-        find_package(OpenMP REQUIRED)
+if(AOCL_ENABLE_THREADS)
+    if(AOCL_THREADING_BACKEND STREQUAL "TBB")
+        find_package(TBB REQUIRED)
+        message(STATUS "Threading backend: TBB (oneTBB)")
     else()
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+        # OpenMP dependency for MT feature support
+        if(WIN32 OR NOT OpenMP_libomp_LIBRARY)
+            find_package(OpenMP REQUIRED)
+        else()
+            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+        endif()
+        message(STATUS "Threading backend: OpenMP")
     endif()
 endif()
 
@@ -762,6 +783,9 @@ endif()
 
 if (AOCL_ENABLE_THREADS)
     set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
+    if(AOCL_THREADING_BACKEND STREQUAL "TBB")
+        set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_USE_TBB")
+    endif()
 endif()
 
 if (AOCL_LLC_PREFIX)
@@ -886,11 +910,25 @@ target_include_directories(${lib_name}
                             PRIVATE ${ALGOS_PATH}/common
                             PRIVATE api)
 if (AOCL_ENABLE_THREADS)
-    if (OPENMP_FOUND AND (WIN32 OR NOT OpenMP_libomp_LIBRARY))
-        target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+    # Propagate the backend selection macros to anything that links the library
+    # (gtests, bench, other consumers) so they compile the public headers
+    # (threads.h, utils.h) with backend macros that match how the library was
+    # built. Without this, a TBB-backed library would still expose OpenMP-only
+    # header paths (e.g. threads.h pulling in <omp.h>) to its consumers.
+    # The library's own sources receive these via per-source COMPILE_OPTIONS
+    # above (which also covers the unified/object-library build), so these are
+    # INTERFACE (consumer-only) to avoid redundant defines on the library sources.
+    target_compile_definitions(${lib_name} INTERFACE AOCL_ENABLE_THREADS)
+    if(AOCL_THREADING_BACKEND STREQUAL "TBB")
+        target_compile_definitions(${lib_name} INTERFACE AOCL_USE_TBB)
+        target_link_libraries(${lib_name} PUBLIC TBB::tbb)
     else()
-        target_link_libraries(${lib_name} PUBLIC ${OpenMP_libomp_LIBRARY})
-    endif ()
+        if (OPENMP_FOUND AND (WIN32 OR NOT OpenMP_libomp_LIBRARY))
+            target_link_libraries (${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+        else()
+            target_link_libraries(${lib_name} PUBLIC ${OpenMP_libomp_LIBRARY})
+        endif ()
+    endif()
 endif()
 
 # Link pthread library for native multi-threading 

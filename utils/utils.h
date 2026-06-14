@@ -82,7 +82,7 @@ typedef struct timespec timeVal;
 
 /* Place content that needs to run within a critical section
  * between AOCL_ENTER_CRITICAL() and AOCL_EXIT_CRITICAL() calls */
-#ifdef AOCL_ENABLE_THREADS
+#if defined(AOCL_ENABLE_THREADS) && !defined(AOCL_USE_TBB)
 #define AOCL_BUILD_PRAGMA(x) _Pragma (#x)
 #define AOCL_ENTER_CRITICAL(func) AOCL_BUILD_PRAGMA(omp critical (func)) {
 #define AOCL_EXIT_CRITICAL(func) }
@@ -104,7 +104,7 @@ static atomic_flag setup_logs __attribute__((unused)) = ATOMIC_FLAG_INIT;
         _mm_pause();                                                                    \
     }
 #define AOCL_EXIT_CRITICAL(flag) atomic_flag_clear(&flag);
-#endif /* AOCL_ENABLE_THREADS */
+#endif /* AOCL_ENABLE_THREADS && !AOCL_USE_TBB */
 
 #include <string.h>
 #include <stdio.h>

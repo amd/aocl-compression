@@ -794,6 +794,27 @@ unsigned LZ4_count(const BYTE* pIn, const BYTE* pMatch, const BYTE* pInLimit)
 }
  
 #ifdef AOCL_ENABLE_THREADS_LZ4
+typedef struct {
+    aocl_thread_group_t *thread_group_handle;
+    BYTE **threads_cmpr_offset;
+    size_t *cmpr_dest_offset;
+} AOCL_LZ4_postproc_memcpy_ctx_t;
+
+static void AOCL_LZ4_postproc_memcpy_worker(AOCL_UINT32 thread_id, void *context)
+{
+    AOCL_LZ4_postproc_memcpy_ctx_t *ctx = (AOCL_LZ4_postproc_memcpy_ctx_t *)context;
+    aocl_thread_group_t *thread_group_handle = ctx->thread_group_handle;
+    aocl_thread_info_t thread_info = thread_group_handle->threads_info_list[thread_id];
+    if(thread_info.additional_state_info != NULL && thread_id != thread_group_handle->num_threads-1)
+    {
+        memcpy(thread_info.partition_src, thread_info.additional_state_info, thread_info.last_bytes_len);
+    }
+    if(ctx->threads_cmpr_offset[thread_id] != NULL)
+    {
+        memcpy(ctx->threads_cmpr_offset[thread_id], thread_info.dst_trap + ctx->cmpr_dest_offset[thread_id], thread_info.dst_trap_size);
+    }
+}
+
 /**
  * AOCL_LZ4_postProcessing_mt(): Post processing in multi-threaded mode.
  * Prepares RAP frame and joins the last sequences of the neighboring threads.
@@ -937,22 +958,18 @@ int AOCL_LZ4_postProcessing_mt(aocl_thread_group_t *thread_group_handle, int rap
         curr_thrd_cmprdata_offset += curr_thrd_cmprdata_len;
     }
 
-    aocl_thread_info_t thread_info;
-    // MT data copying
-    #pragma omp parallel private(thread_info) shared(thread_group_handle, threads_cmpr_offset, cmpr_dest_offset) num_threads(thread_group_handle->num_threads)
+    AOCL_LZ4_postproc_memcpy_ctx_t memcpy_ctx;
+    memcpy_ctx.thread_group_handle = thread_group_handle;
+    memcpy_ctx.threads_cmpr_offset = threads_cmpr_offset;
+    memcpy_ctx.cmpr_dest_offset = cmpr_dest_offset;
+    /* Copy-out has no per-partition status: a swallowed backend exception must
+     * fail (return 0), not return a truncated size as success. */
+    if (aocl_parallel_for(thread_group_handle->num_threads, AOCL_LZ4_postproc_memcpy_worker, &memcpy_ctx) != 0)
     {
-        AOCL_UINT32 thread_id = omp_get_thread_num();
-        thread_info = thread_group_handle->threads_info_list[thread_id];
-        // copy additional_state_info (literal bytes) to next thread compressed sequence
-        if(thread_info.additional_state_info != NULL && thread_id != thread_group_handle->num_threads-1)
-        {
-            memcpy(thread_info.partition_src, thread_info.additional_state_info, thread_info.last_bytes_len);
-        }
-        // copy current thread compressed bytes to threads_cmpr_offset (offset in final buffer)
-        if(threads_cmpr_offset[thread_id] != NULL)
-        {
-            memcpy(threads_cmpr_offset[thread_id], thread_info.dst_trap + cmpr_dest_offset[thread_id], thread_info.dst_trap_size);
-        }
+        LOG_UNFORMATTED(ERR, logCtx, "Multi-threaded compress copy-out failed");
+        free(threads_cmpr_offset);
+        free(cmpr_dest_offset);
+        return 0;
     }
 
     result = thread_group_handle->dst - dest;
@@ -971,7 +988,7 @@ int AOCL_LZ4_postProcessing_mt(aocl_thread_group_t *thread_group_handle, int rap
 /* `setup_ok_lz4` placed inside #ifndef LZ4_COMMONDEFS_ONLY to avoid
  warnings related to unused variable. */
 static int setup_ok_lz4 = 0; // flag to indicate status of dynamic dispatcher setup
-#ifndef AOCL_ENABLE_THREADS
+#if !defined(AOCL_ENABLE_THREADS) || defined(AOCL_USE_TBB)
 static atomic_flag setup_lz4 = ATOMIC_FLAG_INIT;
 #endif
 
@@ -3211,12 +3228,20 @@ LZ4_FORCE_INLINE int AOCL_LZ4_compress_generic_mt(
         srcSize, dstCapacity);
 
     if ((U32)srcSize > (U32)LZ4_MAX_INPUT_SIZE) {
-        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : Unsupported srcSize, too large or negative", omp_get_thread_num()); 
+#ifndef AOCL_USE_TBB
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : Unsupported srcSize, too large or negative", omp_get_thread_num());
+#else
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : Unsupported srcSize, too large or negative", 0);
+#endif
         return 0; 
     }  /* Unsupported srcSize, too large (or negative) */
     if (srcSize == 0) {   /* src == NULL supported if srcSize == 0 */
         if (outputDirective != notLimited && dstCapacity <= 0) return 0;  /* no output, can't write anything */
+#ifndef AOCL_USE_TBB
         LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : Generating an empty block", omp_get_thread_num());
+#else
+        LOG_FORMATTED(INFO, logCtx, "Thread [id: %d] : Generating an empty block", 0);
+#endif
         DEBUGLOG(5, "Generating an empty block");
         assert(outputDirective == notLimited || dstCapacity >= 1);
         assert(dst != NULL);
@@ -3461,6 +3486,65 @@ int LZ4_compress_fast_ST(const char* src, char* dest, int srcSize, int dstCapaci
     return result;
 }
 
+typedef struct {
+    aocl_thread_group_t *thread_group_handle;
+    int acceleration;
+    AOCL_INT32 rap_metadata_len;
+} AOCL_LZ4_compress_fast_mt_ctx_t;
+
+static void AOCL_LZ4_compress_fast_mt_worker(AOCL_UINT32 thread_id, void *context)
+{
+    AOCL_LZ4_compress_fast_mt_ctx_t *ctx = (AOCL_LZ4_compress_fast_mt_ctx_t *)context;
+    aocl_thread_group_t *thread_group_handle = ctx->thread_group_handle;
+#ifdef AOCL_THREADS_LOG
+    printf("Compress Thread [id: %d] : Inside parallel region\n", thread_id);
+#endif
+    aocl_thread_info_t cur_thread_info;
+    AOCL_UCHAR *last_anchor_ptr = NULL;
+    AOCL_UINT32 cmpr_bound_pad = ((thread_group_handle->common_part_src_size +
+                                thread_group_handle->leftover_part_src_bytes) / 255) +
+                                16 + ctx->rap_metadata_len;
+    AOCL_UINT32 is_error = 1;
+    AOCL_INT32 local_result = -1;
+    AOCL_UINT32 last_bytes_len = 0;
+
+    if (aocl_do_partition_compress_mt(thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
+    {
+
+#if (LZ4_HEAPMODE)
+        LZ4_stream_t* const ctxPtr = (LZ4_stream_t*)ALLOC(sizeof(LZ4_stream_t));   /* malloc-calloc always properly aligned */
+        if (ctxPtr == NULL) is_error = 1;
+        else
+#else
+        LZ4_stream_t stream_ctx;
+        LZ4_stream_t* const ctxPtr = &stream_ctx;
+#endif
+        {
+            local_result = AOCL_LZ4_compress_fast_extState_mt(ctxPtr,
+                cur_thread_info.partition_src, cur_thread_info.dst_trap,
+                cur_thread_info.partition_src_size,
+                cur_thread_info.dst_trap_size, ctx->acceleration,
+                &last_anchor_ptr, (thread_id != (thread_group_handle->num_threads - 1)) ? &last_bytes_len : NULL);
+#if (LZ4_HEAPMODE)
+            FREEMEM(ctxPtr);
+#endif
+            if (local_result == 0)
+                is_error = (last_anchor_ptr == NULL);
+            else
+                is_error = 0;
+        }
+    }
+
+    thread_group_handle->threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
+    thread_group_handle->threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
+    thread_group_handle->threads_info_list[thread_id].additional_state_info = (AOCL_VOID *)last_anchor_ptr;
+    thread_group_handle->threads_info_list[thread_id].dst_trap_size = local_result;
+    thread_group_handle->threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
+    thread_group_handle->threads_info_list[thread_id].last_bytes_len = last_bytes_len;
+    thread_group_handle->threads_info_list[thread_id].is_error = is_error;
+    thread_group_handle->threads_info_list[thread_id].num_child_threads = 0;
+}
+
 int AOCL_LZ4_compress_fast_mt(const char* src, char* dest, int srcSize, int dstCapacity, int acceleration){
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if ((src == NULL && srcSize != 0) || dest == NULL) {
@@ -3479,7 +3563,6 @@ int AOCL_LZ4_compress_fast_mt(const char* src, char* dest, int srcSize, int dstC
     
     int result;
     aocl_thread_group_t thread_group_handle;
-    aocl_thread_info_t cur_thread_info;
     AOCL_INT32 rap_metadata_len = -1;
     
     rap_metadata_len = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)src,
@@ -3500,65 +3583,20 @@ int AOCL_LZ4_compress_fast_mt(const char* src, char* dest, int srcSize, int dstC
     else
     {
 #ifdef AOCL_THREADS_LOG
+#ifndef AOCL_USE_TBB
         printf("Compress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
 #endif
+#endif
         LOG_FORMATTED(INFO, logCtx, "Running multi threaded compress on %u threads", thread_group_handle.num_threads);
-#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
-        {
+        AOCL_LZ4_compress_fast_mt_ctx_t compress_mt_ctx;
+        compress_mt_ctx.thread_group_handle = &thread_group_handle;
+        compress_mt_ctx.acceleration = acceleration;
+        compress_mt_ctx.rap_metadata_len = rap_metadata_len;
+        aocl_parallel_for(thread_group_handle.num_threads, AOCL_LZ4_compress_fast_mt_worker, &compress_mt_ctx);
 #ifdef AOCL_THREADS_LOG
-            printf("Compress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
-#endif
-            AOCL_UCHAR *last_anchor_ptr = NULL;
-            AOCL_UINT32 cmpr_bound_pad = ((thread_group_handle.common_part_src_size + 
-                                        thread_group_handle.leftover_part_src_bytes) / 255) + 
-                                        16 + rap_metadata_len;
-            AOCL_UINT32 is_error = 1;
-            AOCL_UINT32 thread_id = omp_get_thread_num();
-            AOCL_INT32 local_result = -1;
-            AOCL_UINT32 last_bytes_len = 0;
-
-            if (aocl_do_partition_compress_mt(&thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
-            {
-
-#if (LZ4_HEAPMODE)
-                LZ4_stream_t* const ctxPtr = (LZ4_stream_t*)ALLOC(sizeof(LZ4_stream_t));   /* malloc-calloc always properly aligned */
-                if (ctxPtr == NULL) is_error = 1;
-                else
-#else
-                LZ4_stream_t ctx;
-                LZ4_stream_t* const ctxPtr = &ctx;
-#endif
-                {
-                    local_result = AOCL_LZ4_compress_fast_extState_mt(ctxPtr,
-                        cur_thread_info.partition_src, cur_thread_info.dst_trap,
-                        cur_thread_info.partition_src_size, 
-                        cur_thread_info.dst_trap_size, acceleration, 
-                        &last_anchor_ptr, (thread_id != (thread_group_handle.num_threads - 1)) ? &last_bytes_len : NULL);
-#if (LZ4_HEAPMODE)
-                    FREEMEM(ctxPtr);
-#endif
-                    if (local_result == 0)
-                        is_error = (last_anchor_ptr == NULL);
-                    else
-                        is_error = 0;
-                }
-            }//aocl_do_partition_compress_mt
-            
-            thread_group_handle.threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
-            thread_group_handle.threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
-            thread_group_handle.threads_info_list[thread_id].additional_state_info = (AOCL_VOID *)last_anchor_ptr;
-            thread_group_handle.threads_info_list[thread_id].dst_trap_size = local_result;
-            thread_group_handle.threads_info_list[thread_id].partition_src_size = cur_thread_info.partition_src_size;
-            thread_group_handle.threads_info_list[thread_id].last_bytes_len = last_bytes_len;
-            thread_group_handle.threads_info_list[thread_id].is_error = is_error;
-            thread_group_handle.threads_info_list[thread_id].num_child_threads = 0;
-#ifdef AOCL_THREADS_LOG
-            //printf("Compress Thread [id: %d] : Compression output length [%d], original source length [%d]\n",
-            //                                                  omp_get_thread_num(), local_result, srcSize);
-#endif
-        }//#pragma omp parallel
-#ifdef AOCL_THREADS_LOG
+#ifndef AOCL_USE_TBB
         printf("Compress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
+#endif
 #endif
 
         result = AOCL_LZ4_postProcessing_mt(&thread_group_handle, rap_metadata_len, dest);
@@ -3703,6 +3741,59 @@ int LZ4_decompress_safe_ST(const char* source, char* dest, int compressedSize, i
     return LZ4_decompress_wrapper_fp(source, dest, compressedSize, maxDecompressedSize);
 }
 
+typedef struct {
+    aocl_thread_group_t *thread_group_handle;
+} AOCL_LZ4_decompress_safe_mt_ctx_t;
+
+static void AOCL_LZ4_decompress_safe_mt_worker(AOCL_UINT32 thread_id, void *context)
+{
+    AOCL_LZ4_decompress_safe_mt_ctx_t *ctx = (AOCL_LZ4_decompress_safe_mt_ctx_t *)context;
+    aocl_thread_group_t *thread_group_handle = ctx->thread_group_handle;
+#ifdef AOCL_THREADS_LOG
+    printf("Decompress Thread [id: %d] : Inside parallel region\n", thread_id);
+#endif
+    aocl_thread_info_t cur_thread_info;
+    AOCL_UINT32 is_error = 1;
+    AOCL_INT32 local_result = -1;
+    AOCL_INT32 thread_parallel_res = 0;
+
+    AOCL_MT_PROCESS_PARTITION_START((*thread_group_handle), ti_cur, thread_id)
+    thread_parallel_res = aocl_do_partition_decompress_mt(thread_group_handle,
+        &cur_thread_info, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur));
+    if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_SUCCESS)
+    {
+        local_result = AOCL_LZ4_decompress_generic_mt(cur_thread_info.partition_src, cur_thread_info.dst_trap,
+            cur_thread_info.partition_src_size, cur_thread_info.dst_trap_size,
+            decode_full_block, noDict,
+            (BYTE*)cur_thread_info.dst_trap, NULL, 0,
+            AOCL_MT_IS_LAST_PARTITION((*thread_group_handle), ti_cur, thread_id) ? 1 : 0);
+
+        if (local_result < 0)
+            is_error = 1;
+        else
+            is_error = 0;
+    }
+    else if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_EMPTY_SRC)
+    {
+        local_result = 0;
+        is_error = 0;
+    }
+    else
+    {
+        is_error = 2;
+    }
+
+    ti_cur->partition_src = cur_thread_info.partition_src;
+    ti_cur->dst_trap = cur_thread_info.dst_trap;
+    ti_cur->additional_state_info = NULL;
+    ti_cur->dst_trap_size = local_result;
+    ti_cur->partition_src_size = cur_thread_info.partition_src_size;
+    ti_cur->last_bytes_len = 0;
+    ti_cur->is_error = is_error;
+    ti_cur->num_child_threads = 0;
+    AOCL_MT_PROCESS_PARTITION_END(ti_cur)
+}
+
 int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSize, int maxDecompressedSize){
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     if (source == NULL || dest == NULL)
@@ -3714,7 +3805,6 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
     
     int result;
     aocl_thread_group_t thread_group_handle;
-    aocl_thread_info_t cur_thread_info;
     AOCL_INT32 ret_status = -1;
     AOCL_INT32 use_ST_decompressor = 0;
 
@@ -3737,58 +3827,18 @@ int AOCL_LZ4_decompress_safe_mt(const char* source, char* dest, int compressedSi
     else
     {
 #ifdef AOCL_THREADS_LOG
+#ifndef AOCL_USE_TBB
         printf("Decompress Thread [id: %d] : Before parallel region\n", omp_get_thread_num());
 #endif
-        LOG_FORMATTED(INFO, logCtx, "Running multi threaded decompress on %u threads", thread_group_handle.num_threads);
-#pragma omp parallel private(cur_thread_info) shared(thread_group_handle) num_threads(thread_group_handle.num_threads)
-        {
-#ifdef AOCL_THREADS_LOG
-            printf("Decompress Thread [id: %d] : Inside parallel region\n", omp_get_thread_num());
 #endif
-            AOCL_UINT32 is_error = 1;
-            AOCL_UINT32 thread_id = omp_get_thread_num();
-            AOCL_INT32 local_result = -1;
-            AOCL_INT32 thread_parallel_res = 0;
-
-            AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
-            thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, 
-                &cur_thread_info, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur));
-            if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_SUCCESS)
-            {
-                local_result = AOCL_LZ4_decompress_generic_mt(cur_thread_info.partition_src, cur_thread_info.dst_trap, 
-                    cur_thread_info.partition_src_size, cur_thread_info.dst_trap_size,
-                    decode_full_block, noDict,
-                    (BYTE*)cur_thread_info.dst_trap, NULL, 0,
-                    AOCL_MT_IS_LAST_PARTITION(thread_group_handle, ti_cur, thread_id) ? 1 : 0);
-
-                if (local_result < 0)
-                    is_error = 1;
-                else
-                    is_error = 0;
-            }//aocl_do_partition_decompress_mt
-            else if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_EMPTY_SRC)
-            {
-                local_result = 0;
-                is_error = 0;
-            }
-            else // thread_parallel_res == AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE
-            {
-                is_error = 2;
-            }
-
-            ti_cur->partition_src = cur_thread_info.partition_src;
-            ti_cur->dst_trap = cur_thread_info.dst_trap;
-            ti_cur->additional_state_info = NULL;
-            ti_cur->dst_trap_size = local_result;
-            ti_cur->partition_src_size = cur_thread_info.partition_src_size;
-            ti_cur->last_bytes_len = 0;
-            ti_cur->is_error = is_error;
-            ti_cur->num_child_threads = 0;
-            AOCL_MT_PROCESS_PARTITION_END(ti_cur)
-
-        }//#pragma omp parallel
+        LOG_FORMATTED(INFO, logCtx, "Running multi threaded decompress on %u threads", thread_group_handle.num_threads);
+        AOCL_LZ4_decompress_safe_mt_ctx_t decompress_mt_ctx;
+        decompress_mt_ctx.thread_group_handle = &thread_group_handle;
+        aocl_parallel_for(thread_group_handle.num_threads, AOCL_LZ4_decompress_safe_mt_worker, &decompress_mt_ctx);
 #ifdef AOCL_THREADS_LOG
+#ifndef AOCL_USE_TBB
         printf("Decompress Thread [id: %d] : After parallel region\n", omp_get_thread_num());
+#endif
 #endif
 
         /* Post processing: 

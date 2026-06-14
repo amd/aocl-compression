@@ -46,6 +46,43 @@
 
 using namespace std;
 
+#ifdef AOCL_ENABLE_THREADS
+#include <thread>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+/* Backend-agnostic parallel test harness.
+ *
+ * Runs body(thread_id) on `num_threads` threads, each with a unique id in
+ * [0, num_threads). Under OpenMP it uses an `omp parallel` region so the
+ * OpenMP build keeps coverage of the library being driven from within an
+ * OpenMP team; for any other library backend (e.g. TBB, where the test binary
+ * is built without OpenMP) it falls back to std::thread. This keeps the gtest
+ * suite free of a hard OpenMP dependency while preserving OpenMP-region
+ * coverage where OpenMP is present.
+ *
+ * Note: use only EXPECT_* (non-fatal) assertions inside body(); ASSERT_*
+ * (fatal) from a non-main thread does not terminate the test correctly. */
+template <typename Fn>
+static inline void aocl_test_parallel_run(int num_threads, Fn body) {
+    if (num_threads <= 0)
+        return;
+#ifdef _OPENMP
+    #pragma omp parallel num_threads(num_threads)
+    {
+        body((unsigned)omp_get_thread_num());
+    }
+#else
+    std::vector<std::thread> workers;
+    workers.reserve((size_t)num_threads);
+    for (int i = 0; i < num_threads; ++i)
+        workers.emplace_back([&body, i]() { body((unsigned)i); });
+    for (std::thread &w : workers)
+        w.join();
+#endif
+}
+#endif /* AOCL_ENABLE_THREADS */
+
 // Struct for generating input parameters for parameterized tests which change the optimization level(code path) dynamically.
 typedef struct
 {

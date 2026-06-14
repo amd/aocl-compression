@@ -1346,7 +1346,7 @@ TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pas
 TEST_F(ZSTD_ZSTD_compressStream2, AOCL_Compression_zstd_ZSTD_compressStream2_pass_common_27) //reference multi-threaded
 {
     TestLoad_2 d((512 * 1024) + 1); //ZSTDMT_JOBSIZE_MIN + 1 : minimum size for reference multi-threading to get activated
-    int max_threads = omp_get_max_threads();
+    int max_threads = test_omp_max_threads_get();
     set_num_ref_threads(max_threads);
     size_t outLen = compress_end(d.getOrigData(), d.getOrigSize(), d.getCompressedBuff(), d.getCompressedSize());
     CHECK_PASS_ZSTD(outLen);

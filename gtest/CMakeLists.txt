@@ -169,9 +169,9 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             if (AOCL_DYNAMIC_DISPATCHER)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
             endif()
-            if (AOCL_ENABLE_THREADS)
-	            set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_THREADS")
-            endif()
+            # AOCL_ENABLE_THREADS (and AOCL_USE_TBB for TBB builds) are inherited
+            # from ${lib_name}'s INTERFACE compile definitions when linked below,
+            # so they need not be set per-source here.
             if (AOCL_DECOMPRESS_FAST)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DECOMPRESS_FAST=${AOCL_DECOMPRESS_FAST}")
             endif()
