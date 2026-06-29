@@ -2568,7 +2568,7 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)(char *dest,
       int local_result = 0;
       AOCL_UINT32 thread_id = omp_get_thread_num();
       AOCL_INT32 thread_parallel_res = 0;
-      Int32 dst_offset = 0;
+      AOCL_UINTP dst_offset = 0;
       mt_data_list * mt_head_node = &mt_head_table[thread_id];
 
       AOCL_MT_PROCESS_PARTITION_START(thread_group_handle, ti_cur, thread_id)
@@ -2576,11 +2576,11 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)(char *dest,
       Int32 current_thread_id = AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur);
       state = current_thread_id ? BZ_X_BLKHDR_1 : BZ_X_MAGIC_1;
       thread_parallel_res = aocl_do_partition_decompress_mt(&thread_group_handle, &cur_thread_info, current_thread_id);
-      dst_offset = cur_thread_info.dst_trap - thread_group_handle.dst;
-      
+
       // If partition setup was successful
       if (thread_parallel_res == 0)
       {
+         dst_offset = cur_thread_info.dst_trap - thread_group_handle.dst;
          unsigned int dst_len = cur_thread_info.dst_trap_size;
          local_result = BZ2_bzBuffToBuffDecompress_internal(cur_thread_info.dst_trap, &dst_len,
                                                                   cur_thread_info.partition_src,
@@ -2591,24 +2591,33 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)(char *dest,
       } // aocl_do_partition_decompress_mt
       else
       {
-         local_result = thread_parallel_res;
+         local_result = (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE)
+             ? BZ_OUTBUFF_FULL : BZ_DATA_ERROR;
       }
 
       ti_cur->dst_trap = cur_thread_info.dst_trap;
       ti_cur->is_error = -1 * local_result;
 
       // Copy the decompressed data to the final destination buffer
-      if(dst_offset + cur_thread_info.dst_trap_size <= thread_group_handle.dst_size)
-         memcpy(dest + dst_offset, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+      if (thread_parallel_res == 0)
+      {
+         if(dst_offset <= thread_group_handle.dst_size &&
+            cur_thread_info.dst_trap_size <= thread_group_handle.dst_size - dst_offset)
+            memcpy(dest + dst_offset, cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
+         else
+         {
+            ti_cur->is_error = -1 * BZ_OUTBUFF_FULL;
+            break;
+         }
+
+         // If this is the last thread, update the total decompressed length
+         if(thread_id == thread_group_handle.num_threads-1)
+            *destLen = (unsigned int)(dst_offset + cur_thread_info.dst_trap_size);
+      }
       else
       {
-         ti_cur->is_error = -1 * BZ_OUTBUFF_FULL;
          break;
       }
-   
-      // If this is the last thread, update the total decompressed length
-      if(thread_id == thread_group_handle.num_threads-1)
-         *destLen = dst_offset + cur_thread_info.dst_trap_size;
 
       AOCL_MT_PROCESS_PARTITION_END(ti_cur);
    } // #pragma omp parallel
