@@ -614,6 +614,15 @@ if (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
     # Hence setting it at file level here for lz4.
     set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-O2")
 endif()
+
+# Per-file compiler flags to recover the ZLIB and ZSTD performance lost for GCC >=15 
+if (${CMAKE_C_COMPILER_ID} STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 15)
+    set_property(SOURCE ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c
+                 APPEND PROPERTY COMPILE_OPTIONS "-fno-schedule-insns2;-fno-code-hoisting")
+    set_property(SOURCE ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block.c
+                 APPEND PROPERTY COMPILE_OPTIONS "-fno-tree-sink")
+endif()
+
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
     if(ENABLE_FAST_MATH)

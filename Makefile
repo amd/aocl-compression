@@ -1042,8 +1042,11 @@ ifeq ($(CC_ID),gcc)
 GCC_CFLAGS :=
 GCC_CXXFLAGS :=
 
-# No special per-file optimization needed for GCC
-# (Unlike Clang which needs -O2 for LZ4)
+# Per-file compiler flags to recover the ZLIB and ZSTD performance lost for GCC >=15
+ifeq ($(shell major=$(CC_MAJOR); [ -n "$$major" ] && [ "$$major" -ge 15 ] && echo 1),1)
+$(OBJ_DIR)/algos/zlib/zlib-ng/arch/x86/chunkset_avx512.o: CFLAGS += -fno-schedule-insns2 -fno-code-hoisting
+$(OBJ_DIR)/algos/zstd/lib/decompress/zstd_decompress_block.o: CFLAGS += -fno-tree-sink
+endif
 
 # TODO: Future implementation
 # # Code coverage support
