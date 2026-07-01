@@ -169,8 +169,8 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
     set_target_properties(${tp_exe_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
     # Add additional include directories needed by zstd test benches
-    target_include_directories (${tp_exe_name} PRIVATE  ${CMAKE_SOURCE_DIR}/api
-                                                        ${CMAKE_SOURCE_DIR}/utils
+    target_include_directories (${tp_exe_name} PRIVATE  ${AOCL_COMPRESSION_ROOT}/api
+                                                        ${AOCL_COMPRESSION_ROOT}/utils
                                                         ${AOCL_GENERATED_COMMON_INC_DIR}
                                                         ${ALGOS_PATH}/common)
     if (NOT AOCL_EXCLUDE_ZSTD)
@@ -249,9 +249,9 @@ if (BUILD_UTILITY)
           set (zstd_utility zstd_utility) 
           add_executable(${zstd_utility} ${ZSTD_PROGRAM_SRCS}) 
           set_target_properties(${zstd_utility} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
-          target_include_directories(${zstd_utility} PRIVATE ${CMAKE_SOURCE_DIR} 
-  							${CMAKE_SOURCE_DIR}/api 
-                            ${CMAKE_SOURCE_DIR}/utils
+          target_include_directories(${zstd_utility} PRIVATE ${AOCL_COMPRESSION_ROOT} 
+  							${AOCL_COMPRESSION_ROOT}/api 
+                            ${AOCL_COMPRESSION_ROOT}/utils
                             ${AOCL_GENERATED_COMMON_INC_DIR}
   							${BU_ZSTD_LIBRARY_DIR}/common)
           target_include_directories(${zstd_utility} PRIVATE ${BU_ZSTD_LIBRARY_DIR}/zstd/lib 
