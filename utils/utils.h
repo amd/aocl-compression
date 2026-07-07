@@ -64,7 +64,9 @@
 
 #ifdef AOCL_CL_STATS
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 typedef LARGE_INTEGER timer;
 typedef LARGE_INTEGER timeVal;
