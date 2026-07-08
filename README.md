@@ -489,3 +489,7 @@ CONTACTS
 --------
 AOCL-Compression is developed and maintained by AMD.<br>
 For support, send an email to toolchainsupport@amd.com.
+
+HELP
+--------
+AOCL-Compression help page
