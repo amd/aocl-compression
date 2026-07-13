@@ -63,21 +63,24 @@ TEST(AOCL_Compression_zlib, compressBound_common)
 
 TEST_P(AOCL_Compression_zlib, compress_negative)
 {
+  /*
+  * compress API contract :
+  * Z_BUF_ERROR , if not enough room in output buffer
+  * Z_MEM_ERROR , if there was not enough memory ( memory allocation failures )
+  * or error return from downstream functions that could be Z_STREAM_ERROR
+  * Z_OK, otherwise
+  */
   unsigned long destLen = compressBound(11);
   char c[11] = "helloWorld";
   Bytef *dest = (Bytef *)malloc(destLen);
 
-#ifdef AOCL_ENABLE_THREADS
-  EXPECT_EQ(compress(NULL, &destLen, (Bytef *)c, 11), Z_MEM_ERROR);  // AOCL_Compression_zlib_compress_common_1
-#else
   EXPECT_EQ(compress(NULL, &destLen, (Bytef*)c, 11), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress_common_1
-#endif
-  EXPECT_EQ(compress(dest,NULL,(Bytef*)c,10),Z_BUF_ERROR); // AOCL_Compression_zlib_compress_common_2
+  EXPECT_EQ(compress(dest, NULL, (Bytef*)c, 10), Z_STREAM_ERROR); // AOCL_Compression_zlib_compress_common_2
   EXPECT_EQ(compress(dest, &destLen, NULL, 10), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress_common_3
-  EXPECT_EQ(compress(dest, &destLen, (Bytef *)c, 0), Z_BUF_ERROR);  // AOCL_Compression_zlib_compress_common_4
+  EXPECT_EQ(compress(dest, &destLen, (Bytef *)c, 0), Z_OK);  // AOCL_Compression_zlib_compress_common_4
 
   destLen = 2;
-  EXPECT_EQ(compress(dest, &destLen, (Bytef *)c, 11), Z_BUF_ERROR); // AOCL_Compression_zlib_compress_common_5
+  EXPECT_EQ(compress(dest, &destLen, (Bytef *)c, 11), Z_BUF_ERROR) << "Not enough room in output buffer"; // AOCL_Compression_zlib_compress_common_5
 
   free(dest);
   dest = nullptr;
@@ -123,6 +126,13 @@ TEST_P(AOCL_Compression_zlib, compress_boundary)
 
 TEST_P(AOCL_Compression_zlib, compress2_negative)
 {
+  /*
+  * compress2 API contract :
+  * Z_BUF_ERROR , if not enough room in output buffer
+  * Z_MEM_ERROR , if there was not enough memory ( memory allocation failures )
+  * or error return from downstream functions that could be Z_STREAM_ERROR
+  * Z_OK, otherwise
+  */
   const uLong srcLen = 10;
   Bytef src[srcLen + 1] = "helloWorld";
   unsigned long destLen = compressBound(srcLen);
@@ -131,13 +141,8 @@ TEST_P(AOCL_Compression_zlib, compress2_negative)
   int valid_clevel = 6;
   int invalid_srcLen = 0;
 
-
-#ifdef AOCL_ENABLE_THREADS
-  EXPECT_EQ(compress2(NULL, &destLen, src, srcLen, valid_clevel), Z_MEM_ERROR); // AOCL_Compression_zlib_compress2_common_1
-#else
   EXPECT_EQ(compress2(NULL, &destLen, src, srcLen, valid_clevel), Z_STREAM_ERROR); // AOCL_Compression_zlib_compress2_common_1
-#endif
-  EXPECT_EQ(compress2(dest, NULL, src, srcLen, valid_clevel),Z_BUF_ERROR); // AOCL_Compression_zlib_compress2_common_2
+  EXPECT_EQ(compress2(dest, NULL, src, srcLen, valid_clevel), Z_STREAM_ERROR); // AOCL_Compression_zlib_compress2_common_2
   EXPECT_EQ(compress2(dest, &destLen, NULL, srcLen, valid_clevel), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_3
   destLen = compressBound(srcLen);
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, invalid_clevels[0]), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_4
@@ -145,7 +150,7 @@ TEST_P(AOCL_Compression_zlib, compress2_negative)
   EXPECT_EQ(compress2(dest, &destLen, src, srcLen, invalid_clevels[1]), Z_STREAM_ERROR);  // AOCL_Compression_zlib_compress2_common_5
   EXPECT_EQ(compress2(dest, &destLen, src, invalid_srcLen, valid_clevel), Z_BUF_ERROR); // AOCL_Compression_zlib_compress2_common_6
   destLen = 3; // not enough output buffer
-  EXPECT_EQ(compress2(dest, &destLen, src, srcLen, valid_clevel), Z_BUF_ERROR);  // AOCL_Compression_zlib_compress2_common_7
+  EXPECT_EQ(compress2(dest, &destLen, src, srcLen, valid_clevel), Z_BUF_ERROR) << "Not enough room in output buffer";  // AOCL_Compression_zlib_compress2_common_7
   free(dest);
   dest = nullptr;
 }
@@ -190,6 +195,14 @@ TEST_P(AOCL_Compression_zlib, compress2_boundary)
 
 TEST_P(AOCL_Compression_zlib, uncompress2_negative)
 {
+  /*
+  * uncompress2 API contract :
+  * Z_DATA_ERROR , in case input is corrupted or incomplete
+  * Z_BUF_ERROR , if not enough room in output buffer
+  * Z_MEM_ERROR , if there was not enough memory ( memory allocation failures )
+  * or error return from downstream functions that could be Z_STREAM_ERROR
+  * Z_OK, otherwise
+  */
   string source = "helloWorld";
   uLong compressedLen = compressBound(source.length());
   Bytef compressed[compressedLen];
@@ -199,22 +212,20 @@ TEST_P(AOCL_Compression_zlib, uncompress2_negative)
   Bytef uncompressed[uncompressLen];
   int temp = compressedLen;
   compressedLen = 3; // partial compressed buffer
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_1
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR) << "Incomplete input";  // AOCL_Compression_zlib_uncompress2_common_1
   compressedLen = temp;
+  uncompressLen = source.length(); // In zlib 1.3.2 call to uncompress2 resets uncompressLen to 0
   Bytef t = compressed[3];
   compressed[3] = 4; // compressed buffer invalid modification
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_2
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR) << "Corrupt input";  // AOCL_Compression_zlib_uncompress2_common_2
+  compressedLen = temp; // In zlib 1.3.2 call to uncompress2 compressedLen is modified
   compressed[3] = t;
   uncompressLen = 3; // insufficient output buffer size
-  #ifdef AOCL_ENABLE_THREADS
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_DATA_ERROR); // AOCL_Compression_zlib_uncompress2_common_3
-  #else
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_3
-  #endif
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, &compressedLen), Z_BUF_ERROR) << "Not enough room in output buffer"; // AOCL_Compression_zlib_uncompress2_common_3
   EXPECT_EQ(uncompress2(NULL, &uncompressLen, compressed, &compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_4
-  EXPECT_EQ(uncompress2(uncompressed,NULL,compressed,&compressedLen),Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress2_common_5
-  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, NULL, &compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_6
-  EXPECT_EQ(uncompress2(uncompressed,&uncompressLen,compressed, NULL), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
+  EXPECT_EQ(uncompress2(uncompressed, NULL, compressed, &compressedLen),Z_STREAM_ERROR); // AOCL_Compression_zlib_uncompress2_common_5
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, NULL, &compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_6
+  EXPECT_EQ(uncompress2(uncompressed, &uncompressLen, compressed, NULL), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress2_common_7
 }
 
 TEST_P(AOCL_Compression_zlib, uncompress2_common)
@@ -232,6 +243,15 @@ TEST_P(AOCL_Compression_zlib, uncompress2_common)
 
 TEST_P(AOCL_Compression_zlib, uncompress_negative)
 {
+  /*
+  * uncompress API contract :
+  * Z_DATA_ERROR , in case input is corrupted or incomplete
+  * Z_BUF_ERROR , if not enough room in output buffer
+  * Z_MEM_ERROR , if there was not enough memory ( memory allocation failures )
+  * or error return from downstream functions that could be Z_STREAM_ERROR
+  * Z_OK, otherwise
+  */
+
   string source = "helloWorld";
   uLong compressedLen = compressBound(source.length());
   Bytef compressed[compressedLen];
@@ -241,22 +261,19 @@ TEST_P(AOCL_Compression_zlib, uncompress_negative)
   Bytef uncompressed[uncompressLen];
   int temp = compressedLen;
   compressedLen = 3;
-  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress_common_1
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_DATA_ERROR) << "Incomplete input";  // AOCL_Compression_zlib_uncompress_common_1
   compressedLen = temp;
+  uncompressLen = source.length(); // In zlib 1.3.2 call to uncompress resets uncompressLen to 0
   Bytef t = compressed[3];
   compressed[3] = 4;
-  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress_common_2
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_DATA_ERROR) << "Corrupt input";  // AOCL_Compression_zlib_uncompress_common_2
   compressed[3] = t;
   uncompressLen = 3;
-  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress_common_3
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, compressedLen), Z_BUF_ERROR) << "Not enough room in output buffer"; // AOCL_Compression_zlib_uncompress_common_3
   EXPECT_EQ(uncompress(NULL, &uncompressLen, compressed, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_4
-  EXPECT_EQ(uncompress(uncompressed, NULL, compressed, compressedLen),Z_BUF_ERROR); // AOCL_Compression_zlib_uncompress_common_5
-#ifdef AOCL_ENABLE_THREADS
-    EXPECT_EQ(uncompress(uncompressed, &uncompressLen, NULL, compressedLen), Z_DATA_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
-#else
+  EXPECT_EQ(uncompress(uncompressed, NULL, compressed, compressedLen), Z_STREAM_ERROR); // AOCL_Compression_zlib_uncompress_common_5
   EXPECT_EQ(uncompress(uncompressed, &uncompressLen, NULL, compressedLen), Z_STREAM_ERROR);  // AOCL_Compression_zlib_uncompress_common_6
-#endif
-  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, 0), Z_DATA_ERROR); // AOCL_Compression_zlib_uncompress_common_7
+  EXPECT_EQ(uncompress(uncompressed, &uncompressLen, compressed, 0), Z_DATA_ERROR) << "Incomplete input"; // AOCL_Compression_zlib_uncompress_common_7
 }
 
 TEST_P(AOCL_Compression_zlib, uncompress_common)

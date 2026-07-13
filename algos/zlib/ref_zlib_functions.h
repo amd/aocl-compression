@@ -39,7 +39,14 @@ local void fill_window_ref(deflate_state *s) {
         more = (unsigned)(s->window_size -(ulg)s->lookahead -(ulg)s->strstart);
 
         /* Deal with !@#$% 64K limit: */
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4127)
+#endif
         if (sizeof(int) <= 2) {
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
             if (more == 0 && s->strstart == 0 && s->lookahead == 0) {
                 more = wsize;
 
@@ -187,7 +194,7 @@ local block_state deflate_fast_ref(deflate_state *s, int flush) {
             /* longest_match() sets match_start */
         }
         if (s->match_length >= MIN_MATCH) {
-            check_match(s, s->strstart, s->match_start, s->match_length);
+            check_match(s, s->strstart, s->match_start, (int)s->match_length);
 
             _tr_tally_dist(s, s->strstart - s->match_start,
                            s->match_length - MIN_MATCH, bflush);
@@ -305,7 +312,7 @@ local block_state deflate_slow_ref(deflate_state *s, int flush) {
             uInt max_insert = s->strstart + s->lookahead - MIN_MATCH;
             /* Do not insert strings in hash table beyond this. */
 
-            check_match(s, s->strstart - 1, s->prev_match, s->prev_length);
+            check_match(s, s->strstart - 1, s->prev_match, (int)s->prev_length);
 
             _tr_tally_dist(s, s->strstart - 1 - s->prev_match,
                            s->prev_length - MIN_MATCH, bflush);
@@ -491,6 +498,7 @@ local int deflateInit2__ref(z_streamp strm, int level, int method,
 
     s = (deflate_state *) ZALLOC(strm, 1, sizeof(deflate_state));
     if (s == Z_NULL) return Z_MEM_ERROR;
+    zmemzero(s, sizeof(deflate_state));
     strm->state = (struct internal_state FAR *)s;
     s->strm = strm;
     s->status = INIT_STATE;     /* to pass state test in deflateReset() */
@@ -553,11 +561,7 @@ local int deflateInit2__ref(z_streamp strm, int level, int method,
      * symbols from which it is being constructed.
      */
 
-#ifdef LIT_MEM
-    s->pending_buf = (uchf *) ZALLOC(strm, s->lit_bufsize, 5);
-#else
-    s->pending_buf = (uchf *) ZALLOC(strm, s->lit_bufsize, 4);
-#endif
+    s->pending_buf = (uchf *) ZALLOC(strm, s->lit_bufsize, LIT_BUFS);
     s->pending_buf_size = (ulg)s->lit_bufsize * 4;
 
     if (s->window == Z_NULL || s->prev == Z_NULL || s->head == Z_NULL ||

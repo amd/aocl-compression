@@ -56,7 +56,10 @@
 #  ifndef Z_SOLO
 #    define compress              AOCL_LLC_compress
 #    define compress2             AOCL_LLC_compress2
+#    define compress_z            AOCL_LLC_compress_z
+#    define compress2_z           AOCL_LLC_compress2_z
 #    define compressBound         AOCL_LLC_compressBound
+#    define compressBound_z       AOCL_LLC_compressBound_z
 #  endif
 #  define crc32                 AOCL_LLC_crc32
 #  define crc32_combine         AOCL_LLC_crc32_combine
@@ -69,6 +72,7 @@
 #  define deflate_medium        AOCL_LLC_deflate_medium
 #  define deflate_quick         AOCL_LLC_deflate_quick
 #  define deflateBound          AOCL_LLC_deflateBound
+#  define deflateBound_z        AOCL_LLC_deflateBound_z
 #  define deflateCopy           AOCL_LLC_deflateCopy
 #  define deflateEnd            AOCL_LLC_deflateEnd
 #  define deflateGetDictionary  AOCL_LLC_deflateGetDictionary
@@ -84,6 +88,7 @@
 #  define deflateSetDictionary  AOCL_LLC_deflateSetDictionary
 #  define deflateSetHeader      AOCL_LLC_deflateSetHeader
 #  define deflateTune           AOCL_LLC_deflateTune
+#  define deflateUsed           AOCL_LLC_deflateUsed
 #  define deflate_copyright     AOCL_LLC_deflate_copyright
 #  define get_crc_table         AOCL_LLC_get_crc_table
 #  ifndef Z_SOLO
@@ -153,9 +158,12 @@
 #  define inflate_copyright     AOCL_LLC_inflate_copyright
 #  define inflate_fast          AOCL_LLC_inflate_fast
 #  define inflate_table         AOCL_LLC_inflate_table
+#  define inflate_fixed         AOCL_LLC_inflate_fixed
 #  ifndef Z_SOLO
 #    define uncompress            AOCL_LLC_uncompress
 #    define uncompress2           AOCL_LLC_uncompress2
+#    define uncompress_z          AOCL_LLC_uncompress_z
+#    define uncompress2_z         AOCL_LLC_uncompress2_z
 #  endif
 #  define zError                AOCL_LLC_zError
 #  define z_errmsg              AOCL_LLC_z_errmsg

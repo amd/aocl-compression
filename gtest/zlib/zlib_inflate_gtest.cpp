@@ -261,7 +261,7 @@ TEST(AOCL_Compression_zlib, inflateCopy_common)
   dest.reset_inflate_stream();
 
   inflate_state *state = (inflate_state *)strm.get_stream()->state;
-  state->wbits = 3;
+  state->whave = 8;
   char c[9] = "abcdefgh";
   state->window = (Bytef *)malloc(sizeof(char) * 8);
   memcpy(state->window, c, 8);
@@ -269,7 +269,7 @@ TEST(AOCL_Compression_zlib, inflateCopy_common)
 
   inflate_state *dstate = (inflate_state *)dest.get_stream()->state;
   EXPECT_EQ(dstate->wbits, state->wbits);
-  EXPECT_EQ(memcmp(dstate->window, state->window, 1U << state->wbits), 0);
+  EXPECT_EQ(memcmp(dstate->window, state->window, state->whave), 0);
   dest.get_stream()->state = strm.get_stream()->state;
   EXPECT_EQ(memcmp(strm.get_stream(), dest.get_stream(), sizeof(z_stream)), 0);
   dest.get_stream()->state = (internal_state *)dstate;

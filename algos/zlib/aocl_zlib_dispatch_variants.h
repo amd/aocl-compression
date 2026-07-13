@@ -48,7 +48,7 @@ typedef struct {
 
 typedef struct {
     CpuFeatures required_features;
-    unsigned long (*impl)(unsigned long, const unsigned char FAR *, z_size_t);
+    uLong (*impl)(uLong, const unsigned char FAR *, z_size_t);
 } AoclZlibCrc32Variant;
 
 typedef struct {

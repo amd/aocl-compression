@@ -33,7 +33,7 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH_AVX_FAMILY(deflate_state* s, IPos cur_match
 {
     AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     unsigned chain_length = s->max_chain_length;
-    register Bytef *scan = s->window + s->strstart;
+    Bytef *scan = s->window + s->strstart;
     int len;
     int best_len = s->prev_length ? s->prev_length : MIN_MATCH-1;
     int nice_match = s->nice_match;
@@ -46,8 +46,8 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH_AVX_FAMILY(deflate_state* s, IPos cur_match
     /* exit from match finding if match lengths are not meaningful */
     int exit = s->level < 5;       
 
-    register Bytef *match_start = s->window;
-    register Bytef *match_end;
+    Bytef *match_start = s->window;
+    Bytef *match_end;
 
     Posf *prev = s->prev;
     uInt wmask = s->w_mask;
@@ -132,8 +132,8 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH_LAZY_AVX_FAMILY(deflate_state* s, IPos cur_
 {
     AOCL_SIMD_UNIT_TEST(DEBUG, logCtx, "Enter");
     unsigned chain_length = s->max_chain_length;/* max hash chain length */
-    register Bytef *scan = s->window + s->strstart; /* current string */
-    register int len;                           /* length of current match */
+    Bytef *scan = s->window + s->strstart; /* current string */
+    int len;                           /* length of current match */
     int best_len = s->prev_length ? s->prev_length : MIN_MATCH-1;   /* ignore strings, shorter or of the same length */
     int nice_match = s->nice_match;             /* stop if match long enough */
     int offset = 0;
@@ -148,8 +148,8 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH_LAZY_AVX_FAMILY(deflate_state* s, IPos cur_
     /* Stop when cur_match becomes <= limit. To simplify the code,
      * we prevent matches with the string of window index 0.
      */
-    register Bytef *match_base_start = s->window;
-    register Bytef *match_base_end;
+    Bytef *match_base_start = s->window;
+    Bytef *match_base_end;
 
     Posf *prev = s->prev;                       /* lists of the hash chains */
     uInt wmask = s->w_mask;
@@ -180,9 +180,9 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH_LAZY_AVX_FAMILY(deflate_state* s, IPos cur_
 
     if (best_len >= AOCL_MIN_MATCH) {
         /* We're continuing search (lazy evaluation).*/
-        register int i;
+        int i;
         IPos pos;
-        register uInt hash = 0;
+        uInt hash = 0;
         /* Find a most distant chain starting from scan with index=1 (index=0 corresponds
          * to cur_match). Note: we cannot use s->prev[strstart+1,...] immediately, because
          * these strings are not yet inserted into hash table yet.
@@ -260,8 +260,8 @@ ZLIB_INTERNAL uint32_t LONGEST_MATCH_LAZY_AVX_FAMILY(deflate_state* s, IPos cur_
             /* look for better string offset */
             if (UNLIKELY(len > MIN_MATCH && cur_match - match_offset + len < strstart)) {
                 IPos pos, next_pos;
-                register int i;
-                register uInt hash;
+                int i;
+                uInt hash;
                 Bytef* scan_end0;
 
                 /* go back to offset 0 */
