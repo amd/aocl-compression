@@ -167,7 +167,12 @@ static void pwinerror (s)
 #endif
 #define SUFFIX_LEN (sizeof(GZ_SUFFIX)-1)
 
-#define BUFLEN      16384
+/* Match zlib-ng's minigzip I/O granularity (GZBUFSIZE = 128 KiB). */
+#ifdef MAXSEG_64K
+#  define BUFLEN      16384
+#else
+#  define BUFLEN      131072
+#endif
 #define MAX_NAME_LEN 1024
 
 #ifdef MAXSEG_64K
@@ -265,7 +270,11 @@ static gzFile gzdopen(int fd, const char *mode) {
 
 static int gzwrite(gzFile gz, const void *buf, unsigned len) {
     z_stream *strm;
-    unsigned char out[BUFLEN];
+    /* BUFLEN is 128 KiB; keep this large buffer in static storage rather than
+       on the stack so per-call stack usage stays small on constrained/thread
+       stacks and under sanitizers. minigzip is single-threaded, so static is
+       safe here. */
+    static unsigned char out[BUFLEN];
 
     if (gz == NULL || !gz->write)
         return 0;
@@ -314,7 +323,7 @@ static int gzread(gzFile gz, void *buf, unsigned len) {
 
 static int gzclose(gzFile gz) {
     z_stream *strm;
-    unsigned char out[BUFLEN];
+    static unsigned char out[BUFLEN];   /* off the stack: see gzwrite() */
 
     if (gz == NULL)
         return Z_STREAM_ERROR;
@@ -393,7 +402,7 @@ static int gz_compress_mmap(FILE *in, gzFile out) {
  */
 
 static void gz_compress(FILE *in, gzFile out) {
-    local char buf[BUFLEN];
+    static char buf[BUFLEN];   /* 128 KiB: static, not stack (see gzwrite()) */
     int len;
     int err;
 
@@ -421,7 +430,7 @@ static void gz_compress(FILE *in, gzFile out) {
  * Uncompress input to output then close both files.
  */
 static void gz_uncompress(gzFile in, FILE *out) {
-    local char buf[BUFLEN];
+    static char buf[BUFLEN];   /* 128 KiB: static, not stack (see gzwrite()) */
     int len;
     int err;
 
