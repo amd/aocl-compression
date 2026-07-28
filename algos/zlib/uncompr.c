@@ -181,8 +181,12 @@ static inline int uncompress2_z_MT_generic(Bytef *dest, z_size_t *destLen, const
 
             if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_SUCCESS)
             {
-                is_error = uncompress2_ST_raw((Bytef *)cur_thread_info.dst_trap, (uLong *)&(cur_thread_info.dst_trap_size),
-                                            (Bytef *)cur_thread_info.partition_src, (uLong *)&(cur_thread_info.partition_src_size), -1 * MAX_WBITS);
+                z_size_t dst_trap_size = (z_size_t)cur_thread_info.dst_trap_size;
+                z_size_t part_src_size = (z_size_t)cur_thread_info.partition_src_size;
+                is_error = uncompress2_ST_raw((Bytef *)cur_thread_info.dst_trap, &dst_trap_size,
+                                            (Bytef *)cur_thread_info.partition_src, &part_src_size, -1 * MAX_WBITS);
+                cur_thread_info.dst_trap_size = (AOCL_UINTP)dst_trap_size;
+                cur_thread_info.partition_src_size = (AOCL_UINTP)part_src_size;
                 cur_thread_info.last_bytes_len = CALCULATE_CHECKSUM(cur_thread_info.dst_trap, cur_thread_info.dst_trap_size, wrap);
             }//aocl_do_partition_decompress_mt
             else if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_EMPTY_SRC)
