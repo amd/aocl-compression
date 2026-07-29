@@ -1045,7 +1045,7 @@ GCC_CXXFLAGS :=
 # Per-file compiler flags to recover the ZLIB and ZSTD performance lost for GCC >=15
 ifeq ($(shell major=$(CC_MAJOR); [ -n "$$major" ] && [ "$$major" -ge 15 ] && echo 1),1)
 $(OBJ_DIR)/algos/zlib/zlib-ng/arch/x86/chunkset_avx512.o: CFLAGS += -fno-schedule-insns2 -fno-code-hoisting
-$(OBJ_DIR)/algos/zstd/lib/decompress/zstd_decompress_block.o: CFLAGS += -fno-tree-sink
+$(OBJ_DIR)/algos/zstd/lib/decompress/zstd_decompress_block.o: CFLAGS += -fno-schedule-insns -fno-tree-sink -fno-if-conversion
 endif
 
 # TODO: Future implementation

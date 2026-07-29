@@ -620,7 +620,7 @@ if (${CMAKE_C_COMPILER_ID} STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_G
     set_property(SOURCE ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c
                  APPEND PROPERTY COMPILE_OPTIONS "-fno-schedule-insns2;-fno-code-hoisting")
     set_property(SOURCE ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block.c
-                 APPEND PROPERTY COMPILE_OPTIONS "-fno-tree-sink")
+                 APPEND PROPERTY COMPILE_OPTIONS "-fno-schedule-insns;-fno-tree-sink;-fno-if-conversion")
 endif()
 
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
