@@ -438,9 +438,47 @@ TEST(API_setup, AOCL_Compression_api_aocl_llc_setup_invalidAlgo_common_1) //inva
     EXPECT_EQ(aocl_llc_setup(&desc, algo), ERR_UNSUPPORTED_METHOD);
 }
 
+// Out-of-range codec_type must be rejected by every dispatch entry point before
+// indexing the fixed-size aocl_codec[] table (CPUPL-8847). Prior to the guards
+// these calls performed an out-of-bounds table read and crashed.
+TEST(API_setup, AOCL_Compression_api_aocl_llc_invalidAlgo_common_2) //invalid algo on compress/decompress/compressBound/destroy
+{
+    ACD desc;
+    reset_ACD(&desc, 0);
+    ACT algo = AOCL_COMPRESSOR_ALGOS_NUM; // one past the last valid method
+
+    EXPECT_EQ(aocl_llc_compressBound(algo, 1024), ERR_UNSUPPORTED_METHOD);
+    EXPECT_EQ(aocl_llc_compress(&desc, algo), ERR_UNSUPPORTED_METHOD);
+    EXPECT_EQ(aocl_llc_decompress(&desc, algo), ERR_UNSUPPORTED_METHOD);
+    // Returns void; must not dereference the out-of-range table slot.
+    EXPECT_NO_THROW(aocl_llc_destroy(&desc, algo));
+}
+
 static void test_excluded_algo(ACD* desc, ACT algo){
     reset_ACD(desc, 1);
     EXPECT_EQ(aocl_llc_setup(desc, algo), ERR_EXCLUDED_METHOD);
+    // A codec compiled out of the build must be rejected by every dispatch
+    // entry point whose slot is NULL, not just setup (CPUPL-8847). Without the
+    // guard, calling through a NULL slot would crash.
+    EXPECT_EQ(aocl_llc_compressBound(algo, 1024), ERR_EXCLUDED_METHOD);
+    EXPECT_EQ(aocl_llc_compress(desc, algo), ERR_EXCLUDED_METHOD);
+    // Returns void; must not dereference the NULL destroy slot.
+    EXPECT_NO_THROW(aocl_llc_destroy(desc, algo));
+
+    // Exclusion is per-operation. LZ4HC decodes LZ4-compatible frames, so its
+    // decompress slot intentionally reuses aocl_lz4_decompress. When only LZ4HC
+    // is excluded (LZ4 still built), that slot stays non-NULL and decompress
+    // dispatches normally instead of returning ERR_EXCLUDED_METHOD; it must
+    // simply not crash. Every other excluded codec has a NULL decompress slot.
+    bool decompress_excluded = true;
+#if !defined(AOCL_EXCLUDE_LZ4)
+    if (algo == LZ4HC)
+        decompress_excluded = false;
+#endif
+    if (decompress_excluded)
+        EXPECT_EQ(aocl_llc_decompress(desc, algo), ERR_EXCLUDED_METHOD);
+    else
+        EXPECT_NO_THROW(aocl_llc_decompress(desc, algo));
 }
 
 TEST(API_setup, AOCL_Compression_api_aocl_llc_setup_excludedMethod_common_1) //excluded method

@@ -169,6 +169,8 @@ typedef struct
  * |:-----------|:------------|
  * | Success    |Returns an upper bound on the compressed size.      |
  * | Fail       |`ERR_COMPRESSION_FAILED`                            |
+ * | ^          |`ERR_UNSUPPORTED_METHOD`                            |
+ * | ^          |`ERR_EXCLUDED_METHOD`                               |
  */
 EXPORT_SYM_DYN int64_t aocl_llc_compressBound(aocl_compression_type codec_type,
                                             size_t inSize);
@@ -188,6 +190,8 @@ EXPORT_SYM_DYN int64_t aocl_llc_compressBound(aocl_compression_type codec_type,
  * | Success    |Number of bytes decompressed      |
  * | Fail       |`ERR_COMPRESSION_FAILED`          |
  * | ^          |`ERR_COMPRESSION_INVALID_OUTPUT`  |
+ * | ^          |`ERR_UNSUPPORTED_METHOD`          |
+ * | ^          |`ERR_EXCLUDED_METHOD`             |
  */
 EXPORT_SYM_DYN int64_t aocl_llc_compress(aocl_compression_desc *handle,
                             aocl_compression_type codec_type);
@@ -206,6 +210,8 @@ EXPORT_SYM_DYN int64_t aocl_llc_compress(aocl_compression_desc *handle,
  * | Success    |Numbers of bytes decompressed     |
  * | Fail       |`ERR_COMPRESSION_FAILED`          |
  * | ^          |`ERR_COMPRESSION_INVALID_OUTPUT`  |
+ * | ^          |`ERR_UNSUPPORTED_METHOD`          |
+ * | ^          |`ERR_EXCLUDED_METHOD`             |
  * 
  */
 
@@ -226,6 +232,7 @@ EXPORT_SYM_DYN int64_t aocl_llc_decompress(aocl_compression_desc *handle,
  * | Success    | \b 0                           |
  * | Fail       | `ERR_UNSUPPORTED_METHOD`       |
  * | ^          | `ERR_EXCLUDED_METHOD`          |
+ * | ^          | `ERR_UNSUPPORTED_METHOD`       |
  * 
  */
 

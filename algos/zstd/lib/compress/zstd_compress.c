@@ -8430,6 +8430,7 @@ size_t AOCL_ZSTD_writeSkippableFrameHeader(void* dst, size_t dstCapacity, size_t
 
     RETURN_ERROR_IF(srcSize > (unsigned)0xFFFFFFFF, srcSize_wrong, "Src size too large for skippable frame");
     RETURN_ERROR_IF(magicVariant > 15, parameter_outOfBound, "Skippable frame magic number variant not supported");
+    RETURN_ERROR_IF(dstCapacity < ZSTD_SKIPPABLEHEADERSIZE, dstSize_tooSmall, "Not enough room for skippable frame header");
 
     MEM_writeLE32(op, (U32)(ZSTD_MAGIC_SKIPPABLE_START + magicVariant));
     MEM_writeLE32(op + 4, (U32)srcSize);

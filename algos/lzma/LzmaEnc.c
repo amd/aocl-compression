@@ -749,6 +749,11 @@ static unsigned GetOptimum(CLzmaEnc* p, UInt32 position);
 
 void LzmaEnc_SaveState(CLzmaEncHandle pp)
 {
+  if (pp == NULL)
+  {
+    LOG_UNFORMATTED(ERR, logCtx, "LzmaEnc_SaveState: Invalid CLzmaEncHandle");
+    return;
+  }
   CLzmaEnc *p = (CLzmaEnc *)pp;
   CSaveState *dest = &p->saveState;
   
@@ -775,6 +780,11 @@ void LzmaEnc_SaveState(CLzmaEncHandle pp)
 
 void LzmaEnc_RestoreState(CLzmaEncHandle pp)
 {
+  if (pp == NULL)
+  {
+    LOG_UNFORMATTED(ERR, logCtx, "LzmaEnc_RestoreState: Invalid CLzmaEncHandle");
+    return;
+  }
   CLzmaEnc *dest = (CLzmaEnc *)pp;
   const CSaveState *p = &dest->saveState;
 
@@ -3738,6 +3748,18 @@ static void LzmaEnc_Destruct(CLzmaEnc *p, ISzAllocPtr alloc, ISzAllocPtr allocBi
 void LzmaEnc_Destroy(CLzmaEncHandle p, ISzAllocPtr alloc, ISzAllocPtr allocBig)
 {
   AOCL_SETUP_NATIVE();
+  /* Guard against NULL so a destroy on an unset/NULL handle is a no-op
+   * instead of dereferencing/freeing an invalid pointer (CPUPL-8846). This
+   * only covers the NULL case; it cannot detect an already-freed (dangling,
+   * non-NULL) handle. Callers must still not reuse or re-destroy a handle
+   * after LzmaEnc_Destroy(): the handle is invalid once destroyed. */
+  if (p == NULL)
+  {
+    /* Documented no-op path (see LzmaEnc.h): keep it quiet at TRACE rather
+     * than ERR so a valid NULL call does not emit spurious error logs. */
+    LOG_UNFORMATTED(TRACE, logCtx, "LzmaEnc_Destroy called with NULL handle; no-op");
+    return;
+  }
   LzmaEnc_Destruct((CLzmaEnc *)p, alloc, allocBig);
   ISzAlloc_Free(alloc, p);
 }
@@ -4327,6 +4349,11 @@ UInt32 LzmaEnc_GetNumAvailableBytes(CLzmaEncHandle pp)
 
 const Byte *LzmaEnc_GetCurBuf(CLzmaEncHandle pp)
 {
+  if (pp == NULL)
+  {
+    LOG_UNFORMATTED(ERR, logCtx, "LzmaEnc_GetCurBuf: Invalid CLzmaEncHandle");
+    return NULL;
+  }
   const CLzmaEnc *p = (CLzmaEnc *)pp;
   return p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - p->additionalOffset;
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -1593,6 +1593,13 @@ TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Create_fail_common_1) //LzmaE
     CLzmaEncHandle p = LzmaEnc_Create(NULL);
 
     EXPECT_EQ(p, nullptr);
+}
+
+TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Destroy_null_common_1) //Destroy on NULL handle is a no-op (CPUPL-8846)
+{
+    const ISzAlloc g_Alloc = { SzAlloc, SzFree };
+    const ISzAlloc g_AllocBig = { SzAlloc, SzFree };
+    EXPECT_NO_THROW(LzmaEnc_Destroy(NULL, &g_Alloc, &g_AllocBig));
 }
 /*********************************************
 * End of LZMA_encCreate
