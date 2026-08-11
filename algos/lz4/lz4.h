@@ -185,6 +185,25 @@ LZ4LIB_API const char* LZ4_versionString (void);
 #ifdef AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
 #define AOCL_LZ4_MATCH_SKIPPING_THRESHOLD 3
 #endif /* AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 */
+
+/* LZ4 decode software prefetch hints (value-tested toggles + distances).
+ * -DAOCL_LZ4_DEC_PREFETCH=0 disables; distances overridable from CMake/Make.
+ * Sweep-tuned on Zen-class / cold 4 KiB zswap pages. */
+#ifndef AOCL_LZ4_DEC_PREFETCH
+#define AOCL_LZ4_DEC_PREFETCH 1
+#endif
+#ifndef AOCL_LZ4_DEC_PREFETCH_DEEPER
+#define AOCL_LZ4_DEC_PREFETCH_DEEPER 1
+#endif
+#ifndef AOCL_LZ4_DEC_PREFETCH_IN_DIST
+#define AOCL_LZ4_DEC_PREFETCH_IN_DIST 96      /* read-ahead into compressed input (bytes) */
+#endif
+#ifndef AOCL_LZ4_DEC_PREFETCH_OUT_DIST
+#define AOCL_LZ4_DEC_PREFETCH_OUT_DIST 128    /* write-intent into output (bytes) */
+#endif
+#ifndef AOCL_LZ4_DEC_PREFETCH_DEEPER_DIST
+#define AOCL_LZ4_DEC_PREFETCH_DEEPER_DIST 192 /* second, deeper read-ahead (bytes) */
+#endif
 #endif /* AOCL_LZ4_OPT */
 
 /*-************************************

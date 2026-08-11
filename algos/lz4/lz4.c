@@ -2439,6 +2439,27 @@ read_variable_length(const BYTE** ip, const BYTE* ilimit,
 }
 
 
+/* Decode software prefetch -- emitter macros (ST fast loop only).
+ * Toggles and distances live in lz4.h (AOCL Optimization flags block).
+ * Unconditional hints: __builtin_prefetch never faults, so an address past
+ * the buffer end is silently dropped by the CPU. */
+#if defined(AOCL_LZ4_OPT) && AOCL_LZ4_DEC_PREFETCH && (defined(__GNUC__) || defined(__clang__))
+#  define AOCL_LZ4_DEC_PREFETCH_AHEAD(ip_, op_) do {                                                  \
+        __builtin_prefetch((const void*)((uptrval)(ip_) + AOCL_LZ4_DEC_PREFETCH_IN_DIST), 0, 0);      \
+        __builtin_prefetch((void*)((uptrval)(op_) + AOCL_LZ4_DEC_PREFETCH_OUT_DIST), 1, 0);           \
+    } while (0)
+#else
+#  define AOCL_LZ4_DEC_PREFETCH_AHEAD(ip_, op_) do { } while (0)
+#endif
+
+#if defined(AOCL_LZ4_OPT) && AOCL_LZ4_DEC_PREFETCH && AOCL_LZ4_DEC_PREFETCH_DEEPER \
+    && (defined(__GNUC__) || defined(__clang__))
+#  define AOCL_LZ4_DEC_PREFETCH_DEEPER_AHEAD(ip_) \
+        __builtin_prefetch((const void*)((uptrval)(ip_) + AOCL_LZ4_DEC_PREFETCH_DEEPER_DIST), 0, 0)
+#else
+#  define AOCL_LZ4_DEC_PREFETCH_DEEPER_AHEAD(ip_) do { } while (0)
+#endif
+
 /*! LZ4_decompress_generic() :
  *  This generic decompression function covers all use cases.
  *  It shall be instantiated several times, using different sets of directives.
@@ -2512,6 +2533,9 @@ LZ4_decompress_generic(
             /* Main fastloop assertion: We can always wildcopy FASTLOOP_SAFE_DISTANCE */
             assert(oend - op >= FASTLOOP_SAFE_DISTANCE);
             assert(ip < iend);
+            /* prefetch a bit ahead so memory fetches overlap the copies */
+            AOCL_LZ4_DEC_PREFETCH_AHEAD(ip, op);
+            AOCL_LZ4_DEC_PREFETCH_DEEPER_AHEAD(ip);   /* extra deeper read-ahead */
             token = *ip++;
             length = token >> ML_BITS;  /* literal length */
             DEBUGLOG(7, "blockPos%6u: litLength token = %u", (unsigned)(op-(BYTE*)dst), (unsigned)length);
