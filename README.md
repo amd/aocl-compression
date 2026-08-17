@@ -178,6 +178,7 @@ NATIVE_ENABLE_THREADS               |  Enable native multi-threaded compression 
 AOCL_TEST_FUZZER                    |  Enable fuzz test along with GTest. Only supported on Linux with the Clang compiler (Disabled by default)
 AOCL_TEST_FUZZER_WITH_CORPUS        |  Run fuzz tests with corpus. Only supported on Linux with the Clang compiler (Disabled by default)
 ENABLE_FAST_MATH                    |  Enable fast-math optimizations (Disabled by default)
+AOCL_MAX_ISA_LEVEL                  |  Cap the maximum ISA optimization level compiled into the library: SSE2, AVX, AVX2, or AVX512 (AVX512 by default, all levels enabled). UNIX only; ignored on Windows.
 BUILD_UTILITY                       |  Enable third party utility build: minigzip(zlib), zstd_utility(zstd) (Disabled by default)
 AOCL_BZIP2_HUFFMAN_ITERATIONS       |  Control number of BZIP2 Huffman tables refinement iterations (1-4). Lower values are faster but reduce compression ratio. (Default: 3)
 AOCL_LLC_PREFIX                     |  Prefix library symbols (Disabled by default)
