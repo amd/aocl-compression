@@ -47,8 +47,20 @@ TEST_CXXFLAGS := $(PUBLIC_INCLUDE_DIRS) \
                  -Wno-error=unused-variable -Wno-error=unused-function \
                  -Wno-error=sign-compare -Wno-error=unused-but-set-variable \
                  -Wno-error=dangling-else -Wno-error=vla -Wno-error=overflow \
-                 -Wno-error=deprecated-declarations -Wno-error=maybe-uninitialized \
+                 -Wno-error=deprecated-declarations \
                  -Wno-error=conversion-null
+
+# -Wno-error=maybe-uninitialized refers to a GCC-only warning name. Clang does
+# not know "maybe-uninitialized" (it uses -Wuninitialized/-Wsometimes-uninitialized
+# instead) and reports it as an unknown warning option; because the strict test
+# build compiles with -Werror, that unknown-option diagnostic is promoted to a
+# hard error and breaks every gtest target under AOCL_TEST_COVERAGE=1. Only pass
+# it when the C++ compiler is GCC. This is gated on CXX_ID (not CC_ID) because the
+# flag lives in TEST_CXXFLAGS and is consumed by $(CXX); with a mixed toolchain
+# (e.g. CC=gcc CXX=clang++) a CC_ID check would wrongly feed the flag to Clang.
+ifeq ($(CXX_ID),gcc)
+    TEST_CXXFLAGS += -Wno-error=maybe-uninitialized
+endif
 
 # Conditionally add sys/uio.h define if header is available
 ifeq ($(HAS_SYS_UIO_H),1)

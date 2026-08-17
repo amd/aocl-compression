@@ -134,7 +134,7 @@ public:
 TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_allMatch_common_1) {
     BYTE tag = 'a';
     const int head = 0;
-    setup_tag_row(tag, { 0 }, 0, MATCH_TYPE_ALL);
+    setup_tag_row(tag, nullptr, 0, MATCH_TYPE_ALL);
     U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
     validate_mask(tag, mask, head);
 }
@@ -153,7 +153,7 @@ TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getM
 TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_nonematch_common_1) {
     BYTE tag = 'a';
     const int head = 0;
-    setup_tag_row(tag, { 0 }, 0, MATCH_TYPE_NONE);
+    setup_tag_row(tag, nullptr, 0, MATCH_TYPE_NONE);
     U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
     validate_mask(tag, mask, head);
 }

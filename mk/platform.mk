@@ -78,6 +78,23 @@ else
     $(error Unsupported compiler: $(CC). Only GCC and Clang are supported.)
 endif
 
+# Identify the C++ compiler independently of the C compiler. The two can differ
+# for mixed toolchains (e.g. CC=gcc CXX=clang++), and flags that live in
+# TEST_CXXFLAGS are consumed by $(CXX), so C++-specific gating must key off this.
+# Detection is driven by the compiler's own predefined macros rather than its
+# --version banner: C++ drivers are commonly named "g++"/"c++"/"clang++", whose
+# banners do not reliably contain "gcc"/"GCC", so a findstring on the banner
+# misclassifies them. Clang defines both __clang__ and __GNUC__, so __clang__ is
+# checked first. The grep patterns anchor to the "#define <macro> " line so a
+# future predefined macro that merely embeds these tokens (e.g. __clang_foo__)
+# cannot cause a false match.
+CXX_ID := $(shell printf '' | $(CXX) -E -x c++ -dM - 2>/dev/null | \
+    grep -q '^#define __clang__ ' && echo clang || \
+    { printf '' | $(CXX) -E -x c++ -dM - 2>/dev/null | grep -q '^#define __GNUC__ ' && echo gcc || echo unknown; })
+ifeq ($(CXX_ID),unknown)
+    $(error Unsupported C++ compiler: $(CXX). Only GCC and Clang are supported.)
+endif
+
 # Get compiler version
 ifeq ($(CC_ID),gcc)
     CC_MAJOR := $(shell $(CC) -dumpversion | cut -d. -f1)
