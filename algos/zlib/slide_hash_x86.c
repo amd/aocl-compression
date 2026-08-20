@@ -60,6 +60,7 @@ static inline void slide_hash_c_opt(deflate_state *s)
         Pos t = (Pos)wsize;
         *pc++ = (Pos)(v >= t ? v-t: 0);
     }
+    s->slid = 1;
 }
 
 /* Function pointer holding the optimized variant as per the detected CPU 
@@ -92,6 +93,7 @@ static inline void slide_hash_avx2(deflate_state *s)
         _mm256_storeu_si256((__m256i *)pc, pres); 
         pc += 16;
     }
+    s->slid = 1;
 }
 #endif /* AOCL_ZLIB_AVX2_OPT */
 

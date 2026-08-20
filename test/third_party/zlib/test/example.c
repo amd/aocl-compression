@@ -1,10 +1,10 @@
 /* example.c -- usage example of the zlib compression library
- * Copyright (C) 1995-2006, 2011, 2016 Jean-loup Gailly
+ * Copyright (C) 1995-2026 Jean-loup Gailly
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
 /**
- * Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -37,6 +37,10 @@
 
 /* @(#) $Id$ */
 
+#if defined(_WIN32) && !defined(_CRT_SECURE_NO_WARNINGS)
+#  define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include "zlib.h"
 #include <stdio.h>
 #include <stdint.h>
@@ -46,8 +50,10 @@
 #  include <stdlib.h>
 #endif
 
-#if defined(VMS) || defined(RISCOS)
+#if defined(VMS)
 #  define TESTFILE "foo-gz"
+#elif defined(__riscos) && !defined(__TARGET_UNIXLIB__)
+#  define TESTFILE "foo/gz"
 #else
 #  define TESTFILE "foo.gz"
 #endif
@@ -381,7 +387,7 @@ static void test_large_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
     CHECK_ERR(err, "inflateEnd");
 
     if (d_stream.total_out != 2*uncomprLen + uncomprLen/2) {
-        fprintf(stderr, "bad large inflate: %ld\n", d_stream.total_out);
+        fprintf(stderr, "bad large inflate: %lu\n", d_stream.total_out);
         exit(1);
     } else {
         printf("large_inflate(): OK\n");
@@ -947,7 +953,7 @@ int zlib_example_main(int argc, char **argv) {
     }
 
     printf("zlib version %s = 0x%04x, compile flags = 0x%lx\n",
-            ZLIB_VERSION, ZLIB_VERNUM, zlibCompileFlags());
+            ZLIB_VERSION, (unsigned)ZLIB_VERNUM, zlibCompileFlags());
 
     compr    = (Byte*)calloc((uInt)comprLen, 1);
     uncompr  = (Byte*)calloc((uInt)uncomprLen, 1);

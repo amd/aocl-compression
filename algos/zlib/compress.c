@@ -1,5 +1,5 @@
 /* compress.c -- compress a memory buffer
- * Copyright (C) 1995-2005, 2014, 2016 Jean-loup Gailly, Mark Adler
+ * Copyright (C) 1995-2026 Jean-loup Gailly, Mark Adler
  * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
@@ -113,14 +113,16 @@ ZEXTERN int ZEXPORT test_aocl_zlib_get_zlibOptOff(void)
      compress2 returns Z_OK if success, Z_MEM_ERROR if there was not enough
    memory, Z_BUF_ERROR if there was not enough room in the output buffer,
    Z_STREAM_ERROR if the level parameter is invalid.
+
+     The _z versions of the functions take size_t length arguments.
 */
 
 #ifdef AOCL_ENABLE_THREADS
 static inline int compress2_ST_raw(aocl_thread_info_t *cThread, int level, int finalFlush) {
     Bytef *dest = (Bytef*)cThread->dst_trap;
-    uLongf *destLen = (uLongf*)&(cThread->dst_trap_size);
+    z_size_t *destLen = (z_size_t*)&(cThread->dst_trap_size);
     Bytef *source = (Bytef*)cThread->partition_src;
-    uLong sourceLen = cThread->partition_src_size;
+    z_size_t sourceLen = cThread->partition_src_size;
 
     if(destLen == NULL)
     {
@@ -130,7 +132,7 @@ static inline int compress2_ST_raw(aocl_thread_info_t *cThread, int level, int f
     z_stream stream;
     int err;
     const uInt max = (uInt)-1;
-    uLong left;
+    z_size_t left;
 
     left = *destLen;
     *destLen = 0;
@@ -168,23 +170,23 @@ static inline int compress2_ST_raw(aocl_thread_info_t *cThread, int level, int f
     return err == Z_STREAM_END ? Z_OK : err;
 }
 
-static uLong compressBound_ST_raw(uLong sourceLen) {
+static z_size_t compressBound_ST_raw(z_size_t sourceLen) {
     /* Worst case: each byte -> 9 bits (fixed Huffman deflate). */
-    uLong fixed_size = FIXED_HUFFFMAN_COMPRESSED_SIZE(sourceLen);
+    z_size_t fixed_size = FIXED_HUFFFMAN_COMPRESSED_SIZE(sourceLen);
 
     /* stored_size: size with stored deflate (no compression). Adds 5 bytes/block (worst case as per deflate specification).
        Assumes default memLevel/windowbits. */
-    uLong stored_size = STORED_ZLIB_COMPRESSED_SIZE(sourceLen);
+    z_size_t stored_size = STORED_ZLIB_COMPRESSED_SIZE(sourceLen);
     if(aocl_zlib_get_enable_dquick()) {
         return (fixed_size > stored_size) ? fixed_size : stored_size;
     }
     return stored_size;
 }
 
-static uLong compressBound_MT_generic(uLong sourceLen, const int wrap) {
+static z_size_t compressBound_MT_generic(z_size_t sourceLen, const int wrap) {
 
-    uLong sz1 = compressBound_ST_raw(sourceLen);
-    uLong sz2 = 0;
+    z_size_t sz1 = compressBound_ST_raw(sourceLen);
+    z_size_t sz2 = 0;
     uInt wrapper_size = 0;
     COMPRESS_BOUND_MT(sourceLen, compressBound_ST_raw, ZLIB_MT_WINDOW_LEN, WINDOW_FACTOR, sz1, sz2, 0)
 
@@ -203,8 +205,8 @@ static uLong compressBound_MT_generic(uLong sourceLen, const int wrap) {
 }
 
 
-static inline int compress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef *source,
-                      uLong sourceLen, int level, const int wrap) {
+static inline int compress2_MT_generic(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                      z_size_t sourceLen, int level, const int wrap) {
 
     if ((*destLen) < compressBound_MT_generic(sourceLen, wrap))
         RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(Z_BUF_ERROR)
@@ -214,6 +216,10 @@ static inline int compress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef
     aocl_thread_info_t cur_thread_info;
     AOCL_INT32 rap_metadata_len = -1;
     AOCL_UINT32 thread_cnt = 0;
+
+    if ((sourceLen > 0 && source == NULL) ||
+        destLen == NULL || (*destLen > 0 && dest == NULL))
+        return Z_STREAM_ERROR;
 
     rap_metadata_len = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)source,
                                                  (char *)dest, sourceLen, *destLen,
@@ -355,7 +361,7 @@ static inline int compress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef
 }
 #endif /* AOCL_ENABLE_THREADS */
 
-uLong ZEXPORT compressBound_gzip(uLong sourceLen) {
+z_size_t ZEXPORT compressBound_gzip(z_size_t sourceLen) {
 #ifdef AOCL_ENABLE_THREADS
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     AOCL_SETUP_NATIVE();
@@ -366,15 +372,15 @@ uLong ZEXPORT compressBound_gzip(uLong sourceLen) {
 #endif
 }
 
-int ZEXPORT compress2_gzip(Bytef *dest, uLongf *destLen, const Bytef *source,
-                      uLong sourceLen, int level) {
+int ZEXPORT compress2_gzip(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                      z_size_t sourceLen, int level) {
 #ifdef AOCL_ENABLE_THREADS
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     AOCL_SETUP_NATIVE();
     if(destLen == NULL)
     {
         LOG_UNFORMATTED(INFO, logCtx, "Exit");
-        return Z_BUF_ERROR;
+        return Z_STREAM_ERROR;
     }
     return compress2_MT_generic(dest, destLen, source, sourceLen, level, 2);
 #else
@@ -383,15 +389,15 @@ int ZEXPORT compress2_gzip(Bytef *dest, uLongf *destLen, const Bytef *source,
 #endif
 }
 
-int ZEXPORT compress2_raw(Bytef *dest, uLongf *destLen, const Bytef *source,
-                      uLong sourceLen, int level) {
+int ZEXPORT compress2_raw(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                      z_size_t sourceLen, int level) {
 #ifdef AOCL_ENABLE_THREADS
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     AOCL_SETUP_NATIVE();
     if(destLen == NULL)
     {
         LOG_UNFORMATTED(INFO, logCtx, "Exit");
-        return Z_BUF_ERROR;
+        return Z_STREAM_ERROR;
     }
     return compress2_MT_generic(dest, destLen, source, sourceLen, level, 0);
 #else
@@ -400,20 +406,21 @@ int ZEXPORT compress2_raw(Bytef *dest, uLongf *destLen, const Bytef *source,
 #endif
 }
 
-int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
-                      uLong sourceLen, int level) {
+int ZEXPORT compress2_z(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                        z_size_t sourceLen, int level) {
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     AOCL_SETUP_NATIVE();
-    if(destLen == NULL)
-    {
-        LOG_UNFORMATTED(INFO, logCtx, "Exit");
-        return Z_BUF_ERROR;
-    }
 #ifndef AOCL_ENABLE_THREADS //Non threaded
     z_stream stream;
     int err;
     const uInt max = (uInt)-1;
-    uLong left;
+    z_size_t left;
+
+    if ((sourceLen > 0 && source == NULL) ||
+        destLen == NULL || (*destLen > 0 && dest == NULL)) {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return Z_STREAM_ERROR;
+    }
 
     left = *destLen;
     *destLen = 0;
@@ -436,17 +443,18 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
 
     do {
         if (stream.avail_out == 0) {
-            stream.avail_out = left > (uLong)max ? max : (uInt)left;
+            stream.avail_out = left > (z_size_t)max ? max : (uInt)left;
             left -= stream.avail_out;
         }
         if (stream.avail_in == 0) {
-            stream.avail_in = sourceLen > (uLong)max ? max : (uInt)sourceLen;
+            stream.avail_in = sourceLen > (z_size_t)max ? max :
+                                                          (uInt)sourceLen;
             sourceLen -= stream.avail_in;
         }
         err = deflate(&stream, sourceLen ? Z_NO_FLUSH : Z_FINISH);
     } while (err == Z_OK);
 
-    *destLen = stream.total_out;
+    *destLen = (z_size_t)(stream.next_out - dest);
     deflateEnd(&stream);
     LOG_UNFORMATTED(INFO, logCtx, "Exit");
     
@@ -455,9 +463,23 @@ int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
     return compress2_MT_generic(dest, destLen, source, sourceLen, level, 1);  
 #endif /* !AOCL_ENABLE_THREADS */
 }
-
+int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
+                      uLong sourceLen, int level) {
+    int ret;
+    if(destLen == NULL)
+        return Z_STREAM_ERROR;
+    z_size_t got = *destLen;
+    ret = compress2_z(dest, &got, source, sourceLen, level);
+    *destLen = (uLong)got;
+    return ret;
+}
 /* ===========================================================================
  */
+int ZEXPORT compress_z(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                       z_size_t sourceLen) {
+    return compress2_z(dest, destLen, source, sourceLen,
+                       Z_DEFAULT_COMPRESSION);
+}
 int ZEXPORT compress(Bytef *dest, uLongf *destLen, const Bytef *source,
                      uLong sourceLen) {
     return compress2(dest, destLen, source, sourceLen, Z_DEFAULT_COMPRESSION);
@@ -468,7 +490,7 @@ int ZEXPORT compress(Bytef *dest, uLongf *destLen, const Bytef *source,
    this function needs to be updated.
  */
 
-uLong ZEXPORT compressBound(uLong sourceLen) {
+z_size_t ZEXPORT compressBound_z(z_size_t sourceLen) {
     AOCL_SETUP_NATIVE();
 #ifdef AOCL_ENABLE_THREADS
     return compressBound_MT_generic(sourceLen, 1);
@@ -484,7 +506,12 @@ uLong ZEXPORT compressBound(uLong sourceLen) {
     }
     return stored_size;
 #else
-    return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
-           (sourceLen >> 25) + 13;
+    z_size_t bound = sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
+                     (sourceLen >> 25) + 13;
+    return bound < sourceLen ? (z_size_t)-1 : bound;
 #endif
+}
+uLong ZEXPORT compressBound(uLong sourceLen) {
+    z_size_t bound = compressBound_z(sourceLen);
+    return (uLong)bound != bound ? (uLong)-1 : (uLong)bound;
 }

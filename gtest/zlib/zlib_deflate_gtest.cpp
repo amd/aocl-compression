@@ -421,14 +421,14 @@ TEST_P(AOCL_Compression_zlib, deflateBound_common)
   if(is_quick_mode)
     EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 85);
   else
-    EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 82); // AOCL_Compression_zlib_deflateBound_common_1
+    EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 94); // AOCL_Compression_zlib_deflateBound_common_1
 
   deflateInit(deflateObj.get_stream(), 2);
   deflate_state *state = (deflate_state *)deflateObj.get_stream()->state;
   state->wrap = 3;
   sourceLen = 1 << 25;
 
-  EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 33564686); // AOCL_Compression_zlib_deflateBound_common_2
+  EXPECT_EQ(deflateBound(deflateObj.get_stream(), sourceLen), 33564698); // AOCL_Compression_zlib_deflateBound_common_2
 
   state->wrap = 0;
   sourceLen = 100;

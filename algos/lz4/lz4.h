@@ -1172,6 +1172,10 @@ struct LZ4_stream_t_internal {
 #ifdef AOCL_UNIT_TEST
 LZ4LIB_API int Test_LZ4_compress_forceExtDict(LZ4_stream_t* LZ4_dict, const char* source, char* dest, int srcSize);
 LZ4LIB_API void Test_LZ4_renormDictT(LZ4_stream_t_internal* LZ4_dict, int nextSize);
+#if defined(AOCL_ENABLE_THREADS) && defined(AOCL_LZ4_AVX_OPT)
+LZ4LIB_API int Test_AOCL_LZ4_decompress_generic_mt(const char* src, char* dst, int srcSize,
+                                                   int outputSize, int is_last_thread);
+#endif /* AOCL_ENABLE_THREADS && AOCL_LZ4_AVX_OPT */
 #endif /* AOCL_UNIT_TEST */
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */

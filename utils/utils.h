@@ -63,8 +63,10 @@
 #endif /* AOCL_ENABLE_LOG_FEATURE */
 
 #ifdef AOCL_CL_STATS
-#ifdef _WINDOWS
+#ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 typedef LARGE_INTEGER timer;
 typedef LARGE_INTEGER timeVal;
@@ -127,7 +129,7 @@ extern "C" {
 #endif
 
 #ifdef AOCL_ENABLE_LOG_FEATURE
-#ifdef _WINDOWS
+#ifdef _WIN32
 #include <stdlib.h>
 #define SET_MAX_LOG_LEVEL(logCtx)\
 {\
@@ -168,7 +170,7 @@ extern "C" {
                                     logCtx.maxLevel = 0;\
                             AOCL_EXIT_CRITICAL(setup_logs)\
 }
-#endif /* _WINDOWS */
+#endif /* _WIN32 */
 #endif
 
 #define LOG_UNFORMATTED(logType, logCtx, str)     do {\
@@ -236,7 +238,7 @@ extern "C" {
 
 //Timer and stats keeping
 #ifdef AOCL_CL_STATS
-#ifdef _WINDOWS
+#ifdef _WIN32
 #ifdef __cplusplus
 #define initTimer(timerClk) if(!QueryPerformanceFrequency(&timerClk))\
                          {\
@@ -266,7 +268,7 @@ extern "C" {
 #endif
 #endif
 
-#if defined(WIN32) && defined(AOCL_UNIT_TEST)
+#if defined(_WIN32) && defined(AOCL_UNIT_TEST)
 #define EXPORT_UTILS_DYN_TEST __declspec(dllexport)
 #else
 /**

@@ -479,18 +479,20 @@ TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common
 
 TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_12) // pass_case_mt
 {
+    aocl_setup_lz4(GetParam(), DEFAULT_OPT_LEVEL, 0, 0, 0);
     for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
     {
         Test_Buffer test_buf(8*64*1024);
         int compressedSize = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), level /* level */);
         EXPECT_NE(compressedSize, 0);
-
         EXPECT_TRUE(lz4hc_check_uncompressed_equal_to_original(test_buf.getOrigData(), test_buf.getOrigSize(), test_buf.getCompressedBuff(), compressedSize));
     }
+    aocl_destroy_lz4();
 }
 
 TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common_13) // dstCapacity_inadequate_mt
 {
+    aocl_setup_lz4(GetParam(), DEFAULT_OPT_LEVEL, 0, 0, 0);
     for(int level=0; level<=LZ4HC_CLEVEL_MAX; level++)
     {
         int srcLen = 16*64*1024;
@@ -499,6 +501,7 @@ TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_fail_common
         int compressedSize = LZ4_compress_HC(test_buf.getOrigData(), test_buf.getCompressedBuff(), test_buf.getOrigSize(), test_buf.getCompressedSize(), level /* level */);
         EXPECT_EQ(compressedSize, 0);
     }
+    aocl_destroy_lz4();
 }
 
 TEST_P(LZ4HC_LZ4_compress_HC, AOCL_Compression_lz4hc_LZ4_compress_HC_pass_common_14) // mt_compression_st_decompression

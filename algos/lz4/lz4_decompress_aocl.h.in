@@ -470,13 +470,15 @@ LZ4_FORCE_INLINE int
                     AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Last LASTLITERALS bytes must be uncompressed literals.");
                     goto _output_error; 
                 } /* Error : last LASTLITERALS bytes must be literals (uncompressed) */
-                if (op < oCopyLimit) {
-                    LZ4_wildCopy8(op, match, oCopyLimit);
-                    match += oCopyLimit - op;
-                    op = oCopyLimit;
+                if (op < cpy) {
+                    if (op < oCopyLimit) {
+                        LZ4_wildCopy8(op, match, oCopyLimit);
+                        match += oCopyLimit - op;
+                        op = oCopyLimit;
+                    }
+                    while (op < cpy) { *op++ = *match++; }
                 }
-                while (op < cpy) { *op++ = *match++; }
-            } else {
+            } else if (op < cpy) {
                 LZ4_memcpy(op, match, 8);
                 if (length > 16) { LZ4_wildCopy8(op+8, match+8, cpy); }
             }

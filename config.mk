@@ -227,6 +227,18 @@ AOCL_TEST_COVERAGE ?= 0
 # COMPILER OPTIMIZATIONS
 # ==============================================================================
 
+# Maximum ISA level for compile-time optimization gating (Linux only)
+# Controls which SIMD instruction set levels are compiled into the library.
+# Higher levels include all lower levels.
+# CMake equivalent: AOCL_MAX_ISA_LEVEL
+#
+# Values:
+#   SSE2   - SSE2 only (level 1)
+#   AVX    - SSE2 + AVX (level 2)
+#   AVX2   - SSE2 + AVX + AVX2 (level 3)
+#   AVX512 - All levels enabled (level 4, default)
+AOCL_MAX_ISA_LEVEL ?= AVX512
+
 # Enable fast-math optimizations
 ENABLE_FAST_MATH ?= 0
 
@@ -325,6 +337,16 @@ ifneq ($(filter-out AUTO 0 1,$(SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS)),)
     $(error SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS must be AUTO, 0, or 1. Got: $(SNAPPY_ENABLE_DECOMPRESS_BRANCHLESS))
 endif
 
+# Normalize to uppercase for case-insensitive matching
+AOCL_MAX_ISA_LEVEL := $(shell echo '$(AOCL_MAX_ISA_LEVEL)' | tr '[:lower:]' '[:upper:]')
+# Validate AOCL_MAX_ISA_LEVEL
+ifeq ($(strip $(AOCL_MAX_ISA_LEVEL)),)
+    $(error AOCL_MAX_ISA_LEVEL must be SSE2, AVX, AVX2, or AVX512. Got: <empty>)
+endif
+ifneq ($(filter-out SSE2 AVX AVX2 AVX512,$(AOCL_MAX_ISA_LEVEL)),)
+    $(error AOCL_MAX_ISA_LEVEL must be SSE2, AVX, AVX2, or AVX512. Got: $(AOCL_MAX_ISA_LEVEL))
+endif
+
 # ==============================================================================
 # AUTO-ENABLING LOGIC (mirrors CMake behavior)
 # ==============================================================================
@@ -362,3 +384,4 @@ export AOCL_TEST_COVERAGE
 export ENABLE_FAST_MATH ENABLE_STRICT_WARNINGS
 export PREFIX DESTDIR DEST_LIB_PATH DEST_INC_PATH DEST_EXAMPLES_PATH
 export AOCL_EXCLUDE_DEPRECATED_APIS JOBS
+export AOCL_MAX_ISA_LEVEL

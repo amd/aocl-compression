@@ -1,7 +1,7 @@
 /* zlib.h -- interface of the 'zlib' general purpose compression library
-  version 1.3.1, January 22nd, 2024
+  version 1.3.2, February 17th, 2026
 
-  Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler
+  Copyright (C) 1995-2026 Jean-loup Gailly and Mark Adler
   Modifications Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
 
   This software is provided 'as-is', without any express or implied
@@ -25,7 +25,7 @@
 
 
   The data format used by the zlib library is described by RFCs (Request for
-  Comments) 1950 to 1952 in the files http://tools.ietf.org/html/rfc1950
+  Comments) 1950 to 1952 at https://datatracker.ietf.org/doc/html/rfc1950
   (zlib format), rfc1951 (deflate format) and rfc1952 (gzip format).
 */
 
@@ -38,11 +38,11 @@
 extern "C" {
 #endif
 
-#define ZLIB_VERSION "1.3.1.f-AOCL-ZLIB"
-#define ZLIB_VERNUM 0x131f
+#define ZLIB_VERSION "1.3.2.f-AOCL-ZLIB"
+#define ZLIB_VERNUM 0x132f
 #define ZLIB_VER_MAJOR 1
 #define ZLIB_VER_MINOR 3
-#define ZLIB_VER_REVISION 1
+#define ZLIB_VER_REVISION 2
 #define ZLIB_VER_SUBREVISION 'f'
 /**
  * \addtogroup ZLIB_API
@@ -533,7 +533,7 @@ ZEXTERN int ZEXPORT inflateInit(z_streamp strm);
 
     The Z_BLOCK option assists in appending to or combining deflate streams.
   To assist in this, on return inflate() always sets strm->data_type to the
-  number of unused bits in the last byte taken from strm->next_in, plus 64 if
+  number of unused bits in the input taken from strm->next_in, plus 64 if
   inflate() is currently decoding the last block in the deflate stream, plus
   128 if inflate() returned immediately after decoding an end-of-block code or
   decoding the complete header up to just before the first byte of the deflate
@@ -695,18 +695,21 @@ ZEXTERN int ZEXPORT deflateInit2(z_streamp strm,
 
      The strategy parameter is used to tune the compression algorithm.  Use the
    value Z_DEFAULT_STRATEGY for normal data, Z_FILTERED for data produced by a
-   filter (or predictor), Z_HUFFMAN_ONLY to force Huffman encoding only (no
-   string match), or Z_RLE to limit match distances to one (run-length
-   encoding).  Filtered data consists mostly of small values with a somewhat
-   random distribution.  In this case, the compression algorithm is tuned to
-   compress them better.  The effect of Z_FILTERED is to force more Huffman
-   coding and less string matching; it is somewhat intermediate between
-   Z_DEFAULT_STRATEGY and Z_HUFFMAN_ONLY.  Z_RLE is designed to be almost as
-   fast as Z_HUFFMAN_ONLY, but give better compression for PNG image data.  The
-   strategy parameter only affects the compression ratio but not the
-   correctness of the compressed output even if it is not set appropriately.
-   Z_FIXED prevents the use of dynamic Huffman codes, allowing for a simpler
-   decoder for special applications.
+   filter (or predictor), Z_RLE to limit match distances to one (run-length
+   encoding), or Z_HUFFMAN_ONLY to force Huffman encoding only (no string
+   matching).  Filtered data consists mostly of small values with a somewhat
+   random distribution, as produced by the PNG filters.  In this case, the
+   compression algorithm is tuned to compress them better.  The effect of
+   Z_FILTERED is to force more Huffman coding and less string matching than the
+   default; it is intermediate between Z_DEFAULT_STRATEGY and Z_HUFFMAN_ONLY.
+   Z_RLE is almost as fast as Z_HUFFMAN_ONLY, but should give better
+   compression for PNG image data than Huffman only.  The degree of string
+   matching from most to none is: Z_DEFAULT_STRATEGY, Z_FILTERED, Z_RLE, then
+   Z_HUFFMAN_ONLY. The strategy parameter affects the compression ratio but
+   never the correctness of the compressed output, even if it is not set
+   optimally for the given data.  Z_FIXED uses the default string matching, but
+   prevents the use of dynamic Huffman codes, allowing for a simpler decoder
+   for special applications.
 
      deflateInit2 returns Z_OK if success, Z_MEM_ERROR if there was not enough
    memory, Z_STREAM_ERROR if any parameter is invalid (such as an invalid
@@ -938,10 +941,13 @@ ZEXTERN int ZEXPORT deflateTune(z_streamp strm,
   |:-------|:------------|
   |Success | Returns an upper bound on the compressed size after deflation of sourceLen bytes. |
 */
-ZEXTERN uLong ZEXPORT deflateBound(z_streamp strm,
-                                   uLong sourceLen);
+ZEXTERN uLong ZEXPORT deflateBound(z_streamp strm, uLong sourceLen);
 
-
+/**
+  @brief deflateBound_z() is the same, but takes and returns a size_t length.  Note
+   that a long is 32 bits on Windows.
+*/
+ZEXTERN z_size_t ZEXPORT deflateBound_z(z_streamp strm, z_size_t sourceLen);
 
 /**
   @brief This function returns the number of bytes and bits of output that have
@@ -959,6 +965,11 @@ ZEXTERN uLong ZEXPORT deflateBound(z_streamp strm,
   await more bits to join them in order to fill out a full byte.  If pending
   or bits are Z_NULL, then those values are not set.
 
+  @note If an int is 16 bits and memLevel is 9, then
+  it is possible for the number of pending bytes to not fit in an unsigned. In
+  that case Z_BUF_ERROR is returned and *pending is set to the maximum value
+  of an unsigned.
+
   @return
   |Result          | Description  |
   |:---------------|:-------------|
@@ -969,6 +980,27 @@ ZEXTERN int ZEXPORT deflatePending(z_streamp strm,
                                    unsigned *pending,
                                    int *bits);
 
+
+/**
+  @brief This function returns in *bits the most recent number of deflate bits used
+   in the last byte when flushing to a byte boundary.  
+ 
+   The result is in 1..8, or 0 if there has not yet been a flush. This helps determine 
+   the location of the last bit of a deflate stream.
+
+  |Parameters|Direction|Description|
+  |:---------|:-------:|:----------|
+  | \b strm  | in,out |It works as a handle for compression, refer @ref z_stream_s for more info.|
+  | \b bits  | out    |returns most recent number of deflate bits used in the last byte when flushing to a byte boundary|
+
+  @return
+  |Result          | Description |
+  |:---------------|:------------|
+  | Z_OK           | If success. |
+  | Z_STREAM_ERROR | If the source stream state was inconsistent. |
+*/
+ZEXTERN int ZEXPORT deflateUsed(z_streamp strm,
+                                int *bits);
 
 /**
   @brief This function inserts bits in the deflate output stream.  
@@ -1252,8 +1284,11 @@ ZEXTERN int ZEXPORT inflateReset2(z_streamp strm,
 
   @attention This function should only be used with raw inflate, and
   should be used before the first inflate() call after inflateInit2() or
-  inflateReset().  bits must be less than or equal to 16, and that many of the
-  least significant bits of value will be inserted in the input.
+  inflateReset(). It can also be used after an inflate() return indicates
+  the end of a deflate block or header when using Z_BLOCK.  bits must be
+  less than or equal to 16, and that many of the least significant bits of
+  value will be inserted in the input. The other bits in value can be
+  non-zero, and will be ignored.
 
   If bits is negative, then the input stream bit buffer is emptied.  Then
   inflatePrime() can be called again to put bits in the buffer.  This is used
@@ -1264,7 +1299,7 @@ ZEXTERN int ZEXPORT inflateReset2(z_streamp strm,
   |Result          | Description |
   |:---------------|:------------|
   | Z_OK           | If success |
-  | Z_STREAM_ERROR | If the source stream state was inconsistent |
+  | Z_STREAM_ERROR | If the source stream state was inconsistent, or if bits is out of range. If inflate was in the middle of processing a header, trailer, or stored block lengths, then it is possible for there to be only eight bits available in the bit buffer. In that case, bits > 8 is considered out of range.  However, when used as outlined above, there will always be 16 bits available in the buffer for insertion.  As noted in its documentation above, inflate records the number of bits in the bit buffer on return in data_type. 32 minus that is the number of bits available for insertion.  inflatePrime does not update data_type with the new number of bits in buffer. |
 */
 ZEXTERN int ZEXPORT inflatePrime(z_streamp strm,
                                  int bits,
@@ -1327,20 +1362,22 @@ ZEXTERN long ZEXPORT inflateMark(z_streamp strm);
 
     The text, time, xflags, and os fields are filled in with the gzip header
   contents.  hcrc is set to \b true if there is a header CRC.  (The header CRC
-  was valid if done is set to one.) If extra is not Z_NULL, then extra_max
-  contains the maximum number of bytes to write to extra.  Once done is \b true,
-  extra_len contains the actual extra field length, and extra contains the
-  extra field, or that field truncated if extra_max is less than extra_len.
-  If name is not Z_NULL, then up to name_max characters are written there,
-  terminated with a zero unless the length is greater than name_max.  If
-  comment is not Z_NULL, then up to comm_max characters are written there,
-  terminated with a zero unless the length is greater than comm_max.  When any
-  of extra, name, or comment are not Z_NULL and the respective field is not
-  present in the header, then that field is set to Z_NULL to signal its
-  absence.  This allows the use of deflateSetHeader() with the returned
-  structure to duplicate the header.  However if those fields are set to
-  allocated memory, then the application will need to save those pointers
-  elsewhere so that they can be eventually freed.
+  was valid if done is set to one.) The extra, name, and comment pointers
+  must each be either Z_NULL or point to space to store that information from
+  the header.  If extra is not Z_NULL, then extra_max contains the maximum
+  number of bytes that can be written to extra.  Once done is true, extra_len
+  contains the actual extra field length, and extra contains the extra field,
+  or that field truncated if extra_max is less than extra_len.  If name is not
+  Z_NULL, then up to name_max characters, including the terminating zero, are
+  written there.  If comment is not Z_NULL, then up to comm_max characters,
+  including the terminating zero, are written there.  The application can tell
+  that the name or comment did not fit in the provided space by the absence of
+  a terminating zero.  If any of extra, name, or comment are not present in
+  the header, then that field's pointer is set to Z_NULL.  This allows the use
+  of deflateSetHeader() with the returned structure to duplicate the header.
+  @note Note that if those fields initially pointed to allocated memory, then the
+  application will need to save them elsewhere so that they can be eventually
+  freed.
 
     If inflateGetHeader is not used, then the header information is simply
   discarded.  The header is always checked for validity, including the header
@@ -1519,13 +1556,14 @@ ZEXTERN int ZEXPORT inflateBackEnd(z_streamp strm);
   - 21: FASTEST -- deflate algorithm with only one, lowest compression level (not supported in AOCL ZLIB)
   - 22,23: 0 (reserved)
 
-  The sprintf variant used by gzprintf (zero is best):
+  The sprintf variant used by gzprintf (all zeros is best):
   - 24: 0 = vs*, 1 = s* -- 1 means limited to 20 arguments after the format
-  - 25: 0 = *nprintf, 1 = *printf -- 1 means gzprintf() not secure!
+  - 25: 0 = *nprintf, 1 = *printf -- 1 means gzprintf() is not secure!
   - 26: 0 = returns value, 1 = void -- 1 means inferred string length returned
+  - 27: 0 = gzprintf() present, 1 = not -- 1 means gzprintf() returns an error
 
   Remainder:
-  - 27-31: 0 (reserved)
+  - 28-31: 0 (reserved)
 
   @return
   |Result  | Description |
@@ -1548,7 +1586,8 @@ ZEXTERN uLong ZEXPORT zlibCompileFlags(void);
   stream-oriented functions.  To simplify the interface, some default options
   are assumed (compression level and memory usage, standard memory allocation
   functions).  The source code of these utility functions can be modified if
-  you need special options.
+  you need special options.  The _z versions of the functions use the size_t
+  type for lengths.  Note that a long is 32 bits on Windows.
   @{
 */
 
@@ -1586,6 +1625,16 @@ ZEXTERN int ZEXPORT compress(Bytef *dest,   uLongf *destLen,
 
 /**
   @rst 
+  .. _compress_z:
+  @endrst
+  
+  @brief This function similar to compress() that take size_t length arguments.  
+*/
+ZEXTERN int ZEXPORT compress_z(Bytef *dest, z_size_t *destLen,
+                             const Bytef *source, z_size_t sourceLen);
+
+/**
+  @rst 
   .. _compress2:
   @endrst
 
@@ -1617,6 +1666,17 @@ ZEXTERN int ZEXPORT compress(Bytef *dest,   uLongf *destLen,
 ZEXTERN int ZEXPORT compress2(Bytef *dest,   uLongf *destLen,
                               const Bytef *source, uLong sourceLen,
                               int level);
+
+/**
+  @rst 
+  .. _compress2_z:
+  @endrst
+  
+  @brief This function similar to compress2_z() that take size_t length arguments.  
+*/
+ZEXTERN int ZEXPORT compress2_z(Bytef *dest, z_size_t *destLen,
+                                const Bytef *source, z_size_t sourceLen,
+                                int level);
 
 /**
   @rst 
@@ -1653,8 +1713,8 @@ ZEXTERN int ZEXPORT compress2(Bytef *dest,   uLongf *destLen,
   |Z_BUF_ERROR    | If there was not enough room in the output buffer. |
   |Z_STREAM_ERROR | If the level parameter is invalid. |
 */
-ZEXTERN int ZEXPORT compress2_gzip(Bytef *dest,   uLongf *destLen,
-                              const Bytef *source, uLong sourceLen,
+ZEXTERN int ZEXPORT compress2_gzip(Bytef *dest,   z_size_t *destLen,
+                              const Bytef *source, z_size_t sourceLen,
                               int level);
 
 /**
@@ -1692,8 +1752,8 @@ ZEXTERN int ZEXPORT compress2_gzip(Bytef *dest,   uLongf *destLen,
   |Z_BUF_ERROR    | If there was not enough room in the output buffer. |
   |Z_STREAM_ERROR | If the level parameter is invalid. |
 */
-ZEXTERN int ZEXPORT compress2_raw(Bytef *dest,   uLongf *destLen,
-                              const Bytef *source, uLong sourceLen,
+ZEXTERN int ZEXPORT compress2_raw(Bytef *dest,   z_size_t *destLen,
+                              const Bytef *source, z_size_t sourceLen,
                               int level);
 
 /**
@@ -1715,6 +1775,22 @@ ZEXTERN int ZEXPORT compress2_raw(Bytef *dest,   uLongf *destLen,
 ZEXTERN uLong ZEXPORT compressBound(uLong sourceLen);
 
 /**
+  @brief Similar to compressBound() that takes length in size_t
+ 
+  |Parameters    |Direction|Description|
+  |:-------------|:-------:|:----------|
+  | \b sourceLen |    in   | Length of source buffer to be compressed.|
+
+
+  @return
+  |Result | Description |
+  |:------|:------------|
+  |Success| Returns an upper bound on the compressed size after compress() or compress2() on sourceLen bytes. |
+
+*/
+ZEXTERN z_size_t ZEXPORT compressBound_z(z_size_t sourceLen);
+
+/**
   @brief It returns an upper bound on the compressed size after
   compress2_gzip() on sourceLen bytes.  It would be used before a
   compress2_gzip() call to allocate the destination buffer. Only work in Multithreaded mode.
@@ -1730,7 +1806,7 @@ ZEXTERN uLong ZEXPORT compressBound(uLong sourceLen);
   |Success| Returns an upper bound on the compressed size after compress2_gzip() on sourceLen bytes. |
 
 */
-ZEXTERN uLong ZEXPORT compressBound_gzip(uLong sourceLen);
+ZEXTERN z_size_t ZEXPORT compressBound_gzip(z_size_t sourceLen);
 
 /**
   @rst
@@ -1748,9 +1824,9 @@ ZEXTERN uLong ZEXPORT compressBound_gzip(uLong sourceLen);
 
   |Parameters|Direction|Description|
   |:---------|:-------:|:----------|
-  | \b dest  | in,out |The compressed data is stored in this buffer.|
-  | \b destLen |in | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the compressed data.|
-  | \b source |out | This buffer contains the compressed data which will be decompressed into dest buffer.|
+  | \b dest  | out |The compressed data is stored in this buffer.|
+  | \b destLen |in,out | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the uncompressed data.|
+  | \b source |in | This buffer contains the compressed data which will be decompressed into dest buffer.|
   | \b sourceLen| in |It is the byte length of the source buffer.|
 
   @return
@@ -1763,6 +1839,38 @@ ZEXTERN uLong ZEXPORT compressBound_gzip(uLong sourceLen);
 */
 ZEXTERN int ZEXPORT uncompress(Bytef *dest,   uLongf *destLen,
                                const Bytef *source, uLong sourceLen);
+
+                               /**
+  @rst
+  .. _uncompress_z:
+  @endrst
+  
+  @brief Similar to uncompress() with length in size_t.  
+
+  \b sourceLen is the byte length of the source buffer.  Upon entry, destLen is the total size
+  of the destination buffer, which must be large enough to hold the entire
+  uncompressed data.  (The size of the uncompressed data must have been saved
+  previously by the compressor and transmitted to the decompressor by some
+  mechanism outside the scope of this compression library.) Upon exit, destLen
+  is the actual size of the uncompressed data.
+
+  |Parameters|Direction|Description|
+  |:---------|:-------:|:----------|
+  | \b dest  | out |The compressed data is stored in this buffer.|
+  | \b destLen |in,out | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the uncompressed data.|
+  | \b source |in | This buffer contains the compressed data which will be decompressed into dest buffer.|
+  | \b sourceLen| in |It is the byte length of the source buffer.|
+
+  @return
+  |Result      | Description   |
+  |:-----------|:--------------|
+  |Z_OK        | If success.    |
+  |Z_MEM_ERROR | If there was not enough memory.  |
+  |Z_BUF_ERROR | If there was not enough room in the output buffer |
+  |Z_DATA_ERROR| If the input data was corrupted or incomplete. In the case where there is not enough room, uncompress() will fill the output buffer with the uncompressed data up to that point. |
+*/
+ZEXTERN int ZEXPORT uncompress_z(Bytef *dest, z_size_t *destLen,
+                                 const Bytef *source, z_size_t sourceLen);
 
 /**
   @rst
@@ -1777,9 +1885,9 @@ ZEXTERN int ZEXPORT uncompress(Bytef *dest,   uLongf *destLen,
 
   |Parameters    |Direction|Description|
   |:-------------|:-------:|:----------|
-  | \b dest      |  in,out | The decompressed data is stored in this buffer.|
-  | \b destLen   |  in     | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the compressed data.|
-  | \b source    |  out    | This buffer contains the compressed data which will be decompressed into dest buffer.|
+  | \b dest      |  out | The decompressed data is stored in this buffer.|
+  | \b destLen   |  in,out     | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the uncompressed data.|
+  | \b source    |  in    | This buffer contains the compressed data which will be decompressed into dest buffer.|
   | \b sourceLen |  in     | Upon entry *sourceLen is the byte length of the source buffer.On return *sourceLen is the number of source bytes consumed.|
 
 
@@ -1796,6 +1904,36 @@ ZEXTERN int ZEXPORT uncompress2(Bytef *dest,   uLongf *destLen,
 
 /**
   @rst
+  .. _uncompress2_z:
+  @endrst
+
+  @brief Similar to uncompress2() with length in size_t.
+
+  Same as uncompress(), except that sourceLen is a pointer, where the
+  length of the source is *sourceLen. On return, *sourceLen is the number of
+  source bytes consumed.
+
+  |Parameters    |Direction|Description|
+  |:-------------|:-------:|:----------|
+  | \b dest      |  out | The decompressed data is stored in this buffer.|
+  | \b destLen   |  in,out    | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the uncompressed data.|
+  | \b source    |  in    | This buffer contains the compressed data which will be decompressed into dest buffer.|
+  | \b sourceLen |  in     | Upon entry *sourceLen is the byte length of the source buffer.On return *sourceLen is the number of source bytes consumed.|
+
+
+  @return
+  |Result       | Description   |
+  |:------------|:--------------|
+  |Z_OK         | If success.   |
+  |Z_MEM_ERROR  | If there was not enough memory. |
+  |Z_BUF_ERROR  | If there was not enough room in the output buffer |
+  |Z_DATA_ERROR | If the input data was corrupted or incomplete. In the case where there is not enough room, uncompress() will fill the output buffer with the uncompressed data up to that point. |
+*/
+ZEXTERN int ZEXPORT uncompress2_z(Bytef *dest, z_size_t *destLen,
+                                  const Bytef *source, z_size_t *sourceLen);
+
+/**
+  @rst
   .. _uncompress2_gzip:
   @endrst 
 
@@ -1806,9 +1944,9 @@ ZEXTERN int ZEXPORT uncompress2(Bytef *dest,   uLongf *destLen,
 
   |Parameters    |Direction|Description|
   |:-------------|:-------:|:----------|
-  | \b dest      |  in,out | The decompressed data is stored in this buffer.|
-  | \b destLen   |  in     | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the compressed data.|
-  | \b source    |  out    | This buffer contains the compressed data which will be decompressed into dest buffer.|
+  | \b dest      |  out | The decompressed data is stored in this buffer.|
+  | \b destLen   |  in,out     | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the uncompressed data.|
+  | \b source    |  in    | This buffer contains the compressed data which will be decompressed into dest buffer.|
   | \b sourceLen |  in     | Upon entry *sourceLen is the byte length of the source buffer.On return *sourceLen is the number of source bytes consumed.|
 
 
@@ -1820,8 +1958,8 @@ ZEXTERN int ZEXPORT uncompress2(Bytef *dest,   uLongf *destLen,
   |Z_BUF_ERROR  | If there was not enough room in the output buffer |
   |Z_DATA_ERROR | If the input data was corrupted or incomplete. In the case where there is not enough room, uncompress2_gzip() will fill the output buffer with the uncompressed data up to that point. |
 */
-ZEXTERN int ZEXPORT uncompress2_gzip(Bytef *dest,   uLongf *destLen,
-                                const Bytef *source, uLong *sourceLen);
+ZEXTERN int ZEXPORT uncompress2_gzip(Bytef *dest,   z_size_t *destLen,
+                                const Bytef *source, z_size_t *sourceLen);
 
 /**
   @rst 
@@ -1835,9 +1973,9 @@ ZEXTERN int ZEXPORT uncompress2_gzip(Bytef *dest,   uLongf *destLen,
 
   |Parameters    |Direction|Description|
   |:-------------|:-------:|:----------|
-  | \b dest      |  in,out | The decompressed data is stored in this buffer.|
-  | \b destLen   |  in     | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the compressed data.|
-  | \b source    |  out    | This buffer contains the compressed data which will be decompressed into dest buffer.|
+  | \b dest      |  out | The decompressed data is stored in this buffer.|
+  | \b destLen   |  in,out     | Upon entry, destLen is the total size of the destination buffer, which must be large enough to hold the entire uncompressed data.  Upon exit, destLen is the actual size of the uncompressed data.|
+  | \b source    |  in    | This buffer contains the compressed data which will be decompressed into dest buffer.|
   | \b sourceLen |  in     | Upon entry *sourceLen is the byte length of the source buffer.On return *sourceLen is the number of source bytes consumed.|
 
 
@@ -1849,8 +1987,8 @@ ZEXTERN int ZEXPORT uncompress2_gzip(Bytef *dest,   uLongf *destLen,
   |Z_BUF_ERROR  | If there was not enough room in the output buffer |
   |Z_DATA_ERROR | If the input data was corrupted or incomplete. In the case where there is not enough room, uncompress2_raw() will fill the output buffer with the uncompressed data up to that point. |
 */
-ZEXTERN int ZEXPORT uncompress2_raw(Bytef *dest,   uLongf *destLen,
-                                const Bytef *source, uLong *sourceLen);
+ZEXTERN int ZEXPORT uncompress2_raw(Bytef *dest,   z_size_t *destLen,
+                                const Bytef *source, z_size_t *sourceLen);
 
 /**
  * @}
@@ -1879,7 +2017,11 @@ ZEXTERN gzFile ZEXPORT gzopen(const char *path, const char *mode);
    'R' for run-length encoding as in "wb1R", or 'F' for fixed code compression
    as in "wb9F".  (See the description of deflateInit2 for more information
    about the strategy parameter.)  'T' will request transparent writing or
-   appending with no compression and not using the gzip format.
+   appending with no compression and not using the gzip format. 'T' cannot be
+   used to force transparent reading. Transparent reading is automatically
+   performed if there is no gzip header at the start. Transparent reading can
+   be disabled with the 'G' option, which will instead return an error if there
+   is no gzip header. 'N' will open the file in non-blocking mode.
 
      "a" can be used instead of "w" to request that the gzip stream that will
    be written be appended to the file.  "+" will result in an error, since
@@ -1904,14 +2046,23 @@ ZEXTERN gzFile ZEXPORT gzopen(const char *path, const char *mode);
    insufficient memory to allocate the gzFile state, or if an invalid mode was
    specified (an 'r', 'w', or 'a' was not provided, or '+' was provided).
    errno can be checked to determine if the reason gzopen failed was that the
-   file could not be opened.
+   file could not be opened. 
+   @note Note that if 'N' is in mode for non-blocking, the
+   open() itself can fail in order to not block. In that case gzopen() will
+   return NULL and errno will be EAGAIN or ENONBLOCK. The call to gzopen() can
+   then be re-tried. If the application would like to block on opening the
+   file, then it can use open() without O_NONBLOCK, and then gzdopen() with the
+   resulting file descriptor and 'N' in the mode, which will set it to non-
+   blocking.
 */
 
 /**
   @brief This function associates a gzFile with the file descriptor fd.
 
   File descriptors are obtained from calls like open, dup, creat, pipe or fileno (if the file
-  has been previously opened with fopen).
+  has been previously opened with fopen). The mode parameter is as in gzopen. An
+  'e' in mode will set fd's flag to close the file on an execve() call. An 'N'
+  in mode will set fd's non-blocking flag.
 
   |Parameters|Direction|Description|
   |:---------|:-------:|:----------|
@@ -2007,6 +2158,11 @@ ZEXTERN int ZEXPORT gzsetparams(gzFile file, int level, int strategy);
   on the last gzread.  Z_BUF_ERROR indicates that the input file ended in the
   middle of a gzip stream.
 
+  gzread can be used to read a gzip file on a non-blocking device. If the
+  input stalls and there is no uncompressed data to return, then gzread() will
+  return -1, and errno will be EAGAIN or EWOULDBLOCK. gzread() can then be
+  called again.
+
   @note 
   - If the input file is not in gzip format, gzread copies the given number of
   bytes into the buffer directly from the file.
@@ -2020,7 +2176,7 @@ ZEXTERN int ZEXPORT gzsetparams(gzFile file, int level, int strategy);
   |Result          | Description |
   |:---------------|:------------|
   |Success         | Returns the number of uncompressed bytes actually read, less than len for end of file. |
-  | -1             | If len is too large to fit in an int, then nothing is read, -1 is returned , and the error state is set to Z_STREAM_ERROR. |
+  | -1             | If len is too large to fit in an int, then nothing is read, -1 is returned , and the error state is set to Z_STREAM_ERROR. If some data was read before an error, then that data is returned until exhausted, after which the next call will signal the error. |
 */
 ZEXTERN int ZEXPORT gzread(gzFile file, voidp buf, unsigned len);
 
@@ -2044,9 +2200,10 @@ ZEXTERN int ZEXPORT gzread(gzFile file, voidp buf, unsigned len);
   multiple of size, then the final partial item is nevetheless read into buf
   and the end-of-file flag is set.  The length of the partial item read is not
   provided, but could be inferred from the result of gztell().  This behavior
-  is the same as the behavior of fread() implementations in common libraries,
-  but it prevents the direct use of gzfread() to read a concurrently written
-  file, reseting and retrying on end-of-file, when size is not 1.
+  is the same as that of fread() implementations in common libraries, This
+  could result in data loss if used with size != 1 when reading a concurrently
+  written file or a non-blocking file. In that case, use size == 1 or gzread()
+  instead.
 
   @note 
   - If the input file is not in gzip format, gzread copies the given number of bytes into the buffer directly from the file.
@@ -2073,8 +2230,8 @@ ZEXTERN z_size_t ZEXPORT gzfread(voidp buf, z_size_t size, z_size_t nitems,
   @return
   |Result   | Description |
   |:--------|:------------|
-  | Success | The number of uncompressed bytes written. |
-  | Zero    | 0 in case of error. |
+  | Success | The number of uncompressed bytes written. For non blocking write destination may return a number of bytes written that is not 0 and less than len. |
+  | Zero    | 0 in case of error or if len is 0. If len does not fit in an int, then 0 is returned and nothing is written|
 */
 ZEXTERN int ZEXPORT gzwrite(gzFile file, voidpc buf, unsigned len);
 
@@ -2084,6 +2241,11 @@ ZEXTERN int ZEXPORT gzwrite(gzFile file, voidpc buf, unsigned len);
 
   If the library defines size_t, then z_size_t is identical to size_t.  If not,
   then z_size_t is an unsigned integer type that can contain a pointer.
+
+  If writing a concurrently read file or a non-blocking file with size != 1,
+  a partial item could be written, with no way of knowing how much of it was
+  not written, resulting in data loss.  In that case, use size == 1 or
+  gzwrite() instead.
 
   |Parameters |Direction|Description|
   |:----------|:-------:|:----------|
@@ -2115,9 +2277,14 @@ ZEXTERN z_size_t ZEXPORT gzfwrite(voidpc buf, z_size_t size,
   |:---------------|:-------------|
   | Success        | The number of uncompressed bytes actually written
   | Negative `int` | Negative zlib error code in case of error.  The number of uncompressed bytes written is limited to 8191, or one less than the buffer size given to gzbuffer().  The caller should assure that this limit is not exceeded. |
-  | 0              | If it is exceeded, then gzprintf() will return an error (0) with nothing written.  In this case, there may also be a buffer overflow with unpredictable consequences, which is possible only if zlib was compiled with the insecure functions sprintf() or vsprintf() because the secure snprintf() or vsnprintf() functions were not available. This can be determined using zlibCompileFlags(). |
+  control of the format string, as in fprintf.
+  | 0              | If it is exceeded, then gzprintf() will return an error (0) with nothing written.  In this case, there may also be a buffer overflow with unpredictable consequences, which is possible only if zlib was compiled with the insecure functions sprintf() or vsprintf() because the secure snprintf() or vsnprintf() functions were not available. That would only be the case for a non-ANSI C compiler. zlib may have been built without gzprintf() because secure functions were not available and having gzprintf() be insecure was not an option, in which case, gzprintf() returns Z_STREAM_ERROR. All of these possibilities can be determined using zlibCompileFlags(). |
 */
+#if defined(STDC) || defined(Z_HAVE_STDARG_H)
 ZEXTERN int ZEXPORTVA gzprintf(gzFile file, const char *format, ...);
+#else
+ZEXTERN int ZEXPORTVA gzprintf();
+#endif
 
 /**
   @brief It writes the given null-terminated string to the compressed file, excluding
@@ -2133,7 +2300,12 @@ ZEXTERN int ZEXPORTVA gzprintf(gzFile file, const char *format, ...);
   |:--------|:-------------|
   | Success | It returns the number of characters written.|
   | -1      | It returns in case of error. |
-   
+
+  @note
+  The number of characters written may be less than the length of the string
+  if the write destination is non-blocking.
+  If the length of the string does not fit in an int, then -1 is returned
+  and nothing is written.
 */
 ZEXTERN int ZEXPORT gzputs(gzFile file, const char *s);
 
@@ -2156,8 +2328,13 @@ ZEXTERN int ZEXPORT gzputs(gzFile file, const char *s);
   |Result   | Description |
   |:--------|:------------|
   | Success | It returns a buffer which is a null-terminated string. |
-  | \b NULL | It returns \b NULL for end-of-file or in case of error.  If there was an error, the contents at buf are indeterminate. |
-*/
+  | \b NULL | It returns \b NULL for end-of-file or in case of error.  If some data was read before an error, then that data is returned until exhausted, after which the next call will return NULL to signal the error. |
+
+  @note
+  gzgets can be used on a file being concurrently written, and on a non-
+  blocking device, both as for gzread(). However lines may be broken in the
+  middle, leaving it up to the application to reassemble them as needed.
+  */
 ZEXTERN char * ZEXPORT gzgets(gzFile file, char *buf, int len);
 
 /**
@@ -2185,12 +2362,16 @@ ZEXTERN int ZEXPORT gzputc(gzFile file, int c);
 
   @note This is implemented as a macro for speed. As such, it does not do all of the checking the other functions do.  I.e.
   it does not check to see if file is \b NULL, nor whether the structure file points to has been clobbered or not.
+  gzgetc can be used to read a gzip file on a non-blocking device. If the
+  input stalls and there is no uncompressed data to return, then gzgetc() will
+  return -1, and errno will be EAGAIN or EWOULDBLOCK. gzread() can then be
+  called again.
 
   @return
   |Result   | Description |
   |:--------|:------------|
   | Success | Returns this byte. |
-  | -1      | It returns in case of end of file or error. |
+  | -1      | It returns in case of end of file or error. If some data was read before an error, then that data is returned until exhausted, after which the next call will return -1 to signal the error. |
 */
 ZEXTERN int ZEXPORT gzgetc(gzFile file);
 
@@ -2204,6 +2385,11 @@ ZEXTERN int ZEXPORT gzgetc(gzFile file);
   output buffer size of pushed characters is allowed.  (See gzbuffer above.)
   The pushed character will be discarded if the stream is repositioned with
   gzseek() or gzrewind().
+
+  gzungetc(-1, file) will force any pending seek to execute. Then gztell()
+  will report the position, even if the requested seek reached end of file.
+  This can be used to determine the number of uncompressed bytes in a gzip
+  file without having to read it into a buffer.
 
   |Parameters|Direction|Description|
   |:---------|:-------:|:----------|
@@ -2256,7 +2442,8 @@ ZEXTERN z_off_t ZEXPORT gzseek(gzFile file,
      If the file is opened for reading, this function is emulated but can be
    extremely slow.  If the file is opened for writing, only forward seeks are
    supported; gzseek then compresses a sequence of zeroes up to the new
-   starting position.
+   starting position. For reading or writing, any actual seeking is deferred
+   until the next read or write operation, or close operation when writing.
 
      gzseek returns the resulting offset location as measured in bytes from
    the beginning of the uncompressed stream, or -1 in case of error, in
@@ -2280,10 +2467,10 @@ ZEXTERN z_off_t ZEXPORT gzseek(gzFile file,
   |-1     | on error    |
   | 0     | on success  |
 */
-ZEXTERN int ZEXPORT    gzrewind(gzFile file);
+ZEXTERN int ZEXPORT gzrewind(gzFile file);
 
 /*
-ZEXTERN z_off_t ZEXPORT    gztell(gzFile file);
+ZEXTERN z_off_t ZEXPORT gztell(gzFile file);
 
      Return the starting position for the next gzread or gzwrite on file.
    This position represents a number of bytes in the uncompressed data stream,
@@ -2339,8 +2526,11 @@ ZEXTERN int ZEXPORT gzeof(gzFile file);
 
   If gzdirect() is used immediately after gzopen() or gzdopen() it will
   cause buffers to be allocated to allow reading the file to determine if it
-  is a gzip file.  Therefore if gzbuffer() is used, it should be called before
-  gzdirect().
+  is a gzip file. Therefore if gzbuffer() is used, it should be called before
+  gzdirect(). If the input is being written concurrently or the device is non-
+  blocking, then gzdirect() may give a different answer once four bytes of
+  input have been accumulated, which is what is needed to confirm or deny a
+  gzip header. Before this, gzdirect() will return true (1).
 
   @note gzdirect() is not needed when writing.  Transparent writing must be
   explicitly requested, so the application already knows the answer.  When
@@ -2389,7 +2579,7 @@ ZEXTERN int ZEXPORT gzdirect(gzFile file);
   |Z_BUF_ERROR    | If the last read ended in the middle of a gzip stream. |
   |Z_OK           | On success. |
 */
-ZEXTERN int ZEXPORT    gzclose(gzFile file);
+ZEXTERN int ZEXPORT gzclose(gzFile file);
 
 /**
   @brief Same as gzclose(), but gzclose_r() is only for use when reading.
@@ -2451,6 +2641,11 @@ ZEXTERN int ZEXPORT gzclose_w(gzFile file);
   this function may invalidate the previously returned string.  If file is
   closed, then the string previously returned by gzerror will no longer be
   available.
+
+  If errnum is not NULL, *errnum is set to zlib error number.  If an error
+  occurred in the file system and not in the compression library, *errnum is
+  set to Z_ERRNO and the application may consult errno to get the exact error
+  code.
 
   @return
   Result | Description
@@ -2528,7 +2723,8 @@ ZEXTERN uLong ZEXPORT adler32(uLong adler, const Bytef *buf, uInt len);
 ZEXTERN uInt ZEXPORT adler32_x86(uInt adler, const Bytef *buf, z_size_t len);
 
 /**
-  @brief Same as adler32(), but with a size_t length.
+  @brief Same as adler32(), but with a size_t length. Note that a long is 32 bits
+  on Windows.
 
 
   |Parameters|Direction|Description|
@@ -2596,7 +2792,8 @@ ZEXTERN uLong ZEXPORT adler32_combine(uLong adler1, uLong adler2,
 ZEXTERN uLong ZEXPORT crc32(uLong crc, const Bytef *buf, uInt len);
 
 /**
-  @brief Same as crc32(), but with a size_t length.
+  @brief Same as crc32(), but with a size_t length. Note that a long is 32 bits on
+  Windows.
 
   |Parameters|Direction|Description|
   |:---------|:-------:|:----------|
@@ -2620,13 +2817,13 @@ ZEXTERN uLong ZEXPORT crc32_combine(uLong crc1, uLong crc2, z_off_t len2);
    seq1 and seq2 with lengths len1 and len2, CRC-32 check values were
    calculated for each, crc1 and crc2.  crc32_combine() returns the CRC-32
    check value of seq1 and seq2 concatenated, requiring only crc1, crc2, and
-   len2. len2 must be non-negative.
+   len2. len2 must be non-negative, otherwise zero is returned.
 */
 /*
 ZEXTERN uLong ZEXPORT crc32_combine_gen(z_off_t len2);
 
      Return the operator corresponding to length len2, to be used with
-   crc32_combine_op(). len2 must be non-negative.
+   crc32_combine_op(). len2 must be non-negative, otherwise zero is returned.
 */
 
 /**

@@ -43,24 +43,20 @@
 #include "codec_bench.h"
 #include <sys/stat.h>
 
-#ifndef _WINDOWS
+#ifndef _WIN32
 #include <unistd.h>
 #include <dirent.h>
 #include <errno.h>
 #endif
 
-#ifdef _WINDOWS
+#ifdef _WIN32
 #define CODEC_STRCAT(name) strcat(name, "\\")
-#else
-#define CODEC_STRCAT(name) strcat(name, "/")
-#endif
-
-#ifdef _WINDOWS
 #define LOG_SYSTEM_ERROR()\
 {\
     LOG_BENCH(ERR, "System Error Code: %lu\n", GetLastError());\
-} 
+}
 #else
+#define CODEC_STRCAT(name) strcat(name, "/")
 #define LOG_SYSTEM_ERROR()\
 {\
     LOG_BENCH(ERR, "Error Message: %s\n", strerror(errno));\
@@ -242,7 +238,7 @@ AOCL_INTP get_file_name(aocl_codec_bench_info* codec_bench_handle, AOCL_CHAR* dm
 AOCL_INTP is_dir(const AOCL_CHAR* filename)
 {
 
-#ifdef _WINDOWS
+#ifdef _WIN32
     unsigned long file_attributes = GetFileAttributes(filename);
 	return (AOCL_INTP)((file_attributes != INVALID_FILE_ATTRIBUTES) && (file_attributes & FILE_ATTRIBUTE_DIRECTORY));
 #else
@@ -258,7 +254,7 @@ AOCL_INTP is_dir(const AOCL_CHAR* filename)
 AOCL_INTP file_object_exists(const AOCL_CHAR* dirName)
 {
 
-#ifdef _WINDOWS
+#ifdef _WIN32
     unsigned long file_attributes = GetFileAttributes(dirName);
 	return (AOCL_INTP)(file_attributes != INVALID_FILE_ATTRIBUTES);
 
@@ -277,13 +273,16 @@ AOCL_INTP get_file_count(const AOCL_CHAR* dirName)
 {
     AOCL_INTP cnt = 0;
 
-#ifdef _WINDOWS
+#ifdef _WIN32
 	AOCL_CHAR dir [MAX_FILENAME_LEN];
     memset(dir, '\0', sizeof(dir));
     sprintf(dir, "%s\\*", dirName);
 
 	WIN32_FIND_DATA find_data;
 	HANDLE searchHandle = FindFirstFile(dir, &find_data);
+	if (searchHandle == INVALID_HANDLE_VALUE) {
+		return 0;
+	}
 
 	if(!(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)){
         cnt += 1;
@@ -518,7 +517,7 @@ AOCL_INTP read_user_options (AOCL_INTP argc,
                     LOG_STRING_OVERFLOW(argv[cnt]);
                     ret = ERR_CODEC_BENCH_ARGS;
                 }
-#ifdef _WINDOWS
+#ifdef _WIN32
                 tmpStr = strrchr(inFile, '\\');
 #else
                 tmpStr = strrchr(inFile, '/');
@@ -708,7 +707,7 @@ AOCL_INTP open_file(aocl_codec_bench_info* codec_bench_handle,
         return 0;
     }
 
-#ifdef _WINDOWS
+#ifdef _WIN32
     _fseeki64(fp, 0L, SEEK_END);
     *file_size = _ftelli64(fp);
 #else
@@ -897,7 +896,7 @@ AOCL_INTP create_dump_folder(aocl_codec_bench_info* codec_bench_handle)
         return ERR_CODEC_BENCH_FILE_IO;
     }
     // create dump folder with name codec_bench_handle->dumpFile
-#ifdef _WINDOWS
+#ifdef _WIN32
     if (CreateDirectory(codec_bench_handle->dumpFile, NULL) == 0)
     {
 #else
@@ -1543,7 +1542,7 @@ AOCL_INT32 main (AOCL_INT32 argc, AOCL_CHAR **argv)
 
     if (codec_bench_handle.useIPP) 
     {
-#ifdef _WINDOWS
+#ifdef _WIN32
         LOG_BENCH(ERR, "IPP test execution not supported on Windows for now.\n");
 #else
         result = ipp_bench_run(aocl_codec_handle, &codec_bench_handle);

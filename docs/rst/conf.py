@@ -34,8 +34,8 @@ import os
 project = 'AOCL-Compression'
 copyright = '2020-2024, Advanced Micro Devices, Inc'
 author = 'Advanced Micro Devices, Inc'
-version = '5.3.0'
-release = '5.3.0'
+version = '5.3.2'
+release = '5.3.2'
 
 extensions = ['breathe', 'myst_parser']
 pwd = os.path.dirname(os.path.abspath(__file__))

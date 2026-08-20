@@ -61,9 +61,27 @@ include config.mk
 # Platform and compiler detection
 include mk/platform.mk
 
-# GNU Make build supports only Linux
-ifneq ($(OS_TYPE),unix)
-    $(error GNU Make build does not support Windows. Use the CMake build system on Windows.)
+# Verify the supported platform (Unix or Windows with MinGW/MSYS2)
+ifeq ($(filter $(OS_TYPE),unix windows),)
+    $(error GNU Make build supports Unix and Windows (MinGW/MSYS2). Detected OS_TYPE: $(OS_TYPE))
+endif
+
+# ==============================================================================
+# ISA LEVEL NUMERIC MAPPING
+# ==============================================================================
+
+# Normalize to uppercase for case-insensitive matching
+AOCL_MAX_ISA_LEVEL := $(shell echo '$(AOCL_MAX_ISA_LEVEL)' | tr '[:lower:]' '[:upper:]')
+
+# Map AOCL_MAX_ISA_LEVEL string to numeric value
+ifeq ($(AOCL_MAX_ISA_LEVEL),SSE2)
+    AOCL_MAX_ISA_LEVEL_NUM := 1
+else ifeq ($(AOCL_MAX_ISA_LEVEL),AVX)
+    AOCL_MAX_ISA_LEVEL_NUM := 2
+else ifeq ($(AOCL_MAX_ISA_LEVEL),AVX2)
+    AOCL_MAX_ISA_LEVEL_NUM := 3
+else
+    AOCL_MAX_ISA_LEVEL_NUM := 4
 endif
 
 # Build rules and patterns
@@ -99,8 +117,13 @@ else
     LIB_TYPE := shared
 endif
 
-# Link-time library artifact
+# Link-time library artifact (import library on Windows/MinGW shared builds).
 LIB_LINK_TARGET := $(LIB_TARGET)
+ifneq ($(BUILD_STATIC_LIBS),1)
+ifeq ($(OS_TYPE),windows)
+    LIB_LINK_TARGET := $(LIB_DIR)/$(LIB_PREFIX)$(LIB_NAME).dll.a
+endif
+endif
 
 export LIB_TARGET LIB_LINK_TARGET LIB_NAME LIB_DIR OBJ_DIR DEP_DIR GEN_DIR
 
@@ -260,6 +283,12 @@ ifeq ($(BUILD_TYPE),Debug)
     endif
 endif
 
+# Windows DLL export (shared build) -- matches CMake set_property pattern
+ifeq ($(OS_TYPE),windows)
+ifneq ($(BUILD_STATIC_LIBS),1)
+    BZIP2_CFLAGS += -DBZIP2_DLL_EXPORT=1
+endif
+endif
 
 # Per-file flags for BZIP2 sources
 $(OBJ_DIR)/algos/bzip2/%.o: CFLAGS += $(BZIP2_CFLAGS)
@@ -368,6 +397,13 @@ ifeq ($(AOCL_LLC_PREFIX),1)
     LZ4_CFLAGS += -DAOCL_LLC_PREFIX
 endif
 
+# Windows DLL export (shared build) -- matches CMake set_property pattern
+ifeq ($(OS_TYPE),windows)
+ifneq ($(BUILD_STATIC_LIBS),1)
+    LZ4_CFLAGS += -DLZ4_DLL_EXPORT=1
+endif
+endif
+
 # Add include path for aoclPrefix.h (in algos/common)
 
 # Per-file flags for LZ4 sources
@@ -431,6 +467,14 @@ ifeq ($(AOCL_LLC_PREFIX),1)
     LZ4HC_CFLAGS += -DAOCL_LLC_PREFIX
 endif
 
+# Windows DLL export (shared build) -- matches CMake set_property pattern.
+# LZ4HC sources reuse the LZ4_DLL_EXPORT gate (see algos/lz4/lz4hc.h).
+ifeq ($(OS_TYPE),windows)
+ifneq ($(BUILD_STATIC_LIBS),1)
+    LZ4HC_CFLAGS += -DLZ4_DLL_EXPORT=1
+endif
+endif
+
 # Add include path for aoclPrefix.h (in algos/common)
 
 # Per-file flags for LZ4HC sources
@@ -488,6 +532,13 @@ ifeq ($(BUILD_TYPE),Debug)
     endif
 endif
 
+# Windows DLL export (shared build) -- matches CMake set_property pattern
+ifeq ($(OS_TYPE),windows)
+ifneq ($(BUILD_STATIC_LIBS),1)
+    LZMA_CFLAGS += -DLZMA_DLL_EXPORT=1
+endif
+endif
+
 # Per-file flags for LZMA sources
 $(OBJ_DIR)/algos/lzma/%.o: CFLAGS += $(LZMA_CFLAGS)
 
@@ -536,19 +587,18 @@ ALL_HEADERS += $(SNAPPY_HEADERS)
 # SNAPPY-specific flags
 SNAPPY_CXXFLAGS :=
 
-# Platform-specific flags
+# SSE4.1 / hardware CRC32 (supported by GCC and Clang on both Unix and MinGW)
+SNAPPY_CXXFLAGS += -msse4.1
+
+# Compiler capability defines (GCC/Clang built-ins; available on MinGW too)
+SNAPPY_CXXFLAGS += -DHAVE_ATTRIBUTE_ALWAYS_INLINE=1
+SNAPPY_CXXFLAGS += -DHAVE_BUILTIN_CTZ=1
+SNAPPY_CXXFLAGS += -DHAVE_BUILTIN_EXPECT=1
+SNAPPY_CXXFLAGS += -DHAVE_BUILTIN_PREFETCH=1
+SNAPPY_CXXFLAGS += -DSNAPPY_HAVE_X86_CRC32=1
+
+# sys/uio.h is Unix-only
 ifeq ($(OS_TYPE),unix)
-    # SSE4.1 support for Unix
-    SNAPPY_CXXFLAGS += -msse4.1
-    
-    # Compiler capabilities
-    SNAPPY_CXXFLAGS += -DHAVE_ATTRIBUTE_ALWAYS_INLINE=1
-    SNAPPY_CXXFLAGS += -DHAVE_BUILTIN_CTZ=1
-    SNAPPY_CXXFLAGS += -DHAVE_BUILTIN_EXPECT=1
-    SNAPPY_CXXFLAGS += -DHAVE_BUILTIN_PREFETCH=1
-    SNAPPY_CXXFLAGS += -DSNAPPY_HAVE_X86_CRC32=1
-    
-    # Check for sys/uio.h
     SNAPPY_HAS_SYS_UIO := $(shell printf '%s\n' '\#include <sys/uio.h>' | $(CC) -E - >/dev/null 2>&1; if [ $$? -eq 0 ]; then echo 1; else echo 0; fi)
     ifeq ($(SNAPPY_HAS_SYS_UIO),1)
         SNAPPY_CXXFLAGS += -DHAVE_SYS_UIO_H
@@ -579,6 +629,13 @@ ifeq ($(BUILD_TYPE),Debug)
     ifeq ($(AOCL_TEST_COVERAGE),1)
         SNAPPY_CXXFLAGS += -DNDEBUG
     endif
+endif
+
+# Windows DLL export (shared build) -- matches CMake set_property pattern
+ifeq ($(OS_TYPE),windows)
+ifneq ($(BUILD_STATIC_LIBS),1)
+    SNAPPY_CXXFLAGS += -DSNAPPY_DLL_EXPORT=1
+endif
 endif
 
 # Per-file flags for SNAPPY sources
@@ -630,8 +687,10 @@ ZLIB_SOURCES := algos/zlib/code_alignment.c \
                 algos/zlib/aocl_zlib_utils.c
 
 # ZLIB-NG optimized sources
-ZLIBNG_SOURCES := algos/zlib/zlib-ng/arch/x86/chunkset_sse2.c \
-                  algos/zlib/zlib-ng/arch/x86/chunkset_avx512.c
+ZLIBNG_SOURCES := algos/zlib/zlib-ng/arch/x86/chunkset_sse2.c
+ifeq ($(AOCL_MAX_ISA_LEVEL_NUM),4)
+    ZLIBNG_SOURCES += algos/zlib/zlib-ng/arch/x86/chunkset_avx512.c
+endif
 
 # ZLIB header files
 ZLIB_HEADERS := algos/zlib/zlib.h \
@@ -647,12 +706,13 @@ ZLIB_CFLAGS := -DHAVE_BUILTIN_CTZ=1 \
 
 # ZLIB-NG specific flags
 ZLIBNG_CFLAGS := -DHAVE_ATTRIBUTE_ALIGNED=1
-
-# Check for hidden attribute support
-ZLIB_HAS_HIDDEN := $(shell printf '%s\n' 'int __attribute__((visibility("hidden"))) foo;' | $(CC) -x c -fsyntax-only - >/dev/null 2>&1; if [ $$? -eq 0 ]; then echo 1; else echo 0; fi)
-ifeq ($(ZLIB_HAS_HIDDEN),1)
-    ZLIB_CFLAGS += -DHAVE_HIDDEN
-    ZLIBNG_CFLAGS += -DHAVE_HIDDEN
+# Hidden visibility attribute (ELF only; PE/COFF rejects it with -Werror=attributes)
+ifneq ($(OS_TYPE),windows)
+    ZLIB_HAS_HIDDEN := $(shell printf '%s\n' 'int __attribute__((visibility("hidden"))) foo;' | $(CC) -x c -fsyntax-only - >/dev/null 2>&1; if [ $$? -eq 0 ]; then echo 1; else echo 0; fi)
+    ifeq ($(ZLIB_HAS_HIDDEN),1)
+        ZLIB_CFLAGS   += -DHAVE_HIDDEN
+        ZLIBNG_CFLAGS += -DHAVE_HIDDEN
+    endif
 endif
 
 # Debug flags for Debug build (if not testing)
@@ -668,18 +728,27 @@ ifeq ($(AOCL_LLC_PREFIX),1)
     ZLIB_CFLAGS += -DAOCL_LLC_PREFIX
 endif
 
+# Windows DLL export (shared build) -- matches CMake set_property pattern.
+ifeq ($(OS_TYPE),windows)
+ifneq ($(BUILD_STATIC_LIBS),1)
+    ZLIB_CFLAGS   += -DZLIB_DLL_EXPORT=1
+endif
+endif
+
 # Per-file flags for ZLIB sources (need to find aoclPrefix.h in algos/common)
 $(OBJ_DIR)/algos/zlib/%.o: CFLAGS += $(ZLIB_CFLAGS) -I$(ROOT_DIR)/algos/zlib
 
 # Per-file flags for ZLIB-NG sources (need additional include paths)
 $(OBJ_DIR)/algos/zlib/zlib-ng/%.o: CFLAGS += $(ZLIBNG_CFLAGS) -I$(ROOT_DIR)/algos/zlib/zlib-ng -I$(ROOT_DIR)/algos/zlib
 
-# AVX-512 sources need special flags
+# AVX-512 sources need special flags (only when ISA level includes AVX512)
 AVX512_SOURCES := algos/zlib/crc32_x86_vpclmulqdq.c \
                   algos/zlib/zlib-ng/arch/x86/chunkset_avx512.c
 
+ifeq ($(AOCL_MAX_ISA_LEVEL_NUM),4)
 $(OBJ_DIR)/algos/zlib/crc32_x86_vpclmulqdq.o: CFLAGS += -mpclmul -mvpclmulqdq -mavx512f
 $(OBJ_DIR)/algos/zlib/zlib-ng/arch/x86/chunkset_avx512.o: CFLAGS += -mavx512f -mavx512bw
+endif
 
 # Installation headers
 INSTALL_HEADERS += algos/zlib/zconf.h \
@@ -788,6 +857,15 @@ ifeq ($(AOCL_LLC_PREFIX),1)
     ZSTD_CFLAGS += -DAOCL_LLC_PREFIX
 endif
 
+# Windows DLL export (shared build) -- matches CMake set_property pattern.
+# FSE_DLL_EXPORT / XXH_EXPORT are added by CMake only for TEST_COVERAGE_THIRD_PARTY
+# or BUILD_UTILITY paths, which are not wired in this Make build yet.
+ifeq ($(OS_TYPE),windows)
+ifneq ($(BUILD_STATIC_LIBS),1)
+    ZSTD_CFLAGS += -DZSTD_DLL_EXPORT=1
+endif
+endif
+
 # Per-file flags for ZSTD sources
 $(OBJ_DIR)/algos/zstd/%.o: CFLAGS += $(ZSTD_CFLAGS)
 
@@ -859,6 +937,11 @@ ifeq ($(OS_TYPE),unix)
         # libomp found, link it
         LIBS += -lomp
     endif
+else ifeq ($(OS_TYPE),windows)
+    # GCC/MinGW auto-links libgomp via -fopenmp; Clang/MinGW needs explicit -lomp
+    ifeq ($(CC_ID),clang)
+        LIBS += -lomp
+    endif
 endif
 
 # Add threading flags
@@ -878,10 +961,8 @@ endif # AOCL_ENABLE_THREADS
 
 ifeq ($(NATIVE_ENABLE_THREADS),1)
 
-# Link pthread library
-ifeq ($(OS_TYPE),unix)
-    LIBS += -lpthread
-endif
+# Link pthread library (MSYS2/MinGW provides POSIX threads via winpthreads)
+LIBS += -lpthread
 
 endif # NATIVE_ENABLE_THREADS
 # ---- END INLINE: mk/features/threads.mk ----
@@ -961,8 +1042,11 @@ ifeq ($(CC_ID),gcc)
 GCC_CFLAGS :=
 GCC_CXXFLAGS :=
 
-# No special per-file optimization needed for GCC
-# (Unlike Clang which needs -O2 for LZ4)
+# Per-file compiler flags to recover the ZLIB and ZSTD performance lost for GCC >=15
+ifeq ($(shell major=$(CC_MAJOR); [ -n "$$major" ] && [ "$$major" -ge 15 ] && echo 1),1)
+$(OBJ_DIR)/algos/zlib/zlib-ng/arch/x86/chunkset_avx512.o: CFLAGS += -fno-schedule-insns2 -fno-code-hoisting
+$(OBJ_DIR)/algos/zstd/lib/decompress/zstd_decompress_block.o: CFLAGS += -fno-schedule-insns -fno-tree-sink -fno-if-conversion
+endif
 
 # TODO: Future implementation
 # # Code coverage support
@@ -1053,6 +1137,10 @@ CXXFLAGS += -DAOCL_BUILD_VERSION="\"$(BUILD_VERSION)\""
 CFLAGS += -DAOCL_DYNAMIC_DISPATCHER
 CXXFLAGS += -DAOCL_DYNAMIC_DISPATCHER
 
+# Pass AOCL_MAX_ISA_LEVEL to all source files
+CFLAGS += -DAOCL_MAX_ISA_LEVEL=$(AOCL_MAX_ISA_LEVEL_NUM)
+CXXFLAGS += -DAOCL_MAX_ISA_LEVEL=$(AOCL_MAX_ISA_LEVEL_NUM)
+
 # Match CMake compile definitions for shared library builds and strict warnings
 ifneq ($(BUILD_STATIC_LIBS),1)
     CFLAGS += -Daocl_compression_EXPORTS
@@ -1128,7 +1216,12 @@ all: $(LIB_TARGET)
 	@echo "Type: $(LIB_TYPE)"
 	@echo "=========================================="
 
-# Build library
+# Build library.
+# Windows shared builds emit two artifacts from a single link: the DLL and the
+# MinGW import library (.dll.a, via -Wl,--out-implib). Declare both with GNU
+# Make grouped-target syntax (&:, Make 4.3+) so deleting either output forces
+# a re-link instead of leaving a stale pair.
+ifeq ($(LIB_LINK_TARGET),$(LIB_TARGET))
 $(LIB_TARGET): $(ALL_OBJECTS) | $(LIB_DIR)
 	@echo "Linking $(LIB_TYPE) library: $@"
 ifeq ($(BUILD_STATIC_LIBS),1)
@@ -1136,9 +1229,16 @@ ifeq ($(BUILD_STATIC_LIBS),1)
 else
 	$(CXX) $(LDFLAGS) $(SHARED_LDFLAGS) -o $@ $^ $(LIBS)
 endif
-	@# Copy to root lib directory for convenience
 	@mkdir -p $(ROOT_DIR)/lib
 	@cp $@ $(ROOT_DIR)/lib/
+else
+$(LIB_TARGET) $(LIB_LINK_TARGET) &: $(ALL_OBJECTS) | $(LIB_DIR)
+	@echo "Linking $(LIB_TYPE) library: $(LIB_TARGET)"
+	$(CXX) $(LDFLAGS) $(SHARED_LDFLAGS) -o $(LIB_TARGET) $(ALL_OBJECTS) $(LIBS)
+	@mkdir -p $(ROOT_DIR)/lib
+	@cp $(LIB_TARGET) $(ROOT_DIR)/lib/
+	@cp $(LIB_LINK_TARGET) $(ROOT_DIR)/lib/
+endif
 
 # ==============================================================================
 # TEMPLATE GENERATION
@@ -1242,16 +1342,30 @@ endif
 ifeq ($(BUILD_TYPE),Debug)
     BENCH_CFLAGS += -DDEBUG_ASSERT_ENABLED
 endif
+# Apply the same Release-mode hardening as the library (see mk/platform.mk).
+ifeq ($(BUILD_TYPE),Release)
+    BENCH_CFLAGS += $(SECURITY_FLAGS) -D_FORTIFY_SOURCE=2
+endif
 
-BENCH_LINK_FLAGS := $(LIB_LINK_TARGET) -Wl,-rpath,$(LIB_DIR) -ldl -lstdc++ $(EXE_LDFLAGS)
+# Bench link uses executable and platform linker hardening flags.
+ifeq ($(OS_TYPE),windows)
+BENCH_LINK_FLAGS := $(LIB_LINK_TARGET) $(LDFLAGS) -lstdc++ $(EXE_LDFLAGS)
+else
+BENCH_LINK_FLAGS := $(LIB_LINK_TARGET) $(LDFLAGS) -Wl,-rpath,$(LIB_DIR) -ldl -lstdc++ $(EXE_LDFLAGS)
+endif
 
-$(BENCH_BIN): $(BENCH_SOURCES) $(LIB_TARGET)
+$(BENCH_BIN): $(BENCH_SOURCES) $(LIB_LINK_TARGET)
 	@mkdir -p $(dir $@)
 	@echo "Building benchmark: $(notdir $@)"
 	@$(CC) $(BENCH_CFLAGS) $(BENCH_INCLUDES) \
 		test/codec_bench.c test/codec_native_api_bench.c $(if $(filter linux,$(PLATFORM)),test/ipp_codec_bench.c) \
 		-o $@ \
 		$(BENCH_LINK_FLAGS) $(LIBS)
+ifeq ($(OS_TYPE),windows)
+ifneq ($(BUILD_STATIC_LIBS),1)
+	@cp -f $(LIB_TARGET) $(dir $@)
+endif
+endif
 
 # Build benchmark by default
 all: $(LIB_TARGET) $(BENCH_BIN)

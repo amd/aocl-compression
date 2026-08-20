@@ -3845,6 +3845,15 @@ void Test_LZ4_renormDictT(LZ4_stream_t_internal* LZ4_dict, int nextSize)
 {
     LZ4_renormDictT(LZ4_dict, nextSize);
 }
+#if defined(AOCL_ENABLE_THREADS) && defined(AOCL_LZ4_AVX_OPT)
+int Test_AOCL_LZ4_decompress_generic_mt(const char* src, char* dst, int srcSize,
+                                        int outputSize, int is_last_thread)
+{
+    return AOCL_LZ4_decompress_generic_mt(src, dst, srcSize, outputSize,
+                                          decode_full_block, noDict,
+                                          (BYTE*)dst, NULL, 0, is_last_thread);
+}
+#endif /* AOCL_ENABLE_THREADS && AOCL_LZ4_AVX_OPT */
 void LZ4_writeLE16_wrapper(void* memPtr, unsigned short value)
 {
     LZ4_writeLE16(memPtr, value);

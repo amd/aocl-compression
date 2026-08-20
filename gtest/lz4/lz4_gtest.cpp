@@ -510,6 +510,35 @@ TEST_P(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_fail_commo
     int decLen = LZ4_decompress_safe(src, output, srcLen, outLen);
     EXPECT_LT(decLen, 0);
 }
+
+#ifdef AOCL_LZ4_AVX_OPT
+TEST_P(LLZ4_decompress_safe, AOCL_Compression_lz4_LZ4_decompress_safe_pass_common_13) // mt_post_match_copy_guard
+{
+    /* Non-last MT partitions may legally end after a match sequence. */
+    const unsigned char compressed[] = {
+        0x40,                   /* 4 literal bytes, 4-byte match */
+        'a', 'b', 'c', 'd',
+        0x04, 0x00              /* offset = 4 */
+    };
+    const char expected[] = "abcdabcd";
+    const char next_partition_output[] = "WXYZ1234";
+    const int decoded_len = 8;
+    char dst[32];
+    const int dst_capacity = (int)sizeof(dst);
+
+    memset(dst, 0, sizeof(dst));
+    memcpy(dst + decoded_len, next_partition_output, sizeof(next_partition_output) - 1);
+
+    int decLen = Test_AOCL_LZ4_decompress_generic_mt(
+        (const char*)compressed, dst, (int)sizeof(compressed), dst_capacity,
+        0 /* non-last MT partition */);
+
+    ASSERT_EQ(decoded_len, decLen);
+    EXPECT_EQ(0, memcmp(dst, expected, decoded_len));
+    EXPECT_EQ(0, memcmp(dst + decoded_len, next_partition_output,
+                        sizeof(next_partition_output) - 1));
+}
+#endif /* AOCL_LZ4_AVX_OPT */
 #endif
 
 INSTANTIATE_TEST_SUITE_P(

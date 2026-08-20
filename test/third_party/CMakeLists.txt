@@ -169,8 +169,8 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
     set_target_properties(${tp_exe_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
     # Add additional include directories needed by zstd test benches
-    target_include_directories (${tp_exe_name} PRIVATE  ${CMAKE_SOURCE_DIR}/api
-                                                        ${CMAKE_SOURCE_DIR}/utils
+    target_include_directories (${tp_exe_name} PRIVATE  ${AOCL_COMPRESSION_ROOT}/api
+                                                        ${AOCL_COMPRESSION_ROOT}/utils
                                                         ${AOCL_GENERATED_COMMON_INC_DIR}
                                                         ${ALGOS_PATH}/common)
     if (NOT AOCL_EXCLUDE_ZSTD)
@@ -197,7 +197,15 @@ if (TEST_COVERAGE_THIRD_PARTY AND BUILD_STATIC_LIBS)
     # Each test runs aocl_third_party_bench by passing a specific test bench target passed via -e option.
     # Subsequent options are specific to the selected test bench target and are forwarded to them.
     if (NOT AOCL_EXCLUDE_ZSTD)
-        add_test(TP_ZSTD_BIGDICT              ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_BIGDICT)
+        # Check available memory for BIGDICT test (requires ~4.5 GB)
+        
+        if(SYSTEM_AVAILABLE_MEMORY_MB GREATER_EQUAL AOCL_MIN_MEMORY_INTENSIVE_TEST_MB)
+            add_test(TP_ZSTD_BIGDICT              ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_BIGDICT)
+            message(STATUS "TP_ZSTD_BIGDICT test enabled (available memory: ${SYSTEM_AVAILABLE_MEMORY_MB}MB >= ${AOCL_MIN_MEMORY_INTENSIVE_TEST_MB}MB)")
+        else()
+            message(STATUS "TP_ZSTD_BIGDICT test skipped: insufficient memory (available: ${SYSTEM_AVAILABLE_MEMORY_MB}MB, required: ${AOCL_MIN_MEMORY_INTENSIVE_TEST_MB}MB)")
+        endif()
+        
         add_test(TP_ZSTD_FUZZER               ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_FUZZER -i1 -v)
         add_test(TP_ZSTD_INVALIDDICTIONARIES  ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_INVALIDDICTIONARIES)
         add_test(TP_ZSTD_LONGMATCH            ${CMAKE_BINARY_DIR}/aocl_third_party_bench -eZSTD_LONGMATCH)
@@ -241,9 +249,9 @@ if (BUILD_UTILITY)
           set (zstd_utility zstd_utility) 
           add_executable(${zstd_utility} ${ZSTD_PROGRAM_SRCS}) 
           set_target_properties(${zstd_utility} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
-          target_include_directories(${zstd_utility} PRIVATE ${CMAKE_SOURCE_DIR} 
-  							${CMAKE_SOURCE_DIR}/api 
-                            ${CMAKE_SOURCE_DIR}/utils
+          target_include_directories(${zstd_utility} PRIVATE ${AOCL_COMPRESSION_ROOT} 
+  							${AOCL_COMPRESSION_ROOT}/api 
+                            ${AOCL_COMPRESSION_ROOT}/utils
                             ${AOCL_GENERATED_COMMON_INC_DIR}
   							${BU_ZSTD_LIBRARY_DIR}/common)
           target_include_directories(${zstd_utility} PRIVATE ${BU_ZSTD_LIBRARY_DIR}/zstd/lib 

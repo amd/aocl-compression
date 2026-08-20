@@ -1,4 +1,4 @@
-# Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -109,7 +109,7 @@ if(AOCL_TEST_FUZZER)
     fuzztest_setup_fuzzing_flags()
 endif()
 
-set (GTEST_SRC_PATH ${CMAKE_SOURCE_DIR}/gtest)
+set (GTEST_SRC_PATH ${AOCL_COMPRESSION_ROOT}/gtest)
 set (GTEST_UTILS_SRC_FILES ${GTEST_SRC_PATH}/utils/utils_gtest.cpp)
 set (GTEST_API_SRC_FILES ${GTEST_SRC_PATH}/api/api_gtest.cpp)
 set (GTEST_COMMON_SRC_FILES ${GTEST_SRC_PATH}/common/common_gtest.cpp)
@@ -211,6 +211,10 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DDEBUG_ASSERT_ENABLED")
             endif()
 
+            if(SYSTEM_AVAILABLE_MEMORY_MB GREATER_EQUAL AOCL_MIN_MEMORY_INTENSIVE_TEST_MB)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_MEM_INT_TEST")
+            endif()
+
             # Non API function tests
             if (BUILD_STATIC_LIBS)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_INTERNAL_TEST")
@@ -218,9 +222,9 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             # add target
             add_executable(${GTEST_CUR_EXE_NAME} ${GTEST_CUR_SRC_FILES} ${GTEST_UTILITY_SRC_FILES})
             set_target_properties(${GTEST_CUR_EXE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
-            target_include_directories(${GTEST_CUR_EXE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}
-                                                PRIVATE ${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/common
-                                                PRIVATE ${CMAKE_SOURCE_DIR}/api
+            target_include_directories(${GTEST_CUR_EXE_NAME} PRIVATE ${AOCL_COMPRESSION_ROOT}
+                                                PRIVATE ${AOCL_COMPRESSION_ROOT}/${ALGOS_PATH}/common
+                                                PRIVATE ${AOCL_COMPRESSION_ROOT}/api
                                                 PRIVATE ${AOCL_GENERATED_COMMON_INC_DIR}
                                                 PRIVATE ${GTEST_SRC_PATH})
             if(AOCL_TEST_FUZZER)

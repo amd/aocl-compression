@@ -1,6 +1,6 @@
 /* uncompr.c -- decompress a memory buffer
- * Copyright (C) 1995-2003, 2010, 2014, 2016 Jean-loup Gailly, Mark Adler
- * Modifications Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 1995-2026 Jean-loup Gailly, Mark Adler
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
@@ -32,26 +32,22 @@
    memory, Z_BUF_ERROR if there was not enough room in the output buffer, or
    Z_DATA_ERROR if the input data was corrupted, including if the input data is
    an incomplete zlib stream.
+
+     The _z versions of the functions take size_t length arguments.
 */
 #ifdef AOCL_ENABLE_THREADS
 
-static inline int uncompress2_ST_raw(Bytef *dest, uLongf *destLen, const Bytef *source,
-                        uLong *sourceLen, short winBits) {
+static inline int uncompress2_ST_raw(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                        z_size_t *sourceLen, short winBits) {
     z_stream stream;
     int err;
     const uInt max = (uInt)-1;
-    uLong len, left;
-    Byte buf[1];    /* for detection of incomplete stream when *destLen == 0 */
+    z_size_t len, left;
 
     len = *sourceLen;
-    if (*destLen) {
-        left = *destLen;
-        *destLen = 0;
-    }
-    else {
-        left = 1;
-        dest = buf;
-    }
+    left = *destLen;
+    if (left == 0 && dest == Z_NULL)
+        dest = (Bytef *)&stream.reserved;       /* next_out cannot be NULL */
 
     stream.next_in = (z_const Bytef *)source;
     stream.avail_in = 0;
@@ -67,22 +63,24 @@ static inline int uncompress2_ST_raw(Bytef *dest, uLongf *destLen, const Bytef *
 
     do {
         if (stream.avail_out == 0) {
-            stream.avail_out = left > (uLong)max ? max : (uInt)left;
+            stream.avail_out = left > (z_size_t)max ? max : (uInt)left;
             left -= stream.avail_out;
         }
         if (stream.avail_in == 0) {
-            stream.avail_in = len > (uLong)max ? max : (uInt)len;
+            stream.avail_in = len > (z_size_t)max ? max : (uInt)len;
             len -= stream.avail_in;
         }
 
         err = inflate(&stream, Z_NO_FLUSH);
     } while (err == Z_OK);
 
-    *sourceLen -= len + stream.avail_in;
-    if (dest != buf)
-        *destLen = stream.total_out;
-    else if (stream.total_out && err == Z_BUF_ERROR)
-        left = 1;
+    /* Set len and left to the unused input data and unused output space. Set
+       *sourceLen to the amount of input consumed. Set *destLen to the amount
+       of data produced. */
+    len += stream.avail_in;
+    left += stream.avail_out;
+    *sourceLen -= len;
+    *destLen -= left;
 
     inflateEnd(&stream);
     return err == Z_STREAM_END ? Z_OK :
@@ -91,7 +89,7 @@ static inline int uncompress2_ST_raw(Bytef *dest, uLongf *destLen, const Bytef *
            err;
 }
 static inline int validate_Checksum(AOCL_UINT32 checksum, const Bytef *source,
-                        uLong *sourceLen, const int wrap) {
+                        z_size_t *sourceLen, const int wrap) {
     int isValid = 1; 
     if(wrap == 1)
     {   // zlib
@@ -110,20 +108,8 @@ static inline int validate_Checksum(AOCL_UINT32 checksum, const Bytef *source,
 #endif
     return isValid;
 }
-static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Bytef *source,
-                        uLong *sourceLen, const int wrap) {
-    if(destLen == NULL)
-    {
-        return Z_BUF_ERROR;
-    }
-    if(dest == NULL)
-    {
-        return Z_STREAM_ERROR;
-    }
-    if(sourceLen == NULL || source == NULL)
-    {
-        return Z_DATA_ERROR;
-    }
+static inline int uncompress2_z_MT_generic(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                        z_size_t *sourceLen, const int wrap) {
     int result = Z_OK;
     aocl_thread_group_t thread_group_handle;
     aocl_thread_info_t cur_thread_info;
@@ -131,6 +117,10 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
     AOCL_UINT32 thread_cnt = 0;
     AOCL_INT32 rap_metadata_len = 0;
     int header_size = 0, trailer_size = 0;
+
+    if (sourceLen == NULL || (*sourceLen > 0 && source == NULL) ||
+        destLen == NULL || (*destLen > 0 && dest == NULL))
+        return Z_STREAM_ERROR;
 
     if(wrap == 1)
     {   // zlib
@@ -148,7 +138,7 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
         trailer_size = 8;
     }
 #endif
-    uLong org_sourceLen = *sourceLen;
+    z_size_t org_sourceLen = *sourceLen;
     rap_metadata_len = aocl_setup_parallel_decompress_mt(&thread_group_handle, (char *)source, (char *)dest,
                                                    *sourceLen, *destLen, use_ST_decompressor);
 
@@ -191,8 +181,12 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
 
             if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_SUCCESS)
             {
-                is_error = uncompress2_ST_raw((Bytef *)cur_thread_info.dst_trap, (uLong *)&(cur_thread_info.dst_trap_size),
-                                            (Bytef *)cur_thread_info.partition_src, (uLong *)&(cur_thread_info.partition_src_size), -1 * MAX_WBITS);
+                z_size_t dst_trap_size = (z_size_t)cur_thread_info.dst_trap_size;
+                z_size_t part_src_size = (z_size_t)cur_thread_info.partition_src_size;
+                is_error = uncompress2_ST_raw((Bytef *)cur_thread_info.dst_trap, &dst_trap_size,
+                                            (Bytef *)cur_thread_info.partition_src, &part_src_size, -1 * MAX_WBITS);
+                cur_thread_info.dst_trap_size = (AOCL_UINTP)dst_trap_size;
+                cur_thread_info.partition_src_size = (AOCL_UINTP)part_src_size;
                 cur_thread_info.last_bytes_len = CALCULATE_CHECKSUM(cur_thread_info.dst_trap, cur_thread_info.dst_trap_size, wrap);
             }//aocl_do_partition_decompress_mt
             else if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_EMPTY_SRC)
@@ -257,55 +251,44 @@ static inline int uncompress2_MT_generic(Bytef *dest, uLongf *destLen, const Byt
 }
 #endif
 
-int ZEXPORT uncompress2_gzip(Bytef *dest, uLongf *destLen, const Bytef *source,
-                        uLong *sourceLen) {
+int ZEXPORT uncompress2_gzip(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                        z_size_t *sourceLen) {
 #ifdef AOCL_ENABLE_THREADS
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-    return uncompress2_MT_generic(dest, destLen, source, sourceLen, 2);
+    return uncompress2_z_MT_generic(dest, destLen, source, sourceLen, 2);
 #else
     LOG_UNFORMATTED(ERR, logCtx, "Only supported with multithread library.");
     return Z_VERSION_ERROR;
 #endif
 }
 
-int ZEXPORT uncompress2_raw(Bytef *dest, uLongf *destLen, const Bytef *source,
-                        uLong *sourceLen) {
+int ZEXPORT uncompress2_raw(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                        z_size_t *sourceLen) {
 #ifdef AOCL_ENABLE_THREADS
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-    return uncompress2_MT_generic(dest, destLen, source, sourceLen, 0);
+    return uncompress2_z_MT_generic(dest, destLen, source, sourceLen, 0);
 #else
     LOG_UNFORMATTED(ERR, logCtx, "Only supported with multithread library.");
     return Z_VERSION_ERROR;
 #endif
 }
 
-int ZEXPORT uncompress2(Bytef *dest, uLongf *destLen, const Bytef *source,
-                        uLong *sourceLen) {
+int ZEXPORT uncompress2_z(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                          z_size_t *sourceLen) {
 #ifndef AOCL_ENABLE_THREADS //Non threaded
-    if(destLen == NULL)
-    {
-        return Z_BUF_ERROR;
-    }
-    else if(sourceLen == NULL)
-    {
-        return Z_DATA_ERROR;
-    }
-    
     z_stream stream;
     int err;
     const uInt max = (uInt)-1;
-    uLong len, left;
-    Byte buf[1];    /* for detection of incomplete stream when *destLen == 0 */
+    z_size_t len, left;
+
+    if (sourceLen == NULL || (*sourceLen > 0 && source == NULL) ||
+        destLen == NULL || (*destLen > 0 && dest == NULL))
+        return Z_STREAM_ERROR;
 
     len = *sourceLen;
-    if (*destLen) {
-        left = *destLen;
-        *destLen = 0;
-    }
-    else {
-        left = 1;
-        dest = buf;
-    }
+    left = *destLen;
+    if (left == 0 && dest == Z_NULL)
+        dest = (Bytef *)&stream.reserved;       /* next_out cannot be NULL */
 
     stream.next_in = (z_const Bytef *)source;
     stream.avail_in = 0;
@@ -321,36 +304,61 @@ int ZEXPORT uncompress2(Bytef *dest, uLongf *destLen, const Bytef *source,
 
     do {
         if (stream.avail_out == 0) {
-            stream.avail_out = left > (uLong)max ? max : (uInt)left;
+            stream.avail_out = left > (z_size_t)max ? max : (uInt)left;
             left -= stream.avail_out;
         }
         if (stream.avail_in == 0) {
-            stream.avail_in = len > (uLong)max ? max : (uInt)len;
+            stream.avail_in = len > (z_size_t)max ? max : (uInt)len;
             len -= stream.avail_in;
         }
         err = inflate(&stream, Z_NO_FLUSH);
     } while (err == Z_OK);
 
-    *sourceLen -= len + stream.avail_in;
-    if (dest != buf)
-        *destLen = stream.total_out;
-    else if (stream.total_out && err == Z_BUF_ERROR)
-        left = 1;
+    /* Set len and left to the unused input data and unused output space. Set
+       *sourceLen to the amount of input consumed. Set *destLen to the amount
+       of data produced. */
+    len += stream.avail_in;
+    left += stream.avail_out;
+    *sourceLen -= len;
+    *destLen -= left;
 
     inflateEnd(&stream);
     return err == Z_STREAM_END ? Z_OK :
            err == Z_NEED_DICT ? Z_DATA_ERROR  :
-           err == Z_BUF_ERROR && left + stream.avail_out ? Z_DATA_ERROR :
+           err == Z_BUF_ERROR && len == 0 ? Z_DATA_ERROR :
            err;
 #else //Threaded
-    return uncompress2_MT_generic(dest, destLen, source, sourceLen, 1);
+    return uncompress2_z_MT_generic(dest, destLen, source, sourceLen, 1);
 #endif /* !AOCL_ENABLE_THREADS */
 }
-
+int ZEXPORT uncompress2(Bytef *dest, uLongf *destLen, const Bytef *source,
+                        uLong *sourceLen) {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    int ret;
+    if (sourceLen == NULL || destLen == NULL) {
+        LOG_UNFORMATTED(INFO, logCtx, "Exit");
+        return Z_STREAM_ERROR;
+    }
+    z_size_t got = *destLen, used = *sourceLen;
+    ret = uncompress2_z(dest, &got, source, &used);
+    *sourceLen = (uLong)used;
+    *destLen = (uLong)got;
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return ret;
+}
+int ZEXPORT uncompress_z(Bytef *dest, z_size_t *destLen, const Bytef *source,
+                         z_size_t sourceLen) {
+    LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+    z_size_t used = sourceLen;
+    int ret = uncompress2_z(dest, destLen, source, &used);
+    LOG_UNFORMATTED(INFO, logCtx, "Exit");
+    return ret;
+}
 int ZEXPORT uncompress(Bytef *dest, uLongf *destLen, const Bytef *source,
                        uLong sourceLen) {
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-    int ret = uncompress2(dest, destLen, source, &sourceLen);
+    uLong used = sourceLen;
+    int ret = uncompress2(dest, destLen, source, &used);
     LOG_UNFORMATTED(INFO, logCtx, "Exit");
     return ret;
 }

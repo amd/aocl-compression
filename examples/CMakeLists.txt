@@ -69,7 +69,6 @@ else()
     # If building alongside AOCL-Compression library source code
     set(EXAMPLE_INC_FILES ${INC_FILES})
     set(AOCL_COMPRESSION_INC_DIR ${CMAKE_BINARY_DIR}/include_examples)
-    list(TRANSFORM EXAMPLE_INC_FILES PREPEND ${CMAKE_SOURCE_DIR}/)
     add_custom_command(
         OUTPUT ${AOCL_COMPRESSION_INC_DIR}
         COMMENT "Copy interface headers to build path"

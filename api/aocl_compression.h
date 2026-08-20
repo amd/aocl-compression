@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -67,7 +67,7 @@ extern "C" {
 
 /// @cond DOXYGEN_SHOULD_SKIP_THIS
 #ifndef EXPORT_SYM_DYN
-#ifdef _WINDOWS
+#ifdef _WIN32
 /**
  * You can export data, functions, classes, or class member functions from a DLL
  * using the __declspec(dllexport) keyword. __declspec(dllexport) adds the export
@@ -83,7 +83,7 @@ extern "C" {
 #endif
 #endif
 
-#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 5.3.0"
+#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 5.3.2"
 #define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 4.0"
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 

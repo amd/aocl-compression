@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -106,6 +106,7 @@ extern "C"
 #define AOCL_MT_DECOMP_PARTITION_SUCCESS 0
 #define AOCL_MT_DECOMP_PARTITION_EMPTY_SRC 1
 #define AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE -1
+#define AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME -2
 
 #define RETURN_DST_SIZE_LESS_THAN_COMPRESSBOUND_ERROR_MT(error) { \
                         LOG_UNFORMATTED(ERR, logCtx, "Destination buffer is too small/ insufficient."); \
@@ -203,7 +204,7 @@ typedef struct thread_group
 
 #ifndef EXPORT_SYM_THREADS
 #ifdef AOCL_UNIT_TEST
-#ifdef _WINDOWS
+#ifdef _WIN32
 /**
  * You can export data, functions, classes, or class member functions from a DLL
  * using the __declspec(dllexport) keyword. __declspec(dllexport) adds the export

@@ -97,10 +97,9 @@ endif()
 #set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${DEST_LIB_PATH}")
 
 set(INTERNAL_INC_FILES  ${INC_FILES}
-                        api/types.h
-                        utils/utils.h
-                        utils/dispatcher.h)
-list(TRANSFORM INTERNAL_INC_FILES PREPEND ${CMAKE_SOURCE_DIR}/)
+                        ${AOCL_COMPRESSION_ROOT}/api/types.h
+                        ${AOCL_COMPRESSION_ROOT}/utils/utils.h
+                        ${AOCL_COMPRESSION_ROOT}/utils/dispatcher.h)
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/include/types.h
     COMMENT "Copy interface headers to build path"

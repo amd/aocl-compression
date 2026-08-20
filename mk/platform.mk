@@ -38,8 +38,12 @@ UNAME_M := $(shell uname -m 2>/dev/null || echo x86_64)
 ifeq ($(UNAME_S),Linux)
     PLATFORM := linux
     OS_TYPE := unix
+else ifneq (,$(or $(findstring MINGW,$(UNAME_S)),$(findstring MSYS,$(UNAME_S))))
+    # MinGW / MSYS2 / Git Bash on Windows
+    PLATFORM := windows
+    OS_TYPE := windows
 else
-    $(error GNU Make build is supported only on Linux. Detected platform: $(UNAME_S))
+    $(error GNU Make build is supported only on Linux and Windows (MinGW/MSYS2). Detected platform: $(UNAME_S))
 endif
 
 # ==============================================================================
@@ -47,8 +51,12 @@ endif
 # ==============================================================================
 
 # Default compilers
-CC ?= gcc
-CXX ?= g++
+ifeq ($(origin CC),default)
+    CC := gcc
+endif
+ifeq ($(origin CXX),default)
+    CXX := g++
+endif
 AR ?= ar
 AS ?= as
 
@@ -94,12 +102,24 @@ endif
 # LIBRARY NAMING CONVENTIONS
 # ==============================================================================
 
-LIB_PREFIX := lib
-LIB_EXT := .so
-SHARED_LDFLAGS := -shared
-LIB_STATIC_EXT := .a
-EXE_EXT :=
-OBJ_EXT := .o
+ifeq ($(OS_TYPE),windows)
+    # Windows (MinGW/MSYS2) extensions
+    LIB_PREFIX :=
+    LIB_EXT := .dll
+    # Recursive = required: LIB_NAME/LIB_DIR are defined after this file is included.
+    SHARED_LDFLAGS = -shared -Wl,--out-implib,$(LIB_DIR)/$(LIB_PREFIX)$(LIB_NAME).dll.a
+    LIB_STATIC_EXT := .a
+    EXE_EXT := .exe
+    OBJ_EXT := .o
+else
+    # Unix/Linux extensions
+    LIB_PREFIX := lib
+    LIB_EXT := .so
+    SHARED_LDFLAGS := -shared
+    LIB_STATIC_EXT := .a
+    EXE_EXT :=
+    OBJ_EXT := .o
+endif
 
 # ==============================================================================
 # PLATFORM-SPECIFIC FLAGS
@@ -141,6 +161,22 @@ ifeq ($(OS_TYPE),unix)
     # Critical: Static libs need -fPIC to link into PIE executables
     CFLAGS += -fPIC
     CXXFLAGS += -fPIC
+else ifeq ($(OS_TYPE),windows)
+    # Security flags for MinGW
+    ifeq ($(BUILD_TYPE),Release)
+        SECURITY_FLAGS := -fstack-protector-strong -Wformat -Wformat-security
+        CFLAGS += $(SECURITY_FLAGS)
+        CXXFLAGS += $(SECURITY_FLAGS)
+        # Buffer overflow detection (supported by mingw-w64 runtime headers)
+        CFLAGS += -D_FORTIFY_SOURCE=2
+        CXXFLAGS += -D_FORTIFY_SOURCE=2
+        # ASLR / DEP (parity with Linux relro/now/PIE)
+        LDFLAGS += -Wl,--dynamicbase -Wl,--nxcompat
+        # High-Entropy ASLR is x86_64-only
+        ifeq ($(UNAME_M),x86_64)
+            LDFLAGS += -Wl,--high-entropy-va
+        endif
+    endif
 endif
 
 # Fast-math optimization
@@ -152,8 +188,13 @@ endif
 # Strict warnings
 ifeq ($(ENABLE_STRICT_WARNINGS),1)
     ifeq ($(BUILD_TYPE),Release)
-        CFLAGS += -Wall -Werror -Wpedantic
-        CXXFLAGS += -Wall -Werror -Wpedantic
+        ifeq ($(OS_TYPE),windows)
+            CFLAGS += -Wall -Werror
+            CXXFLAGS += -Wall -Werror
+        else
+            CFLAGS += -Wall -Werror -Wpedantic
+            CXXFLAGS += -Wall -Werror -Wpedantic
+        endif
     endif
 endif
 
@@ -163,6 +204,40 @@ endif
 
 # Detect sys/uio.h availability (used by Snappy and tests)
 HAS_SYS_UIO_H := $(shell printf '%s\n' '\#include <sys/uio.h>' | $(CC) -E - >/dev/null 2>&1; if [ $$? -eq 0 ]; then echo 1; else echo 0; fi)
+
+# Windows: probe OpenMP runtime (libgomp for GCC, libomp for Clang) so we fail fast with a clear message instead of a cryptic link error.
+ifeq ($(OS_TYPE),windows)
+    ifeq ($(AOCL_ENABLE_THREADS),1)
+        OMP_PROBE_FLAGS := -fopenmp
+        ifeq ($(CC_ID),clang)
+            OMP_PROBE_FLAGS += -lomp
+        endif
+        HAS_OMP_LINK := $(shell printf '%s\n' 'int omp_get_num_threads(void); int main(void){return omp_get_num_threads();}' | $(CC) -x c $(OMP_PROBE_FLAGS) -o /tmp/_aocl_probe.exe - >/dev/null 2>&1; rc=$$?; rm -f /tmp/_aocl_probe.exe; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+        ifneq ($(HAS_OMP_LINK),1)
+            ifeq ($(CC_ID),clang)
+                $(error Clang OpenMP runtime (libomp) not found. Install MSYS2/MinGW package or build with AOCL_ENABLE_THREADS=0)
+            else
+                $(error GCC OpenMP runtime (libgomp) not found. Install MSYS2/MinGW package or build with AOCL_ENABLE_THREADS=0)
+            endif
+        endif
+    endif
+endif
+
+# Windows: probe -fstack-protector-strong link; if it fails, retry with -lssp and keep it.
+ifeq ($(OS_TYPE),windows)
+    ifeq ($(BUILD_TYPE),Release)
+        HAS_SSP_AUTO := $(shell printf '%s\n' 'int main(int argc, char **argv){char b[64];return argv[argc-1][0]^b[0];}' | $(CC) -x c -fstack-protector-strong -o /tmp/_aocl_probe.exe - >/dev/null 2>&1; rc=$$?; rm -f /tmp/_aocl_probe.exe; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+        ifneq ($(HAS_SSP_AUTO),1)
+            HAS_SSP_EXPLICIT := $(shell printf '%s\n' 'int main(int argc, char **argv){char b[64];return argv[argc-1][0]^b[0];}' | $(CC) -x c -fstack-protector-strong -lssp -o /tmp/_aocl_probe.exe - >/dev/null 2>&1; rc=$$?; rm -f /tmp/_aocl_probe.exe; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+            ifeq ($(HAS_SSP_EXPLICIT),1)
+                LIBS += -lssp
+            else
+                $(warning -fstack-protector-strong fails to link even with -lssp; install MSYS2 mingw-w64-x86_64-gcc-libs or pass -fno-stack-protector via SECURITY_FLAGS)
+            endif
+        endif
+    endif
+endif
+
 
 # ==============================================================================
 # SNAPPY BRANCHLESS DECOMPRESSION AUTO-DETECTION

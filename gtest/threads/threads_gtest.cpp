@@ -1189,4 +1189,392 @@ TEST(API_destroy_parallel_decompress_MT, AOCL_Compression_api_aocl_destroy_paral
 * End multi-threaded compress destroy Tests
 *********************************************/
 
+/*********************************************
+* Begin security tests for RAP frame validation
+* Tests mimic attack scenarios from security audit:
+* VULN-01: OOB read on undersized buffer with valid magic
+* VULN-02: Uncontrolled allocation via crafted num_main_threads
+* VULN-03: OOB access via crafted partition offsets
+* VULN-04: Integer overflow in RAP position calculation
+* VULN-06: Oversized rap_metadata_len
+*********************************************/
+class API_RAP_security_MT : public ::testing::Test {
+public:
+    void SetUp() override {
+        init_thread_group(&thread_grp);
+        dst_size = 1024 * 16;
+        dst = (AOCL_CHAR*)calloc(dst_size, sizeof(AOCL_CHAR));
+        src = nullptr;
+        src_size = 0;
+    }
+
+    void TearDown() override {
+        Test_aocl_destroy_parallel_decompress_mt(&thread_grp);
+        if (src) free(src);
+        if (dst) free(dst);
+    }
+
+    void write_magic(AOCL_CHAR* buf) {
+        *(AOCL_INT64*)buf = RAP_MAGIC_WORD;
+    }
+
+    aocl_thread_group_t thread_grp;
+    AOCL_CHAR* src;
+    AOCL_CHAR* dst;
+    AOCL_INT32 src_size;
+    AOCL_INT32 dst_size;
+};
+
+// VULN-01: Buffer has valid magic word but is too small to contain header fields.
+// Before fix: OOB read at offsets 8-15. After fix: falls back to single-thread mode.
+TEST_F(API_RAP_security_MT, VULN01_undersized_buffer_with_valid_magic) {
+    src_size = RAP_MAGIC_WORD_BYTES + 2; // 10 bytes: has magic but not enough for metadata_len + num_threads
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_EQ(result, 0); // Falls back to ST mode, returns rap_metadata_len=0
+    EXPECT_EQ(thread_grp.num_threads, 1);
+}
+
+// VULN-01: Buffer is exactly RAP_MAGIC_WORD_BYTES (8). Previously the guard only checked >=8.
+TEST_F(API_RAP_security_MT, VULN01_buffer_exactly_magic_word_size) {
+    src_size = RAP_MAGIC_WORD_BYTES; // exactly 8 bytes
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_EQ(result, 0);
+    EXPECT_EQ(thread_grp.num_threads, 1);
+}
+
+// VULN-02: Crafted num_main_threads far exceeding buffer capacity.
+// Before fix: attempts ~309 GB allocation. After fix: rejected with -1.
+TEST_F(API_RAP_security_MT, VULN02_excessive_num_main_threads) {
+    src_size = RAP_START_OF_PARTITIONS + 12; // Only room for 1 partition entry
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES) = src_size; // rap_metadata_len = src_size (valid)
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES) = 0xFFFFFFFF; // ~4 billion threads
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_EQ(result, -1);
+}
+
+// VULN-02: num_main_threads slightly exceeds what source buffer can hold.
+TEST_F(API_RAP_security_MT, VULN02_num_threads_exceeds_buffer_capacity) {
+    src_size = RAP_START_OF_PARTITIONS + (2 * RAP_DATA_BYTES_WITH_DECOMP_LEN); // room for 2 partitions
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES) = src_size;
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES) = 3; // claims 3, only room for 2
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_EQ(result, -1);
+}
+
+// VULN-03: Partition offset points beyond source buffer.
+// Before fix: decompression from arbitrary memory. After fix: rejected.
+TEST_F(API_RAP_security_MT, VULN03_partition_offset_beyond_buffer) {
+    const AOCL_INT32 num_threads = 2;
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    add_RAP_frame_header(src, num_threads);
+
+    // Set up partition entries: first partition offset points way beyond buffer
+    AOCL_CHAR* ptr = src + RAP_START_OF_PARTITIONS;
+    *(AOCL_UINT32*)ptr = 0xFFFFFFF0; // partition 0 offset: far beyond buffer
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 100; // partition 0 size
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 200; // partition 0 decomp len
+    ptr += DECOMP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 64; // partition 1 offset (valid)
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 50; // partition 1 size
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 100; // partition 1 decomp len
+
+    AOCL_INT32 res = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    ASSERT_GE(res, 0);
+
+    aocl_thread_info_t cur_thread_info;
+    AOCL_INT32 part_result = Test_aocl_do_partition_decompress_mt(&thread_grp,
+        &cur_thread_info, 0);
+    EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME);
+}
+
+// VULN-03: Partition size causes offset+size to exceed buffer.
+TEST_F(API_RAP_security_MT, VULN03_partition_size_overflows_buffer) {
+    const AOCL_INT32 num_threads = 1;
+    src_size = RAP_START_OF_PARTITIONS + RAP_DATA_BYTES_WITH_DECOMP_LEN + 32; // small buffer
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    add_RAP_frame_header(src, num_threads);
+
+    AOCL_CHAR* ptr = src + RAP_START_OF_PARTITIONS;
+    *(AOCL_UINT32*)ptr = RAP_START_OF_PARTITIONS + RAP_DATA_BYTES_WITH_DECOMP_LEN; // offset within buffer
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 0xFFFF; // partition size: way larger than remaining buffer
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 200; // decomp len
+
+    AOCL_INT32 res = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    ASSERT_GE(res, 0);
+
+    aocl_thread_info_t cur_thread_info;
+    AOCL_INT32 part_result = Test_aocl_do_partition_decompress_mt(&thread_grp,
+        &cur_thread_info, 0);
+    EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME);
+}
+
+// VULN-04: Integer overflow in thread_id * RAP_DATA_BYTES_WITH_DECOMP_LEN.
+// With VULN-02 fix, such large thread_ids cannot be reached (setup rejects them).
+TEST_F(API_RAP_security_MT, VULN04_overflow_prevented_by_thread_count_bound) {
+    src_size = RAP_START_OF_PARTITIONS + RAP_DATA_BYTES_WITH_DECOMP_LEN; // room for exactly 1 thread
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES) = src_size;
+    // Try to claim many threads — should be rejected at setup
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES) = 0x20000000;
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_EQ(result, -1); // Rejected: overflow would occur
+}
+
+// Crafted decompressed-length in thread 0 makes thread 1's dst_offset overflow dst buffer.
+// Only applies when dst_size > 0 (caller supplied a real bound). Rejected before pointer is formed.
+TEST_F(API_RAP_security_MT, dst_offset_exceeds_destination_buffer) {
+    const AOCL_INT32 num_threads = 2;
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    AOCL_INT32 rap_frame_len = add_RAP_frame_header(src, num_threads);
+
+    AOCL_CHAR* ptr = src + RAP_START_OF_PARTITIONS;
+    // Thread 0: valid offset/size, but huge decompressed length
+    *(AOCL_UINT32*)ptr = rap_frame_len;       // partition_offset
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 10;                  // partition_size
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 0xFFFFFFF0;          // decompressed length (crafted huge)
+    ptr += DECOMP_LEN_BYTES;
+    // Thread 1: valid offset/size, normal decompressed length
+    *(AOCL_UINT32*)ptr = rap_frame_len + 10;
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 10;
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 100;
+    ptr += DECOMP_LEN_BYTES;
+
+    // Setup succeeds (src-side checks pass)
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_GT(result, 0);
+
+    // Thread 1's dst_offset = 0xFFFFFFF0 which exceeds dst_size — rejected, dst_trap not used
+    aocl_thread_info_t cur_thread_info;
+    AOCL_INT32 part_result = Test_aocl_do_partition_decompress_mt(&thread_grp,
+        &cur_thread_info, 1);
+    EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE);
+}
+
+// dst_size=0 contract (snappy-style): dst_trap must always be set even for thread 1+,
+// because the caller decompresses directly into dst_trap without a post-parallel copy.
+// A crafted huge decompressed-length in thread 0 makes dst_offset > 0 for thread 1;
+// with dst_size=0 the bounds check is skipped and dst_trap is still set (not NULL).
+TEST_F(API_RAP_security_MT, dst_size_zero_dst_trap_always_set) {
+    const AOCL_INT32 num_threads = 2;
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    AOCL_INT32 rap_frame_len = add_RAP_frame_header(src, num_threads);
+
+    AOCL_CHAR* ptr = src + RAP_START_OF_PARTITIONS;
+    // Thread 0: decompressed length large enough to push thread 1's dst_offset > 0
+    *(AOCL_UINT32*)ptr = rap_frame_len;
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 10;
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 500;               // decompressed length for thread 0
+    ptr += DECOMP_LEN_BYTES;
+    // Thread 1: valid partition
+    *(AOCL_UINT32*)ptr = rap_frame_len + 10;
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 10;
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 500;
+    ptr += DECOMP_LEN_BYTES;
+
+    // Setup with dst_size=0 (snappy contract: caller owns bounds)
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        0 /* dst_size=0 */, 0);
+    EXPECT_GT(result, 0);
+
+    // Thread 1: dst_offset=500 > dst_size=0, but bounds check is skipped.
+    // dst_trap must be set (not NULL) and SUCCESS returned.
+    aocl_thread_info_t cur_thread_info;
+    AOCL_INT32 part_result = Test_aocl_do_partition_decompress_mt(&thread_grp,
+        &cur_thread_info, 1);
+    EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_SUCCESS);
+    EXPECT_NE(cur_thread_info.dst_trap, nullptr);
+    EXPECT_EQ(cur_thread_info.dst_trap, dst + 500); // dst + sum of thread 0's decomp len
+}
+
+// VULN-06: rap_metadata_len larger than source buffer.
+// Before fix: callers would do source + rap_metadata_len (OOB). After fix: rejected with -1.
+TEST_F(API_RAP_security_MT, VULN06_rap_metadata_len_exceeds_source) {
+    src_size = RAP_START_OF_PARTITIONS + RAP_DATA_BYTES_WITH_DECOMP_LEN;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES) = src_size + 1000; // rap_metadata_len far exceeds buffer
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES) = 1;
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_EQ(result, -1);
+}
+
+// VULN-06: rap_metadata_len = UINT32_MAX (maximum crafted value).
+TEST_F(API_RAP_security_MT, VULN06_rap_metadata_len_uint32_max) {
+    src_size = RAP_START_OF_PARTITIONS + RAP_DATA_BYTES_WITH_DECOMP_LEN;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES) = 0xFFFFFFFF; // UINT32_MAX
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES) = 1;
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_EQ(result, -1);
+}
+
+// aocl_skip_rap_frame_mt: undersized buffer with valid magic (same as VULN-01 pattern)
+TEST_F(API_RAP_security_MT, skip_rap_frame_undersized_buffer) {
+    src_size = RAP_MAGIC_WORD_BYTES + 2; // 10 bytes: has magic but too small for metadata_len read
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+
+    AOCL_INT32 result = aocl_skip_rap_frame_mt(src, src_size);
+    EXPECT_EQ(result, 0); // Falls back: not a valid RAP frame
+}
+
+// aocl_skip_rap_frame_mt: rap_metadata_len exceeds source (same as VULN-06 pattern)
+TEST_F(API_RAP_security_MT, skip_rap_frame_metadata_len_exceeds_source) {
+    src_size = RAP_START_OF_PARTITIONS;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES) = src_size + 1000; // oversized
+
+    AOCL_INT32 result = aocl_skip_rap_frame_mt(src, src_size);
+    EXPECT_EQ(result, -1);
+}
+
+// rap_metadata_len smaller than required for declared num_main_threads.
+// Attack: rap_metadata_len=16 with num_main_threads=1 causes codec to skip too few bytes.
+TEST_F(API_RAP_security_MT, metadata_len_inconsistent_with_thread_count) {
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    // rap_metadata_len = RAP_START_OF_PARTITIONS (16) but num_main_threads = 1
+    // Expected minimum: 16 + 1*12 = 28
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES) = RAP_START_OF_PARTITIONS;
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES) = 1;
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_EQ(result, -1);
+}
+
+// rap_metadata_len too small for multiple threads.
+TEST_F(API_RAP_security_MT, metadata_len_inconsistent_with_multiple_threads) {
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    // rap_metadata_len = 28 (valid for 1 thread) but num_main_threads = 4
+    // Expected minimum: 16 + 4*12 = 64
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES) = RAP_START_OF_PARTITIONS + RAP_DATA_BYTES_WITH_DECOMP_LEN;
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES) = 4;
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_EQ(result, -1);
+}
+
+// aocl_skip_rap_frame_mt: rap_metadata_len inconsistent with thread count
+TEST_F(API_RAP_security_MT, skip_rap_frame_metadata_len_inconsistent) {
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES) = RAP_START_OF_PARTITIONS; // too small
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES) = 2; // needs 40
+
+    AOCL_INT32 result = aocl_skip_rap_frame_mt(src, src_size);
+    EXPECT_EQ(result, -1);
+}
+
+// aocl_skip_rap_frame_mt: num_main_threads=0 rejected
+TEST_F(API_RAP_security_MT, skip_rap_frame_zero_threads) {
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES) = 64;
+    *(AOCL_UINT32*)(src + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES) = 0;
+
+    AOCL_INT32 result = aocl_skip_rap_frame_mt(src, src_size);
+    EXPECT_EQ(result, -1);
+}
+
+// aocl_skip_rap_frame_mt: valid input returns correct metadata len
+TEST_F(API_RAP_security_MT, skip_rap_frame_valid) {
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    AOCL_INT32 expected_len = add_RAP_frame_header(src, 4);
+
+    AOCL_INT32 result = aocl_skip_rap_frame_mt(src, src_size);
+    EXPECT_EQ(result, expected_len);
+}
+
+// Positive test: valid RAP frame still works after security hardening.
+TEST_F(API_RAP_security_MT, valid_rap_frame_still_accepted) {
+    const AOCL_INT32 num_threads = 4;
+    src_size = 1024 * 16;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    AOCL_INT32 rap_frame_len = add_RAP_frame_header(src, num_threads);
+
+    // Write valid partition entries
+    AOCL_CHAR* ptr = src + RAP_START_OF_PARTITIONS;
+    AOCL_UINT32 offset = rap_frame_len;
+    for (int i = 0; i < num_threads; i++) {
+        *(AOCL_UINT32*)ptr = offset; // valid offset within buffer
+        ptr += RAP_OFFSET_BYTES;
+        *(AOCL_UINT32*)ptr = 100; // valid partition size
+        ptr += RAP_LEN_BYTES;
+        *(AOCL_UINT32*)ptr = 200; // decomp size
+        ptr += DECOMP_LEN_BYTES;
+        offset += 100;
+    }
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    EXPECT_GT(result, 0);
+
+    // Partition setup should succeed for all threads
+    for (AOCL_UINT32 tid = 0; tid < (AOCL_UINT32)num_threads; tid++) {
+        aocl_thread_info_t cur_thread_info;
+        AOCL_INT32 part_result = Test_aocl_do_partition_decompress_mt(&thread_grp,
+            &cur_thread_info, tid);
+        EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_SUCCESS);
+        EXPECT_NE(cur_thread_info.partition_src, nullptr);
+        EXPECT_EQ(cur_thread_info.partition_src_size, (AOCL_UINTP)100);
+        EXPECT_EQ(cur_thread_info.dst_trap_size, (AOCL_UINTP)200);
+    }
+}
+/*********************************************
+* End security tests for RAP frame validation
+*********************************************/
+
 #endif /* AOCL_ENABLE_THREADS */

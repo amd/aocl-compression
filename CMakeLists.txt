@@ -95,6 +95,15 @@ option (AOCL_TEST_FUZZER_WITH_CORPUS "Run fuzzer tests with corpus (only on Linu
 option (ENABLE_FAST_MATH "Enable fast-math optimizations (Disabled by default)" OFF)
 option (AOCL_LLC_PREFIX "Prefix library symbols (Disabled by default)" OFF)
 
+# Maximum ISA level for compile-time optimization gating (UNIX only)
+set(AOCL_MAX_ISA_LEVEL "AVX512" CACHE STRING
+    "Maximum ISA optimization level to compile (SSE2, AVX, AVX2, AVX512). Default: AVX512 (all levels enabled). UNIX only.")
+set_property(
+    CACHE AOCL_MAX_ISA_LEVEL
+    PROPERTY STRINGS
+    "SSE2" "AVX" "AVX2" "AVX512"
+)
+
 option (AOCL_EXCLUDE_BZIP2 "Exclude BZIP2 compression method from the library build (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_LZ4 "Exclude LZ4 compression method from the library build. LZ4HC also gets excluded (Disabled by default)" OFF)
 option (AOCL_EXCLUDE_LZ4HC "Exclude LZ4HC compression method from the library build (Disabled by default)" OFF)
@@ -155,6 +164,31 @@ if (BUILD_UTILITY AND NOT BUILD_STATIC_LIBS)
     message(WARNING "Building static library to allow all utilities to be built.")
     set(BUILD_STATIC_LIBS ON)
 endif()
+
+# AOCL_MAX_ISA_LEVEL: Platform check and validation
+string(TOUPPER "${AOCL_MAX_ISA_LEVEL}" AOCL_MAX_ISA_LEVEL)
+if (WIN32)
+    if (NOT AOCL_MAX_ISA_LEVEL STREQUAL "AVX512")
+        message(WARNING "AOCL_MAX_ISA_LEVEL is not supported on Windows. Ignoring setting '${AOCL_MAX_ISA_LEVEL}' and using full optimization.")
+        set(AOCL_MAX_ISA_LEVEL "AVX512")
+    endif()
+else()
+    if (NOT AOCL_MAX_ISA_LEVEL MATCHES "^(SSE2|AVX|AVX2|AVX512)$")
+        message(FATAL_ERROR "AOCL_MAX_ISA_LEVEL must be one of SSE2, AVX, AVX2, AVX512. Got: ${AOCL_MAX_ISA_LEVEL}")
+    endif()
+endif()
+
+# Map AOCL_MAX_ISA_LEVEL string to numeric value
+if (AOCL_MAX_ISA_LEVEL STREQUAL "SSE2")
+    set(AOCL_MAX_ISA_LEVEL_NUM 1)
+elseif (AOCL_MAX_ISA_LEVEL STREQUAL "AVX")
+    set(AOCL_MAX_ISA_LEVEL_NUM 2)
+elseif (AOCL_MAX_ISA_LEVEL STREQUAL "AVX2")
+    set(AOCL_MAX_ISA_LEVEL_NUM 3)
+else()
+    set(AOCL_MAX_ISA_LEVEL_NUM 4)
+endif()
+message(STATUS "Maximum ISA level: ${AOCL_MAX_ISA_LEVEL} (numeric: ${AOCL_MAX_ISA_LEVEL_NUM})")
 
 if (AOCL_EXCLUDE_LZ4 AND NOT AOCL_EXCLUDE_LZ4HC)
     # as lz4hc depends on lz4, it should be excluded along with lz4
@@ -248,12 +282,13 @@ set(AOCL_GENERATED_COMMON_INC_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/algos/co
 set(AOCL_GENERATED_ALGO_OPT_H ${AOCL_GENERATED_COMMON_INC_DIR}/aoclAlgoOpt.h)
 file(RELATIVE_PATH REL_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
 file(MAKE_DIRECTORY ${AOCL_GENERATED_COMMON_INC_DIR})
+set(AOCL_COMPRESSION_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "AOCL-Compression source root")
 if (LZ4_FRAME_FORMAT_SUPPORT)
     set(AOCL_LZ4HC_OPT "// #define AOCL_LZ4HC_OPT")
 else()
     set(AOCL_LZ4HC_OPT "#define AOCL_LZ4HC_OPT")
 endif()
-configure_file(${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/common/aoclAlgoOpt.h.in
+configure_file(${AOCL_COMPRESSION_ROOT}/${ALGOS_PATH}/common/aoclAlgoOpt.h.in
                ${AOCL_GENERATED_ALGO_OPT_H}
                @ONLY)
 
@@ -346,11 +381,13 @@ set (ZLIB_SRC_FILES ${ALGOS_PATH}/zlib/code_alignment.c
                     ${ALGOS_PATH}/zlib/zutil.c
                     ${ALGOS_PATH}/zlib/zlib.h
                     ${ALGOS_PATH}/zlib/aocl_zlib_utils.c)
-set (ZLIBNG_SRC_FILES        ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
-                             ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_sse2.c
-                             ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
+set (ZLIBNG_SRC_FILES        ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_sse2.c)
+if (AOCL_MAX_ISA_LEVEL_NUM GREATER_EQUAL 4 OR WIN32)
+    list(APPEND ZLIBNG_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
+                            ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
+endif()
 set_property(SOURCE ${ZLIBNG_SRC_FILES} APPEND PROPERTY INCLUDE_DIRECTORIES 
-                    "${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/zlib/zlib-ng/;${CMAKE_SOURCE_DIR}/${ALGOS_PATH}/zlib/")
+                    "${AOCL_COMPRESSION_ROOT}/${ALGOS_PATH}/zlib/zlib-ng/;${AOCL_COMPRESSION_ROOT}/${ALGOS_PATH}/zlib/")
 set_property(SOURCE ${ZLIBNG_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DHAVE_ATTRIBUTE_ALIGNED=1;-DHAVE_HIDDEN=1")
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZLIB")
@@ -391,6 +428,18 @@ set (ZSTD_SRC_FILES ${ALGOS_PATH}/zstd/lib/common/code_alignment.c
                     ${ALGOS_PATH}/zstd/lib/dictBuilder/fastcover.c
                     ${ALGOS_PATH}/zstd/lib/dictBuilder/zdict.c
                     ${ALGOS_PATH}/zstd/lib/zstd.h)
+    # huf_decompress_amd64.S (GAS assembly) is compiled fine by the Ninja
+    # generator, which drives clang-cl/clang directly, but the Visual Studio
+    # generator's MSBuild ClangCl toolset has no build rule for .S sources, so its
+    # .obj is silently never produced and the unified link later fails to open it.
+    # Under the VS generator drop the asm and fall back to zstd's portable C
+    # Huffman decoder (ZSTD_DISABLE_ASM); Ninja keeps the optimized asm path.
+    if(CMAKE_GENERATOR MATCHES "Visual Studio")
+            list(REMOVE_ITEM ZSTD_SRC_FILES
+            ${ALGOS_PATH}/zstd/lib/decompress/huf_decompress_amd64.S)
+            set_property(SOURCE ${ALGOS_PATH}/zstd/lib/decompress/huf_decompress.c
+            APPEND PROPERTY COMPILE_OPTIONS "-DZSTD_DISABLE_ASM")
+    endif()
 else ()
 set_property(SOURCE ${API_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_EXCLUDE_ZSTD")
 endif ()
@@ -404,8 +453,10 @@ set (UTILS_SRC_FILES	utils/code_alignment.cpp
 						utils/utils.h
                         utils/dispatcher.h)
 # Source files utilizing AVX-512 and higher ISA extensions
-set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
-                      ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
+if (AOCL_MAX_ISA_LEVEL_NUM GREATER_EQUAL 4 OR WIN32)
+    set (AVX512_SRC_FILES ${ALGOS_PATH}/zlib/crc32_x86_vpclmulqdq.c
+                          ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c)
+endif()
 
 if (AOCL_ENABLE_THREADS)
     set (THREADS_SRC_FILES threads/code_alignment.c
@@ -563,12 +614,22 @@ if (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
     # Hence setting it at file level here for lz4.
     set_property(SOURCE ${LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-O2")
 endif()
+
+# Per-file compiler flags to recover the ZLIB and ZSTD performance lost for GCC >=15 
+if (${CMAKE_C_COMPILER_ID} STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 15)
+    set_property(SOURCE ${ALGOS_PATH}/zlib/zlib-ng/arch/x86/chunkset_avx512.c
+                 APPEND PROPERTY COMPILE_OPTIONS "-fno-schedule-insns2;-fno-code-hoisting")
+    set_property(SOURCE ${ALGOS_PATH}/zstd/lib/decompress/zstd_decompress_block.c
+                 APPEND PROPERTY COMPILE_OPTIONS "-fno-schedule-insns;-fno-tree-sink;-fno-if-conversion")
+endif()
+
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} -fomit-frame-pointer -fstrict-aliasing")
     if(ENABLE_FAST_MATH)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffast-math")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
     endif()
+    add_compile_definitions(AOCL_MAX_ISA_LEVEL=${AOCL_MAX_ISA_LEVEL_NUM})
     set_source_files_properties(${SNAPPY_SRC_FILES} PROPERTIES COMPILE_OPTIONS "-DHAVE_ATTRIBUTE_ALWAYS_INLINE=1;-DHAVE_BUILTIN_CTZ=1;-DHAVE_BUILTIN_EXPECT=1;-DHAVE_BUILTIN_PREFETCH=1;-DSNAPPY_HAVE_X86_CRC32=1;")
 endif()
 
@@ -706,6 +767,14 @@ endif()
 if (AOCL_LLC_PREFIX)
     add_compile_definitions(AOCL_LLC_PREFIX)
 endif()
+    
+# Function to get available system memory in MB
+function(get_available_memory OUTPUT_VAR)
+    cmake_host_system_information(RESULT AVAILABLE_MEMORY_MB QUERY AVAILABLE_PHYSICAL_MEMORY)
+    set(${OUTPUT_VAR} ${AVAILABLE_MEMORY_MB} PARENT_SCOPE)
+endfunction()
+get_available_memory(SYSTEM_AVAILABLE_MEMORY_MB)
+set(AOCL_MIN_MEMORY_INTENSIVE_TEST_MB 4608 CACHE STRING "Minimum required memory (in MB) to enable memory intensive tests") # 4.5 GB in MB
 
 #setup CTest for GoogleTest and aocl_compression_bench test
 if (AOCL_TEST_COVERAGE OR TEST_COVERAGE_THIRD_PARTY)
@@ -758,6 +827,16 @@ else ()
     add_library(${lib_name} SHARED ${SRC_FILES})
     message(STATUS "Library type being built is: Shared")
 endif()
+
+# AOCL Build-It-Yourself unified build: compile the same sources into a sibling
+# OBJECT library whose objects are pulled directly into the single libaocl.
+if(AOCL_TB_UNIFIED_BUILD)
+    if(NOT COMMAND aocl_tb_objectify)
+        message(FATAL_ERROR "AOCL_TB_UNIFIED_BUILD is ON but aocl_tb_objectify() is not defined. Include the unified-build tooling or disable AOCL_TB_UNIFIED_BUILD.")
+    endif()
+    aocl_tb_objectify(${lib_name})
+endif()
+
 set_target_properties(${lib_name}   PROPERTIES 
                                     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
                                     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -790,10 +869,18 @@ if (ASAN)
     target_link_options(${lib_name} PUBLIC -fsanitize=address)
 endif()
 
+# PUBLIC_HEADER entries above are listed as RELATIVE paths (api/..., algos/...,
+# ${REL_BUILD_DIR}/...). CMake resolves relative PUBLIC_HEADER paths against the
+# top-level CMAKE_SOURCE_DIR, which under the AOCL-BIY in-tree build is the parent(aocl) tree -- not this component -- so install() looks for e.g. aocl/api/... and
+# fails. Anchor every entry to this component's own root (AOCL_COMPRESSION_ROOT);
+# REL_BUILD_DIR is relative to that same root, so prepending it keeps the generated
+# header path correct too. This is identical to the standalone resolution.
+list(TRANSFORM INC_FILES PREPEND "${AOCL_COMPRESSION_ROOT}/")
+
 set_target_properties(${lib_name} PROPERTIES PUBLIC_HEADER "${INC_FILES}")
 
 target_include_directories(${lib_name}
-                            PRIVATE ${CMAKE_SOURCE_DIR}
+                            PRIVATE ${AOCL_COMPRESSION_ROOT}
                             PRIVATE ${PROJECT_BINARY_DIR} # required for files generated from .in templates
                             PRIVATE ${AOCL_GENERATED_COMMON_INC_DIR}
                             PRIVATE ${ALGOS_PATH}/common
@@ -813,7 +900,15 @@ if (NATIVE_ENABLE_THREADS)
 endif()
 
 #add benchmarking application and tests
-add_subdirectory(test)
+# Under the AOCL-BIY in-tree build (FetchContent + add_subdirectory) this project
+# is not top-level: CMAKE_SOURCE_DIR/CMAKE_BINARY_DIR point at the parent (aocl)
+# tree, so the test bench's header-staging custom command (which copies from
+# ${CMAKE_SOURCE_DIR}/api/...) resolves to the wrong paths and breaks the unified
+# 'all' build. The merged libaocl does not need the test bench, so only build it
+# when aocl-compression is configured as the top-level project (standalone).
+if(CMAKE_SOURCE_DIR STREQUAL AOCL_COMPRESSION_ROOT)
+    add_subdirectory(test)
+endif()
 
 if (AOCL_ENABLE_LOG_FEATURE)
 	set_property(SOURCE ${SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_ENABLE_LOG_FEATURE")

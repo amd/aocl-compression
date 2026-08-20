@@ -244,12 +244,46 @@ void aocl_destroy_parallel_compress_mt(aocl_thread_group_t *thread_grp)
     }
 }
 
+/* Validates the RAP frame header fields after the magic word and size guards pass.
+ * Precondition: src_size >= RAP_START_OF_PARTITIONS and src[0..7] == RAP_MAGIC_WORD.
+ * On success, sets *rap_metadata_len_out and *num_main_threads_out; returns 0.
+ * Returns -1 on any validation failure. */
+static AOCL_INT32 aocl_validate_rap_header(AOCL_CHAR const *src, AOCL_UINTP src_size,
+                                            AOCL_UINT32 *rap_metadata_len_out,
+                                            AOCL_UINT32 *num_main_threads_out)
+{
+    AOCL_CHAR const *src_ptr = src + RAP_MAGIC_WORD_BYTES;
+    AOCL_UINT32 rap_metadata_len = *(AOCL_UINT32 *)(src_ptr);
+    if (rap_metadata_len > src_size) {
+        LOG_UNFORMATTED(ERR, logCtx, "RAP metadata length exceeds source buffer size");
+        return -1;
+    }
+    AOCL_UINT32 num_main_threads = *(AOCL_UINT32 *)(src_ptr + RAP_METADATA_LEN_BYTES);
+    if (num_main_threads == 0) {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid main thread count value in RAP frame");
+        return -1;
+    }
+    if (num_main_threads > (src_size - RAP_START_OF_PARTITIONS) / RAP_DATA_BYTES_WITH_DECOMP_LEN) {
+        LOG_UNFORMATTED(ERR, logCtx, "RAP frame partition entries exceed source buffer size");
+        return -1;
+    }
+    AOCL_UINTP expected_frame_len = (AOCL_UINTP)RAP_START_OF_PARTITIONS +
+        ((AOCL_UINTP)num_main_threads * RAP_DATA_BYTES_WITH_DECOMP_LEN);
+    if (rap_metadata_len < expected_frame_len) {
+        LOG_UNFORMATTED(ERR, logCtx, "RAP metadata length inconsistent with partition count");
+        return -1;
+    }
+    *rap_metadata_len_out = rap_metadata_len;
+    *num_main_threads_out = num_main_threads;
+    return 0;
+}
+
 AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
                                         AOCL_CHAR* src, AOCL_CHAR* dst, AOCL_UINTP in_size,
                                         AOCL_UINTP out_size, AOCL_INT32 use_ST_decompressor)
 {
     assert(thread_grp != NULL);
-    if (src == NULL) 
+    if (src == NULL)
     {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
         return ERR_INVALID_INPUT;
@@ -267,7 +301,7 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
 
     src_base = thread_grp->src;
 
-    if ((thread_grp->src_size < RAP_MAGIC_WORD_BYTES) ||
+    if ((thread_grp->src_size < RAP_START_OF_PARTITIONS) ||
         (RAP_MAGIC_WORD != *(AOCL_INT64*)src_base))
     {
         //Stream is very small or not in multi-threaded RAP format
@@ -277,18 +311,9 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
     }
     else
     {
-        AOCL_CHAR* src_ptr;
         AOCL_UINT32 num_main_threads;
-        src_ptr = src_base + RAP_MAGIC_WORD_BYTES;
-        rap_metadata_len = *(AOCL_UINT32*)(src_ptr);
-        src_ptr += RAP_METADATA_LEN_BYTES;
-        num_main_threads = *(AOCL_UINT32*)(src_ptr);
-
-        if (num_main_threads == 0) 
-        {
-            LOG_UNFORMATTED(ERR, logCtx, "Invalid main thread count value in RAP frame");
-            return -1; // invalid main thread count in stream. Must be >= 1.
-        }
+        if (aocl_validate_rap_header(src_base, in_size, &rap_metadata_len, &num_main_threads) != 0)
+            return -1;
 
         if (use_ST_decompressor == 1)
             return rap_metadata_len;
@@ -413,28 +438,72 @@ AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_group_t* thread_grp,
 static AOCL_UINTP aocl_calculate_dst_offset_internal(AOCL_CHAR const *source, AOCL_INT32 thread_id)
 {
    source = source + RAP_START_OF_PARTITIONS;
-   AOCL_UINTP len = 0;
+   /* Accumulate in 64-bit to detect overflow before truncating to AOCL_UINTP.
+    * Each per-partition decomp_len is untrusted (UINT32); summing even two
+    * maximum-value fields overflows a 32-bit accumulator on ILP32 targets. */
+   AOCL_UINT64 len = 0;
    for(AOCL_INT32 i = 0; i < thread_id; i++)
    {
       len += *(AOCL_UINT32 *)(source + RAP_DATA_BYTES);
       source += RAP_DATA_BYTES_WITH_DECOMP_LEN;
    }
-   return len;
+   /* Reject if the sum cannot be represented in a pointer-sized offset. */
+   if (len > (AOCL_UINT64)SIZE_MAX)
+      return (AOCL_UINTP)SIZE_MAX; /* sentinel: callers' dst_size check will reject */
+   return (AOCL_UINTP)len;
 }
 
+/*
+ * aocl_do_partition_decompress_mt() — API contract
+ *
+ * Sets up cur_thread_info for one decompression thread by reading partition
+ * metadata from the RAP frame embedded in thread_grp->src.
+ *
+ * dst_size contract (thread_grp->dst_size):
+ *   > 0  — Caller knows the destination buffer size. This function validates
+ *           that (dst_offset + dst_trap_size) fits within dst_size before
+ *           forming the dst_trap pointer. Returns INSUFFICIENT_DST_SPACE if
+ *           the partition would overflow the destination buffer.
+ *   == 0 — Caller does not know the destination size at setup time (e.g.
+ *           snappy, which decompresses directly into the caller-provided buffer
+ *           without a post-parallel copy step). In this mode the dst bounds
+ *           check is skipped entirely; dst_trap is always set. The caller is
+ *           responsible for its own output-bounds enforcement. dst_trap_size
+ *           (read from untrusted RAP metadata) must be re-validated by the
+ *           caller's decompressor before any write.
+ *
+ * Return values:
+ *   AOCL_MT_DECOMP_PARTITION_SUCCESS          (0)  — dst_trap and all fields valid.
+ *   AOCL_MT_DECOMP_PARTITION_EMPTY_SRC        (1)  — partition_src_size == 0; dst_trap is NULL.
+ *   AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE (-1)
+ *       Only returned when dst_size > 0. dst_trap IS set (dst_offset was safe);
+ *       dst_trap_size exceeds the remaining destination space.
+ *   AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME (-2)
+ *       RAP partition metadata is inconsistent with the source buffer.
+ *       dst_trap is NOT set (NULL). Callers must not dereference dst_trap.
+ */
 AOCL_INT32 aocl_do_partition_decompress_mt(const aocl_thread_group_t* thread_grp,
                                       aocl_thread_info_t* cur_thread_info, AOCL_UINT32 thread_id)
 {
     assert(thread_grp != NULL);
     assert(cur_thread_info != NULL);
     memset(cur_thread_info, 0, sizeof(aocl_thread_info_t)); //needed to ensure pointer related checks behave as expected
-        
-    AOCL_UINT32 cur_rap_pos = RAP_START_OF_PARTITIONS + 
-                            (thread_id * (RAP_DATA_BYTES_WITH_DECOMP_LEN));
-    cur_thread_info->partition_src = thread_grp->src +
-                            *(AOCL_UINT32*)(thread_grp->src + cur_rap_pos);
-    cur_thread_info->partition_src_size = *(AOCL_UINT32*)(thread_grp->src +
+
+    AOCL_UINTP cur_rap_pos = (AOCL_UINTP)RAP_START_OF_PARTITIONS +
+                            ((AOCL_UINTP)thread_id * RAP_DATA_BYTES_WITH_DECOMP_LEN);
+
+    AOCL_UINT32 partition_offset = *(AOCL_UINT32*)(thread_grp->src + cur_rap_pos);
+    AOCL_UINT32 partition_size = *(AOCL_UINT32*)(thread_grp->src +
                                             cur_rap_pos + RAP_OFFSET_BYTES);
+
+    if (partition_offset > thread_grp->src_size ||
+        partition_size > thread_grp->src_size - partition_offset) {
+        LOG_FORMATTED(ERR, logCtx, "Thread %u: Partition data exceeds source buffer", thread_id);
+        return AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME;
+    }
+
+    cur_thread_info->partition_src = thread_grp->src + partition_offset;
+    cur_thread_info->partition_src_size = partition_size;
     cur_thread_info->thread_id = thread_id;
 
     if (cur_thread_info->partition_src_size == 0)
@@ -448,19 +517,28 @@ AOCL_INT32 aocl_do_partition_decompress_mt(const aocl_thread_group_t* thread_grp
                                         cur_rap_pos + RAP_DATA_BYTES));
     AOCL_UINTP dst_offset = aocl_calculate_dst_offset_internal(thread_grp->src, thread_id);
 
+    /* Always form dst_trap before the bounds check so callers that pass
+     * dst_size=0 (e.g. snappy) can use dst_trap regardless of the result.
+     * dst_offset is a UINT32 sum, so dst + dst_offset cannot wrap a 64-bit
+     * address space; on ILP32 the setup guard on num_main_threads caps
+     * dst_offset to at most (src_size - 16) which is <= UINT32_MAX. */
     cur_thread_info->dst_trap = thread_grp->dst + dst_offset;
+
+    /* Validate dst bounds only when the caller supplied a real destination
+     * size. Callers that pass dst_size=0 accept responsibility for their own
+     * output-bounds enforcement (see contract above). */
+    if (thread_grp->dst_size > 0) {
+        if (dst_offset > thread_grp->dst_size ||
+            cur_thread_info->dst_trap_size > thread_grp->dst_size - dst_offset) {
+            LOG_FORMATTED(ERR, logCtx, "Thread %u: Decompression failed, destination buffer too small.", thread_id);
+            return AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE;
+        }
+    }
 
 #ifdef AOCL_THREADS_LOG
     printf("aocl_do_partition_decompress_mt(): thread id: [%d]\n",
         cur_thread_info->thread_id);
 #endif
-
-    // Check if sufficent space is there in destination buffer.
-    if(dst_offset + cur_thread_info->dst_trap_size > thread_grp->dst_size)
-    {
-        LOG_FORMATTED(ERR, logCtx, "Thread %u: Decompression failed, destination buffer too small.", thread_id);
-        return AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE;
-    }
 
     return AOCL_MT_DECOMP_PARTITION_SUCCESS;
 }
@@ -486,15 +564,16 @@ AOCL_INT32 aocl_skip_rap_frame_mt(AOCL_CHAR* src, AOCL_UINTP src_size)
     if (src == NULL)
         return ERR_INVALID_INPUT;
 
-    if ((src_size < RAP_MAGIC_WORD_BYTES) ||
+    if ((src_size < RAP_START_OF_PARTITIONS) ||
         (RAP_MAGIC_WORD != *(AOCL_INT64*)src))
     {
         return 0; //Stream is very small or not in multi-threaded RAP format
     }
     else
     {
-        AOCL_CHAR* src_ptr = src + RAP_MAGIC_WORD_BYTES;
-        AOCL_UINT32 rap_metadata_len = *(AOCL_UINT32*)(src_ptr);
+        AOCL_UINT32 rap_metadata_len, num_main_threads;
+        if (aocl_validate_rap_header(src, src_size, &rap_metadata_len, &num_main_threads) != 0)
+            return -1;
         return rap_metadata_len;
     }
 }

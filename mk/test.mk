@@ -132,10 +132,17 @@ ifeq ($(AOCL_LLC_PREFIX),1)
     TEST_CFLAGS += -DAOCL_LLC_PREFIX
     TEST_CXXFLAGS += -DAOCL_LLC_PREFIX
 endif
+ifeq ($(OS_TYPE),windows)
+# Windows: no -rpath (DLL discovery via PATH); no libdl 
+TEST_LDFLAGS := -L$(LIB_DIR)
+TEST_RUN_ENV = PATH=$(LIB_DIR):$$PATH
+TEST_LIBS := $(LIB_LINK_TARGET) -lstdc++ $(LIBS)
+else
 TEST_LDFLAGS := -L$(LIB_DIR) -Wl,-rpath,$(LIB_DIR)
 TEST_RUN_ENV = LD_LIBRARY_PATH=$(LIB_DIR):$$LD_LIBRARY_PATH
 TEST_LIBS := $(LIB_LINK_TARGET) -lstdc++ $(LIBS)
 TEST_LIBS += -ldl
+endif
 
 # ==============================================================================
 # GTEST CONFIGURATION

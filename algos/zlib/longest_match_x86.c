@@ -69,9 +69,9 @@ static inline uint32_t compare256_c(const Bytef *src1, const Bytef *src2) {
 static inline uInt longest_match_c_opt(deflate_state* s, IPos cur_match)
 {
     unsigned chain_length = s->max_chain_length;/* max hash chain length */
-    register Bytef *scan = s->window + s->strstart; /* current string */
-    register Bytef *match;                      /* matched string */
-    register int len;                           /* length of current match */
+    Bytef *scan = s->window + s->strstart; /* current string */
+    Bytef *match;                      /* matched string */
+    int len;                           /* length of current match */
     int best_len = s->prev_length;              /* ignore strings, shorter or of the same length */
     int nice_match = s->nice_match;             /* stop if match long enough */
     int offset = 0;                             /* offset of current hash chain */
@@ -94,11 +94,11 @@ static inline uInt longest_match_c_opt(deflate_state* s, IPos cur_match)
     Posf *prev = s->prev;                       /* lists of the hash chains */
     uInt wmask = s->w_mask;
 
-    register Bytef *strend = s->window + s->strstart + MAX_MATCH-1;
+    Bytef *strend = s->window + s->strstart + MAX_MATCH-1;
         /* points to last byte for maximal-length scan */
-    register ush scan_start = *(ushf*)scan;     /* 1st 2 bytes of scan */
+    ush scan_start = *(ushf*)scan;     /* 1st 2 bytes of scan */
     uInt scan_start32 = *(uIntf*)scan;          /* 1st 4 bytes of scan */
-    register ush scan_end;                      /* last byte of scan + next one */
+    ush scan_end;                      /* last byte of scan + next one */
 
 #if (MIN_MATCH != 3) || (MAX_MATCH != 258)
 #error The code is designed for MIN_MATCH==3 && MAX_MATCH==258
@@ -129,9 +129,9 @@ static inline uInt longest_match_c_opt(deflate_state* s, IPos cur_match)
         /* We're continuing search (lazy evaluation).
          * Note: for deflate_fast best_len is always MIN_MATCH-1 here
          */
-        register int i;
+        int i;
         IPos pos;
-        register uInt hash = 0;
+        uInt hash = 0;
         /* Find a most distant chain starting from scan with index=1 (index=0 corresponds
          * to cur_match). Note: we cannot use s->prev[strstart+1,...] immediately, because
          * these strings are not yet inserted into hash table yet.
@@ -225,8 +225,8 @@ static inline uInt longest_match_c_opt(deflate_state* s, IPos cur_match)
                  *   with "cur_match + len < strend".
                  */
                 IPos    pos, next_pos;
-                register int i;
-                register uInt hash;
+                int i;
+                uInt hash;
                 Bytef* scan_end;
 
                 /* go back to offset 0 */

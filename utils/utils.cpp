@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -102,7 +102,7 @@ unordered_map<string, size_t> unit_test_log_counter;
 static atomic_flag unit_test_log_counter_update = ATOMIC_FLAG_INIT;
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 #define SET_ENV_VAR(var) 
 #else
 #define SET_ENV_VAR(var) putenv(var)
@@ -140,7 +140,7 @@ int validate_simd_func_access(const aocl_func_info* aocl_simd_funcs, size_t cnt,
 }
 
 int set_env_var(const char* name, const char* value) {
-#ifdef WIN32
+#ifdef _WIN32
     std::string env_var = std::string(name) + "=" + std::string(value);
     return _putenv((char*)(env_var.c_str()));
 #else
@@ -150,7 +150,7 @@ int set_env_var(const char* name, const char* value) {
 }
 
 int unset_env_var(const char* name) {
-#ifdef WIN32
+#ifdef _WIN32
     std::string env_var = std::string(name) + "=";
     return _putenv((char*)(env_var.c_str()));
 #else
