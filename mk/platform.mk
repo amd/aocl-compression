@@ -223,18 +223,23 @@ endif
 HAS_SYS_UIO_H := $(shell printf '%s\n' '\#include <sys/uio.h>' | $(CC) -E - >/dev/null 2>&1; if [ $$? -eq 0 ]; then echo 1; else echo 0; fi)
 
 # Windows: probe OpenMP runtime (libgomp for GCC, libomp for Clang) so we fail fast with a clear message instead of a cryptic link error.
+# Only relevant for the OpenMP backend; TBB builds link no OpenMP runtime.
 ifeq ($(OS_TYPE),windows)
     ifeq ($(AOCL_ENABLE_THREADS),1)
-        OMP_PROBE_FLAGS := -fopenmp
-        ifeq ($(CC_ID),clang)
-            OMP_PROBE_FLAGS += -lomp
-        endif
-        HAS_OMP_LINK := $(shell printf '%s\n' 'int omp_get_num_threads(void); int main(void){return omp_get_num_threads();}' | $(CC) -x c $(OMP_PROBE_FLAGS) -o /tmp/_aocl_probe.exe - >/dev/null 2>&1; rc=$$?; rm -f /tmp/_aocl_probe.exe; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
-        ifneq ($(HAS_OMP_LINK),1)
+        ifneq ($(AOCL_THREADING_BACKEND),TBB)
+            OMP_PROBE_FLAGS := -fopenmp
             ifeq ($(CC_ID),clang)
-                $(error Clang OpenMP runtime (libomp) not found. Install MSYS2/MinGW package or build with AOCL_ENABLE_THREADS=0)
-            else
-                $(error GCC OpenMP runtime (libgomp) not found. Install MSYS2/MinGW package or build with AOCL_ENABLE_THREADS=0)
+                OMP_PROBE_FLAGS += -lomp
+            endif
+            # PID-unique temp path (honoring TMPDIR) so parallel builds of two
+            # configs do not race on the same probe binary; mirrors the TBB probe.
+            HAS_OMP_LINK := $(shell tmp="$${TMPDIR:-/tmp}/_aocl_probe.$$$$.exe"; printf '%s\n' 'int omp_get_num_threads(void); int main(void){return omp_get_num_threads();}' | $(CC) -x c $(OMP_PROBE_FLAGS) -o "$$tmp" - >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+            ifneq ($(HAS_OMP_LINK),1)
+                ifeq ($(CC_ID),clang)
+                    $(error Clang OpenMP runtime (libomp) not found. Install MSYS2/MinGW package or build with AOCL_ENABLE_THREADS=0)
+                else
+                    $(error GCC OpenMP runtime (libgomp) not found. Install MSYS2/MinGW package or build with AOCL_ENABLE_THREADS=0)
+                endif
             endif
         endif
     endif
@@ -243,9 +248,11 @@ endif
 # Windows: probe -fstack-protector-strong link; if it fails, retry with -lssp and keep it.
 ifeq ($(OS_TYPE),windows)
     ifeq ($(BUILD_TYPE),Release)
-        HAS_SSP_AUTO := $(shell printf '%s\n' 'int main(int argc, char **argv){char b[64];return argv[argc-1][0]^b[0];}' | $(CC) -x c -fstack-protector-strong -o /tmp/_aocl_probe.exe - >/dev/null 2>&1; rc=$$?; rm -f /tmp/_aocl_probe.exe; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+        # PID-unique temp path (honoring TMPDIR) so parallel builds do not race
+        # on the same probe binary; mirrors the OpenMP/TBB probes.
+        HAS_SSP_AUTO := $(shell tmp="$${TMPDIR:-/tmp}/_aocl_probe.$$$$.exe"; printf '%s\n' 'int main(int argc, char **argv){char b[64];return argv[argc-1][0]^b[0];}' | $(CC) -x c -fstack-protector-strong -o "$$tmp" - >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
         ifneq ($(HAS_SSP_AUTO),1)
-            HAS_SSP_EXPLICIT := $(shell printf '%s\n' 'int main(int argc, char **argv){char b[64];return argv[argc-1][0]^b[0];}' | $(CC) -x c -fstack-protector-strong -lssp -o /tmp/_aocl_probe.exe - >/dev/null 2>&1; rc=$$?; rm -f /tmp/_aocl_probe.exe; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+            HAS_SSP_EXPLICIT := $(shell tmp="$${TMPDIR:-/tmp}/_aocl_probe.$$$$.exe"; printf '%s\n' 'int main(int argc, char **argv){char b[64];return argv[argc-1][0]^b[0];}' | $(CC) -x c -fstack-protector-strong -lssp -o "$$tmp" - >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
             ifeq ($(HAS_SSP_EXPLICIT),1)
                 LIBS += -lssp
             else

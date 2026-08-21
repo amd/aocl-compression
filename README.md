@@ -84,6 +84,9 @@ On Windows, the build is supported under MSYS2 with the MinGW-w64 toolchain (`ma
    ```
    make BUILD_TYPE=Debug BUILD_STATIC_LIBS=1 AOCL_ENABLE_THREADS=1
    ```
+   When `AOCL_ENABLE_THREADS=1`, the threading backend is selected with `AOCL_THREADING_BACKEND`
+   (`OPENMP` by default, or `TBB`; a TBB build requires the TBB development package
+   and links no OpenMP runtime).
 4. Run tests when enabled:
    ```
    make test AOCL_TEST_COVERAGE=1
@@ -95,6 +98,7 @@ On Windows, the build is supported under MSYS2 with the MinGW-w64 toolchain (`ma
    ```
 * NOTE: <br>
    1. **GoogleTest**: Required to build and execute the test suite
+   2. **TBB**: Required only when building with `AOCL_THREADING_BACKEND=TBB`
 
 GNU Make Example
 ----------------
@@ -103,6 +107,13 @@ Build a Debug static library with OpenMP threading support and run tests:
 make clean
 make BUILD_TYPE=Debug BUILD_STATIC_LIBS=1 AOCL_ENABLE_THREADS=1 -j
 make test AOCL_TEST_COVERAGE=1
+```
+
+Build a shared library with the TBB threading backend (Linux/Unix only) and run tests:
+```
+make clean
+make AOCL_ENABLE_THREADS=1 AOCL_THREADING_BACKEND=TBB -j
+make test AOCL_TEST_COVERAGE=1 AOCL_ENABLE_THREADS=1 AOCL_THREADING_BACKEND=TBB
 ```
 
 Building on Windows

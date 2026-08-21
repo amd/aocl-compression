@@ -906,52 +906,124 @@ INSTALL_HEADERS += $(GEN_AOCL_ALGO_OPT) \
 # ==============================================================================
 # Threading Support Module
 # ==============================================================================
-# Handles OpenMP and native pthread multi-threading
+# Handles the backend-agnostic AOCL threading layer (OpenMP or TBB) and
+# native pthread multi-threading.
 # ==============================================================================
 
 # ==============================================================================
-# AOCL MULTI-THREADING (OpenMP)
+# AOCL MULTI-THREADING (OpenMP or TBB)
 # ==============================================================================
 
 ifeq ($(AOCL_ENABLE_THREADS),1)
 
-# Add threading sources
+# Backend-agnostic threading sources (always compiled when threading is on).
 THREADS_SOURCES := threads/code_alignment.c \
                    threads/threads.c
 
-THREADS_HEADERS := threads/threads.h
+THREADS_HEADERS := threads/threads.h \
+                   threads/aocl_threading.h
+
+# Backend implementation of the aocl_threading API (one only), mirroring the
+# CMake THREADS_SRC_FILES selection.
+ifeq ($(AOCL_THREADING_BACKEND),TBB)
+    THREADS_SOURCES += threads/aocl_threading_tbb.cpp
+else
+    THREADS_SOURCES += threads/aocl_threading.c
+endif
 
 ALL_SOURCES += $(THREADS_SOURCES)
 ALL_HEADERS += $(THREADS_HEADERS)
 
-# OpenMP flags
-THREADS_CFLAGS := -fopenmp
-THREADS_CXXFLAGS := -fopenmp
-THREADS_LDFLAGS := -fopenmp
+# Backend compile definitions (-DAOCL_ENABLE_THREADS, plus -DAOCL_USE_TBB for
+# the TBB backend). Single source of truth: THREAD_BACKEND_DEFS in config.mk,
+# also consumed by the benchmark and mk/test.mk.
+ALL_CFLAGS += $(THREAD_BACKEND_DEFS)
+ALL_CXXFLAGS += $(THREAD_BACKEND_DEFS)
 
-# Check if we need to link OpenMP library explicitly
-ifeq ($(OS_TYPE),unix)
-    # On Linux, check if libomp exists
-    LIBOMP_PATH := $(shell $(CC) -print-file-name=libomp.so 2>/dev/null)
-    ifneq ($(LIBOMP_PATH),libomp.so)
-        # libomp found, link it
-        LIBS += -lomp
+ifeq ($(AOCL_THREADING_BACKEND),TBB)
+    # TBB backend: no OpenMP runtime linked. The AOCL_USE_TBB macro (which gates
+    # the OpenMP-only paths in the public headers/codecs) comes from
+    # THREAD_BACKEND_DEFS above; this branch only handles TBB discovery/linking.
+    # Locate TBB via pkg-config (like the gtest lookup), else fall back to
+    # -ltbb. TBB_CFLAGS/TBB_LIBS may be overridden for non-standard installs.
+    # Use immediate ($(origin ...)/:=) assignment so pkg-config runs once here,
+    # instead of on every reference of $(TBB_CFLAGS)/$(TBB_LIBS) in a compile
+    # line (a recursively-expanded '?=' would re-invoke it each time).
+    ifeq ($(origin TBB_CFLAGS),undefined)
+        TBB_CFLAGS := $(shell pkg-config --cflags tbb 2>/dev/null)
+        TBB_CFLAGS_FROM_PKGCONFIG := 1
     endif
-else ifeq ($(OS_TYPE),windows)
-    # GCC/MinGW auto-links libgomp via -fopenmp; Clang/MinGW needs explicit -lomp
-    ifeq ($(CC_ID),clang)
-        LIBS += -lomp
+    ifeq ($(origin TBB_LIBS),undefined)
+        TBB_LIBS := $(shell pkg-config --libs tbb 2>/dev/null)
+        TBB_LIBS_FROM_PKGCONFIG := 1
     endif
+    # Fall back to -ltbb when pkg-config yielded nothing. Only clear the paired
+    # TBB_CFLAGS when it too came from pkg-config, so a user-provided TBB_CFLAGS
+    # is never silently discarded.
+    ifeq ($(strip $(TBB_LIBS)),)
+        ifeq ($(TBB_LIBS_FROM_PKGCONFIG),1)
+            ifeq ($(TBB_CFLAGS_FROM_PKGCONFIG),1)
+                TBB_CFLAGS :=
+            endif
+            TBB_LIBS := -ltbb
+        endif
+    endif
+
+    # The toolchain probe and hard errors only matter for goals that actually
+    # compile/link. Skip them for clean/help/uninstall so those still work on a
+    # machine without TBB (and on Windows, where the TBB backend is not yet
+    # supported).
+    ifneq ($(filter-out clean test-clean help test-help test-report uninstall,$(if $(MAKECMDGOALS),$(MAKECMDGOALS),all)),)
+        # TBB backend is only validated on Linux/Unix for now.
+        ifeq ($(OS_TYPE),windows)
+            $(error TBB backend (AOCL_THREADING_BACKEND=TBB) is only supported on Linux/Unix for now; build with AOCL_THREADING_BACKEND=OPENMP on Windows)
+        endif
+
+        # Fail fast (like the OpenMP probe, and CMake's required TBB lookup) if
+        # TBB cannot compile+link, instead of a cryptic later link error.
+        # -include is used because a literal '#' is not reliable inside
+        # $(shell ...); the probe binary uses a PID-unique temp path so parallel
+        # builds of two configs do not race on the same file.
+        AOCL_TBB_PROBE := $(shell tmp="$${TMPDIR:-/tmp}/_aocl_tbb_probe.$$$$"; printf 'int main(void){ return 0; }\n' | $(CXX) -x c++ $(TBB_CFLAGS) -include tbb/task_arena.h - $(TBB_LIBS) -o "$$tmp" >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+        ifneq ($(AOCL_TBB_PROBE),1)
+            $(error TBB backend selected (AOCL_THREADING_BACKEND=TBB) but the TBB headers/runtime could not be compiled and linked. Install the TBB development package, set TBB_CFLAGS/TBB_LIBS for a non-standard install, or build with AOCL_THREADING_BACKEND=OPENMP)
+        endif
+    endif
+
+    # The TBB backend implementation is C++, so the C++ runtime must be linked
+    # even when the link driver is $(CC) (e.g. the benchmark). CMake gets this
+    # via language propagation; Make does not, so request libstdc++ explicitly.
+    CFLAGS += $(TBB_CFLAGS)
+    CXXFLAGS += $(TBB_CFLAGS)
+    LIBS += $(TBB_LIBS) -lstdc++
+else
+    # ------------------------------------------------------------------
+    # OpenMP backend (default).
+    # ------------------------------------------------------------------
+    THREADS_CFLAGS := -fopenmp
+    THREADS_CXXFLAGS := -fopenmp
+    THREADS_LDFLAGS := -fopenmp
+
+    # Check if we need to link OpenMP library explicitly
+    ifeq ($(OS_TYPE),unix)
+        # On Linux, check if libomp exists
+        LIBOMP_PATH := $(shell $(CC) -print-file-name=libomp.so 2>/dev/null)
+        ifneq ($(LIBOMP_PATH),libomp.so)
+            # libomp found, link it
+            LIBS += -lomp
+        endif
+    else ifeq ($(OS_TYPE),windows)
+        # GCC/MinGW auto-links libgomp via -fopenmp; Clang/MinGW needs explicit -lomp
+        ifeq ($(CC_ID),clang)
+            LIBS += -lomp
+        endif
+    endif
+
+    # Add threading flags
+    CFLAGS += $(THREADS_CFLAGS)
+    CXXFLAGS += $(THREADS_CXXFLAGS)
+    LDFLAGS += $(THREADS_LDFLAGS)
 endif
-
-# Add threading flags
-CFLAGS += $(THREADS_CFLAGS)
-CXXFLAGS += $(THREADS_CXXFLAGS)
-LDFLAGS += $(THREADS_LDFLAGS)
-
-# Add AOCL_ENABLE_THREADS definition to all sources
-ALL_CFLAGS += -DAOCL_ENABLE_THREADS
-ALL_CXXFLAGS += -DAOCL_ENABLE_THREADS
 
 endif # AOCL_ENABLE_THREADS
 
@@ -1330,9 +1402,10 @@ ifeq ($(AOCL_LLC_PREFIX),1)
 endif
 
 # Match CMake testbench compile definitions
-ifeq ($(AOCL_ENABLE_THREADS),1)
-    BENCH_CFLAGS += -DAOCL_ENABLE_THREADS
-endif
+# Backend macros (AOCL_ENABLE_THREADS / AOCL_USE_TBB) via the shared
+# THREAD_BACKEND_DEFS from config.mk, so the benchmark compiles the public
+# headers with the same backend view as the library.
+BENCH_CFLAGS += $(THREAD_BACKEND_DEFS)
 ifeq ($(NATIVE_ENABLE_THREADS),1)
     BENCH_CFLAGS += -DNATIVE_ENABLE_THREADS
 endif

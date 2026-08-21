@@ -72,10 +72,12 @@ ifeq ($(BUILD_TYPE),Debug)
     TEST_CFLAGS += -DDEBUG_ASSERT_ENABLED
     TEST_CXXFLAGS += -DDEBUG_ASSERT_ENABLED
 endif
-ifeq ($(AOCL_ENABLE_THREADS),1)
-    TEST_CFLAGS += -DAOCL_ENABLE_THREADS
-    TEST_CXXFLAGS += -DAOCL_ENABLE_THREADS
-endif
+# Backend macros (AOCL_ENABLE_THREADS / AOCL_USE_TBB) via the shared
+# THREAD_BACKEND_DEFS from config.mk. CMake exposes these to consumers through
+# the library's INTERFACE compile definitions; here the tests reference the
+# same single source of truth so they match how the library was built.
+TEST_CFLAGS += $(THREAD_BACKEND_DEFS)
+TEST_CXXFLAGS += $(THREAD_BACKEND_DEFS)
 ifeq ($(NATIVE_ENABLE_THREADS),1)
     TEST_CFLAGS += -DNATIVE_ENABLE_THREADS
     TEST_CXXFLAGS += -DNATIVE_ENABLE_THREADS
