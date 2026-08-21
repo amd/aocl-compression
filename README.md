@@ -163,6 +163,7 @@ AOCL_ZSTD_DYN_BLOCK_SIZE            |  Enable ZSTD dynamic block size determinat
 AOCL_DECOMPRESS_FAST                |  Enable fast decompression modes that might compromise on compression speed / ratio to produce streams that decompress faster. Supported values: {1,2,3} ZSTD, {1,2} Snappy, {1} LZ4. (Disabled by default)
 AOCL_COMPRESS_FAST                  |  Enable fast compression modes that might compromise on compression ratio but compress faster. Supported values: {1,2} ZSTD. (Disabled by default)
 AOCL_TEST_COVERAGE                  |  Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)
+AOCL_TEST_COVERAGE_EXT              |  Enable extended GTest coverage that broadens the tested surface of non-deprecated ZSTD and LZ4 APIs. Implies AOCL_TEST_COVERAGE (Disabled by default)
 AOCL_ENABLE_LOG_FEATURE             |  Enables logging through environment variable `AOCL_ENABLE_LOG` (Disabled by default)
 CODE_COVERAGE                       |  Enable code coverage (GCC/gcov for Linux and Clang/llvm-cov for both Linux and Windows) (Disabled by default)
 ASAN                                |  Enable Address Sanitizer checks. Only supported on Linux/Debug build (Disabled by default)
@@ -370,6 +371,45 @@ Following are a few sample commands that can be executed in the build directory 
  
  To run GTest test cases for a specific method<br>
  `ctest -R <METHOD_NAME_IN_CAPITALS>`
+
+Extended API test coverage
+--------------------------
+
+The `AOCL_TEST_COVERAGE_EXT` option enables an additional set of GTest cases
+that broaden the tested surface of the public, non-deprecated ZSTD and LZ4 APIs,
+extending coverage to entry points not exercised by the base suite. Enabling it
+automatically turns on `AOCL_TEST_COVERAGE`, so a single switch is sufficient.
+
+CMake:
+
+`cmake .. -DAOCL_TEST_COVERAGE_EXT=ON`
+
+GNU Make:
+
+`make AOCL_TEST_COVERAGE_EXT=1`
+
+The extended cases are grouped under three parametrized fixtures instantiated
+with a per-method prefix, so their full suite names are `ZSTD/ZSTD_ext`,
+`LZ4/LZ4_ext` and `LZ4HC/LZ4HC_ext` (the leading `ZSTD/`, `LZ4/`, `LZ4HC/` is the
+instantiation prefix, and each case is suffixed with a `/<n>` parameter index).
+A filter must account for that prefix; a bare `ZSTD_ext.*` will not match.
+
+To build and run only the extended cases after enabling the option, filter by
+the parametrized suite name, e.g.:
+
+`zstd_gtest  --gtest_filter='ZSTD/ZSTD_ext.*'`
+`lz4_gtest   --gtest_filter='LZ4/LZ4_ext.*'`
+`lz4hc_gtest --gtest_filter='LZ4HC/LZ4HC_ext.*'`
+
+Filtering note: because the extended cases live under those three fixtures
+rather than one suite per API, the per-API `ctest -R <METHOD_NAME_IN_CAPITALS>`
+filter does not select an individual extended API on its own. Every extended
+test name still embeds its API (for example
+`ZSTD/ZSTD_ext.AOCL_Compression_zstd_ZSTD_isFrame_valid_common_1/0`), so target
+one API with a substring filter instead, e.g. `ctest -R ZSTD_isFrame` or, at the
+executable, `zstd_gtest --gtest_filter='*ZSTD_isFrame*'`. The parametrization
+also means each case is instantiated once per dynamic-dispatcher configuration
+(the `/<n>` suffix: the reference path plus each supported ISA level).
 
 Running fuzzer tests
 --------------------

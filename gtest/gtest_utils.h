@@ -41,10 +41,50 @@
 #include <string>
 #include <tuple>
 #include <functional>
+#include <utility>
 #include <stdexcept>
 #include "aocl_compression.h"
 
 using namespace std;
+
+/* Size-unit token-hack macros shared across the gtest suites. Usage: `4 KB`,
+ * `2 MB`, `1 GB`. The spelling is kept byte-for-byte identical to the existing
+ * definitions elsewhere in the tree (suite-local ones and the library-internal
+ * zstd_internal.h). A TU such as zstd_gtest pulls in zstd_internal.h *after*
+ * this header and redefines these unconditionally; an identical replacement
+ * list makes that a benign redefinition, whereas any whitespace/token
+ * difference would be promoted to a hard error under -Werror. */
+#ifndef KB
+#define KB *(1 <<10)
+#endif
+#ifndef MB
+#define MB *(1 <<20)
+#endif
+#ifndef GB
+#define GB *(1U<<30)
+#endif
+
+/* Scope guard: invokes a cleanup callback when it goes out of scope, so library
+ * handles are released on every path, including gtest ASSERT_* early-returns.
+ * Usage: ScopeGuard g([&]{ ZSTD_freeCCtx(cctx); });
+ *
+ * This is a concrete (non-template) type with a templated constructor, so a
+ * lambda binds directly without class-template argument deduction. That keeps
+ * it usable under C++11/14 as well as C++17 (the gtest build does not pin a
+ * -std flag, and some toolchains -- notably MSVC -- default below C++17, where
+ * CTAD on a class template would fail to compile). The callable is type-erased
+ * into std::function, which costs one small allocation; acceptable for test
+ * teardown. */
+class ScopeGuard {
+public:
+    template <typename Fn>
+    explicit ScopeGuard(Fn fn) : fn_(std::move(fn)) {}
+    ~ScopeGuard() { if (fn_) fn_(); }
+    ScopeGuard(const ScopeGuard&) = delete;
+    ScopeGuard& operator=(const ScopeGuard&) = delete;
+private:
+    std::function<void()> fn_;
+};
 
 #ifdef AOCL_ENABLE_THREADS
 #include <thread>

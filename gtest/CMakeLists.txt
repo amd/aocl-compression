@@ -122,6 +122,15 @@ if (NOT AOCL_EXCLUDE_BZIP2)
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4)
     set (GTEST_LZ4_SRC_FILES ${GTEST_SRC_PATH}/lz4/lz4_gtest.cpp)
+    if (AOCL_TEST_COVERAGE_EXT)
+        # Extended coverage broadening the tested surface of non-deprecated LZ4 APIs.
+        set (GTEST_LZ4_SRC_FILES ${GTEST_LZ4_SRC_FILES} ${GTEST_SRC_PATH}/lz4/lz4_ext_gtest.cpp)
+        # lz4file.c (the file API) is not in the library, so compile it into the
+        # test binary. It depends on the frame API, hence the frame-support gate.
+        if (LZ4_FRAME_FORMAT_SUPPORT)
+            set (GTEST_LZ4_SRC_FILES ${GTEST_LZ4_SRC_FILES} ${AOCL_COMPRESSION_ROOT}/${ALGOS_PATH}/lz4/lz4file.c)
+        endif()
+    endif()
     if (AOCL_LZ4_HASH_BITS_USED)
         if (AOCL_LZ4_HASH_BITS_USED  STREQUAL "LOW")
             set_property(SOURCE ${GTEST_LZ4_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_LZ4_HASH_BITS_USED=41")
@@ -132,6 +141,9 @@ if (NOT AOCL_EXCLUDE_LZ4)
 endif ()
 if (NOT AOCL_EXCLUDE_LZ4HC)
     set (GTEST_LZ4HC_SRC_FILES ${GTEST_SRC_PATH}/lz4hc/lz4hc_gtest.cpp)
+    if (AOCL_TEST_COVERAGE_EXT)
+        set (GTEST_LZ4HC_SRC_FILES ${GTEST_LZ4HC_SRC_FILES} ${GTEST_SRC_PATH}/lz4hc/lz4hc_ext_gtest.cpp)
+    endif()
 endif ()
 if (NOT AOCL_EXCLUDE_LZMA)
     set (GTEST_LZMA_SRC_FILES ${GTEST_SRC_PATH}/lzma/lzma_gtest.cpp)
@@ -166,6 +178,23 @@ foreach(FOLDER ${GTEST_MODULE_DIRS})
             
             # set properties for current source files
             set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_UNIT_TEST")
+            # Extended-coverage defines. These are only consumed by the _ext test
+            # files, so keep them inside the AOCL_TEST_COVERAGE_EXT guard: without
+            # it the base gtest sources (all modules) would be recompiled with
+            # -DLZ4_FRAME_FORMAT_SUPPORT / -DNATIVE_ENABLE_THREADS even when
+            # extended coverage is off, silently changing any #ifdef-gated block
+            # in an existing test.
+            if (AOCL_TEST_COVERAGE_EXT)
+                set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_TEST_COVERAGE_EXT")
+                if (LZ4_FRAME_FORMAT_SUPPORT)
+                    set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DLZ4_FRAME_FORMAT_SUPPORT")
+                endif()
+                if (NATIVE_ENABLE_THREADS)
+                    # Gates the ZSTD thread-pool APIs, which the library only
+                    # defines under ZSTD_MULTITHREAD (NATIVE_ENABLE_THREADS).
+                    set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DNATIVE_ENABLE_THREADS")
+                endif()
+            endif()
             if (AOCL_DYNAMIC_DISPATCHER)
                 set_property(SOURCE ${GTEST_CUR_SRC_FILES} APPEND PROPERTY COMPILE_OPTIONS "-DAOCL_DYNAMIC_DISPATCHER")
             endif()

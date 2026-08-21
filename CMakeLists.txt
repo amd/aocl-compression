@@ -73,6 +73,7 @@ option (AOCL_ZSTD_SEARCH_SKIP_OPT "Enable ZSTD match skipping optimization that 
 option (AOCL_ZSTD_DYN_BLOCK_SIZE "Enable ZSTD dynamic block size determination  (Disabled by default)" OFF)
 option (AOCL_LZ4HC_DISABLE_PATTERN_ANALYSIS "Disable Pattern Analysis in LZ4HC for level 9 (Enabled by default)" ON)
 option (AOCL_TEST_COVERAGE "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" OFF)
+option (AOCL_TEST_COVERAGE_EXT "Enable extended GTest coverage that broadens the tested surface of non-deprecated zstd and lz4 APIs. Implies AOCL_TEST_COVERAGE (Disabled by default)" OFF)
 option (CODE_COVERAGE "Enable code coverage (GCC/gcov for Linux and Clang/llvm-cov for both Linux and Windows)" OFF)
 if(UNIX)
     option (ASAN "Enable Address Sanitizer checks (only on Linux/Debug build)" OFF)
@@ -240,9 +241,18 @@ if (VALGRIND)
     endif()
 endif()
 
+# Extended API test coverage implies the base test-coverage build. Force the
+# cached value so ccmake / cmake-gui / CMakeCache.txt reflect the effective
+# state (a bare set() would only shadow the cache for this configure and leave
+# AOCL_TEST_COVERAGE=OFF visible, which is confusing and can mislead anything
+# that reads the cache).
+if(AOCL_TEST_COVERAGE_EXT)
+    set(AOCL_TEST_COVERAGE ON CACHE BOOL "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" FORCE)
+endif()
+
 # Enable CTest for any of these cases
 if(VALGRIND OR ASAN)
-    set(AOCL_TEST_COVERAGE ON)
+    set(AOCL_TEST_COVERAGE ON CACHE BOOL "Enable GTest, AOCL test bench and third party test bench based CTest suite (Disabled by default)" FORCE)
 endif()
 
 # validating google fuzz test environment

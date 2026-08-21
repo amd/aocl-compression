@@ -190,6 +190,13 @@ AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL ?= 0
 # Enable GTest, AOCL test bench, and third-party test suites
 AOCL_TEST_COVERAGE ?= 0
 
+# Enable extended GTest coverage that broadens the tested surface of
+# non-deprecated zstd and lz4 APIs. Implies AOCL_TEST_COVERAGE.
+AOCL_TEST_COVERAGE_EXT ?= 0
+ifeq ($(AOCL_TEST_COVERAGE_EXT),1)
+    override AOCL_TEST_COVERAGE := 1
+endif
+
 # TODO: Future implementation
 # # Enable code coverage (gcov for GCC, llvm-cov for Clang)
 # CODE_COVERAGE ?= 0
@@ -408,7 +415,7 @@ export AOCL_ENABLE_LOG_FEATURE AOCL_ENABLE_THREADS NATIVE_ENABLE_THREADS
 export AOCL_THREADING_BACKEND
 export THREAD_BACKEND_DEFS
 export AOCL_LLC_PREFIX AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL
-export AOCL_TEST_COVERAGE
+export AOCL_TEST_COVERAGE AOCL_TEST_COVERAGE_EXT
 # TODO: Future implementation
 # export CODE_COVERAGE TEST_COVERAGE_THIRD_PARTY
 # export ASAN VALGRIND AOCL_TEST_FUZZER AOCL_TEST_FUZZER_WITH_CORPUS

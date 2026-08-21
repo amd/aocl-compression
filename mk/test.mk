@@ -141,6 +141,20 @@ ifeq ($(BUILD_STATIC_LIBS),1)
     TEST_CXXFLAGS += -DAOCL_INTERNAL_TEST
 endif
 
+# Extended API coverage: enable the _ext gtest files and their guarded blocks.
+# The extended defines are only consumed by the _ext test files, so keep the
+# LZ4_FRAME_FORMAT_SUPPORT define nested here (mirroring gtest/CMakeLists.txt)
+# rather than applying it to every base gtest source.
+ifeq ($(AOCL_TEST_COVERAGE_EXT),1)
+    TEST_CFLAGS += -DAOCL_TEST_COVERAGE_EXT
+    TEST_CXXFLAGS += -DAOCL_TEST_COVERAGE_EXT
+    # LZ4 frame/file APIs are only present when frame support is compiled in.
+    ifeq ($(LZ4_FRAME_FORMAT_SUPPORT),1)
+        TEST_CFLAGS += -DLZ4_FRAME_FORMAT_SUPPORT
+        TEST_CXXFLAGS += -DLZ4_FRAME_FORMAT_SUPPORT
+    endif
+endif
+
 # Symbol prefixing support
 ifeq ($(AOCL_LLC_PREFIX),1)
     TEST_CFLAGS += -DAOCL_LLC_PREFIX
@@ -176,12 +190,23 @@ GTEST_API_SOURCES := $(wildcard $(GTEST_SOURCE_DIR)/api/*.cpp)
 ifneq ($(AOCL_EXCLUDE_BZIP2),1)
 GTEST_BZIP2_SOURCES := $(wildcard $(GTEST_SOURCE_DIR)/bzip2/*.cpp)
 endif
+# The _ext files are compiled into the single per-method binary (lz4_gtest /
+# lz4hc_gtest) alongside their base file, matching the CMake per-directory
+# build. So keep them out of the per-file GTEST_ALL_SOURCES list (which builds
+# one binary per .cpp) and collect them into _EXT vars used by the combined
+# rules below.
 ifneq ($(AOCL_EXCLUDE_LZ4),1)
-GTEST_LZ4_SOURCES := $(wildcard $(GTEST_SOURCE_DIR)/lz4/*.cpp)
+GTEST_LZ4_SOURCES := $(filter-out %_ext_gtest.cpp,$(wildcard $(GTEST_SOURCE_DIR)/lz4/*.cpp))
+ifeq ($(AOCL_TEST_COVERAGE_EXT),1)
+GTEST_LZ4_EXT_SOURCES := $(GTEST_SOURCE_DIR)/lz4/lz4_ext_gtest.cpp
+endif
 endif
 # AOCL_EXCLUDE_LZ4 and AOCL_EXCLUDE_LZ4HC are synchronized in config.mk.
 ifneq ($(AOCL_EXCLUDE_LZ4HC),1)
-GTEST_LZ4HC_SOURCES := $(wildcard $(GTEST_SOURCE_DIR)/lz4hc/*.cpp)
+GTEST_LZ4HC_SOURCES := $(filter-out %_ext_gtest.cpp,$(wildcard $(GTEST_SOURCE_DIR)/lz4hc/*.cpp))
+ifeq ($(AOCL_TEST_COVERAGE_EXT),1)
+GTEST_LZ4HC_EXT_SOURCES := $(GTEST_SOURCE_DIR)/lz4hc/lz4hc_ext_gtest.cpp
+endif
 endif
 ifneq ($(AOCL_EXCLUDE_LZMA),1)
 GTEST_LZMA_SOURCES := $(wildcard $(GTEST_SOURCE_DIR)/lzma/*.cpp)
@@ -193,7 +218,10 @@ ifneq ($(AOCL_EXCLUDE_ZLIB),1)
 GTEST_ZLIB_SOURCES := $(wildcard $(GTEST_SOURCE_DIR)/zlib/*.cpp)
 endif
 ifneq ($(AOCL_EXCLUDE_ZSTD),1)
-GTEST_ZSTD_SOURCES := $(wildcard $(GTEST_SOURCE_DIR)/zstd/*.cpp)
+GTEST_ZSTD_SOURCES := $(filter-out %_ext_gtest.cpp,$(wildcard $(GTEST_SOURCE_DIR)/zstd/*.cpp))
+ifeq ($(AOCL_TEST_COVERAGE_EXT),1)
+GTEST_ZSTD_SOURCES += $(GTEST_SOURCE_DIR)/zstd/zstd_ext_gtest.cpp
+endif
 endif
 GTEST_COMMON_SOURCES := $(wildcard $(GTEST_SOURCE_DIR)/common/*.cpp)
 ifeq ($(AOCL_ENABLE_THREADS),1)
@@ -212,12 +240,28 @@ GTEST_ALL_SOURCES := $(GTEST_API_SOURCES) \
                      $(GTEST_THREADS_SOURCES) \
                      $(GTEST_UTILS_SOURCES)
 
+# Drop the per-file lz4_gtest / lz4hc_gtest targets from the generic list: with
+# extended coverage they are built as combined base+_ext binaries (rules below).
+ifeq ($(AOCL_TEST_COVERAGE_EXT),1)
+GTEST_ALL_SOURCES := $(filter-out $(GTEST_SOURCE_DIR)/lz4/lz4_gtest.cpp $(GTEST_SOURCE_DIR)/lz4hc/lz4hc_gtest.cpp,$(GTEST_ALL_SOURCES))
+endif
+
 # Generate test executable names
 GTEST_BINS := $(patsubst $(GTEST_SOURCE_DIR)/%.cpp,$(TEST_BUILD_DIR)/%$(EXE_EXT),$(GTEST_ALL_SOURCES))
 
 # ZSTD tests need all source files compiled together (they share common functions)
 ifneq ($(GTEST_ZSTD_SOURCES),)
     GTEST_BINS += $(TEST_BUILD_DIR)/zstd/zstd_gtest$(EXE_EXT)
+endif
+
+# LZ4 / LZ4HC combined test binaries (base + _ext) when extended coverage is on.
+ifeq ($(AOCL_TEST_COVERAGE_EXT),1)
+ifneq ($(GTEST_LZ4_EXT_SOURCES),)
+    GTEST_BINS += $(TEST_BUILD_DIR)/lz4/lz4_gtest$(EXE_EXT)
+endif
+ifneq ($(GTEST_LZ4HC_EXT_SOURCES),)
+    GTEST_BINS += $(TEST_BUILD_DIR)/lz4hc/lz4hc_gtest$(EXE_EXT)
+endif
 endif
 
 # ZLIB tests need all source files compiled together (matches CMake behavior)
@@ -414,6 +458,47 @@ $(TEST_BUILD_DIR)/zlib/zlib_gtest$(EXE_EXT): $(GTEST_ZLIB_SOURCES) $(LIB_TARGET)
 		$(GTEST_ZLIB_SOURCES) $(GTEST_SOURCE_DIR)/gtest_utils.cpp \
 		-o $@ \
 		$(TEST_LDFLAGS) $(LDFLAGS) $(LIB_LINK_TARGET) $(GTEST_LIB) $(LIBS)
+
+# Combined LZ4 / LZ4HC test binaries (base + _ext) under extended coverage,
+# mirroring the CMake per-directory build. With frame support, lz4file.c (the
+# file API, not part of the library) is compiled into the lz4 binary so the
+# file-API tests link.
+ifeq ($(AOCL_TEST_COVERAGE_EXT),1)
+ifeq ($(LZ4_FRAME_FORMAT_SUPPORT),1)
+# lz4file.c is a C source; compile it with $(CC) into an object so it is not
+# fed to the C++ driver (which would treat .c as C++), then link that object in.
+# The rule lives inside this LZ4_FRAME_FORMAT_SUPPORT guard so it is only defined
+# when the object is actually needed, matching the CMake gating. The object is
+# built from a $(ROOT_DIR)-rooted path (like every other library-tree source in
+# the Make build) so it resolves regardless of the invoking directory, and it
+# has no dependency on $(LIB_TARGET) since a C source object does not depend on
+# the built library.
+LZ4_EXT_EXTRA_OBJS := $(TEST_BUILD_DIR)/lz4/lz4file.o
+$(TEST_BUILD_DIR)/lz4/lz4file.o: $(ROOT_DIR)/algos/lz4/lz4file.c
+	@mkdir -p $(dir $@)
+	@echo "Building test object: $(notdir $@)"
+	@$(CC) $(CFLAGS) $(TEST_CFLAGS) -c $< -o $@
+endif
+$(TEST_BUILD_DIR)/lz4/lz4_gtest$(EXE_EXT): $(GTEST_LZ4_SOURCES) $(GTEST_LZ4_EXT_SOURCES) $(LZ4_EXT_EXTRA_OBJS) $(LIB_TARGET) $(GTEST_SOURCE_DIR)/gtest_utils.cpp
+	@mkdir -p $(dir $@)
+	@echo "Building test: $(notdir $@) (base + extended lz4 test files)"
+	@$(CXX) $(CXXFLAGS) $(TEST_CXXFLAGS) \
+		$(GTEST_CFLAGS) \
+		-I$(GTEST_SOURCE_DIR) \
+		$(GTEST_LZ4_SOURCES) $(GTEST_LZ4_EXT_SOURCES) $(LZ4_EXT_EXTRA_OBJS) $(GTEST_SOURCE_DIR)/gtest_utils.cpp \
+		-o $@ \
+		$(TEST_LDFLAGS) $(LDFLAGS) $(LIB_LINK_TARGET) $(GTEST_LIB) $(LIBS)
+
+$(TEST_BUILD_DIR)/lz4hc/lz4hc_gtest$(EXE_EXT): $(GTEST_LZ4HC_SOURCES) $(GTEST_LZ4HC_EXT_SOURCES) $(LIB_TARGET) $(GTEST_SOURCE_DIR)/gtest_utils.cpp
+	@mkdir -p $(dir $@)
+	@echo "Building test: $(notdir $@) (base + extended lz4hc test files)"
+	@$(CXX) $(CXXFLAGS) $(TEST_CXXFLAGS) \
+		$(GTEST_CFLAGS) \
+		-I$(GTEST_SOURCE_DIR) \
+		$(GTEST_LZ4HC_SOURCES) $(GTEST_LZ4HC_EXT_SOURCES) $(GTEST_SOURCE_DIR)/gtest_utils.cpp \
+		-o $@ \
+		$(TEST_LDFLAGS) $(LDFLAGS) $(LIB_LINK_TARGET) $(GTEST_LIB) $(LIBS)
+endif
 
 # Build GTest binaries (one per source file)
 $(TEST_BUILD_DIR)/%$(EXE_EXT): $(GTEST_SOURCE_DIR)/%.cpp $(LIB_TARGET) $(GTEST_SOURCE_DIR)/gtest_utils.cpp
