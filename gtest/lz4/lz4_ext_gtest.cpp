@@ -848,7 +848,7 @@ TEST_P(LZ4_ext, AOCL_Compression_lz4file_write_read_roundtrip_common_1)
     /* Use the framework's temp directory (guaranteed writable, unlike the CTest
      * working directory), with a per-process suffix so parallel runs or reruns
      * without cleanup never collide on the same path. */
-    std::string path = ::testing::TempDir() + "aocl_lz4file_ext_test_" +
+    std::string path = std::string(::testing::TempDir()) + "aocl_lz4file_ext_test_" +
         std::to_string((unsigned long long)AOCL_GETPID()) + ".lz4";
     remove(path.c_str()); /* clear any stale residue from a previous aborted run */
 

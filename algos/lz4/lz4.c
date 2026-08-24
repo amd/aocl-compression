@@ -286,6 +286,16 @@ void  LZ4_free(void* p);
 #define MFLIMIT       12   /* see ../doc/lz4_Block_format.md#parsing-restrictions */
 #endif /*AOCL_LZ4_OPT*/
 
+/* LZ4_DEC_LIT_TAIL is the block-format tail guard used by the decoder to detect
+ * the final literal run. It is fixed by the LZ4 block format at 12 (see
+ * ../doc/lz4_Block_format.md#parsing-restrictions) and is independent of the
+ * encoder-side MFLIMIT. When AOCL_LZ4_OPT widens MFLIMIT to 20 for wildcopy
+ * headroom, the decoder must still recognize non-final literal runs that end in
+ * the 12..MFLIMIT tail window, otherwise valid frames produced by stock/native
+ * LZ4 are wrongly rejected. Keeping this at 12 preserves cross-decoder interop
+ * while leaving every wildcopy width (WILDCOPYLENGTH/MFLIMIT) untouched. */
+#define LZ4_DEC_LIT_TAIL 12
+
 #define MATCH_SAFEGUARD_DISTANCE  ((2*WILDCOPYLENGTH) - MINMATCH)   /* ensure it's possible to write 2 x wildcopyLength without overflowing output buffer */
 #define FASTLOOP_SAFE_DISTANCE 64
 static const int LZ4_minLength = (MFLIMIT+1);
@@ -2286,6 +2296,14 @@ LZ4_decompress_unsafe_generic(
     DEBUGLOG(5, "LZ4_decompress_unsafe_generic");
     if (dictStart == NULL) assert(dictSize == 0);
 
+    /* Tail-guard invariants (compile-time): LZ4_DEC_LIT_TAIL is the format-fixed
+     * tail (12), independent of the widened encoder-side MFLIMIT under
+     * AOCL_LZ4_OPT. It must be >= 8 and must not be stricter than the encoder
+     * (<= MFLIMIT). Hoisted here per LZ4_STATIC_ASSERT's "use after variable
+     * declarations" convention. */
+    LZ4_STATIC_ASSERT(LZ4_DEC_LIT_TAIL >= 8);
+    LZ4_STATIC_ASSERT(LZ4_DEC_LIT_TAIL <= MFLIMIT);
+
     while (1) {
         /* start new sequence */
         unsigned token = *ip++;
@@ -2300,11 +2318,16 @@ LZ4_decompress_unsafe_generic(
             LZ4_memmove(op, ip, ll); /* support in-place decompression */
             op += ll;
             ip += ll;
-            if ((size_t)(oend-op) < MFLIMIT) {
+            /* Format tail guard is fixed at 12 by the LZ4 block format, independent
+             * of the widened encoder-side MFLIMIT under AOCL_LZ4_OPT. Using
+             * LZ4_DEC_LIT_TAIL keeps this deprecated fast decoder able to accept
+             * valid stock/native LZ4 frames whose last match starts 12..MFLIMIT
+             * bytes before the block end. (Invariants asserted at function top.) */
+            if ((size_t)(oend-op) < LZ4_DEC_LIT_TAIL) {
                 if (op==oend) break;  /* end of block */
                 DEBUGLOG(5, "invalid: literals end at distance %zi from end of block", oend-op);
                 /* incorrect end of block :
-                 * last match must start at least MFLIMIT==12 bytes before end of output block */
+                 * last match must start at least LZ4_DEC_LIT_TAIL==12 bytes before end of output block */
                 return -1;
         }   }
 
@@ -2680,8 +2703,24 @@ LZ4_decompress_generic(
             /* copy literals */
             cpy = op+length;
 
+            /* Keep the pre-existing MFLIMIT >= WILDCOPYLENGTH invariant (relied on
+             * by wildcopy paths elsewhere in this file). The else-branch below
+             * copies literals with LZ4_wildCopy8, which overruns by up to 8 bytes,
+             * so the tail guard must be >= 8; and the decoder must never be stricter
+             * than the encoder, so it must be <= MFLIMIT. (The tail check now uses
+             * LZ4_DEC_LIT_TAIL, not MFLIMIT >= WILDCOPYLENGTH.) */
             LZ4_STATIC_ASSERT(MFLIMIT >= WILDCOPYLENGTH);
-            if ((cpy>oend-MFLIMIT) || (ip+length>iend-(2+1+LASTLITERALS))) {
+            LZ4_STATIC_ASSERT(LZ4_DEC_LIT_TAIL >= 8);
+            LZ4_STATIC_ASSERT(LZ4_DEC_LIT_TAIL <= MFLIMIT);
+            /* Use the format-defined tail guard (LZ4_DEC_LIT_TAIL == 12) rather than
+             * the encoder-side MFLIMIT to detect the final literal run. Under
+             * AOCL_LZ4_OPT, MFLIMIT is widened to 20; this stock decoder is the
+             * active path for AOCL non-AVX (SSE2) builds, so it must still accept
+             * non-final literal runs ending in the 12..MFLIMIT tail window that are
+             * legal per the LZ4 block format. In pure stock builds MFLIMIT is 12, so
+             * this is behavior-preserving. The following LZ4_wildCopy8 overruns by
+             * at most 8 bytes, which the 12-byte tail guard covers. */
+            if ((cpy>oend-LZ4_DEC_LIT_TAIL) || (ip+length>iend-(2+1+LASTLITERALS))) {
                 /* We've either hit the input parsing restriction or the output parsing restriction.
                  * In the normal scenario, decoding a full block, it must be the last sequence,
                  * otherwise it's an error (invalid input or dimensions).
@@ -2717,7 +2756,7 @@ LZ4_decompress_generic(
                     if ((ip+length != iend) || (cpy > oend)) {
                         DEBUGLOG(5, "should have been last run of literals")
                         DEBUGLOG(5, "ip(%p) + length(%i) = %p != iend (%p)", ip, (int)length, ip+length, iend);
-                        DEBUGLOG(5, "or cpy(%p) > (oend-MFLIMIT)(%p)", cpy, oend-MFLIMIT);
+                        DEBUGLOG(5, "or cpy(%p) > (oend-LZ4_DEC_LIT_TAIL)(%p)", cpy, oend-LZ4_DEC_LIT_TAIL);
                         DEBUGLOG(5, "after writing %u bytes / %i bytes available", (unsigned)(op-(BYTE*)dst), outputSize);
                         goto _output_error;
                     }

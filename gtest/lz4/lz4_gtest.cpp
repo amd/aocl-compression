@@ -558,6 +558,8 @@ public:
     // Set `output` buffer size to `sz`.
     void setDstSz(int sz)
     {
+        if (output)          /* free any prior allocation so repeated calls don't leak */
+            free(output);
         outLen = sz;
         output = (char *)malloc(outLen);
     }
@@ -883,6 +885,109 @@ TEST_P(LLZ4_decompress_safe_curated_input, AOCL_Compression_lz4_LZ4_decompress_s
     decLen = LZ4_decompress_safe(cpr_src, output, cpr_srcLen, outLen);
     EXPECT_GT(decLen, 0);
 
+}
+
+TEST_P(LLZ4_decompress_safe_curated_input, AOCL_Compression_lz4_LZ4_decompress_safe_pass_common_14) // stock_frame_tail_window_interop
+{
+    // Dispatch-coverage note (answers the "TEST_P never calls GetParam()" review
+    // note): this body never reads GetParam() directly, yet it is intentionally a
+    // TEST_P. The parameter is consumed by the AOCL_setup_lz4 fixture constructor,
+    // which runs `DynamicDispatch opt = GetParam(); aocl_setup_lz4(opt.optOff,
+    // opt.optLevel, 0, 0, 0);` to select the decoder dispatch path before this
+    // body executes. get_dynamic_dispatcher_flags() yields an opt-off entry
+    // (routing LZ4_decompress_safe to the stock LZ4_decompress_generic path used
+    // by SSE2 builds) as well as opt-on entries (routing to the AVX
+    // AOCL_LZ4_decompress_generic decoder). So this single body is re-run under
+    // each dynamic-dispatch variant, validating the fix across dispatch paths
+    // without duplicating the test.
+    //
+    // Regression for the enlarged-MFLIMIT interop bug.
+    //
+    // Under AOCL_LZ4_OPT the encoder-side MFLIMIT is widened to 20, but the
+    // decoder's "is this the final literal run?" check must still use the
+    // format-defined tail guard of 12 (LZ4_DEC_LIT_TAIL). Otherwise a valid
+    // frame produced by stock/native LZ4 - a non-final literal run that ends
+    // 12..19 bytes before the end of output, followed by a match and a final
+    // literal run - is misclassified as the last sequence, fails the
+    // "exact input consumed" check, and is wrongly rejected (returns < 0).
+    //
+    // Each crafted block below is a legal LZ4 block per the block format
+    // (last match starts >= 12 bytes before block end, last 5+ bytes are
+    // literals). All bytes are 'A' with a length-M match at offset 1, so the
+    // correct decoded output is simply 'A' repeated `N` times.
+    const int N = 26;                 // decoded output size
+    char expected[N];
+    memset(expected, 'A', N);
+
+    // gap == distance from end of first literal run to end of output.
+    // [12, 19] is exactly the window that MFLIMIT=20 misclassifies but the
+    // format (and the fix) accept.
+    for (int gap = 12; gap <= 19; gap++)
+    {
+        const int minMatch = 4;       // LZ4 MINMATCH (internal to lz4.c)
+        const int L1 = N - gap;       // first (non-final) literal run  (7..14)
+        const int M1 = gap - 6;       // match length                   (6..13)
+        const int L2 = 6;             // final literal run (>= LASTLITERALS)
+
+        char blk[64];
+        int idx = 0;
+        blk[idx++] = (char)((L1 << 4) | (M1 - minMatch)); // token: litlen | matchlen-4
+        for (int i = 0; i < L1; i++)
+            blk[idx++] = 'A';                             // first literals
+        LZ4_writeLE16_wrapper(&blk[idx], 1);              // offset = 1
+        idx += 2;
+        blk[idx++] = (char)((L2 << 4) | 0);               // final token (literals only)
+        for (int i = 0; i < L2; i++)
+            blk[idx++] = 'A';                             // final literals
+        const int srcLen = idx;
+
+        // Validate the identical crafted block through every decode entry point
+        // the underlying bug spanned. Each adapter decodes `blk` into the tail
+        // [K, K+N) of a freshly zeroed scratch buffer (K leading bytes reserved
+        // for the in-place-prefix case) and returns the decoded length, so one
+        // loop checks them uniformly with no copy-pasted assert blocks to drift
+        // out of sync. Routing forced by each adapter:
+        //   safe            : direct LZ4_decompress_safe.
+        //   partial         : dstCapacity == N is a full decode, but the tail-guard
+        //                     threshold change alters which sequences enter the
+        //                     partial branch.
+        //   withSmallPrefix : usingDict with the dict laid immediately before the
+        //                     output (dictStart+dictSize == dest). A NULL/0 dict
+        //                     would short-circuit back to LZ4_decompress_safe (see
+        //                     LZ4_decompress_safe_usingDict in lz4.c), so a
+        //                     non-empty dict is required to reach it.
+        //   forceExtDict    : usingDict with a separate, non-adjacent dict buffer
+        //                     (dictStart+dictSize != dest).
+        // The crafted block uses offset 1 (match fully within the just-decoded
+        // prefix), so dict content never affects the output: expected stays N 'A's.
+        const int K = 8;                    // small prefix-dict size (< 64 KB)
+        struct DecodeCase {
+            const char* name;
+            int (*decode)(const char* src, int srcSize, char* scratch, int k, int n);
+        };
+        static const DecodeCase cases[] = {
+            { "safe", [](const char* src, int srcSize, char* scratch, int k, int n) {
+                return LZ4_decompress_safe(src, scratch + k, srcSize, n); } },
+            { "partial", [](const char* src, int srcSize, char* scratch, int k, int n) {
+                return LZ4_decompress_safe_partial(src, scratch + k, srcSize, n, n); } },
+            { "usingDict(withSmallPrefix)", [](const char* src, int srcSize, char* scratch, int k, int n) {
+                memset(scratch, 'Z', k);            /* in-place prefix dict */
+                return LZ4_decompress_safe_usingDict(src, scratch + k, srcSize, n, scratch, k); } },
+            { "usingDict(forceExtDict)", [](const char* src, int srcSize, char* scratch, int k, int n) {
+                char extDict[16];
+                memset(extDict, 'Z', k);            /* disjoint external dict */
+                return LZ4_decompress_safe_usingDict(src, scratch + k, srcSize, n, extDict, k); } },
+        };
+
+        for (const DecodeCase& c : cases) {
+            char scratch[K + N + 64];       // [prefix K | output N | wildcopy margin]
+            memset(scratch + K, 0, N);      // zero dest so a stale buffer can't pass
+            int decLen = c.decode(blk, srcLen, scratch, K, N);
+            ASSERT_EQ(decLen, N) << "gap=" << gap << " " << c.name
+                                 << " (valid stock frame rejected)";
+            EXPECT_EQ(0, memcmp(scratch + K, expected, N)) << "gap=" << gap << " " << c.name;
+        }
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(

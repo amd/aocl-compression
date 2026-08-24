@@ -138,6 +138,7 @@ $(LZ4_DECOMPRESS_VARIANT1): $(LZ4_DECOMPRESS_TEMPLATE) | $(LZ4_GEN_DIR)
 	@sed -e 's|@AOCL_LZ4_DECOMPRESS_GENERIC_COMMENT@||g' \
 	     -e 's|@AOCL_LZ4_DECOMPRESS_GENERIC_FUNC@|AOCL_LZ4_decompress_generic|g' \
 	     -e 's|@AOCL_LZ4_DGV_ADDITIONAL_PARAMS@|/* none */|g' \
+	     -e 's|@AOCL_LZ4_DGV_LIT_TAIL_LIMIT@|LZ4_DEC_LIT_TAIL|g' \
 	     -e '/@AOCL_LZ4_DGV_LONG_MATCH@/c\                size_t const addl = read_variable_length(\&ip, iend - LASTLITERALS + 1, 0);\n                if (addl == rvl_error) {\n                    LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional match length.");\n                    DEBUGLOG(5, "error reading long match length");\n                    goto _output_error;\n                }\n                length += addl;\n' \
 	     -e '/@AOCL_LZ4_DGV_LAST_SEQ_CHECK@/c\                    if ((ip+length != iend) || (cpy > oend)) {\n                        LOG_FORMATTED(ERR, logCtx, "Must be the last (or invalid) sequence because of the parsing limitations. Error, %s.",\n                            (ip+length != iend) ? "exact input not consumed" : "output buffer overflow" );\n' \
 	     -e 's|@AOCL_LZ4_DGV_EOF_CHECK@|!partialDecoding \|\| (cpy == oend) \|\| (ip >= (iend-2))|g' \
@@ -149,6 +150,10 @@ $(LZ4_DECOMPRESS_VARIANT1): $(LZ4_DECOMPRESS_TEMPLATE) | $(LZ4_GEN_DIR)
 
 # ==============================================================================
 # DECOMPRESSION VARIANT 2: AOCL_LZ4_decompress_generic_mt
+# MT keeps MFLIMIT for the tail guard (see cmake/algos/lz4/lz4_decompress_config.cmake
+# for the rationale). As a result the generated tail-guard asserts are
+# LZ4_STATIC_ASSERT(MFLIMIT >= 8) and the tautological LZ4_STATIC_ASSERT(MFLIMIT <=
+# MFLIMIT); the latter is meaningful only in the ST instantiation.
 # ==============================================================================
 
 $(LZ4_DECOMPRESS_VARIANT2): $(LZ4_DECOMPRESS_TEMPLATE) | $(LZ4_GEN_DIR)
@@ -156,6 +161,7 @@ $(LZ4_DECOMPRESS_VARIANT2): $(LZ4_DECOMPRESS_TEMPLATE) | $(LZ4_GEN_DIR)
 	@sed -e 's|@AOCL_LZ4_DECOMPRESS_GENERIC_COMMENT@|/* Same as AOCL_LZ4_decompress_generic, but with multi-threaded support */|g' \
 	     -e 's|@AOCL_LZ4_DECOMPRESS_GENERIC_FUNC@|AOCL_LZ4_decompress_generic_mt|g' \
 	     -e 's|@AOCL_LZ4_DGV_ADDITIONAL_PARAMS@|,int is_last_thread|g' \
+	     -e 's|@AOCL_LZ4_DGV_LIT_TAIL_LIMIT@|MFLIMIT|g' \
 	     -e '/@AOCL_LZ4_DGV_LONG_MATCH@/c\                if (is_last_thread) {\n                    size_t const addl = read_variable_length(\&ip, iend - LASTLITERALS + 1, 0);\n                    if (addl == rvl_error) { \n                        AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional match length.");\n                        DEBUGLOG(5, "error reading long match length");\n                        goto _output_error; \n                    }\n                    length += addl;\n                } else {\n                    size_t const addl = read_variable_length(\&ip, iend + 1, 0);\n                    if (addl == rvl_error) {\n                        AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional match length.");\n                        DEBUGLOG(5, "error reading long match length");\n                        goto _output_error; \n                    }\n                    length += addl;\n                }\n' \
 	     -e '/@AOCL_LZ4_DGV_LAST_SEQ_CHECK@/c\                    if ((is_last_thread && (ip + length != iend)) || (cpy > oend)) {\n                        AOCL_LZ4_DGV_LOG_FORMATTED(ERR, logCtx, "Must be the last (or invalid) sequence because of the parsing limitations. Error, %s.",\n                        (is_last_thread && (ip + length != iend)) ? "exact input not consumed" : "output buffer overflow");\n' \
 	     -e 's|@AOCL_LZ4_DGV_EOF_CHECK@|(is_last_thread \&\& !partialDecoding) \|\| (cpy == oend) \|\| (is_last_thread \&\& (ip >= (iend - 2)))|g' \
