@@ -193,6 +193,14 @@ else ifeq ($(OS_TYPE),windows)
         ifeq ($(UNAME_M),x86_64)
             LDFLAGS += -Wl,--high-entropy-va
         endif
+        # Control-flow Enforcement (CET): compile-time counterpart of MSVC
+        # /CETCOMPAT. Emits ENDBR landing pads (IBT) so the code is CET-ready.
+        # NOTE: GNU ld (binutils 2.46) has no option to set the PE
+        # "CET compatible" Extended DLL Characteristics bit, and editbin has no
+        # /CETCOMPAT switch -- so a MinGW-built DLL carries the landing pads but
+        # not the header flag that no-control-flow-enforcement check reads.
+        CFLAGS += -fcf-protection=full
+        CXXFLAGS += -fcf-protection=full
     endif
 endif
 

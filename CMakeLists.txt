@@ -54,6 +54,14 @@ elseif ("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
     if (${CMAKE_C_COMPILER_VERSION} VERSION_LESS 11.0)
         message(FATAL_ERROR "Minimum Clang version supported is 11.0! In case of AOCC, use version 2.3 and above!")
     endif ()
+    # Windows is built only with the MSVC clang-cl toolchain, whose Release
+    # security flags unconditionally enable CET / EH-continuation metadata
+    # (/guard:ehcont, /cetcompat). clang-cl gained /guard:ehcont support in
+    # LLVM 13, so older clang-cl would fail on the unknown option. Require it
+    # here with a clear message rather than emitting a cryptic compiler error.
+    if (WIN32 AND ${CMAKE_C_COMPILER_VERSION} VERSION_LESS 13.0)
+        message(FATAL_ERROR "On Windows (MSVC clang-cl) the minimum Clang version is 13.0 (required for /guard:ehcont CET metadata). Found ${CMAKE_C_COMPILER_VERSION}. Use Visual Studio 2022's bundled ClangCL or a newer LLVM.")
+    endif ()
 else ()
     message(FATAL_ERROR "Compiler not supported! Library has only been tested with Clang and GCC.")
 endif ()
@@ -603,10 +611,17 @@ if (WIN32)
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /DNDEBUG /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
         # Security flags
-		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /GS /DYNAMICBASE /guard:cf /w14774 /w14775")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GS /DYNAMICBASE /guard:cf /w14774 /w14775")
-		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /DYNAMICBASE /NXCOMPAT /GUARD:CF /HIGHENTROPYVA")
-		set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DYNAMICBASE /NXCOMPAT /GUARD:CF /HIGHENTROPYVA")
+        # /guard:ehcont (compile) + /GUARD:EHCONT (link) emit EH continuation
+        # metadata; /cetcompat marks the binary CET / shadow-stack compatible
+        # NOTE: /cetcompat MUST stay lowercase. The Visual Studio generator
+        # recognizes uppercase /CETCOMPAT and hoists it into the <CETCompat>
+        # MSBuild property, which the ClangCL toolset's lld-link step ignores --
+        # silently dropping the flag. Lowercase bypasses that recognizer so the
+        # option is passed through raw (honored by both lld-link and link.exe).
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /GS /DYNAMICBASE /guard:cf /guard:ehcont /w14774 /w14775")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GS /DYNAMICBASE /guard:cf /guard:ehcont /w14774 /w14775")
+		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /DYNAMICBASE /NXCOMPAT /GUARD:CF /GUARD:EHCONT /cetcompat /HIGHENTROPYVA")
+		set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DYNAMICBASE /NXCOMPAT /GUARD:CF /GUARD:EHCONT /cetcompat /HIGHENTROPYVA")
 	else()
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USER_DEBUG_ON} /O2 /Oy /arch:SSE2 /arch:AVX /arch:AVX2")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USER_DEBUG_ON} /O2 /Oy /arch:SSE2 /arch:AVX /arch:AVX2")

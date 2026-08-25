@@ -120,6 +120,9 @@ Building on Windows
 -------------------
 As a prerequisite, make Microsoft Visual Studio® available along with <br>
 __Desktop development with C++__ toolset that includes the Clang compiler.
+The Windows build uses the MSVC ClangCL toolset and requires __Clang 13.0 or
+later__ (the Release security flags enable CET / EH-continuation metadata via
+`/guard:ehcont`, which clang-cl supports from LLVM 13).
 
 Building with Visual Studio IDE (GUI)
 -------------------------------------
