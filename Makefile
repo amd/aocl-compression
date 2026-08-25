@@ -599,7 +599,8 @@ SNAPPY_CXXFLAGS += -DSNAPPY_HAVE_X86_CRC32=1
 
 # sys/uio.h is Unix-only
 ifeq ($(OS_TYPE),unix)
-    SNAPPY_HAS_SYS_UIO := $(shell printf '%s\n' '\#include <sys/uio.h>' | $(CC) -E - >/dev/null 2>&1; if [ $$? -eq 0 ]; then echo 1; else echo 0; fi)
+    # Reuse the probe result from mk/platform.mk instead of re-running it.
+    SNAPPY_HAS_SYS_UIO := $(HAS_SYS_UIO_H)
     ifeq ($(SNAPPY_HAS_SYS_UIO),1)
         SNAPPY_CXXFLAGS += -DHAVE_SYS_UIO_H
     endif
@@ -982,9 +983,10 @@ ifeq ($(AOCL_THREADING_BACKEND),TBB)
         # Fail fast (like the OpenMP probe, and CMake's required TBB lookup) if
         # TBB cannot compile+link, instead of a cryptic later link error.
         # -include is used because a literal '#' is not reliable inside
-        # $(shell ...); the probe binary uses a PID-unique temp path so parallel
-        # builds of two configs do not race on the same file.
-        AOCL_TBB_PROBE := $(shell tmp="$${TMPDIR:-/tmp}/_aocl_tbb_probe.$$$$"; printf 'int main(void){ return 0; }\n' | $(CXX) -x c++ $(TBB_CFLAGS) -include tbb/task_arena.h - $(TBB_LIBS) -o "$$tmp" >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+        # $(shell ...); the probe binary uses a PID-unique temp path in a
+        # writable dir (see AOCL_PROBE_TMPDIR).
+        $(eval $(call AOCL_REQUIRE_PROBE_TMPDIR))
+        AOCL_TBB_PROBE := $(shell tmp="$(AOCL_PROBE_TMPDIR)/_aocl_tbb_probe.$$$$"; printf 'int main(void){ return 0; }\n' | $(AOCL_PROBE_TMP_ENV) $(CXX) -x c++ $(TBB_CFLAGS) -include tbb/task_arena.h - $(TBB_LIBS) -o "$$tmp" >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
         ifneq ($(AOCL_TBB_PROBE),1)
             $(error TBB backend selected (AOCL_THREADING_BACKEND=TBB) but the TBB headers/runtime could not be compiled and linked. Install the TBB development package, set TBB_CFLAGS/TBB_LIBS for a non-standard install, or build with AOCL_THREADING_BACKEND=OPENMP)
         endif

@@ -32,6 +32,11 @@
 # OPERATING SYSTEM DETECTION
 # ==============================================================================
 
+# Literal '#' for $(shell ...) bodies. '\#' unescapes to '#' in a plain
+# assignment on every Make version, so interpolating $(AOCL_HASH) sidesteps the
+# inconsistent handling of a bare '#' inside a function call (Make < 4.3 vs >= 4.3).
+AOCL_HASH := \#
+
 UNAME_S := $(shell uname -s 2>/dev/null || echo unknown)
 UNAME_M := $(shell uname -m 2>/dev/null || echo x86_64)
 
@@ -89,8 +94,8 @@ endif
 # future predefined macro that merely embeds these tokens (e.g. __clang_foo__)
 # cannot cause a false match.
 CXX_ID := $(shell printf '' | $(CXX) -E -x c++ -dM - 2>/dev/null | \
-    grep -q '^#define __clang__ ' && echo clang || \
-    { printf '' | $(CXX) -E -x c++ -dM - 2>/dev/null | grep -q '^#define __GNUC__ ' && echo gcc || echo unknown; })
+    grep -q '^$(AOCL_HASH)define __clang__ ' && echo clang || \
+    { printf '' | $(CXX) -E -x c++ -dM - 2>/dev/null | grep -q '^$(AOCL_HASH)define __GNUC__ ' && echo gcc || echo unknown; })
 ifeq ($(CXX_ID),unknown)
     $(error Unsupported C++ compiler: $(CXX). Only GCC and Clang are supported.)
 endif
@@ -227,21 +232,40 @@ endif
 # HEADER AVAILABILITY DETECTION
 # ==============================================================================
 
-# Detect sys/uio.h availability (used by Snappy and tests)
-HAS_SYS_UIO_H := $(shell printf '%s\n' '\#include <sys/uio.h>' | $(CC) -E - >/dev/null 2>&1; if [ $$? -eq 0 ]; then echo 1; else echo 0; fi)
+# Detect sys/uio.h availability (used by Snappy and tests). $(AOCL_HASH) yields a
+# real '#include' directive; a literal '\#include' reaches the compiler as text
+# and is never actually probed.
+HAS_SYS_UIO_H := $(shell printf '%s\n' '$(AOCL_HASH)include <sys/uio.h>' | $(CC) -E - >/dev/null 2>&1; if [ $$? -eq 0 ]; then echo 1; else echo 0; fi)
+
+# Writable directory for compile/link probe binaries, resolved lazily (=) on
+# first use. Candidates are tested for -d -w -x, preferring the source dir (.)
+# over BUILD_DIR, which is created (mkdir -p) only as a last resort. On
+# MSYS2/MinGW, TMP/TEMP are normalized via cygpath -u, keeping the raw path when
+# it fails or prints nothing. Resolve through AOCL_REQUIRE_PROBE_TMPDIR.
+AOCL_PROBE_TMPDIR = $(shell has_cygpath=; command -v cygpath >/dev/null 2>&1 && has_cygpath=1; norm() { if [ -n "$$has_cygpath" ]; then n=$$(cygpath -u "$$1" 2>/dev/null); if [ $$? -eq 0 ] && [ -n "$$n" ]; then printf '%s' "$$n"; return 0; fi; fi; printf '%s' "$$1"; }; usable() { [ -d "$$1" ] && [ -w "$$1" ] && [ -x "$$1" ]; }; for d in "$$TMPDIR" /tmp "$$TMP" "$$TEMP"; do [ -n "$$d" ] || continue; d=$$(norm "$$d"); if usable "$$d"; then printf '%s' "$$d"; exit 0; fi; done; if usable "."; then printf '%s' "."; exit 0; fi; d=$$(norm "$(BUILD_DIR)"); if [ -n "$$d" ] && mkdir -p "$$d" 2>/dev/null && usable "$$d"; then printf '%s' "$$d"; exit 0; fi)
+
+# Resolve AOCL_PROBE_TMPDIR once (:= memoizes the $(shell)), error if none is
+# writable, and set AOCL_PROBE_TMP_ENV for the probe compiler's scratch files.
+define AOCL_REQUIRE_PROBE_TMPDIR
+AOCL_PROBE_TMPDIR := $$(strip $$(AOCL_PROBE_TMPDIR))
+ifeq ($$(strip $$(AOCL_PROBE_TMPDIR)),)
+$$(error No writable temp directory found for build probes. Set TMPDIR (or TMP/TEMP) to a writable path.)
+endif
+AOCL_PROBE_TMP_ENV := TMPDIR="$$(AOCL_PROBE_TMPDIR)" TMP="$$(AOCL_PROBE_TMPDIR)" TEMP="$$(AOCL_PROBE_TMPDIR)"
+endef
 
 # Windows: probe OpenMP runtime (libgomp for GCC, libomp for Clang) so we fail fast with a clear message instead of a cryptic link error.
 # Only relevant for the OpenMP backend; TBB builds link no OpenMP runtime.
 ifeq ($(OS_TYPE),windows)
     ifeq ($(AOCL_ENABLE_THREADS),1)
         ifneq ($(AOCL_THREADING_BACKEND),TBB)
+            $(eval $(call AOCL_REQUIRE_PROBE_TMPDIR))
             OMP_PROBE_FLAGS := -fopenmp
             ifeq ($(CC_ID),clang)
                 OMP_PROBE_FLAGS += -lomp
             endif
-            # PID-unique temp path (honoring TMPDIR) so parallel builds of two
-            # configs do not race on the same probe binary; mirrors the TBB probe.
-            HAS_OMP_LINK := $(shell tmp="$${TMPDIR:-/tmp}/_aocl_probe.$$$$.exe"; printf '%s\n' 'int omp_get_num_threads(void); int main(void){return omp_get_num_threads();}' | $(CC) -x c $(OMP_PROBE_FLAGS) -o "$$tmp" - >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+            # PID-unique temp path in a writable dir (see AOCL_PROBE_TMPDIR).
+            HAS_OMP_LINK := $(shell tmp="$(AOCL_PROBE_TMPDIR)/_aocl_probe.$$$$.exe"; printf '%s\n' 'int omp_get_num_threads(void); int main(void){return omp_get_num_threads();}' | $(AOCL_PROBE_TMP_ENV) $(CC) -x c $(OMP_PROBE_FLAGS) -o "$$tmp" - >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
             ifneq ($(HAS_OMP_LINK),1)
                 ifeq ($(CC_ID),clang)
                     $(error Clang OpenMP runtime (libomp) not found. Install MSYS2/MinGW package or build with AOCL_ENABLE_THREADS=0)
@@ -256,11 +280,11 @@ endif
 # Windows: probe -fstack-protector-strong link; if it fails, retry with -lssp and keep it.
 ifeq ($(OS_TYPE),windows)
     ifeq ($(BUILD_TYPE),Release)
-        # PID-unique temp path (honoring TMPDIR) so parallel builds do not race
-        # on the same probe binary; mirrors the OpenMP/TBB probes.
-        HAS_SSP_AUTO := $(shell tmp="$${TMPDIR:-/tmp}/_aocl_probe.$$$$.exe"; printf '%s\n' 'int main(int argc, char **argv){char b[64];return argv[argc-1][0]^b[0];}' | $(CC) -x c -fstack-protector-strong -o "$$tmp" - >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+        $(eval $(call AOCL_REQUIRE_PROBE_TMPDIR))
+        # PID-unique temp path in a writable dir (see AOCL_PROBE_TMPDIR).
+        HAS_SSP_AUTO := $(shell tmp="$(AOCL_PROBE_TMPDIR)/_aocl_probe.$$$$.exe"; printf '%s\n' 'int main(int argc, char **argv){char b[64];return argv[argc-1][0]^b[0];}' | $(AOCL_PROBE_TMP_ENV) $(CC) -x c -fstack-protector-strong -o "$$tmp" - >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
         ifneq ($(HAS_SSP_AUTO),1)
-            HAS_SSP_EXPLICIT := $(shell tmp="$${TMPDIR:-/tmp}/_aocl_probe.$$$$.exe"; printf '%s\n' 'int main(int argc, char **argv){char b[64];return argv[argc-1][0]^b[0];}' | $(CC) -x c -fstack-protector-strong -lssp -o "$$tmp" - >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
+            HAS_SSP_EXPLICIT := $(shell tmp="$(AOCL_PROBE_TMPDIR)/_aocl_probe.$$$$.exe"; printf '%s\n' 'int main(int argc, char **argv){char b[64];return argv[argc-1][0]^b[0];}' | $(AOCL_PROBE_TMP_ENV) $(CC) -x c -fstack-protector-strong -lssp -o "$$tmp" - >/dev/null 2>&1; rc=$$?; rm -f "$$tmp"; if [ $$rc -eq 0 ]; then echo 1; else echo 0; fi)
             ifeq ($(HAS_SSP_EXPLICIT),1)
                 LIBS += -lssp
             else
@@ -293,6 +317,9 @@ export CC_ID CC_MAJOR CC_MINOR
 export LIB_PREFIX LIB_EXT LIB_STATIC_EXT EXE_EXT OBJ_EXT SHARED_LDFLAGS
 export CFLAGS CXXFLAGS LDFLAGS LIBS EXE_CFLAGS EXE_LDFLAGS
 export HAS_SYS_UIO_H
+# AOCL_PROBE_TMPDIR/AOCL_PROBE_TMP_ENV are not exported: the lazy probe would run
+# for every recipe. All consumers resolve it in-process via AOCL_REQUIRE_PROBE_TMPDIR.
+export AOCL_HASH
 
 # ==============================================================================
 # DISPLAY CONFIGURATION

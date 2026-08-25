@@ -1140,10 +1140,10 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_4
 
     // Input size chosen to be large enough so partitioning logic is exercised
     // like in realistic workloads (avoids tiny-input corner behavior).
-    const AOCL_UINTP input_size_bytes = 4096 * 64; // Keeps partitioning away from tiny-input edge cases.
+    constexpr AOCL_UINTP input_size_bytes = 4096 * 64; // Keeps partitioning away from tiny-input edge cases.
 
     // Window size used by partition-stat calculation.
-    const AOCL_INT32 window_length = 1024;
+    constexpr AOCL_INT32 window_length = 1024;
 
     // Shared result holders (atomics are used because two std::thread workers
     // write values concurrently).
@@ -1156,10 +1156,10 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_4
     // 1) Set thread-local maximum thread cap.
     // 2) Read RAP frame bound derived from that cap.
     // 3) Build partition stats and verify selected worker-count path.
-    auto worker = [input_size_bytes, window_length](AOCL_INT32 requested_thread_limit,
-                                                    std::atomic<AOCL_INT32>& set_max_threads_result,
-                                                    std::atomic<AOCL_INT32>& rap_frame_bound,
-                                                    std::atomic<AOCL_UINT32>& partition_threads) {
+    auto worker = [](AOCL_INT32 requested_thread_limit,
+                     std::atomic<AOCL_INT32>& set_max_threads_result,
+                     std::atomic<AOCL_INT32>& rap_frame_bound,
+                     std::atomic<AOCL_UINT32>& partition_threads) {
         // Apply this worker's requested max-thread cap.
         set_max_threads_result.store(aocl_llc_set_max_threads(requested_thread_limit));
 
