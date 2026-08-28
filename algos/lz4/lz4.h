@@ -578,7 +578,7 @@ typedef union LZ4_stream_u LZ4_stream_t;  /* incomplete type (defined later) */
  Note about RC_INVOKED
 
  - RC_INVOKED is predefined symbol of rc.exe (the resource compiler which is part of MSVC/Visual Studio).
-   https://docs.microsoft.com/en-us/windows/win32/menurc/predefined-macros
+   Microsoft predefined macros
 
  - Since rc.exe is a legacy compiler, it truncates long symbol (> 30 chars)
    and reports warning "RC4011: identifier truncated".
@@ -587,7 +587,7 @@ typedef union LZ4_stream_u LZ4_stream_t;  /* incomplete type (defined later) */
    "#if !defined(RC_INVOKED) ... #endif" block that means
    "skip this block when rc.exe is trying to read it".
 */
-#if !defined(RC_INVOKED) /* https://docs.microsoft.com/en-us/windows/win32/menurc/predefined-macros */
+#if !defined(RC_INVOKED) /* Microsoft predefined macros */
 #if !defined(LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION)
 /**
  * @name Streaming Compression Functions
@@ -820,7 +820,7 @@ typedef union LZ4_streamDecode_u LZ4_streamDecode_t;   /* tracking context */
  * @{
  */
 
-#if !defined(RC_INVOKED) /* https://docs.microsoft.com/en-us/windows/win32/menurc/predefined-macros */
+#if !defined(RC_INVOKED) /* Microsoft predefined macros */
 #if !defined(LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION)
 /*! LZ4_createStreamDecode() and LZ4_freeStreamDecode() :
  *  creation / destruction of streaming decompression tracking context.
