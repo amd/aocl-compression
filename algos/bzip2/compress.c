@@ -762,7 +762,15 @@ void BZ2_compressBlock ( EState* s, Bool is_last_block )
    if (s->nblock > 0) {
 
       BZ_FINALISE_CRC ( s->blockCRC );
-      AOCL_APPEND_CHECKSUM_NODE(s, s->blockCRC);
+#ifdef AOCL_BZIP2_OPT
+      /* Append the block CRC to the thread's checksum list. If the node malloc
+       * fails under memory pressure, record it and stop building this block;
+       * the caller reports BZ_MEM_ERROR. */
+      if (AOCL_APPEND_CHECKSUM_NODE(s, s->blockCRC)) {
+         s->compressError = 1;
+         return;
+      }
+#endif
       s->combinedCRC = (s->combinedCRC << 1) | (s->combinedCRC >> 31);
       s->combinedCRC ^= s->blockCRC;
       if (s->blockNo > 1) s->numZ = 0;
@@ -782,6 +790,19 @@ void BZ2_compressBlock ( EState* s, Bool is_last_block )
          s->block[-1] = s->block[s->nblock - 1];
          s->block[-2] = s->block[s->nblock - 2];
          s->origPtr = libsais(s->block, (Int32 *)s->ptr, s->nblock, AOCL_LIBSAIS_FS, NULL);
+         /* libsais() returns a negative value on error; in particular it returns
+          * -2 when one of its internal allocations fails (typical under memory
+          * limits with many threads), and -1 for invalid arguments. We guard on
+          * any negative value for safety. Proceeding with a negative origPtr
+          * would emit a corrupt block / crash downstream. The libsais-mode
+          * EState buffers are laid out for libsais (arr1 has AOCL_LIBSAIS_FS
+          * slack, block = arr2+2), so the stock BZ2_blockSort() cannot be used
+          * as an in-place fallback here. Record the failure and stop building
+          * this block; BZ2_bzCompress() surfaces it as BZ_MEM_ERROR. */
+         if (s->origPtr < 0) {
+            s->compressError = 1;
+            return;
+         }
       }
       else
 #endif /* AOCL_BZIP2_OPT */

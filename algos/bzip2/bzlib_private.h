@@ -294,6 +294,7 @@ typedef
       Int32 buckets[4 * ALPHABET_SIZE]; // Bucket to store number of times each character has occured in respective lms type.
       Int32 sa_index;   // Index for SA.
       Int32 n_block;    // Total characters
+      Int32 compressError; // Non-zero if a block failed to compress (e.g. libsais OOM); surfaced as BZ_MEM_ERROR.
 #endif /* AOCL_BZIP2_OPT */
 #ifdef AOCL_ENABLE_THREADS
       mt_data_list* mt_head_node;
@@ -586,33 +587,42 @@ extern int AOCL_use_libsais;
 #define AOCL_LIBSAIS_FS 20*2
 
 #ifdef AOCL_ENABLE_THREADS
-#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC) \
-do { \
-      mt_data_list* mt_head_node = s->mt_head_node; \
-      if(mt_head_node) \
-      { \
-         /* Creating a checksum node and assigning a checksum value. */ \
-         mt_checksum_node * current = (mt_checksum_node *)malloc(sizeof(mt_checksum_node)); \
-         current->checksum = blockCRC; \
-         current->next = NULL; \
-         /* Head of the list would be stored in mt_head_node. */ \
-         if(mt_head_node->head == NULL) \
-         { \
-            mt_head_node->current = current; \
-            mt_head_node->head = current; \
-         } \
-         else \
-         { \
-            mt_head_node->current->next = current; \
-            mt_head_node->current = current; \
-         } \
-      } \
-} while (0)
+/* Append a CRC node to the thread's checksum list. Returns 1 on node malloc
+ * failure (caller surfaces BZ_MEM_ERROR), else 0. Own guard: this header's
+ * include guard closes above, so emit the definition only once. */
+#ifndef AOCL_APPEND_CHECKSUM_NODE_DEFINED
+#define AOCL_APPEND_CHECKSUM_NODE_DEFINED
+static inline int aocl_append_checksum_node(mt_data_list * mt_head_node, UInt32 blockCRC)
+{
+   if (mt_head_node == NULL) return 0;
+
+   mt_checksum_node * current = (mt_checksum_node *)malloc(sizeof(mt_checksum_node));
+   /* Under memory pressure malloc() can fail; without this guard the
+    * dereferences below are a NULL write (observed SIGSEGV). */
+   if (current == NULL) return 1;
+
+   current->checksum = blockCRC;
+   current->next     = NULL;
+   /* Head of the list is stored in mt_head_node. */
+   if(mt_head_node->head == NULL)
+   {
+      mt_head_node->current = current;
+      mt_head_node->head    = current;
+   }
+   else
+   {
+      mt_head_node->current->next = current;
+      mt_head_node->current       = current;
+   }
+   return 0;
+}
+#endif /* AOCL_APPEND_CHECKSUM_NODE_DEFINED */
+#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC) aocl_append_checksum_node((s)->mt_head_node, (blockCRC))
 #else
-#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC)
+#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC) (0)
 #endif /* AOCL_ENABLE_THREADS */
 #else
-#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC)
+#define AOCL_APPEND_CHECKSUM_NODE(s, blockCRC) (0)
 #endif /* AOCL_BZIP2_OPT */
 
 extern void aocl_register_mainSimpleSort_fmv (int optOff, CpuFeatures optLevel);

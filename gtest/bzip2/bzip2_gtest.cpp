@@ -672,6 +672,108 @@ void mem_free(void * opaque, void * addr)
     free(addr);
 }
 
+/*
+    Global allocation-failure injector. Interpose malloc/calloc/realloc in the
+    test binary (via ELF symbol interposition, real impls reached through glibc
+    __libc_*) to hit bzip2's direct C-library allocations (libsais, checksum
+    list) that bypass the stream's bzalloc hook. When armed, the Nth allocation
+    of size >= g_alloc_fail_min_size returns NULL to drive the OOM-propagation
+    paths deterministically.
+
+    Relies on glibc-private __libc_* symbols and ELF symbol interposition, so it
+    is only compiled on glibc. Elsewhere (MSVC/Windows, non-glibc libc) the
+    dependent tests skip. AOCL_ALLOC_FAIL_INJECTION gates both.
+
+    Also stays disabled under AddressSanitizer: interposing malloc/free here
+    bypasses ASan's heap tracking and feeds its interceptors' allocations to the
+    incompatible glibc free. Detect ASan via __SANITIZE_ADDRESS__ (GCC/MSVC) and
+    __has_feature(address_sanitizer) (Clang) and skip the dependent tests.
+*/
+#if defined(__has_feature)
+#  if __has_feature(address_sanitizer)
+#    define AOCL_ALLOC_FAIL_ASAN 1
+#  endif
+#endif
+#if defined(__GLIBC__) && !defined(_WIN32) && !defined(__SANITIZE_ADDRESS__) && !defined(AOCL_ALLOC_FAIL_ASAN)
+#define AOCL_ALLOC_FAIL_INJECTION 1
+
+extern "C" {
+    void * __libc_malloc(size_t size);
+    void * __libc_calloc(size_t nmemb, size_t size);
+    void * __libc_realloc(void * ptr, size_t size);
+    void   __libc_free(void * ptr);
+}
+
+static bool   g_alloc_fail_armed       = false;
+static size_t g_alloc_fail_min_size    = 0;      // only count allocations >= this size
+static int    g_alloc_fail_after       = 0;      // serve this many qualifying allocs, then fail
+static int    g_alloc_qualifying_count = 0;      // qualifying allocations seen so far
+static bool   g_alloc_fail_triggered   = false;  // set once an injected failure happens
+static bool   g_alloc_fail_calloc_only = false;  // when true, only calloc() is a candidate
+
+static void arm_alloc_failure(size_t min_size, int fail_after, bool calloc_only = false)
+{
+    g_alloc_fail_min_size    = min_size;
+    g_alloc_fail_after       = fail_after;
+    g_alloc_qualifying_count = 0;
+    g_alloc_fail_triggered   = false;
+    g_alloc_fail_calloc_only = calloc_only;
+    g_alloc_fail_armed       = true;
+}
+
+static void disarm_alloc_failure()
+{
+    g_alloc_fail_armed = false;
+}
+
+// Returns true if this allocation of `size` bytes should be failed. `is_calloc`
+// distinguishes calloc() from malloc()/realloc() so a test can target libsais'
+// recursive calloc (its only calloc on the BWT path) while letting the malloc-
+// based outer bucket/temp_SA allocations succeed.
+static bool should_fail_alloc(size_t size, bool is_calloc)
+{
+    if (!g_alloc_fail_armed) return false;
+    if (g_alloc_fail_calloc_only && !is_calloc) return false;
+    if (size < g_alloc_fail_min_size) return false;
+    if (g_alloc_qualifying_count++ < g_alloc_fail_after) return false;
+    g_alloc_fail_triggered = true;
+    return true;
+}
+
+extern "C" void * malloc(size_t size)
+{
+    if (should_fail_alloc(size, false)) return NULL;
+    return __libc_malloc(size);
+}
+
+extern "C" void * calloc(size_t nmemb, size_t size)
+{
+    if (should_fail_alloc(nmemb * size, true)) return NULL;
+    return __libc_calloc(nmemb, size);
+}
+
+extern "C" void * realloc(void * ptr, size_t size)
+{
+    if (should_fail_alloc(size, false)) return NULL;
+    return __libc_realloc(ptr, size);
+}
+
+extern "C" void free(void * ptr)
+{
+    __libc_free(ptr);
+}
+
+// RAII guard so an injected failure never leaks past a single test, even if an
+// assertion unwinds early.
+class AllocFailGuard
+{
+public:
+    AllocFailGuard(size_t min_size, int fail_after, bool calloc_only = false)
+    { arm_alloc_failure(min_size, fail_after, calloc_only); }
+    ~AllocFailGuard() { disarm_alloc_failure(); }
+};
+#endif /* glibc && !_WIN32 && !ASan */
+
 /*********************************************
  * "Begin" of libsais Tests
  ********************************************/
@@ -2137,6 +2239,123 @@ TEST_P(BZIP2_BZ2_bzCompress, AOCL_Compression_bzip2_BZ2_bzCompress_pass_common_2
     unsigned int uncompressedLen = 1;
     vector<char> uncompressedBuff(1, 'a');
     EXPECT_EQ(BZIP2_API::BuffToBuffDecompress(uncompressedBuff.data(), &uncompressedLen, output.data(), outputSize - strm->getAvailOut(), 0, 0), BZ_OK);
+}
+
+/*
+    A failing libsais BWT allocation (returns negative) must set compressError
+    and surface BZ_MEM_ERROR, not continue on a corrupt block. libsais allocates
+    via the C library, so force the failure with the global injector.
+    libsais-only path, so skip the opt-off combination.
+*/
+TEST_P(BZIP2_BZ2_bzCompress, AOCL_Compression_bzip2_BZ2_bzCompress_libsais_oom_mem_error_28)
+{
+#ifndef AOCL_ALLOC_FAIL_INJECTION
+    GTEST_SKIP() << "allocation-failure injector unavailable on this libc";
+#else
+    if (!AOCL_use_libsais)
+        GTEST_SKIP() << "libsais BWT path not active for this opt level";
+
+    int ret;
+    {
+        // Fail the first allocation of >= 4096 bytes made during compression.
+        // The first such allocation is libsais' bucket buffer; failing it makes
+        // libsais return -2 (OOM) for the very first block.
+        AllocFailGuard guard(4096, 0);
+        ret = BZIP2_API::Compress(strm->getStrm(), BZ_FINISH);
+    }
+
+    // The injected failure must actually have fired, and must be reported as a
+    // memory error (no SIGSEGV / corrupt-block continuation).
+    EXPECT_TRUE(g_alloc_fail_triggered);
+    EXPECT_EQ(ret, BZ_MEM_ERROR);
+#endif
+}
+
+/*
+    Same check, but fail a later block's libsais allocation (not the first),
+    confirming the state machine stops cleanly mid-stream instead of emitting
+    a partial block.
+*/
+TEST_P(BZIP2_BZ2_bzCompress, AOCL_Compression_bzip2_BZ2_bzCompress_libsais_oom_midstream_mem_error_29)
+{
+#ifndef AOCL_ALLOC_FAIL_INJECTION
+    GTEST_SKIP() << "allocation-failure injector unavailable on this libc";
+#else
+    if (!AOCL_use_libsais)
+        GTEST_SKIP() << "libsais BWT path not active for this opt level";
+
+    int ret;
+    // BZ_RUN emits the full blocks (the 600000-byte input spans several),
+    // leaving only the final block for BZ_FINISH. Require real output first.
+    ret = BZIP2_API::Compress(strm->getStrm(), BZ_RUN);
+    ASSERT_EQ(ret, BZ_RUN_OK);
+    ASSERT_GT(strm->getTotalOutLo32(), 0u)
+        << "no block was emitted before arming the injector";
+
+    // Now fail a later block's libsais allocation during BZ_FINISH and confirm
+    // the state machine stops cleanly instead of emitting a partial block.
+    {
+        AllocFailGuard guard(4096, 0);
+        ret = BZIP2_API::Compress(strm->getStrm(), BZ_FINISH);
+    }
+
+    EXPECT_TRUE(g_alloc_fail_triggered);
+    EXPECT_EQ(ret, BZ_MEM_ERROR);
+#endif
+}
+
+/*
+    Covers the recursive dynamic bucket guard in libsais_main_32s_recursion() -
+    the only calloc() on the BWT path. Tests 28 and 29 fail the first malloc (outer
+    buckets) and never reach it. Every malloc (stream buffers, outer buckets,
+    temp_SA) uses malloc, so calloc-only injection lets the pipeline recurse and
+    fails just that calloc, expecting BZ_MEM_ERROR instead of a crash.
+*/
+TEST_P(BZIP2_BZ2_bzCompress, AOCL_Compression_bzip2_BZ2_bzCompress_libsais_oom_recursion_mem_error_30)
+{
+#ifndef AOCL_ALLOC_FAIL_INJECTION
+    GTEST_SKIP() << "allocation-failure injector unavailable on this libc";
+#else
+    if (!AOCL_use_libsais)
+        GTEST_SKIP() << "libsais BWT path not active for this opt level";
+
+    int ret;
+    {
+        // calloc-only so every malloc (stream buffers, outer buckets, temp_SA)
+        // succeeds and libsais runs far enough to recurse; the first qualifying
+        // calloc is the recursive dynamic bucket buffer.
+        AllocFailGuard guard(4096, 0, /*calloc_only=*/true);
+        ret = BZIP2_API::Compress(strm->getStrm(), BZ_FINISH);
+    }
+
+    EXPECT_TRUE(g_alloc_fail_triggered);
+    EXPECT_EQ(ret, BZ_MEM_ERROR);
+#endif
+}
+
+/*
+    Covers the temp_SA guard in libsais_main_8u(): the outer bucket malloc
+    succeeds, temp_SA (the next >= 4096 malloc) fails. fail_after=1 serves the
+    bucket then fails temp_SA, so the NULL memcpy crash would resurface if the
+    guard were removed. Expect BZ_MEM_ERROR.
+*/
+TEST_P(BZIP2_BZ2_bzCompress, AOCL_Compression_bzip2_BZ2_bzCompress_libsais_oom_tempsa_mem_error_31)
+{
+#ifndef AOCL_ALLOC_FAIL_INJECTION
+    GTEST_SKIP() << "allocation-failure injector unavailable on this libc";
+#else
+    if (!AOCL_use_libsais)
+        GTEST_SKIP() << "libsais BWT path not active for this opt level";
+
+    int ret;
+    {
+        AllocFailGuard guard(4096, 1);
+        ret = BZIP2_API::Compress(strm->getStrm(), BZ_FINISH);
+    }
+
+    EXPECT_TRUE(g_alloc_fail_triggered);
+    EXPECT_EQ(ret, BZ_MEM_ERROR);
+#endif
 }
 
 INSTANTIATE_TEST_SUITE_P(

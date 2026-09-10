@@ -6999,6 +6999,11 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
             const sa_sint_t align = 1024;
             // Allocating buffer to accomodate 6 bucket containers of size `k+1`. Extra `align` bytes will be useful for alignment in `libsais_align_up`.
             dynamic_memory = (sa_sint_t *)calloc(6*(k+1) + align, sizeof(sa_sint_t));
+            // Guard against allocation failure under memory pressure. Without it,
+            // libsais_align_up(NULL, ...) yields a bogus non-NULL pointer and the
+            // buckets writes below crash (observed __memset SIGSEGV). Return the
+            // same OOM code (-2) used by every other branch in this function.
+            if (dynamic_memory == NULL) { return -2; }
             buckets = (sa_sint_t *)libsais_align_up(dynamic_memory, align * sizeof(sa_sint_t));
         }
 #endif /* AOCL_BWT */
@@ -7211,6 +7216,12 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
                 T_next[-2] = T_next[n_next-2];
                 if (libsais_main_32s_recursion(T_next, SA, n_next, names - f, fs + n - 2 * m + f - AOCL_LIBSAIS_MOD_ELEMENTS, threads, thread_state, local_buffer) != 0)
                 {
+#ifdef AOCL_BWT
+                    /* Free the dynamically-allocated bucket buffer on this OOM
+                     * error path; otherwise it leaks (the normal exit frees it
+                     * at the end of the function). */
+                    if (dynamic_memory_alloc) free(dynamic_memory);
+#endif /* AOCL_BWT */
                     return -2;
                 }
                 T_next[-1] = t1;
@@ -7563,6 +7574,10 @@ static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n,
     {
         #ifdef AOCL_BWT
             sa_sint_t * temp_SA = (sa_sint_t *)libsais_alloc_aligned(sizeof(sa_sint_t)*m, 4096);
+            // Guard against allocation failure under memory pressure: the memcpy
+            // below would otherwise dereference a NULL temp_SA. Return the same
+            // OOM code (-2) used elsewhere in libsais.
+            if (temp_SA == NULL) { return -2; }
             memcpy(temp_SA, &SA[n-m], sizeof(sa_sint_t)*m);
         #endif /* AOCL_BWT */
         /* Represents first lms suffix index */

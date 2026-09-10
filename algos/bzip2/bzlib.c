@@ -403,6 +403,7 @@ int BZ_API(BZ2_bzCompressInit)
    s->ptr               = (UInt32*)s->arr1;
 
 #ifdef AOCL_BZIP2_OPT
+   s->compressError     = 0;
 // The last two characters `s->block`, need to be stored before 0th index of `s->block`.
 // Hence making the 0th index of `s->block` start from 2nd index from where it was originally allocated.
    if(AOCL_use_libsais)
@@ -977,6 +978,12 @@ Bool handle_compress ( bz_stream* strm )
    EState* s = strm->state;
    
    while (True) {
+#ifdef AOCL_BZIP2_OPT
+      /* A block failed to build (e.g. under memory pressure). Stop the
+       * state machine immediately so we do not run MTF/output on an unfinished
+       * block or compress further blocks; BZ2_bzCompress() reports BZ_MEM_ERROR. */
+      if (s->compressError) break;
+#endif
 
       if (s->state == BZ_S_OUTPUT) {
 #ifdef AOCL_BZIP2_OPT
@@ -1060,6 +1067,9 @@ int BZ_API(BZ2_bzCompress) ( bz_stream *strm, int action )
       case BZ_M_RUNNING:
          if (action == BZ_RUN) {
             progress = handle_compress ( strm );
+#ifdef AOCL_BZIP2_OPT
+            if (s->compressError) return BZ_MEM_ERROR;
+#endif
             return progress ? BZ_RUN_OK : BZ_PARAM_ERROR;
          } 
          else
@@ -1082,6 +1092,9 @@ int BZ_API(BZ2_bzCompress) ( bz_stream *strm, int action )
          if (s->avail_in_expect != s->strm->avail_in) 
             return BZ_SEQUENCE_ERROR;
          progress = handle_compress ( strm );
+#ifdef AOCL_BZIP2_OPT
+         if (s->compressError) return BZ_MEM_ERROR;
+#endif
          if (s->avail_in_expect > 0 || !isempty_RL(s) ||
              s->state_out_pos < s->numZ) return BZ_FLUSH_OK;
          s->mode = BZ_M_RUNNING;
@@ -1092,6 +1105,9 @@ int BZ_API(BZ2_bzCompress) ( bz_stream *strm, int action )
          if (s->avail_in_expect != s->strm->avail_in) 
             return BZ_SEQUENCE_ERROR;
          progress = handle_compress ( strm );
+#ifdef AOCL_BZIP2_OPT
+         if (s->compressError) return BZ_MEM_ERROR;
+#endif
          if (!progress) return BZ_SEQUENCE_ERROR;
          if (s->avail_in_expect > 0 || !isempty_RL(s) ||
              s->state_out_pos < s->numZ) return BZ_FINISH_OK;
@@ -1686,6 +1702,10 @@ int BZ_API(BZ2_bzDecompress) ( bz_stream *strm )
    AOCL_SETUP_NATIVE();
    Bool    corrupt;
    DState* s;
+   /* Set from AOCL_APPEND_CHECKSUM_NODE() when its node malloc fails under
+    * memory pressure, so we return BZ_MEM_ERROR instead of dereferencing NULL.
+    * When AOCL_BZIP2_OPT (or threads) is off the macro is (0) and this stays 0. */
+   Int32   checksumAllocFailed = 0;
    if (strm == NULL) return BZ_PARAM_ERROR;
    s = strm->state;
    if (s == NULL) return BZ_PARAM_ERROR;
@@ -1711,7 +1731,8 @@ int BZ_API(BZ2_bzDecompress) ( bz_stream *strm )
             if (s->verbosity >= 2) VPrintf0 ( "]" );
             if (s->calculatedBlockCRC != s->storedBlockCRC)
                return BZ_DATA_ERROR;
-            AOCL_APPEND_CHECKSUM_NODE(s, s->storedBlockCRC);
+            checksumAllocFailed = AOCL_APPEND_CHECKSUM_NODE(s, s->storedBlockCRC);
+            if (checksumAllocFailed) return BZ_MEM_ERROR;
             s->calculatedCombinedCRC 
                = (s->calculatedCombinedCRC << 1) | 
                     (s->calculatedCombinedCRC >> 31);
@@ -2302,7 +2323,16 @@ static void bz2_mt_compress_parallel_worker(AOCL_UINT32 thread_id, void *context
       is measured. Using this information, padding bits are added to the "smaller chunk" during compression. This ensures that when
       the compressed output of the "smaller chunk" is appended to the "bigger chunk," the combined output becomes fully byte-aligned.
    */
-   if (aocl_do_partition_compress_mt(thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id) == 0)
+   int part_ret = aocl_do_partition_compress_mt(thread_group_handle, &cur_thread_info, cmpr_bound_pad, thread_id);
+   if (part_ret != 0)
+   {
+      is_error = -1 * BZ_MEM_ERROR;
+      cur_thread_info.dst_trap = NULL;
+      cur_thread_info.dst_trap_size = 0;
+      cur_thread_info.partition_src = NULL;
+      cur_thread_info.partition_src_size = 0;
+      goto store_thread_info;
+   }
    {
       mt_head_node->padding_bits = 0;
       ret |= BZ2_bzBuffToBuffCompress_internal(cur_thread_info.dst_trap,
@@ -2310,6 +2340,19 @@ static void bz2_mt_compress_parallel_worker(AOCL_UINT32 thread_id, void *context
          cur_thread_info.partition_src, 
          cur_thread_info.partition_src_size - 1 /* last byte excluded */,
          blockSize100k, verbosity, workFactor, mt_head_node);
+
+      /* If the partition failed to compress (e.g. BZ_MEM_ERROR under VM
+       * pressure), dst_trap_size still holds the worst-case estimate, so the
+       * bitstream-merge below (get_empty_bits + append) would read and WRITE
+       * past the end of dst_trap and corrupt the heap - later surfacing as a
+       * double-free/abort in aocl_destroy_parallel_compress_mt(). Bail out and
+       * report the error instead. */
+      if (ret != BZ_OK)
+      {
+         is_error = -1 * ret;
+         cur_thread_info.dst_trap_size = 0;
+         goto store_thread_info;
+      }
 
       char * output_ptr = cur_thread_info.dst_trap + cur_thread_info.dst_trap_size;
       int bigger_chunk_empty_bits = get_empty_bits((unsigned char *)output_ptr);
@@ -2320,6 +2363,15 @@ static void bz2_mt_compress_parallel_worker(AOCL_UINT32 thread_id, void *context
       ret |= BZ2_bzBuffToBuffCompress_internal(smaller_chunk_dest, &smaller_chunk_len,
                cur_thread_info.partition_src+cur_thread_info.partition_src_size-1 /* last byte */, 
                1/* input length */, blockSize100k, verbosity, workFactor, mt_head_node);
+
+      /* Same guard for the 1-byte "smaller chunk": on failure the merge state
+       * is invalid, so do not append. */
+      if (ret != BZ_OK)
+      {
+         is_error = -1 * ret;
+         cur_thread_info.dst_trap_size = 0;
+         goto store_thread_info;
+      }
 
       // Ignore BZIP2 end of sequence (EOS magic number "6 bytes", combined checksum "4 bytes")
       output_ptr -= BZIP2_EOS_BYTES+1;
@@ -2353,6 +2405,7 @@ static void bz2_mt_compress_parallel_worker(AOCL_UINT32 thread_id, void *context
          is_error = 0;
    } // aocl_do_partition_compress_mt
 
+store_thread_info:
    thread_group_handle->threads_info_list[thread_id].partition_src = cur_thread_info.partition_src;
    thread_group_handle->threads_info_list[thread_id].dst_trap = cur_thread_info.dst_trap;
    thread_group_handle->threads_info_list[thread_id].dst_trap_size = cur_thread_info.dst_trap_size;
@@ -2406,6 +2459,12 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
 
    // memory allocation for multithreaded checksum table.
    mt_head_table = (mt_data_list *)malloc(sizeof(mt_data_list) * thread_group_handle.num_threads);
+   if (mt_head_table == NULL)
+   {
+      aocl_destroy_parallel_compress_mt(&thread_group_handle);
+      LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
+      return BZ_MEM_ERROR;
+   }
    memset(mt_head_table, 0, sizeof(mt_data_list) * thread_group_handle.num_threads);
 
    bz2_mt_compress_parallel_ctx_t compress_ctx = {
