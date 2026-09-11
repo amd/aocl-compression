@@ -3984,6 +3984,14 @@ void Test_AOCL_LZ4_wildCopy64_AVX(void*dstPtr, const void* srcPtr, void*dstEnd)
     AOCL_LZ4_wildCopy64_AVX(dstPtr, srcPtr, dstEnd);
 }
 #endif /* AOCL_LZ4_AVX_OPT */
+/* Wrapper function to be used for Unit Testing. Gives the test binary an
+ * exported entry point for the LZ4LIB_STATIC_API function, which is otherwise
+ * not present in the Windows DLL export table. */
+int Test_LZ4_compress_fast_extState_fastReset(void* state, const char* src, char* dst,
+                                              int srcSize, int dstCapacity, int acceleration)
+{
+    return LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstCapacity, acceleration);
+}
 #endif /* AOCL_UNIT_TEST */
 
 

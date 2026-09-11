@@ -92,7 +92,6 @@ AOCL_INTP get_disable_opt_flags(int printDebugLogs)
 #include <string>
 #include <cstring>
 #include <unordered_map>
-#include <stdlib.h>
 #include <stdio.h>
 
 using namespace std;

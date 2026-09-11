@@ -1611,7 +1611,7 @@ TEST_P(LLZ4_compress_fast_extState_fastReset, AOCL_Compression_lz4_LZ4_compress_
     setSrcSize(1000);
     setDstSize(LZ4_compressBound(srcSize));
     // generates an empty block
-    EXPECT_EQ(LZ4_compress_fast_extState_fastReset(state, NULL, dst, 0, dstSize, 2), 1);
+    EXPECT_EQ(Test_LZ4_compress_fast_extState_fastReset(state, NULL, dst, 0, dstSize, 2), 1);
     EXPECT_EQ(dst[0], 0);
 }
 
@@ -1620,7 +1620,7 @@ TEST_P(LLZ4_compress_fast_extState_fastReset, AOCL_Compression_lz4_LZ4_compress_
     setSrcSize(1000);
     setDstSize(LZ4_compressBound(srcSize));
 
-    int compressedSize = LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_MAX+1);
+    int compressedSize = Test_LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_MAX+1);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -1631,7 +1631,7 @@ TEST_P(LLZ4_compress_fast_extState_fastReset, AOCL_Compression_lz4_LZ4_compress_
     setSrcSize(1000);
     setDstSize(LZ4_compressBound(srcSize));
 
-    int compressedSize = LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_DEFAULT-1);
+    int compressedSize = Test_LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_DEFAULT-1);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -1644,7 +1644,7 @@ TEST_P(LLZ4_compress_fast_extState_fastReset, AOCL_Compression_lz4_LZ4_compress_
 
     // case 1: with dstSize >= LZ4_compressBound(srcSize) and srcSize < LZ4_64Klimit
     //         dstCapacity, limitedOutput_directive, tableType assumes value 0, notLimited, byU16 respectively.
-    int compressedSize = LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, 2);
+    int compressedSize = Test_LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, 2);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -1657,7 +1657,7 @@ TEST_P(LLZ4_compress_fast_extState_fastReset, AOCL_Compression_lz4_LZ4_compress_
 
     // case 2: with dstSize >= LZ4_compressBound(srcSize) and srcSize >= LZ4_64Klimit
     //         dstCapacity, limitedOutput_directive, tableType assumes value 0, notLimited, byPtr/byU32 respectively.
-    int compressedSize = LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_DEFAULT);
+    int compressedSize = Test_LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_DEFAULT);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -1675,7 +1675,7 @@ TEST_P(LLZ4_compress_fast_extState_fastReset, AOCL_Compression_lz4_LZ4_compress_
     
     // case 3: with dstSize < LZ4_compressBound(srcSize) and srcSize < LZ4_64Klimit
     //         dstCapacity, limitedOutput_directive, tableType assumes value dstSize, limitedOutput, byU16 respectively.
-    int compressedSize = LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_DEFAULT);
+    int compressedSize = Test_LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_DEFAULT);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -1693,7 +1693,7 @@ TEST_P(LLZ4_compress_fast_extState_fastReset, AOCL_Compression_lz4_LZ4_compress_
     
     // case 4: with dstSize < LZ4_compressBound(srcSize) and srcSize >= LZ4_64Klimit
     //         dstCapacity, limitedOutput_directive, tableType assumes value dstSize, limitedOutput, byPtr/byU32 respectively. 
-    int compressedSize = LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_DEFAULT);
+    int compressedSize = Test_LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_DEFAULT);
     EXPECT_NE(compressedSize, 0);
 
     EXPECT_TRUE(check_uncompressed_equal_to_original(src,srcSize,dst,compressedSize));
@@ -1704,7 +1704,7 @@ TEST_P(LLZ4_compress_fast_extState_fastReset, AOCL_Compression_lz4_LZ4_compress_
     setSrcSize(1000);
     setDstSize(LZ4_compressBound(srcSize)/10);
     
-    int compressedSize = LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_DEFAULT);
+    int compressedSize = Test_LZ4_compress_fast_extState_fastReset(state, src, dst, srcSize, dstSize, LZ4_ACCELERATION_DEFAULT);
     EXPECT_EQ(compressedSize, 0);
 
 }
