@@ -1195,6 +1195,15 @@ LZ4LIB_API void Test_LZ4_renormDictT(LZ4_stream_t_internal* LZ4_dict, int nextSi
 LZ4LIB_API int Test_AOCL_LZ4_decompress_generic_mt(const char* src, char* dst, int srcSize,
                                                    int outputSize, int is_last_thread);
 #endif /* AOCL_ENABLE_THREADS && AOCL_LZ4_AVX_OPT */
+/* Test wrapper for LZ4_compress_fast_extState_fastReset. The function itself is
+ * declared LZ4LIB_STATIC_API, which expands to nothing unless
+ * LZ4_PUBLISH_STATIC_FUNCTIONS is defined -- so it carries no __declspec(dllexport)
+ * and is absent from the DLL export table on Windows. On Linux the default
+ * visibility makes it linkable anyway, which is why the gtest only fails for
+ * MinGW/MSVC shared builds. Route the test through an LZ4LIB_API wrapper, the
+ * same pattern lz4hc.h already uses for Test_LZ4_compress_HC_extStateHC_fastReset. */
+LZ4LIB_API int Test_LZ4_compress_fast_extState_fastReset(void* state, const char* src, char* dst,
+                                                         int srcSize, int dstCapacity, int acceleration);
 #endif /* AOCL_UNIT_TEST */
 
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
