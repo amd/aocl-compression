@@ -473,24 +473,22 @@ static AOCL_UINTP aocl_calculate_dst_offset_internal(AOCL_CHAR const *source, AO
  * metadata from the RAP frame embedded in thread_grp->src.
  *
  * dst_size contract (thread_grp->dst_size):
- *   > 0  — Caller knows the destination buffer size. This function validates
- *           that (dst_offset + dst_trap_size) fits within dst_size before
- *           forming the dst_trap pointer. Returns INSUFFICIENT_DST_SPACE if
- *           the partition would overflow the destination buffer.
- *   == 0 — Caller does not know the destination size at setup time (e.g.
- *           snappy, which decompresses directly into the caller-provided buffer
- *           without a post-parallel copy step). In this mode the dst bounds
- *           check is skipped entirely; dst_trap is always set. The caller is
- *           responsible for its own output-bounds enforcement. dst_trap_size
- *           (read from untrusted RAP metadata) must be re-validated by the
- *           caller's decompressor before any write.
+ *   The caller always supplies the destination buffer size (0 means a
+ *   zero-length buffer). This function validates that (dst_offset +
+ *   dst_trap_size) fits within dst_size and returns INSUFFICIENT_DST_SPACE if
+ *   the partition would overflow the destination buffer. The check is
+ *   unconditional and fail-closed: there is no "skip the bounds check" mode, so
+ *   no dst_size value can disable the per-partition write bound.
  *
  * Return values:
  *   AOCL_MT_DECOMP_PARTITION_SUCCESS          (0)  — dst_trap and all fields valid.
  *   AOCL_MT_DECOMP_PARTITION_EMPTY_SRC        (1)  — partition_src_size == 0; dst_trap is NULL.
  *   AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE (-1)
- *       Only returned when dst_size > 0. dst_trap IS set (dst_offset was safe);
- *       dst_trap_size exceeds the remaining destination space.
+ *       The partition cannot be written safely: it would overflow the
+ *       destination buffer (dst_offset + dst_trap_size > dst_size), the
+ *       cumulative offset overflowed (dst_offset == SIZE_MAX sentinel), or the
+ *       destination is NULL. dst_trap is NOT set (left NULL); all checks run
+ *       before the dst_trap pointer is formed.
  *   AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME (-2)
  *       RAP partition metadata is inconsistent with the source buffer.
  *       dst_trap is NOT set (NULL). Callers must not dereference dst_trap.
@@ -530,23 +528,26 @@ AOCL_INT32 aocl_do_partition_decompress_mt(const aocl_thread_group_t* thread_grp
                                         cur_rap_pos + RAP_DATA_BYTES));
     AOCL_UINTP dst_offset = aocl_calculate_dst_offset_internal(thread_grp->src, thread_id);
 
-    /* Always form dst_trap before the bounds check so callers that pass
-     * dst_size=0 (e.g. snappy) can use dst_trap regardless of the result.
-     * dst_offset is a UINT32 sum, so dst + dst_offset cannot wrap a 64-bit
-     * address space; on ILP32 the setup guard on num_main_threads caps
-     * dst_offset to at most (src_size - 16) which is <= UINT32_MAX. */
-    cur_thread_info->dst_trap = thread_grp->dst + dst_offset;
-
-    /* Validate dst bounds only when the caller supplied a real destination
-     * size. Callers that pass dst_size=0 accept responsibility for their own
-     * output-bounds enforcement (see contract above). */
-    if (thread_grp->dst_size > 0) {
-        if (dst_offset > thread_grp->dst_size ||
-            cur_thread_info->dst_trap_size > thread_grp->dst_size - dst_offset) {
-            LOG_FORMATTED(ERR, logCtx, "Thread %u: Decompression failed, destination buffer too small.", thread_id);
-            return AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE;
-        }
+    /* Validate bounds (subtraction-safe) before forming dst_trap. Reject the
+     * SIZE_MAX overflow sentinel from aocl_calculate_dst_offset_internal
+     * explicitly (it is ambiguous with a real dst_size == SIZE_MAX). On failure
+     * dst_trap stays NULL (cur_thread_info was memset at entry). */
+    if (dst_offset == (AOCL_UINTP)SIZE_MAX ||
+        dst_offset > thread_grp->dst_size ||
+        cur_thread_info->dst_trap_size > thread_grp->dst_size - dst_offset) {
+        LOG_FORMATTED(ERR, logCtx, "Thread %u: Decompression failed, destination buffer too small.", thread_id);
+        return AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE;
     }
+
+    /* Reject a NULL destination before the pointer arithmetic (NULL + offset is
+     * undefined). A non-empty partition has already been established above
+     * (partition_src_size != 0), so it cannot write into a NULL buffer. */
+    if (thread_grp->dst == NULL) {
+        return AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE;
+    }
+
+    /* Bounds valid and dst non-NULL: dst_offset <= dst_size, so in-object. */
+    cur_thread_info->dst_trap = thread_grp->dst + dst_offset;
 
 #ifdef AOCL_THREADS_LOG
     printf("aocl_do_partition_decompress_mt(): thread id: [%d]\n",

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -1165,9 +1165,48 @@ TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy
     EXPECT_NE(original_size, uncompressed_length);
 }
 
+// Crafted stream: a valid RAP magic word but an inconsistent RAP header
+// (rap_metadata_len > buffer size) makes aocl_setup_parallel_decompress_mt
+// return a negative error code. GetUncompressedLengthFromMTCompressedBuffer must
+// reject it (return false) and must NOT compute start + offset / n - offset with
+// a negative offset, which would read out of bounds (start[-1]).
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_fail_common_12) // negative setup offset (invalid RAP header)
+{
+    // 8-byte magic "AOCL_LLC" (little-endian 0x434C4C5F4C434F41), then a
+    // rap_metadata_len far larger than the buffer, then a thread count.
+    vector<char> buf(32, '\0');
+    const unsigned char magic[8] = {0x41,0x4F,0x43,0x4C,0x5F,0x4C,0x4C,0x43};
+    for (int i = 0; i < 8; ++i) buf[i] = (char)magic[i];
+    // rap_metadata_len = 0xFFFFFFFF (> buf.size()) at offset 8 -> header invalid
+    buf[8] = (char)0xFF; buf[9] = (char)0xFF; buf[10] = (char)0xFF; buf[11] = (char)0xFF;
+    // num_main_threads = 2 at offset 12
+    buf[12] = 2; buf[13] = 0; buf[14] = 0; buf[15] = 0;
+
+    size_t ulength = 0;
+    // Must return false without any out-of-bounds access / crash.
+    EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(buf.data(), buf.size(), &ulength));
+}
+
 /****************************************************
 * End of GetUncompressedLengthFromMTCompressedBuffer
 *****************************************************/
+
+// A valid multithreaded (RAP) stream with a non-zero length must be rejected
+// when the output buffer is NULL (parity with the single-threaded path).
+TEST(SNAPPY_RawUncompress_MT, AOCL_Compression_snappy_RawUncompress_mt_null_output_rejected)
+{
+    // 1e6 bytes reliably takes the multithreaded RAP path.
+    size_t original_size = 1e6;
+    string orig(original_size, '\0');
+    for (size_t i = 0; i < original_size; ++i) orig[i] = (char)(rand() % 256);
+
+    vector<char> compressed(MaxCompressedLength(original_size));
+    size_t compressed_length = 0;
+    RawCompress(orig.data(), orig.size(), compressed.data(), &compressed_length);
+
+    // NULL output buffer for a non-empty stream: must return false, not crash.
+    EXPECT_FALSE(RawUncompress(compressed.data(), compressed_length, (char*)NULL));
+}
 #endif
 
 /*************************************************************************

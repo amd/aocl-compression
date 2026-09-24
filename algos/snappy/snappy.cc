@@ -5224,9 +5224,10 @@ extern "C" void AoclSnappyUncompressMtWork(AOCL_UINT32 thread_id, void *context)
   AOCL_MT_PROCESS_PARTITION_START((*tg), ti_cur, thread_id)
   thread_parallel_res = aocl_do_partition_decompress_mt(
       tg, &cur_thread_info, AOCL_MT_CUR_THREAD_SERIAL_ID(ti_cur));
-  if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_SUCCESS ||
-      thread_parallel_res ==
-          AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE /* Expected error due to unspecified destination size. */) {
+  /* Only decompress a partition when its destination bounds check passed.
+   * INSUFFICIENT_DST_SPACE means the partition would write past the caller
+   * output buffer, so it is treated as an error instead of being decompressed. */
+  if (thread_parallel_res == AOCL_MT_DECOMP_PARTITION_SUCCESS) {
     local_result = SNAPPY_SAW_raw_uncompress_direct_fp(
         cur_thread_info.partition_src, cur_thread_info.partition_src_size,
         cur_thread_info.dst_trap, cur_thread_info.dst_trap_size);
@@ -5254,10 +5255,25 @@ aocl_thread_group_t thread_group_handle;
   // check 'compressed' here, since passing a null pointer to the setup function
   // will lead to a segmentation fault
   if (compressed != NULL) {
+    /* Read the total decompressed length from the stream's outer
+     * uncompressed-length varint and pass it as out_size so
+     * aocl_do_partition_decompress_mt enforces the per-partition destination
+     * bounds check. This total is the sum of every partition's decompressed
+     * length, so it bounds all partition writes to the output buffer. */
+    size_t total_uncompressed_len = 0;
+    if (!GetUncompressedLengthFromMTCompressedBuffer(compressed, compressed_length,
+                                                     &total_uncompressed_len)) {
+      return false;
+    }
+    /* Reject NULL output for a non-empty stream, matching the single-threaded
+     * path's (ulength != 0 && uncompressed == NULL) guard. */
+    if (total_uncompressed_len != 0 && uncompressed == NULL) {
+      return false;
+    }
     ret_status = aocl_setup_parallel_decompress_mt(&thread_group_handle, 
                                                   (char *)compressed, uncompressed,
                                                   compressed_length, 
-                                                  0 /* maxDecompressedSize (not required by snappy, hence 0) */, 
+                                                  (AOCL_UINTP)total_uncompressed_len /* out_size: total decompressed length */, 
                                                   0 /* use_ST_decompressor (not required here, hence 0) */);
     if (ret_status < 0)
       return false;
@@ -5358,8 +5374,11 @@ bool GetUncompressedLengthFromMTCompressedBuffer(const char* start, size_t n, si
                                                   n,
                                                   0 /* maxDecompressedSize (not required by snappy, hence 0) */, 
                                                   1 /* use_ST_decompressor (get only the RAP metadata length, no allocations done) */);
+  /* offset is the RAP frame length, or negative on setup error. Reject negative
+   * or out-of-range offset before the pointer/length arithmetic. */
+  if (offset < 0 || (size_t)offset > n) return false;
   const char* start_of_stream = start + offset;
-  size_t size_of_stream = n - offset;
+  size_t size_of_stream = n - (size_t)offset;
   uint32_t v = 0;
   const char* limit = start_of_stream + size_of_stream;
   if (Varint::Parse32WithLimit(start_of_stream, limit, &v) != NULL) {
