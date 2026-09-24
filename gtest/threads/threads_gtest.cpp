@@ -39,6 +39,11 @@
 #include <limits>
 #include <vector>
 #include "gtest/gtest.h"
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/mman.h>
+#include <unistd.h>
+#define AOCL_GTEST_HAVE_MMAP_GUARD 1
+#endif
 
 #include "utils/utils.h"
 #include "threads/threads.h"
@@ -1217,6 +1222,130 @@ public:
         *(AOCL_INT64*)buf = RAP_MAGIC_WORD;
     }
 
+#ifndef AOCL_EXCLUDE_SNAPPY
+    // Helpers to build a RAP/Snappy stream and drive the public decompress API.
+    // Used by the Snappy output-bounds tests below.
+
+    // snappy literal tag for a run of 'n' bytes
+    static void append_literal_tag(vector<AOCL_CHAR>& out, AOCL_UINT32 n) {
+        AOCL_UINT32 l = n - 1;
+        if (l < 60) {
+            out.push_back((AOCL_CHAR)(l << 2));
+        } else {
+            // one extra length byte (sufficient for the sizes used here)
+            EXPECT_LT(l, 256u);
+            out.push_back((AOCL_CHAR)(60 << 2));
+            out.push_back((AOCL_CHAR)(l & 0xff));
+        }
+    }
+
+    static void append_varint(vector<AOCL_CHAR>& out, AOCL_UINT32 v) {
+        while (true) {
+            AOCL_UINT32 b = v & 0x7f;
+            v >>= 7;
+            if (v) {
+                out.push_back((AOCL_CHAR)(b | 0x80));
+            } else {
+                out.push_back((AOCL_CHAR)b);
+                return;
+            }
+        }
+    }
+
+    static void put_u32(vector<AOCL_CHAR>& out, AOCL_UINT32 v) {
+        out.push_back((AOCL_CHAR)(v & 0xff));
+        out.push_back((AOCL_CHAR)((v >> 8) & 0xff));
+        out.push_back((AOCL_CHAR)((v >> 16) & 0xff));
+        out.push_back((AOCL_CHAR)((v >> 24) & 0xff));
+    }
+
+    // Build a 2-partition RAP/Snappy stream where partition 0 declares a
+    // decompressed length of part0_decomp_len and carries a matching literal
+    // run, while the outer uncompressed-length varint is set to outer_len_value.
+    static vector<AOCL_CHAR> build_rap_stream(AOCL_UINT32 part0_decomp_len,
+                                              AOCL_UINT32 part0_literal_len,
+                                              AOCL_UINT32 outer_len_value) {
+        const AOCL_UINT32 num_main_threads = 2;
+
+        // partition payloads
+        vector<AOCL_CHAR> part0;
+        append_literal_tag(part0, part0_literal_len);
+        for (AOCL_UINT32 i = 0; i < part0_literal_len; ++i) part0.push_back('A');
+        vector<AOCL_CHAR> part1;
+        append_literal_tag(part1, 4);
+        for (int i = 0; i < 4; ++i) part1.push_back('B');
+
+        const AOCL_UINT32 table_len =
+            num_main_threads * RAP_DATA_BYTES_WITH_DECOMP_LEN;
+        const AOCL_UINT32 rap_metadata_len = RAP_START_OF_PARTITIONS + table_len;
+
+        vector<AOCL_CHAR> outer_varint;
+        append_varint(outer_varint, outer_len_value);
+
+        const AOCL_UINT32 src_offset_base =
+            rap_metadata_len + (AOCL_UINT32)outer_varint.size();
+        const AOCL_UINT32 off0 = src_offset_base;
+        const AOCL_UINT32 off1 = off0 + (AOCL_UINT32)part0.size();
+
+        vector<AOCL_CHAR> buf;
+        // magic
+        AOCL_INT64 magic = RAP_MAGIC_WORD;
+        for (int i = 0; i < 8; ++i) buf.push_back((AOCL_CHAR)((magic >> (8 * i)) & 0xff));
+        // rap_metadata_len, num_main_threads
+        put_u32(buf, rap_metadata_len);
+        put_u32(buf, num_main_threads);
+        // partition table: offset, size, decomp_len
+        put_u32(buf, off0);
+        put_u32(buf, (AOCL_UINT32)part0.size());
+        put_u32(buf, part0_decomp_len);         // partition 0: declared decomp length
+        put_u32(buf, off1);
+        put_u32(buf, (AOCL_UINT32)part1.size());
+        put_u32(buf, 4);                         // partition 1: small
+        EXPECT_EQ(buf.size(), (size_t)rap_metadata_len);
+        // outer varint + payloads
+        buf.insert(buf.end(), outer_varint.begin(), outer_varint.end());
+        buf.insert(buf.end(), part0.begin(), part0.end());
+        buf.insert(buf.end(), part1.begin(), part1.end());
+        return buf;
+    }
+
+    // Decompress 'stream' via aocl_llc_decompress(SNAPPY) into a buffer whose
+    // declared size is declared_out_size, backed by a larger physical allocation
+    // so the test itself stays memory-safe; a canary region immediately follows
+    // the declared size and must remain intact. Returns the decompress return
+    // value and sets canary_intact.
+    int64_t run_snappy_decompress(const vector<AOCL_CHAR>& stream,
+                                  AOCL_UINTP declared_out_size,
+                                  bool optOff, bool* canary_intact) {
+        const AOCL_UINTP phys = 4096;
+        EXPECT_LE(declared_out_size, phys);
+        vector<AOCL_CHAR> outbuf(phys, (AOCL_CHAR)0xCC); // 0xCC canary everywhere
+
+        ACD desc;
+        reset_ACD(&desc, 0);
+        desc.inBuf = (AOCL_CHAR*)stream.data();
+        desc.inSize = (AOCL_UINTP)stream.size();
+        desc.outBuf = outbuf.data();
+        desc.outSize = declared_out_size;      // what the caller claims to own
+        desc.numThreads = 4;
+        desc.optOff = optOff ? 1 : 0;
+        desc.optLevel = 2;
+
+        EXPECT_EQ(aocl_llc_setup(&desc, SNAPPY), 0);
+        int64_t ret = aocl_llc_decompress(&desc, SNAPPY);
+        aocl_llc_destroy(&desc, SNAPPY);
+
+        // A changed byte in the canary region means the partition-0 literal run
+        // was written past the declared output buffer.
+        bool intact = true;
+        for (AOCL_UINTP i = declared_out_size; i < phys; ++i) {
+            if (outbuf[i] != (AOCL_CHAR)0xCC) { intact = false; break; }
+        }
+        *canary_intact = intact;
+        return ret;
+    }
+#endif /* AOCL_EXCLUDE_SNAPPY */
+
     aocl_thread_group_t thread_grp;
     AOCL_CHAR* src;
     AOCL_CHAR* dst;
@@ -1383,11 +1512,11 @@ TEST_F(API_RAP_security_MT, dst_offset_exceeds_destination_buffer) {
     EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE);
 }
 
-// dst_size=0 contract (snappy-style): dst_trap must always be set even for thread 1+,
-// because the caller decompresses directly into dst_trap without a post-parallel copy.
-// A crafted huge decompressed-length in thread 0 makes dst_offset > 0 for thread 1;
-// with dst_size=0 the bounds check is skipped and dst_trap is still set (not NULL).
-TEST_F(API_RAP_security_MT, dst_size_zero_dst_trap_always_set) {
+// Fail-closed dst_size contract: a plain dst_size of 0 is a real (zero-length)
+// buffer, so any partition with a non-zero destination requirement must be
+// rejected with INSUFFICIENT_DST_SPACE. A crafted huge decompressed-length in
+// thread 0 pushes thread 1's dst_offset past the (zero-length) buffer.
+TEST_F(API_RAP_security_MT, dst_size_zero_is_bounds_checked) {
     const AOCL_INT32 num_threads = 2;
     src_size = 1024;
     src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
@@ -1409,19 +1538,116 @@ TEST_F(API_RAP_security_MT, dst_size_zero_dst_trap_always_set) {
     *(AOCL_UINT32*)ptr = 500;
     ptr += DECOMP_LEN_BYTES;
 
-    // Setup with dst_size=0 (snappy contract: caller owns bounds)
+    // Setup with a real dst_size of 0 (fail-closed: bounds are enforced).
     AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
         0 /* dst_size=0 */, 0);
     EXPECT_GT(result, 0);
 
-    // Thread 1: dst_offset=500 > dst_size=0, but bounds check is skipped.
-    // dst_trap must be set (not NULL) and SUCCESS returned.
+    // Thread 1: dst_offset=500 > dst_size=0, so the bounds check rejects it.
     aocl_thread_info_t cur_thread_info;
     AOCL_INT32 part_result = Test_aocl_do_partition_decompress_mt(&thread_grp,
         &cur_thread_info, 1);
-    EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_SUCCESS);
-    EXPECT_NE(cur_thread_info.dst_trap, nullptr);
-    EXPECT_EQ(cur_thread_info.dst_trap, dst + 500); // dst + sum of thread 0's decomp len
+    EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE);
+}
+
+// dst == NULL with dst_size 0 and a non-empty partition must be rejected with
+// dst_trap left NULL (bounds checked before the pointer is formed).
+TEST_F(API_RAP_security_MT, null_dst_zero_size_rejected_before_pointer_math) {
+    const AOCL_INT32 num_threads = 2;
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    AOCL_INT32 rap_frame_len = add_RAP_frame_header(src, num_threads);
+
+    AOCL_CHAR* ptr = src + RAP_START_OF_PARTITIONS;
+    *(AOCL_UINT32*)ptr = rap_frame_len;      // thread 0 offset
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 10;                 // thread 0 partition size
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 500;                // thread 0 decomp length
+    ptr += DECOMP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = rap_frame_len + 10; // thread 1 offset
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 10;                 // thread 1 partition size
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 500;                // thread 1 decomp length
+    ptr += DECOMP_LEN_BYTES;
+
+    // Set up with dst == NULL and dst_size == 0 (a legal caller combination).
+    Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, /*dst=*/NULL, src_size,
+        /*out_size=*/0, 0);
+
+    aocl_thread_info_t cur_thread_info;
+    AOCL_INT32 part_result = Test_aocl_do_partition_decompress_mt(&thread_grp,
+        &cur_thread_info, 1);
+    EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE);
+    // dst_trap must not have been formed from the NULL base.
+    EXPECT_EQ(cur_thread_info.dst_trap, (AOCL_CHAR*)NULL);
+}
+
+// dst == NULL with an in-range non-zero dst_size must also be rejected (NULL base
+// pointer arithmetic is undefined even when the size check would pass).
+TEST_F(API_RAP_security_MT, null_dst_nonzero_size_rejected) {
+    const AOCL_INT32 num_threads = 2;
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    AOCL_INT32 rap_frame_len = add_RAP_frame_header(src, num_threads);
+
+    AOCL_CHAR* ptr = src + RAP_START_OF_PARTITIONS;
+    *(AOCL_UINT32*)ptr = rap_frame_len;      // thread 0 offset
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 10;                 // thread 0 partition size
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 100;                // thread 0 decomp length (fits dst_size)
+    ptr += DECOMP_LEN_BYTES;
+
+    Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, /*dst=*/NULL, src_size,
+        /*out_size=*/4096, 0);              // in-range: bounds check alone would pass
+
+    aocl_thread_info_t cur_thread_info;
+    AOCL_INT32 part_result = Test_aocl_do_partition_decompress_mt(&thread_grp,
+        &cur_thread_info, 0);
+    EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE);
+    EXPECT_EQ(cur_thread_info.dst_trap, (AOCL_CHAR*)NULL);
+}
+
+// Regression: the destination bounds check is unconditional. A max-value
+// dst_size (0xFFFFFFFF, the value that once collided with the removed
+// AOCL_MT_DST_SIZE_UNBOUNDED sentinel on ILP32) must still be bounds-checked
+// like any other size, i.e. an over-large partition is rejected.
+TEST_F(API_RAP_security_MT, dst_size_max_u32_is_still_bounds_checked) {
+    const AOCL_INT32 num_threads = 2;
+    src_size = 1024;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    AOCL_INT32 rap_frame_len = add_RAP_frame_header(src, num_threads);
+
+    AOCL_CHAR* ptr = src + RAP_START_OF_PARTITIONS;
+    *(AOCL_UINT32*)ptr = rap_frame_len;
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 10;
+    ptr += RAP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = 500;               // decompressed length for thread 0
+    ptr += DECOMP_LEN_BYTES;
+    *(AOCL_UINT32*)ptr = rap_frame_len + 10;
+    ptr += RAP_OFFSET_BYTES;
+    *(AOCL_UINT32*)ptr = 10;
+    ptr += RAP_LEN_BYTES;
+    // thread 1 decomp_len larger than the space remaining after thread 0's 500
+    // bytes within a (deliberately small) dst_size.
+    *(AOCL_UINT32*)ptr = 0xFFFFFFFFu;
+    ptr += DECOMP_LEN_BYTES;
+
+    Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        (AOCL_INT32)dst_size, 0);
+    // Force the exact ILP32-collision value as the real destination size.
+    thread_grp.dst_size = (AOCL_UINTP)0xFFFFFFFFu;
+
+    aocl_thread_info_t cur_thread_info;
+    // thread 1: dst_offset=500, dst_trap_size=0xFFFFFFFF -> 500 + 0xFFFFFFFF
+    // exceeds dst_size=0xFFFFFFFF, so it must be rejected (NOT treated as
+    // "unbounded" and allowed through).
+    AOCL_INT32 part_result = Test_aocl_do_partition_decompress_mt(&thread_grp,
+        &cur_thread_info, 1);
+    EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE);
 }
 
 // VULN-06: rap_metadata_len larger than source buffer.
@@ -1572,6 +1798,137 @@ TEST_F(API_RAP_security_MT, valid_rap_frame_still_accepted) {
         EXPECT_EQ(cur_thread_info.dst_trap_size, (AOCL_UINTP)200);
     }
 }
+
+#ifndef AOCL_EXCLUDE_SNAPPY
+// End-to-end Snappy output-bounds tests. These drive the public entry point
+// aocl_llc_decompress(SNAPPY) on multithreaded RAP streams whose per-partition
+// decompressed length exceeds the caller output buffer, and assert that
+// decompression fails (return < 0) instead of writing past the buffer and that
+// the memory just past the declared output size is left untouched.
+
+// 16-byte output buffer, outer length 4, partition-0 decomp_len 2000 with a
+// 200-byte literal run. Optimized writer path (optOff = 0).
+TEST_F(API_RAP_security_MT, snappy_oversized_partition_no_oob_write_opt) {
+    vector<AOCL_CHAR> stream = build_rap_stream(/*decomp_len*/2000,
+                                                /*literal*/200,
+                                                /*outer*/4);
+    bool canary_intact = false;
+    int64_t ret = run_snappy_decompress(stream, /*declared_out_size*/16,
+                                        /*optOff*/false, &canary_intact);
+    EXPECT_LT(ret, 0) << "decompress must fail rather than overflow";
+    EXPECT_TRUE(canary_intact) << "bytes past the 16-byte output buffer were overwritten";
+}
+
+// Same input against the scalar/reference writer path (optOff = 1).
+TEST_F(API_RAP_security_MT, snappy_oversized_partition_no_oob_write_scalar) {
+    vector<AOCL_CHAR> stream = build_rap_stream(2000, 200, 4);
+    bool canary_intact = false;
+    int64_t ret = run_snappy_decompress(stream, 16, /*optOff*/true, &canary_intact);
+    EXPECT_LT(ret, 0);
+    EXPECT_TRUE(canary_intact) << "scalar path overwrote memory past the output buffer";
+}
+
+// A partition-0 literal run that exceeds the declared buffer only modestly must
+// still be rejected, not partially written.
+TEST_F(API_RAP_security_MT, snappy_oversized_partition_rejected_small_overflow) {
+    // declared buffer 16 bytes; partition 0 wants to write 40 bytes.
+    vector<AOCL_CHAR> stream = build_rap_stream(/*decomp_len*/40,
+                                                /*literal*/40,
+                                                /*outer*/4);
+    bool canary_intact = false;
+    int64_t ret = run_snappy_decompress(stream, 16, false, &canary_intact);
+    EXPECT_LT(ret, 0);
+    EXPECT_TRUE(canary_intact);
+}
+
+// Control: when the caller output buffer is large enough for the declared
+// per-partition decompressed lengths, decompression must not be over-rejected
+// and must not write past the buffer.
+TEST_F(API_RAP_security_MT, snappy_sufficient_buffer_no_oob_write) {
+    // Well-formed stream: partition 0 has a 24-byte literal (decomp_len 24),
+    // partition 1 a 4-byte literal; outer length is the sum (28).
+    vector<AOCL_CHAR> stream = build_rap_stream(/*decomp_len*/24,
+                                                /*literal*/24,
+                                                /*outer*/28);
+    bool canary_intact = false;
+    int64_t ret = run_snappy_decompress(stream, /*declared_out_size*/64, false,
+                                        &canary_intact);
+    // Must succeed on valid input (guards against an over-restrictive bounds
+    // check) and return the full decompressed length; total = 24 + 4 = 28.
+    EXPECT_EQ(ret, 28) << "valid stream must decompress successfully";
+    EXPECT_TRUE(canary_intact) << "no write may land past a sufficiently sized buffer";
+}
+#endif /* AOCL_EXCLUDE_SNAPPY */
+
+#ifndef AOCL_EXCLUDE_BZIP2
+// bzip2 reads a block-size byte immediately after the RAP frame
+// (source[rap_metadata_len + 3]). A crafted all-metadata frame whose
+// rap_metadata_len equals the source length would read past the buffer. This
+// test places such a frame at the end of a page backed by an inaccessible guard
+// page, so a read past the frame faults deterministically on a vulnerable build,
+// and drives aocl_llc_decompress(BZIP2). It asserts the frame is rejected
+// without faulting.
+TEST_F(API_RAP_security_MT, bzip2_all_metadata_frame_rejected) {
+    const AOCL_UINT32 num_main = 2;
+    const AOCL_UINT32 meta_len = RAP_START_OF_PARTITIONS +
+                                 num_main * RAP_DATA_BYTES_WITH_DECOMP_LEN;
+
+    // Fill the all-metadata frame at 'frame' (exactly meta_len bytes).
+    auto fill_frame = [&](unsigned char* frame) {
+        memset(frame, 0, meta_len);
+        AOCL_INT64 magic = RAP_MAGIC_WORD;
+        for (int i = 0; i < 8; ++i) frame[i] = (unsigned char)((magic >> (8 * i)) & 0xff);
+        auto put_u32 = [&](AOCL_UINT32 off, AOCL_UINT32 v) {
+            frame[off + 0] = (unsigned char)(v & 0xff);
+            frame[off + 1] = (unsigned char)((v >> 8) & 0xff);
+            frame[off + 2] = (unsigned char)((v >> 16) & 0xff);
+            frame[off + 3] = (unsigned char)((v >> 24) & 0xff);
+        };
+        put_u32(8, meta_len);   // rap_metadata_len == source length (all metadata)
+        put_u32(12, num_main);  // main(2)+child(2) combined field
+        for (AOCL_UINT32 i = 0; i < num_main; ++i) {
+            AOCL_UINT32 e = RAP_START_OF_PARTITIONS + i * RAP_DATA_BYTES_WITH_DECOMP_LEN;
+            put_u32(e + 0, meta_len); // partition_offset at end of buffer (size 0)
+            put_u32(e + 4, 0);        // partition_size 0
+            put_u32(e + 8, 0);        // decomp_len 0
+        }
+    };
+
+    unsigned char* frame = nullptr;
+#ifdef AOCL_GTEST_HAVE_MMAP_GUARD
+    // Place the frame at the end of a page backed by an inaccessible guard page,
+    // so source[meta_len+3] faults deterministically on a vulnerable build.
+    long pg = sysconf(_SC_PAGESIZE);
+    ASSERT_GE((AOCL_UINT32)pg, meta_len);
+    unsigned char* mbase = (unsigned char*)mmap(nullptr, (size_t)pg * 2,
+        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    ASSERT_NE(mbase, MAP_FAILED);
+    ASSERT_EQ(mprotect(mbase + pg, pg, PROT_NONE), 0);
+    frame = mbase + pg - meta_len;
+    fill_frame(frame);
+#else
+    GTEST_SKIP() << "Guard-page support is required for this OOB-read regression test";
+#endif
+
+    vector<AOCL_CHAR> outbuf(1024, (AOCL_CHAR)0);
+    ACD desc;
+    reset_ACD(&desc, algo_levels[BZIP2].def);
+    desc.inBuf = (AOCL_CHAR*)frame;
+    desc.inSize = (AOCL_UINTP)meta_len;
+    desc.outBuf = outbuf.data();
+    desc.outSize = (AOCL_UINTP)outbuf.size();
+    desc.numThreads = 4;
+
+    ASSERT_EQ(aocl_llc_setup(&desc, BZIP2), 0);
+    int64_t ret = aocl_llc_decompress(&desc, BZIP2);
+    aocl_llc_destroy(&desc, BZIP2);
+
+#ifdef AOCL_GTEST_HAVE_MMAP_GUARD
+    munmap(mbase, (size_t)pg * 2);
+#endif
+    EXPECT_LT(ret, 0) << "crafted all-metadata bzip2 frame must be rejected";
+}
+#endif /* AOCL_EXCLUDE_BZIP2 */
 /*********************************************
 * End security tests for RAP frame validation
 *********************************************/

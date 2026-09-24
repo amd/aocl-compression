@@ -2666,9 +2666,35 @@ int BZ_API(BZ2_bzBuffToBuffDecompress)(char *dest,
 
    // memory allocation for multithreaded checksum table.
    mt_data_list * mt_head_table = (mt_data_list *)malloc(sizeof(mt_data_list) * thread_group_handle.num_threads);
+   if (mt_head_table == NULL)
+   {
+      aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+      LOG_UNFORMATTED(ERR, logCtx, "Memory allocation failed");
+      return BZ_MEM_ERROR;
+   }
    memset(mt_head_table, 0, sizeof(mt_data_list) * thread_group_handle.num_threads);
 
-   int level = source[rap_metadata_len + 3] - BZ_HDR_0;
+   /* Read the block-size byte at source[rap_metadata_len + 3]. rap_metadata_len is
+    * a non-negative Int32 (values > INT32_MAX are rejected as errors above), so it
+    * is at most 0x7FFFFFFF and the "+ 3" cannot wrap even where AOCL_UINTP is
+    * 32-bit; do the bounds check and subscript in the unsigned size type and
+    * validate the block size is in the legal 1..9 range. */
+   AOCL_UINTP block_hdr_index = (AOCL_UINTP)rap_metadata_len + 3;
+   if (block_hdr_index >= (AOCL_UINTP)sourceLen)
+   {
+      aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+      free(mt_head_table);
+      LOG_UNFORMATTED(ERR, logCtx, "RAP frame leaves no room for bzip2 block header");
+      return BZ_DATA_ERROR;
+   }
+   int level = source[block_hdr_index] - BZ_HDR_0;
+   if (level < 1 || level > 9)
+   {
+      aocl_destroy_parallel_decompress_mt(&thread_group_handle);
+      free(mt_head_table);
+      LOG_UNFORMATTED(ERR, logCtx, "Invalid bzip2 block size in stream");
+      return BZ_DATA_ERROR;
+   }
    bz2_mt_decompress_parallel_ctx_t decompress_ctx = {
       &thread_group_handle,
       mt_head_table,
