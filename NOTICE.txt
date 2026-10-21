@@ -1,4 +1,4 @@
-Third-Party Notices (AOCL-Compression v.5.3)
+Third-Party Notices (AOCL-Compression v.6.0.0)
 
 This software incorporates code or materials from third parties. AMD makes certain open-source software available via written request (identify product name, component name, version number) to Advanced Micro Devices, Inc., Attn: Software Legal Team, 7171 Southwest Pkwy, Austin, TX, 78735. AMD may charge you a reasonable fee for providing the source code.
 
@@ -77,7 +77,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
 LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-fast_zlib v-u (BSD-3-Clause)
+fast_zlib v-u (BSD-3-clause)
 Copyright Statements
 Copyright (C) 2004-2019 Konstantin Nosov
 Copyright (C) 2022-2023, Advanced Micro Devices
