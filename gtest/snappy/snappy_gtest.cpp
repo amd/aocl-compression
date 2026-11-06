@@ -47,6 +47,9 @@
 #include "algos/snappy/snappy-sinksource.h"
 #include "algos/snappy/snappy-internal.h"
 #include "algos/snappy/snappy-c.h"
+#ifdef AOCL_ENABLE_THREADS
+#include "threads/threads.h"
+#endif /* AOCL_ENABLE_THREADS */
 
 using namespace std;
 using namespace snappy;
@@ -1142,7 +1145,7 @@ TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy
     }
 
     RawCompress(orig.data(), orig.size(), compressed.data(), &compressed_length);
-    EXPECT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(compressed.data(), compressed.size(), &uncompressed_length));
+    EXPECT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(compressed.data(), compressed_length, &uncompressed_length));
     EXPECT_EQ(original_size, uncompressed_length);
 }
 
@@ -1187,12 +1190,265 @@ TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy
     EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(buf.data(), buf.size(), &ulength));
 }
 
+// Helper: produce a multithreaded (RAP framed) stream. Returns false if the
+// compressor did not emit a RAP frame (e.g. single thread available).
+static bool Snappy_MakeRapStream(size_t original_size, vector<char>& compressed,
+                                 size_t& compressed_length, uint32_t& rap_frame_len)
+{
+    string orig(original_size, '\0');
+    for (size_t i = 0; i < original_size; ++i) orig[i] = (char)(rand() % 256);
+    compressed.assign(MaxCompressedLength(original_size), 0);
+    compressed_length = 0;
+    RawCompress(orig.data(), orig.size(), compressed.data(), &compressed_length);
+    if (compressed_length < RAP_START_OF_PARTITIONS ||
+        memcmp(compressed.data(), "AOCL_LLC", RAP_MAGIC_WORD_BYTES) != 0)
+        return false;
+    memcpy(&rap_frame_len, compressed.data() + RAP_MAGIC_WORD_BYTES, sizeof(rap_frame_len));
+    compressed.resize(compressed_length);
+    return true;
+}
+
+// Crafted RAP partition tables must be rejected.
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_fail_crafted_partitions_13)
+{
+    vector<char> compressed;
+    size_t compressed_length;
+    uint32_t rap_frame_len;
+    if (!Snappy_MakeRapStream(1e6, compressed, compressed_length, rap_frame_len))
+        GTEST_SKIP() << "Compressor did not emit a RAP frame (single thread)";
+
+    size_t ulength = 0;
+    ASSERT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(compressed.data(), compressed_length, &ulength));
+    ASSERT_EQ(ulength, (size_t)1e6);
+
+    const size_t entry0 = RAP_START_OF_PARTITIONS;
+    const size_t off_pos = entry0;
+    const size_t len_pos = entry0 + RAP_OFFSET_BYTES;
+    const size_t dec_pos = entry0 + RAP_OFFSET_BYTES + RAP_LEN_BYTES;
+    auto put32 = [](vector<char>& b, size_t pos, uint32_t v) { memcpy(b.data() + pos, &v, sizeof(v)); };
+    auto get32 = [](const vector<char>& b, size_t pos) { uint32_t v; memcpy(&v, b.data() + pos, sizeof(v)); return v; };
+
+    { // partition decompressed lengths do not add up to the outer length
+        vector<char> c = compressed;
+        put32(c, dec_pos, get32(c, dec_pos) + 1);
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+    }
+    { // negative partition decompressed length
+        vector<char> c = compressed;
+        put32(c, dec_pos, 0x80000000u);
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+    }
+    { // partition offset beyond the buffer
+        vector<char> c = compressed;
+        put32(c, off_pos, (uint32_t)c.size() + 1);
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+    }
+    { // partition offset inside the RAP frame
+        vector<char> c = compressed;
+        put32(c, off_pos, 0);
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+    }
+    { // partition length runs past the buffer
+        vector<char> c = compressed;
+        put32(c, len_pos, (uint32_t)c.size());
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+    }
+    { // negative partition length
+        vector<char> c = compressed;
+        put32(c, len_pos, 0xFFFFFFFFu);
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+    }
+    { // empty partition declaring nonzero decompressed output (sum unchanged)
+        vector<char> c = compressed;
+        ASSERT_NE(get32(c, dec_pos), 0u);
+        put32(c, len_pos, 0);
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+        // The C API must not report success with part of the output unwritten.
+        vector<char> out((size_t)1e6);
+        size_t out_len = out.size();
+        EXPECT_NE(snappy_uncompress(c.data(), c.size(), out.data(), &out_len), SNAPPY_OK);
+    }
+    { // overlapping partitions: partition 1 starts where partition 0 starts
+        vector<char> c = compressed;
+        put32(c, off_pos + RAP_DATA_BYTES_WITH_DECOMP_LEN, get32(c, off_pos));
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+    }
+    { // out-of-order partitions: offsets of partitions 0 and 1 swapped
+        vector<char> c = compressed;
+        uint32_t off0 = get32(c, off_pos);
+        uint32_t off1 = get32(c, off_pos + RAP_DATA_BYTES_WITH_DECOMP_LEN);
+        put32(c, off_pos, off1);
+        put32(c, off_pos + RAP_DATA_BYTES_WITH_DECOMP_LEN, off0);
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+    }
+    { // gap: first partition does not start right after the outer varint
+        vector<char> c = compressed;
+        put32(c, off_pos, get32(c, off_pos) + 1);
+        put32(c, len_pos, get32(c, len_pos) - 1);
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+    }
+}
+
+// snappy_validate_compressed_buffer accepts RAP framed streams and agrees with
+// snappy_uncompress on valid and tampered streams.
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_validate_compressed_buffer_mt_matches_uncompress_16)
+{
+    vector<char> compressed;
+    size_t compressed_length;
+    uint32_t rap_frame_len;
+    if (!Snappy_MakeRapStream(1e6, compressed, compressed_length, rap_frame_len))
+        GTEST_SKIP() << "Compressor did not emit a RAP frame (single thread)";
+
+    auto verdicts_match = [](vector<char>& c, bool expect_valid) {
+        vector<char> out((size_t)1e6);
+        size_t out_len = out.size();
+        bool decoded = (snappy_uncompress(c.data(), c.size(), out.data(), &out_len) == SNAPPY_OK);
+        bool valid = (snappy_validate_compressed_buffer(c.data(), c.size()) == SNAPPY_OK);
+        EXPECT_EQ(valid, decoded);
+        EXPECT_EQ(valid, expect_valid);
+    };
+
+    verdicts_match(compressed, true);
+
+    const size_t entry1 = RAP_START_OF_PARTITIONS + RAP_DATA_BYTES_WITH_DECOMP_LEN;
+    { // corrupt a tag byte inside partition 1
+        vector<char> c = compressed;
+        uint32_t off1;
+        memcpy(&off1, c.data() + entry1, sizeof(off1));
+        c[off1] = (char)0xFF;
+        verdicts_match(c, false);
+    }
+    { // per-partition lengths wrong but their sum still matches the outer length:
+      // partition 0 declares one byte less, partition 1 one byte more
+        vector<char> c = compressed;
+        const size_t dec0_pos = RAP_START_OF_PARTITIONS + RAP_OFFSET_BYTES + RAP_LEN_BYTES;
+        const size_t dec1_pos = entry1 + RAP_OFFSET_BYTES + RAP_LEN_BYTES;
+        uint32_t dec0, dec1;
+        memcpy(&dec0, c.data() + dec0_pos, sizeof(dec0));
+        memcpy(&dec1, c.data() + dec1_pos, sizeof(dec1));
+        dec0 -= 1;
+        dec1 += 1;
+        memcpy(c.data() + dec0_pos, &dec0, sizeof(dec0));
+        memcpy(c.data() + dec1_pos, &dec1, sizeof(dec1));
+        size_t ulength = 0;
+        EXPECT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+        verdicts_match(c, false);
+    }
+    { // invalid RAP header
+        vector<char> c = compressed;
+        uint32_t bad = (uint32_t)c.size() + 1;
+        memcpy(c.data() + RAP_MAGIC_WORD_BYTES, &bad, sizeof(bad));
+        verdicts_match(c, false);
+    }
+    { // trailing data after the last partition (an incomplete literal tag)
+        vector<char> c = compressed;
+        c.push_back((char)0x04);
+        size_t ulength = 0;
+        EXPECT_FALSE(GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength));
+        verdicts_match(c, false);
+    }
+}
+
+// Hand-built RAP stream: two partitions, each a one-byte literal ('A', 'B'),
+// declaring the given decompressed lengths; outer length = sum of declared.
+static vector<char> Snappy_MakeTwoLiteralRapStream(uint32_t decl0, uint32_t decl1)
+{
+    const uint32_t frame_len = RAP_START_OF_PARTITIONS + 2 * RAP_DATA_BYTES_WITH_DECOMP_LEN;
+    vector<char> s(frame_len, 0);
+    memcpy(s.data(), "AOCL_LLC", RAP_MAGIC_WORD_BYTES);
+    memcpy(s.data() + RAP_MAGIC_WORD_BYTES, &frame_len, sizeof(frame_len));
+    const uint32_t two = 2;
+    memcpy(s.data() + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES, &two, sizeof(two));
+    s.push_back((char)(decl0 + decl1)); // outer length varint (< 128)
+    const uint32_t part_len = 2;        // literal tag (length 1) + one byte
+    const uint32_t decl[2] = { decl0, decl1 };
+    for (uint32_t i = 0; i < 2; ++i) {
+        uint32_t off = (uint32_t)s.size() + i * part_len;
+        char* e = s.data() + RAP_START_OF_PARTITIONS + i * RAP_DATA_BYTES_WITH_DECOMP_LEN;
+        memcpy(e, &off, sizeof(off));
+        memcpy(e + RAP_OFFSET_BYTES, &part_len, sizeof(part_len));
+        memcpy(e + RAP_OFFSET_BYTES + RAP_LEN_BYTES, &decl[i], sizeof(decl[i]));
+    }
+    s.push_back((char)0x00); s.push_back('A');
+    s.push_back((char)0x00); s.push_back('B');
+    return s;
+}
+
+// Validation and decompression agree regardless of the number of workers: the
+// one-worker path decodes each partition with its declared length.
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_rap_one_worker_parity_17)
+{
+    for (int one_worker = 0; one_worker <= 1; ++one_worker) {
+        if (one_worker) test_omp_max_threads_set(1);
+        { // declared lengths [1, 1]: valid, output "AB"
+            vector<char> s = Snappy_MakeTwoLiteralRapStream(1, 1);
+            EXPECT_EQ(snappy_validate_compressed_buffer(s.data(), s.size()), SNAPPY_OK);
+            char out[2] = { 0, 0 };
+            size_t out_len = sizeof(out);
+            EXPECT_EQ(snappy_uncompress(s.data(), s.size(), out, &out_len), SNAPPY_OK)
+                << "one_worker=" << one_worker;
+            EXPECT_EQ(out_len, 2u);
+            EXPECT_EQ(0, memcmp(out, "AB", 2));
+        }
+        { // declared lengths [0, 2]: sum matches, but per-partition lengths are wrong
+            vector<char> s = Snappy_MakeTwoLiteralRapStream(0, 2);
+            size_t ulength = 0;
+            EXPECT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(s.data(), s.size(), &ulength));
+            EXPECT_EQ(snappy_validate_compressed_buffer(s.data(), s.size()), SNAPPY_INVALID_INPUT);
+            char out[2] = { 0, 0 };
+            size_t out_len = sizeof(out);
+            EXPECT_NE(snappy_uncompress(s.data(), s.size(), out, &out_len), SNAPPY_OK)
+                << "one_worker=" << one_worker;
+        }
+        if (one_worker) test_omp_max_threads_reset();
+    }
+}
+
+// Truncation at every interesting boundary must be rejected without OOB reads.
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_fail_truncated_14)
+{
+    vector<char> compressed;
+    size_t compressed_length;
+    uint32_t rap_frame_len;
+    if (!Snappy_MakeRapStream(1e6, compressed, compressed_length, rap_frame_len))
+        GTEST_SKIP() << "Compressor did not emit a RAP frame (single thread)";
+
+    size_t ulength = 0;
+    const size_t cuts[] = { RAP_MAGIC_WORD_BYTES + 2, RAP_START_OF_PARTITIONS,
+                            (size_t)rap_frame_len - 1, (size_t)rap_frame_len,
+                            (size_t)rap_frame_len + 1, compressed_length - 1 };
+    for (size_t cut : cuts) {
+        // Exact-size heap copy so ASan reports any read past the end.
+        vector<char> c(compressed.begin(), compressed.begin() + cut);
+        bool ok = GetUncompressedLengthFromMTCompressedBuffer(c.data(), c.size(), &ulength);
+        if (cut >= RAP_START_OF_PARTITIONS)
+            EXPECT_FALSE(ok) << "cut=" << cut;
+    }
+}
+
+// Unaligned buffers are handled (header fields are not read through casted pointers).
+TEST(SNAPPY_GetUncompressedLengthFromMTCompressedBuffer, AOCL_Compression_snappy_GetUncompressedLengthFromMTCompressedBuffer_pass_unaligned_15)
+{
+    vector<char> compressed;
+    size_t compressed_length;
+    uint32_t rap_frame_len;
+    if (!Snappy_MakeRapStream(1e6, compressed, compressed_length, rap_frame_len))
+        GTEST_SKIP() << "Compressor did not emit a RAP frame (single thread)";
+
+    vector<char> shifted(compressed_length + 1);
+    memcpy(shifted.data() + 1, compressed.data(), compressed_length);
+    size_t ulength = 0;
+    EXPECT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(shifted.data() + 1, compressed_length, &ulength));
+    EXPECT_EQ(ulength, (size_t)1e6);
+}
+
 /****************************************************
 * End of GetUncompressedLengthFromMTCompressedBuffer
 *****************************************************/
 
 // A valid multithreaded (RAP) stream with a non-zero length must be rejected
 // when the output buffer is NULL (parity with the single-threaded path).
+// Multithreaded decompression is available only through the C API.
 TEST(SNAPPY_RawUncompress_MT, AOCL_Compression_snappy_RawUncompress_mt_null_output_rejected)
 {
     // 1e6 bytes reliably takes the multithreaded RAP path.
@@ -1206,6 +1462,159 @@ TEST(SNAPPY_RawUncompress_MT, AOCL_Compression_snappy_RawUncompress_mt_null_outp
 
     // NULL output buffer for a non-empty stream: must return false, not crash.
     EXPECT_FALSE(RawUncompress(compressed.data(), compressed_length, (char*)NULL));
+    size_t uncompressed_length = original_size;
+    EXPECT_NE(snappy_uncompress(compressed.data(), compressed_length, (char*)NULL,
+                                &uncompressed_length), SNAPPY_OK);
+}
+
+// C API decompresses a multithreaded (RAP framed) stream produced by the
+// multithreaded C++ compressor.
+TEST(SNAPPY_RawUncompress_MT, AOCL_Compression_snappy_snappy_uncompress_mt_pass)
+{
+    size_t original_size = 1e6;
+    string orig(original_size, '\0');
+    for (size_t i = 0; i < original_size; ++i) orig[i] = (char)(rand() % 256);
+
+    vector<char> compressed(MaxCompressedLength(original_size));
+    size_t compressed_length = 0;
+    RawCompress(orig.data(), orig.size(), compressed.data(), &compressed_length);
+
+    size_t uncompressed_length = 0;
+    ASSERT_EQ(snappy_uncompressed_length(compressed.data(), compressed_length,
+                                         &uncompressed_length), SNAPPY_OK);
+    ASSERT_EQ(uncompressed_length, original_size);
+
+    vector<char> uncompressed(uncompressed_length);
+    EXPECT_EQ(snappy_uncompress(compressed.data(), compressed_length,
+                                uncompressed.data(), &uncompressed_length), SNAPPY_OK);
+    EXPECT_EQ(uncompressed_length, original_size);
+    EXPECT_EQ(0, memcmp(uncompressed.data(), orig.data(), original_size));
+
+    // Output one byte short of the uncompressed length is rejected.
+    size_t short_length = original_size - 1;
+    vector<char> short_out(short_length);
+    EXPECT_EQ(snappy_uncompress(compressed.data(), compressed_length,
+                                short_out.data(), &short_length), SNAPPY_BUFFER_TOO_SMALL);
+}
+
+// C++ uncompress APIs are single-threaded: they skip the RAP frame of a
+// multithreaded stream and decode the remaining Snappy stream in one thread.
+TEST(SNAPPY_RawUncompress_MT, AOCL_Compression_snappy_RawUncompress_skip_rap_frame_st_pass)
+{
+    size_t original_size = 1e6;
+    string orig(original_size, '\0');
+    for (size_t i = 0; i < original_size; ++i) orig[i] = (char)(rand() % 256);
+
+    vector<char> compressed(MaxCompressedLength(original_size));
+    size_t compressed_length = 0;
+    RawCompress(orig.data(), orig.size(), compressed.data(), &compressed_length);
+
+    // Ensure the stream actually carries a RAP frame ("AOCL_LLC" magic word).
+    if (compressed_length < 8 || memcmp(compressed.data(), "AOCL_LLC", 8) != 0)
+        GTEST_SKIP() << "Compressor did not emit a RAP frame (single thread)";
+
+    size_t uncompressed_length = 0;
+    ASSERT_TRUE(GetUncompressedLengthFromMTCompressedBuffer(compressed.data(),
+                compressed_length, &uncompressed_length));
+    ASSERT_EQ(uncompressed_length, original_size);
+    // Plain varint parse at offset 0 does not see the real length.
+    size_t st_length = 0;
+    EXPECT_FALSE(GetUncompressedLength(compressed.data(), compressed_length, &st_length) &&
+                 st_length == original_size);
+
+    // RawUncompress(const char*, ...)
+    vector<char> uncompressed(original_size);
+    EXPECT_TRUE(RawUncompress(compressed.data(), compressed_length, uncompressed.data()));
+    EXPECT_EQ(0, memcmp(uncompressed.data(), orig.data(), original_size));
+
+    // RawUncompressToIOVec(const char*, ...)
+    vector<char> uncompressed_iov(original_size);
+    struct iovec iov[2];
+    iov[0].iov_base = uncompressed_iov.data();
+    iov[0].iov_len = original_size / 2;
+    iov[1].iov_base = uncompressed_iov.data() + original_size / 2;
+    iov[1].iov_len = original_size - original_size / 2;
+    EXPECT_TRUE(RawUncompressToIOVec(compressed.data(), compressed_length, iov, 2));
+    EXPECT_EQ(0, memcmp(uncompressed_iov.data(), orig.data(), original_size));
+
+    // Uncompress(const char*, size_t, std::string*)
+    string uncompressed_str;
+    EXPECT_TRUE(Uncompress(compressed.data(), compressed_length, &uncompressed_str));
+    EXPECT_EQ(uncompressed_str, orig);
+}
+
+// A RAP magic word with an invalid RAP header must be rejected by the C++
+// uncompress APIs without out-of-bounds access.
+TEST(SNAPPY_RawUncompress_MT, AOCL_Compression_snappy_RawUncompress_invalid_rap_frame_fail)
+{
+    vector<char> buf(32, '\0');
+    const unsigned char magic[8] = {0x41,0x4F,0x43,0x4C,0x5F,0x4C,0x4C,0x43};
+    for (int i = 0; i < 8; ++i) buf[i] = (char)magic[i];
+    // rap_metadata_len = 0xFFFFFFFF (> buf.size()) -> header invalid
+    buf[8] = (char)0xFF; buf[9] = (char)0xFF; buf[10] = (char)0xFF; buf[11] = (char)0xFF;
+    buf[12] = 2;
+
+    vector<char> out(1024);
+    EXPECT_FALSE(RawUncompress(buf.data(), buf.size(), out.data()));
+    string out_str;
+    EXPECT_FALSE(Uncompress(buf.data(), buf.size(), &out_str));
+}
+
+// A multithreaded compression setup failure is reported explicitly through the
+// C API (error status) and the C++ API (zero compressed length).
+TEST(SNAPPY_RawUncompress_MT, AOCL_Compression_snappy_compress_mt_setup_failure_reported)
+{
+    string orig(4096, 'a');
+    vector<char> compressed(snappy_max_compressed_length(orig.size()));
+
+    test_setup_parallel_compress_mt_fail_set(1);
+
+    size_t c_len = compressed.size();
+    EXPECT_EQ(snappy_compress(orig.data(), orig.size(), compressed.data(), &c_len),
+              SNAPPY_INVALID_INPUT);
+
+    size_t cpp_len = 12345;
+    RawCompress(orig.data(), orig.size(), compressed.data(), &cpp_len);
+    EXPECT_EQ(cpp_len, 0u);
+
+    test_setup_parallel_compress_mt_fail_set(0);
+
+    c_len = compressed.size();
+    EXPECT_EQ(snappy_compress(orig.data(), orig.size(), compressed.data(), &c_len), SNAPPY_OK);
+    EXPECT_GT(c_len, 0u);
+}
+
+// Two consecutive header-valid RAP frames ahead of a Snappy stream: only one
+// frame is skipped. The second frame's first byte ('A' = 65) is then the
+// length varint, so the output is sized for 65 bytes; the larger stream behind
+// the second frame must not be decoded into it.
+TEST(SNAPPY_RawUncompress_MT, AOCL_Compression_snappy_RawUncompress_nested_rap_frame_fail)
+{
+    const size_t inner_size = 4096;
+    string inner_src(inner_size, 'a');
+    string inner;
+    Compress(inner_src.data(), inner_src.size(), &inner);
+
+    // One-partition RAP frame header: magic, frame length, thread count, one entry.
+    const uint32_t frame_len = RAP_START_OF_PARTITIONS + RAP_DATA_BYTES_WITH_DECOMP_LEN;
+    vector<char> frame(frame_len, 0);
+    memcpy(frame.data(), "AOCL_LLC", RAP_MAGIC_WORD_BYTES);
+    memcpy(frame.data() + RAP_MAGIC_WORD_BYTES, &frame_len, sizeof(frame_len));
+    const uint32_t one = 1;
+    memcpy(frame.data() + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES, &one, sizeof(one));
+
+    vector<char> buf;
+    buf.insert(buf.end(), frame.begin(), frame.end());
+    buf.insert(buf.end(), frame.begin(), frame.end());
+    buf.insert(buf.end(), inner.begin(), inner.end());
+
+    // Uncompress(std::string*) sizes the string from the stripped stream.
+    string out_str;
+    EXPECT_FALSE(Uncompress(buf.data(), buf.size(), &out_str));
+
+    // RawUncompress into an exact 65-byte heap buffer (ASan catches overflow).
+    vector<char> out_small(65);
+    EXPECT_FALSE(RawUncompress(buf.data(), buf.size(), out_small.data()));
 }
 #endif
 

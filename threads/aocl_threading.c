@@ -62,7 +62,7 @@ AOCL_UINT32 aocl_get_max_threads(void)
     if (env_threads > 0)
         return env_threads;
 
-    return (AOCL_UINT32)omp_get_max_threads();
+    return aocl_clamp_num_threads((long long)omp_get_max_threads());
 }
 
 #endif /* !AOCL_USE_TBB */

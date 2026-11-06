@@ -91,14 +91,13 @@ AOCL_UINT32 aocl_get_max_threads(void)
     if (env_threads > 0)
         return env_threads;
 
-    const char *env = std::getenv("OMP_NUM_THREADS");
-    if (env) {
-        int val = std::atoi(env);
-        if (val > 0)
-            return (AOCL_UINT32)val;
-    }
+    /* Same checked parsing and upper bound as AOCL_NUM_THREADS; the OpenMP
+     * list form ("8,4") is accepted and its first level used. */
+    AOCL_UINT32 omp_env_threads = aocl_parse_num_threads_internal(std::getenv("OMP_NUM_THREADS"), 1);
+    if (omp_env_threads > 0)
+        return omp_env_threads;
     unsigned n = std::thread::hardware_concurrency();
-    return (n > 0) ? (AOCL_UINT32)n : 1;
+    return aocl_clamp_num_threads((long long)n);
 }
 
 } /* extern "C" */

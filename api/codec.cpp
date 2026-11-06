@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022-2024, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -63,6 +63,9 @@
 //snappy
 #ifndef AOCL_EXCLUDE_SNAPPY
 #include "algos/snappy/snappy.h"
+#ifdef AOCL_ENABLE_THREADS
+#include "algos/snappy/snappy-c.h"
+#endif
 #endif
 //zlib
 #ifndef AOCL_EXCLUDE_ZLIB
@@ -315,7 +318,9 @@ AOCL_INT64 aocl_snappy_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
     // max_compressed_length here.
     outsize = max_compressed_length + 1;
     snappy::RawCompress(inbuf, insize, outbuf, &outsize);
-    if (outsize <= max_compressed_length)
+    // 0 also reports failure (multithreaded compress sets it on error; a valid
+    // stream is never empty).
+    if (outsize > 0 && outsize <= max_compressed_length)
         return outsize;
 
     return CODEC_ERROR;
@@ -324,23 +329,29 @@ AOCL_INT64 aocl_snappy_compress(AOCL_CHAR *inbuf, AOCL_UINTP insize, AOCL_CHAR *
 AOCL_INT64 aocl_snappy_decompress(AOCL_CHAR* inbuf, AOCL_UINTP insize, AOCL_CHAR* outbuf,
     AOCL_UINTP outsize, AOCL_UINTP, AOCL_UINTP, AOCL_CHAR*)
 {
-    AOCL_UINTP uncompressed_len;
 #ifdef AOCL_ENABLE_THREADS
-    if (!snappy::GetUncompressedLengthFromMTCompressedBuffer(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len) {
-        LOG_UNFORMATTED(ERR, logCtx, "Invalid uncompressed_len");
-        return CODEC_ERROR;
-    }
+    // AOCL multithreaded decompression is available only through the Snappy
+    // C API; the C++ RawUncompress API is single-threaded.
+    size_t uncompressed_len = outsize;
+    snappy_status status = snappy_uncompress(inbuf, insize, outbuf, &uncompressed_len);
+    if (status == SNAPPY_OK)
+        return uncompressed_len;
+
+    LOG_UNFORMATTED(ERR, logCtx, (status == SNAPPY_BUFFER_TOO_SMALL) ?
+        "Invalid uncompressed_len" : "Snappy decompression failed");
+    return CODEC_ERROR;
 #else
+    AOCL_UINTP uncompressed_len;
     if (!snappy::GetUncompressedLength(inbuf, insize, &uncompressed_len) || outsize < uncompressed_len) {
         LOG_UNFORMATTED(ERR, logCtx, "Invalid uncompressed_len");
         return CODEC_ERROR;
     }
-#endif
     bool res = snappy::RawUncompress(inbuf, insize, outbuf);
     if (res)
         return uncompressed_len;
 
     return CODEC_ERROR;
+#endif /* AOCL_ENABLE_THREADS */
 }
 
 AOCL_VOID aocl_snappy_destroy(AOCL_CHAR* workmem) {

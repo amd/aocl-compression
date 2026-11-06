@@ -1,6 +1,6 @@
 /*
  * Copyright 2011 Martin Gieseking <martin.gieseking@uos.de>.
- * Modifications Copyright (C) 2023-2024, Advanced Micro Devices. All rights reserved.
+ * Modifications Copyright (C) 2023-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -146,6 +146,10 @@ SNAPPYLIB_API snappy_status snappy_compress(const char* input,
  *  |:------|:-----------------------------------------------------------------------|
  *  |Success| Returns \b SNAPPY_OK if successful.                                    |
  *  |Failure| While calling this function if \b uncompressed_length is not at least equal to the value returned by snappy_uncompressed_length for this stream, SNAPPY_BUFFER_TOO_SMALL is returned Returns (a value \b not \b equal to SNAPPY_OK) if the message is corrupted and could not be decrypted. |
+ *
+ *  @note When the library is built with AOCL_ENABLE_THREADS, this API performs AOCL
+ *  multithreaded decompression and accepts both multithreaded (RAP framed) and
+ *  single-threaded streams.
  */
 SNAPPYLIB_API snappy_status snappy_uncompress(const char* compressed,
                                 size_t compressed_length,

@@ -38,6 +38,8 @@
 #include <string>
 #include <limits>
 #include <vector>
+#include <cstdlib>
+#include <cerrno>
 #include "gtest/gtest.h"
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/mman.h>
@@ -520,6 +522,8 @@ void init_thread_group(aocl_thread_group_t* thread_grp) {
     thread_grp->leftover_part_src_bytes = 0;
     thread_grp->num_threads = 0;
     thread_grp->search_window_length = 0;
+    thread_grp->rap_num_partitions = 0;
+    thread_grp->rap_metadata_len = 0;
 }
 
 /*********************************************
@@ -666,14 +670,77 @@ TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_
     Test_aocl_destroy_parallel_compress_mt(&thread_grp);
 }
 
-TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_compress_mt_common_9) { // out_size = 0, valid
+TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_compress_mt_common_9) { // out_size = 0, invalid if a RAP frame is needed
     AOCL_INT32 window_len = in_size / 16;
     AOCL_INT32 window_factor = 2;
     out_size = 0;
     AOCL_INT32 res = Test_aocl_setup_parallel_compress_mt(&thread_grp, src, dst, in_size,
         out_size, window_len, window_factor);
-    validate(res, window_len);
-    EXPECT_LE(thread_grp.num_threads, 8); // num_parallel_partitions = 8 based on window_len and window_factor
+    if (thread_grp.num_threads > 1) {
+        // RAP frame does not fit in dst: must fail without writing or allocating
+        EXPECT_EQ(res, ERR_COMPRESSION_INVALID_OUTPUT);
+        EXPECT_EQ(thread_grp.threads_info_list, nullptr);
+        for (AOCL_INT32 i = 0; i < buff_size; ++i)
+            ASSERT_EQ(dst[i], 0) << "dst modified at " << i;
+    }
+    else {
+        EXPECT_EQ(res, 0); // single thread: no RAP frame
+    }
+    Test_aocl_destroy_parallel_compress_mt(&thread_grp);
+}
+
+TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_compress_mt_common_12) { // out_size at RAP frame boundary
+    AOCL_INT32 window_len = in_size / 16;
+    AOCL_INT32 window_factor = 2;
+    // Determine the thread count / RAP frame length for this input.
+    AOCL_INT32 res = Test_aocl_setup_parallel_compress_mt(&thread_grp, src, dst, in_size,
+        out_size, window_len, window_factor);
+    ASSERT_GE(res, 0);
+    AOCL_UINT32 num_threads = thread_grp.num_threads;
+    Test_aocl_destroy_parallel_compress_mt(&thread_grp);
+    if (num_threads < 2)
+        GTEST_SKIP() << "Single thread available: no RAP frame";
+    AOCL_INT32 frame_len = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(num_threads, 0);
+
+    { // one byte short: rejected, exact-size buffer so ASan catches any write
+        init_thread_group(&thread_grp);
+        AOCL_CHAR* small_dst = (AOCL_CHAR*)malloc(frame_len - 1);
+        ASSERT_NE(small_dst, nullptr);
+        res = Test_aocl_setup_parallel_compress_mt(&thread_grp, src, small_dst, in_size,
+            frame_len - 1, window_len, window_factor);
+        EXPECT_EQ(res, ERR_COMPRESSION_INVALID_OUTPUT);
+        EXPECT_EQ(thread_grp.threads_info_list, nullptr);
+        Test_aocl_destroy_parallel_compress_mt(&thread_grp);
+        free(small_dst);
+    }
+    { // exact fit: accepted, header written
+        init_thread_group(&thread_grp);
+        AOCL_CHAR* exact_dst = (AOCL_CHAR*)malloc(frame_len);
+        ASSERT_NE(exact_dst, nullptr);
+        res = Test_aocl_setup_parallel_compress_mt(&thread_grp, src, exact_dst, in_size,
+            frame_len, window_len, window_factor);
+        EXPECT_EQ(res, frame_len);
+        AOCL_INT64 magic; AOCL_UINT32 len;
+        memcpy(&magic, exact_dst, sizeof(magic));
+        memcpy(&len, exact_dst + RAP_MAGIC_WORD_BYTES, sizeof(len));
+        EXPECT_EQ(magic, (AOCL_INT64)RAP_MAGIC_WORD);
+        EXPECT_EQ(len, (AOCL_UINT32)frame_len);
+        Test_aocl_destroy_parallel_compress_mt(&thread_grp);
+        free(exact_dst);
+    }
+}
+
+TEST_F(API_setup_parallel_compress_MT, AOCL_Compression_api_aocl_setup_parallel_compress_mt_common_13) { // unaligned dst
+    AOCL_INT32 window_len = in_size / 16;
+    AOCL_INT32 window_factor = 2;
+    AOCL_INT32 res = Test_aocl_setup_parallel_compress_mt(&thread_grp, src, dst + 1, in_size,
+        out_size - 1, window_len, window_factor);
+    ASSERT_GE(res, 0);
+    if (thread_grp.num_threads > 1) {
+        AOCL_INT64 magic;
+        memcpy(&magic, dst + 1, sizeof(magic));
+        EXPECT_EQ(magic, (AOCL_INT64)RAP_MAGIC_WORD);
+    }
     Test_aocl_destroy_parallel_compress_mt(&thread_grp);
 }
 
@@ -1799,6 +1866,88 @@ TEST_F(API_RAP_security_MT, valid_rap_frame_still_accepted) {
     }
 }
 
+// Setup records the validated partition count and RAP frame length.
+TEST_F(API_RAP_security_MT, setup_retains_validated_partition_table) {
+    const AOCL_INT32 num_threads = 3;
+    AOCL_INT32 rap_frame_len = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(num_threads, 0);
+    src_size = rap_frame_len + 64;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    add_RAP_frame_header(src, num_threads);
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    ASSERT_EQ(result, rap_frame_len);
+    EXPECT_EQ(thread_grp.rap_num_partitions, (AOCL_UINT32)num_threads);
+    EXPECT_EQ(thread_grp.rap_metadata_len, (AOCL_UINT32)rap_frame_len);
+}
+
+// Out-of-range partition id from a direct caller is rejected before any
+// partition metadata is read. src is exactly the RAP frame size, so ASan
+// reports any read of an entry beyond the validated table.
+TEST_F(API_RAP_security_MT, do_partition_decompress_thread_id_out_of_range) {
+    const AOCL_INT32 num_threads = 2;
+    AOCL_INT32 rap_frame_len = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(num_threads, 0);
+    src_size = rap_frame_len;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    add_RAP_frame_header(src, num_threads);
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    ASSERT_EQ(result, rap_frame_len);
+
+    const AOCL_UINT32 bad_ids[] = { (AOCL_UINT32)num_threads, (AOCL_UINT32)num_threads + 1,
+                                    0x7FFFFFFFu, 0xFFFFFFFFu };
+    for (AOCL_UINT32 tid : bad_ids) {
+        aocl_thread_info_t cur_thread_info;
+        memset(&cur_thread_info, 0xA5, sizeof(cur_thread_info));
+        AOCL_INT32 part_result = Test_aocl_do_partition_decompress_mt(&thread_grp,
+            &cur_thread_info, tid);
+        EXPECT_EQ(part_result, AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME) << "tid=" << tid;
+        EXPECT_EQ(cur_thread_info.dst_trap, nullptr);
+        EXPECT_EQ(cur_thread_info.partition_src, nullptr);
+    }
+
+    // In-range ids still reach the per-partition checks (empty partitions here).
+    for (AOCL_UINT32 tid = 0; tid < (AOCL_UINT32)num_threads; tid++) {
+        aocl_thread_info_t cur_thread_info;
+        EXPECT_NE(Test_aocl_do_partition_decompress_mt(&thread_grp, &cur_thread_info, tid),
+            AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME);
+    }
+}
+
+// A thread group set up on a stream without a RAP frame has no partitions:
+// any partition id is rejected without reading src as a RAP table.
+TEST_F(API_RAP_security_MT, do_partition_decompress_without_rap_frame) {
+    src_size = 8; // smaller than any RAP table entry
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    ASSERT_EQ(result, 0);
+    EXPECT_EQ(thread_grp.rap_num_partitions, 0u);
+
+    aocl_thread_info_t cur_thread_info;
+    EXPECT_EQ(Test_aocl_do_partition_decompress_mt(&thread_grp, &cur_thread_info, 0),
+        AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME);
+}
+
+// A failed setup (invalid RAP header) leaves no partitions to address.
+TEST_F(API_RAP_security_MT, do_partition_decompress_after_failed_setup) {
+    src_size = RAP_START_OF_PARTITIONS;
+    src = (AOCL_CHAR*)calloc(src_size, sizeof(AOCL_CHAR));
+    write_magic(src);
+    AOCL_UINT32 bad_len = (AOCL_UINT32)src_size + 1000;
+    memcpy(src + RAP_MAGIC_WORD_BYTES, &bad_len, sizeof(bad_len));
+
+    AOCL_INT32 result = Test_aocl_setup_parallel_decompress_mt(&thread_grp, src, dst, src_size,
+        dst_size, 0);
+    ASSERT_EQ(result, -1);
+
+    aocl_thread_info_t cur_thread_info;
+    EXPECT_EQ(Test_aocl_do_partition_decompress_mt(&thread_grp, &cur_thread_info, 0),
+        AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME);
+}
+
 #ifndef AOCL_EXCLUDE_SNAPPY
 // End-to-end Snappy output-bounds tests. These drive the public entry point
 // aocl_llc_decompress(SNAPPY) on multithreaded RAP streams whose per-partition
@@ -1931,6 +2080,74 @@ TEST_F(API_RAP_security_MT, bzip2_all_metadata_frame_rejected) {
 #endif /* AOCL_EXCLUDE_BZIP2 */
 /*********************************************
 * End security tests for RAP frame validation
+*********************************************/
+
+/*********************************************
+* Begin AOCL_NUM_THREADS parsing tests
+*********************************************/
+TEST(API_num_threads_env, AOCL_Compression_api_parse_num_threads_valid) {
+    EXPECT_EQ(aocl_parse_num_threads("1"), 1u);
+    EXPECT_EQ(aocl_parse_num_threads("8"), 8u);
+    EXPECT_EQ(aocl_parse_num_threads("  16  "), 16u);
+    EXPECT_EQ(aocl_parse_num_threads("+4"), 4u);
+    EXPECT_EQ(aocl_parse_num_threads("1024"), (AOCL_UINT32)AOCL_MAX_NUM_THREADS);
+}
+
+TEST(API_num_threads_env, AOCL_Compression_api_parse_num_threads_invalid) {
+    const char* invalid[] = { NULL, "", "   ", "abc", "8abc", "1e9", "0x10", "4.5",
+                              "0", "-1", "-2147483648", "-99999999999999999999999",
+                              "8,4" };
+    for (const char* s : invalid)
+        EXPECT_EQ(aocl_parse_num_threads(s), 0u) << "input=" << (s ? s : "(null)");
+}
+
+TEST(API_num_threads_env, AOCL_Compression_api_parse_num_threads_clamped) {
+    EXPECT_EQ(aocl_parse_num_threads("1025"), (AOCL_UINT32)AOCL_MAX_NUM_THREADS);
+    EXPECT_EQ(aocl_parse_num_threads("2147483648"), (AOCL_UINT32)AOCL_MAX_NUM_THREADS); // > INT_MAX (atoi UB)
+    EXPECT_EQ(aocl_parse_num_threads("4294967297"), (AOCL_UINT32)AOCL_MAX_NUM_THREADS); // wraps in 32-bit
+    EXPECT_EQ(aocl_parse_num_threads("99999999999999999999999"), (AOCL_UINT32)AOCL_MAX_NUM_THREADS); // > LONG_MAX
+}
+
+TEST(API_num_threads_env, AOCL_Compression_api_parse_num_threads_list_and_errno) {
+    // OpenMP list form accepted only when requested (OMP_NUM_THREADS on TBB).
+    EXPECT_EQ(aocl_parse_num_threads_internal("8,4", 1), 8u);
+    EXPECT_EQ(aocl_parse_num_threads_internal("8 ,4", 1), 8u);
+    EXPECT_EQ(aocl_parse_num_threads_internal("x,4", 1), 0u);
+    // errno is preserved, including on overflow.
+    errno = EINTR;
+    aocl_parse_num_threads("99999999999999999999999");
+    EXPECT_EQ(errno, EINTR);
+}
+
+TEST(API_num_threads_env, AOCL_Compression_api_get_max_threads_env) {
+    const char* prev = getenv("AOCL_NUM_THREADS");
+    const bool had_prev = (prev != NULL);
+    std::string saved = had_prev ? prev : "";
+
+    // test_omp_max_threads_get() is exported for unit tests on all platforms
+    // (aocl_get_max_threads() is not exported from the Windows DLL). After a
+    // reset it resolves the backend maximum, i.e. aocl_get_max_threads().
+    test_omp_max_threads_reset();
+
+    // set_env_var/unset_env_var are the library's portable, exported helpers;
+    // they update the same runtime environment that the library reads.
+    EXPECT_EQ(set_env_var("AOCL_NUM_THREADS", "3"), 0);
+    EXPECT_EQ(test_omp_max_threads_get(), 3);
+
+    EXPECT_EQ(set_env_var("AOCL_NUM_THREADS", "99999999999"), 0);
+    EXPECT_EQ(test_omp_max_threads_get(), AOCL_MAX_NUM_THREADS);
+
+    // Invalid value is ignored: backend default, within [1, AOCL_MAX_NUM_THREADS].
+    EXPECT_EQ(set_env_var("AOCL_NUM_THREADS", "8abc"), 0);
+    int n = test_omp_max_threads_get();
+    EXPECT_GE(n, 1);
+    EXPECT_LE(n, AOCL_MAX_NUM_THREADS);
+
+    if (had_prev) set_env_var("AOCL_NUM_THREADS", saved.c_str());
+    else unset_env_var("AOCL_NUM_THREADS");
+}
+/*********************************************
+* End AOCL_NUM_THREADS parsing tests
 *********************************************/
 
 #endif /* AOCL_ENABLE_THREADS */

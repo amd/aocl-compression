@@ -1338,6 +1338,83 @@ TEST_F(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_4
 TEST_F(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_5) { //src null
     EXPECT_EQ(aocl_llc_skip_rap_frame(src, src_size), ERR_INVALID_INPUT);
 }
+
+TEST_F(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_6) { //negative src_size
+    //Valid RAP frame, but a negative size must not be treated as a huge size
+    int mainThreads = 2;
+    src_size = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0);
+    add_rap_frame(mainThreads);
+
+    EXPECT_EQ(aocl_llc_skip_rap_frame(src, -1), ERR_INVALID_INPUT);
+    EXPECT_EQ(aocl_llc_skip_rap_frame(src, INT32_MIN), ERR_INVALID_INPUT);
+}
+
+TEST_F(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_7) { //unaligned src
+    int mainThreads = 2;
+    AOCL_INT32 frame_len = RAP_FRAME_LEN_WITH_DECOMP_LENGTH(mainThreads, 0);
+    src_size = frame_len + 1;
+    AOCL_INT32 val_size = add_rap_frame(mainThreads); // allocates src_size bytes
+    memmove(src + 1, src, frame_len);
+
+    EXPECT_EQ(aocl_llc_skip_rap_frame(src + 1, frame_len), val_size);
+}
+
+#ifndef AOCL_EXCLUDE_SNAPPY
+// Multithreaded Snappy stream through aocl_llc_decompress: an output buffer one
+// byte short of the uncompressed length is rejected; the exact size succeeds.
+TEST(API_snappy_MT, AOCL_Compression_api_snappy_decompress_mt_outsize_short_common_1) {
+    const size_t orig_size = 1000000;
+    vector<char> orig(orig_size);
+    for (size_t i = 0; i < orig_size; ++i) orig[i] = (char)(rand() % 256);
+
+    aocl_compression_desc desc;
+    memset(&desc, 0, sizeof(desc));
+    ASSERT_EQ(aocl_llc_setup(&desc, SNAPPY), 0);
+
+    vector<char> compressed((size_t)aocl_llc_compressBound(SNAPPY, orig_size));
+    desc.inBuf = orig.data();
+    desc.inSize = orig_size;
+    desc.outBuf = compressed.data();
+    desc.outSize = compressed.size();
+    int64_t cSize = aocl_llc_compress(&desc, SNAPPY);
+    ASSERT_GT(cSize, 0);
+
+    vector<char> out(orig_size);
+    desc.inBuf = compressed.data();
+    desc.inSize = (size_t)cSize;
+    desc.outBuf = out.data();
+    desc.outSize = orig_size - 1;
+    EXPECT_LT(aocl_llc_decompress(&desc, SNAPPY), 0);
+
+    desc.outSize = orig_size;
+    EXPECT_EQ(aocl_llc_decompress(&desc, SNAPPY), (int64_t)orig_size);
+    EXPECT_EQ(0, memcmp(out.data(), orig.data(), orig_size));
+
+    aocl_llc_destroy(&desc, SNAPPY);
+}
+
+// A multithreaded compression setup failure is reported as an error through
+// aocl_llc_compress(SNAPPY).
+TEST(API_snappy_MT, AOCL_Compression_api_snappy_compress_mt_setup_failure_common_2) {
+    vector<char> orig(4096, 'a');
+    aocl_compression_desc desc;
+    memset(&desc, 0, sizeof(desc));
+    ASSERT_EQ(aocl_llc_setup(&desc, SNAPPY), 0);
+
+    vector<char> compressed((size_t)aocl_llc_compressBound(SNAPPY, orig.size()));
+    desc.inBuf = orig.data();
+    desc.inSize = orig.size();
+    desc.outBuf = compressed.data();
+    desc.outSize = compressed.size();
+
+    test_setup_parallel_compress_mt_fail_set(1);
+    EXPECT_LT(aocl_llc_compress(&desc, SNAPPY), 0);
+    test_setup_parallel_compress_mt_fail_set(0);
+
+    EXPECT_GT(aocl_llc_compress(&desc, SNAPPY), 0);
+    aocl_llc_destroy(&desc, SNAPPY);
+}
+#endif /* AOCL_EXCLUDE_SNAPPY */
 /*********************************************
 * End skip rap frame Tests
 *********************************************/
@@ -1366,6 +1443,13 @@ TEST(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_1) 
     EXPECT_EQ(aocl_llc_skip_rap_frame(src, src_size), 0);
 
     free(src);
+}
+
+TEST(API_skip_rap_frame, AOCL_Compression_api_aocl_llc_skip_rap_frame_common_2) {
+    // Argument validation does not depend on AOCL_ENABLE_THREADS.
+    char buf[32] = {0};
+    EXPECT_EQ(aocl_llc_skip_rap_frame(NULL, 32), ERR_INVALID_INPUT);
+    EXPECT_EQ(aocl_llc_skip_rap_frame(buf, -1), ERR_INVALID_INPUT);
 }
 /*********************************************
 * End skip rap frame Tests

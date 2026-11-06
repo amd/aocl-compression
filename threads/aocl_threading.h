@@ -40,12 +40,86 @@
 #define AOCL_THREADING_H
 
 #include <stdlib.h>
+#include <errno.h>
+#include <ctype.h>
+#include <limits.h>
 #include "api/types.h"
+
+/**
+ * Upper bound on the number of threads used by the AOCL multithreaded flow.
+ * Thread counts requested through AOCL_NUM_THREADS (or, for the TBB backend,
+ * OMP_NUM_THREADS) and the backend default are clamped to this value. It keeps
+ * thread-count dependent sizes (RAP frame length, per-thread allocations) well
+ * within their integer ranges.
+ */
+#define AOCL_MAX_NUM_THREADS 1024
+
+/**
+ * Checked parsing of a thread-count string (e.g. an environment variable).
+ *
+ * Accepts an optionally whitespace-padded base-10 integer.
+ * Returns:
+ *  - 0 if str is NULL/empty, has no digits, has trailing non-space characters,
+ *    or is zero or negative (the caller then uses its default);
+ *  - AOCL_MAX_NUM_THREADS if the value is above it (including values that do
+ *    not fit in a long);
+ *  - the parsed value otherwise.
+ * errno is preserved.
+ *
+ * allow_list (used only for OMP_NUM_THREADS on the TBB backend): accept the
+ * OpenMP specification's list form for nested levels (e.g. "8,4") and use its
+ * first value. AOCL_NUM_THREADS accepts a single value only.
+ */
+static inline AOCL_UINT32 aocl_parse_num_threads_internal(const char *str, int allow_list)
+{
+    if (str == NULL)
+        return 0;
+
+    int saved_errno = errno;
+    char *end = NULL;
+    errno = 0;
+    long val = strtol(str, &end, 10);
+    int range_err = (errno == ERANGE);
+    errno = saved_errno;
+
+    if (end == str) /* no digits */
+        return 0;
+    while (*end != '\0' && isspace((unsigned char)*end))
+        end++;
+    /* allow_list: OpenMP list syntax ("8,4"); only the first level is used. */
+    if (*end != '\0' && !(allow_list && *end == ','))
+        return 0; /* trailing garbage, e.g. "8abc" or "1e9" */
+    if (range_err)
+        return (val == LONG_MAX) ? AOCL_MAX_NUM_THREADS : 0;
+    if (val <= 0)
+        return 0;
+    if (val > AOCL_MAX_NUM_THREADS)
+        return AOCL_MAX_NUM_THREADS;
+    return (AOCL_UINT32)val;
+}
+
+static inline AOCL_UINT32 aocl_parse_num_threads(const char *str)
+{
+    return aocl_parse_num_threads_internal(str, 0);
+}
+
+/**
+ * Clamps a backend default thread count to [1, AOCL_MAX_NUM_THREADS].
+ */
+static inline AOCL_UINT32 aocl_clamp_num_threads(long long n)
+{
+    if (n < 1)
+        return 1;
+    if (n > AOCL_MAX_NUM_THREADS)
+        return AOCL_MAX_NUM_THREADS;
+    return (AOCL_UINT32)n;
+}
 
 /**
  * Returns the AOCL-specific thread-count override requested via the
  * AOCL_NUM_THREADS environment variable, or 0 if it is unset or not a
- * positive integer.
+ * valid positive integer (see aocl_parse_num_threads()). Values above
+ * AOCL_MAX_NUM_THREADS are clamped to it.
  *
  * This override is honored by every threading backend so the number of
  * threads used by AOCL can be controlled independently of any co-resident
@@ -57,14 +131,7 @@
  */
 static inline AOCL_UINT32 aocl_env_num_threads(void)
 {
-    const char *env = getenv("AOCL_NUM_THREADS");
-    if (env)
-    {
-        int val = atoi(env);
-        if (val > 0)
-            return (AOCL_UINT32)val;
-    }
-    return 0;
+    return aocl_parse_num_threads(getenv("AOCL_NUM_THREADS"));
 }
 
 #ifdef __cplusplus
@@ -90,10 +157,10 @@ AOCL_INT32 aocl_parallel_for(AOCL_UINT32 num_threads,
  * Returns the maximum number of threads available for parallel execution.
  *
  * Resolution order (same for every backend): the AOCL_NUM_THREADS environment
- * variable (if set to a positive integer) takes precedence, otherwise the
+ * variable (if set to a valid positive integer) takes precedence, otherwise the
  * backend's native default is used (OpenMP: omp_get_max_threads(), which
  * reflects OMP_NUM_THREADS/omp_set_num_threads(); TBB: OMP_NUM_THREADS then the
- * hardware concurrency).
+ * hardware concurrency). The result is in [1, AOCL_MAX_NUM_THREADS].
  */
 AOCL_UINT32 aocl_get_max_threads(void);
 

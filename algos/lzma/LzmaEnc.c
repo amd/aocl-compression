@@ -63,6 +63,7 @@
 
 #ifdef AOCL_ENABLE_THREADS
 #include "threads/threads.h"
+#include "api/aocl_compression.h" /* ERR_COMPRESSION_INVALID_OUTPUT */
 #endif
 
 SRes LzmaEnc_PrepareForLzma2(CLzmaEncHandle pp, ISeqInStream *inStream, UInt32 keepWindowSize,
@@ -5917,6 +5918,14 @@ static void AOCL_LzmaEncode_MT_parallel_worker(AOCL_UINT32 thread_id, void *cont
   rap_frame_len = aocl_setup_parallel_compress_mt(&thread_group_handle, (char*)src,
                         (char*)dest, srcLen, *destLen, window_len, window_factor);
 
+  /* The LZMA output carries no RAP frame (the 2nd pass rewrites dest from its
+   * start), so a destination smaller than the RAP frame may still fit the
+   * stream: use the single-threaded encoder, which checks its own capacity. */
+  if (rap_frame_len == ERR_COMPRESSION_INVALID_OUTPUT) {
+    LOG_UNFORMATTED(INFO, logCtx, "Running single threaded compress");
+    return LzmaEncode_ST(dest, destLen, src, srcLen, props, propsEncoded, propsSize,
+                         writeEndMark, progress, alloc, allocBig);
+  }
   if (rap_frame_len < 0) {
     return SZ_ERROR_PARAM;
   }

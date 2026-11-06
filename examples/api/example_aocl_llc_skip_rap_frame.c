@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -110,6 +110,11 @@ int main(int argc, char** argv)
     //4. ST decompress
     // Get number of bytes for the RAP frame
     int rap_frame_len = aocl_llc_skip_rap_frame((char*)compPtr, resultComp);
+    if (rap_frame_len < 0 || rap_frame_len > resultComp)
+    {
+        printf("Invalid RAP frame\n");
+        goto error_exit;
+    }
 
     // Skip RAP frame in input stream and pass this to ST decompressor
     aocl_compression_handle->inSize = resultComp - rap_frame_len;

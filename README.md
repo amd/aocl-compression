@@ -533,6 +533,9 @@ Multi-threaded Compression and Decompression
 - AOCL-Compression provides parallel compression and decompression capabilities for multiple formats:
   lz4, lz4hc, zlib (including zlib, deflate, and gzip formats), zstd, snappy, bzip2, and lzma.
   Note: For lzma, only multi-threaded compression is currently supported.
+  Note: For snappy, multi-threaded decompression is available only through the C API (`snappy_uncompress`)
+  and the unified API (`aocl_llc_decompress`). The C++ APIs decompress in a single thread; their
+  flat-buffer variants skip a RAP frame if present.
 - The parallel processing is implemented over a backend-agnostic threading layer that can use either
   OpenMP or oneTBB, selected at build time via `AOCL_THREADING_BACKEND` (OPENMP by default; TBB builds
   link no OpenMP runtime). To enable parallel decompression of compressed streams and files,
@@ -544,6 +547,12 @@ Multi-threaded Compression and Decompression
   (which honors `OMP_NUM_THREADS`), and the TBB backend falls back to `OMP_NUM_THREADS` if set, otherwise
   the hardware concurrency. A per-application-thread cap set via the `aocl_llc_set_max_threads()` API
   applies on top of this for both backends.
+- `AOCL_NUM_THREADS` must be a positive base-10 integer (surrounding whitespace allowed). Values that are
+  empty, non-numeric, contain trailing characters, or are zero or negative are ignored and the backend
+  default is used. The number of threads is capped at `AOCL_MAX_NUM_THREADS` (1024); larger requested
+  values, and larger backend defaults, are clamped to this limit.
+  The TBB backend's `OMP_NUM_THREADS` fallback is parsed the same way, except that the OpenMP list form
+  for nested parallelism (for example `8,4`) is accepted and only its first value is used.
 - A stream compressed with multi-threaded AOCL-Compression library can be decompressed using any
   single-threaded standard decompressor by simply skipping the initial block of bytes containing
   the RAP frame present at the start of the stream.

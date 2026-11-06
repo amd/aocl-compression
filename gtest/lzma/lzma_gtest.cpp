@@ -47,6 +47,10 @@
 #include "algos/lzma/LzmaEnc.h"
 #include "algos/lzma/LzmaDec.h"
 #include "algos/common/aoclHashChain.h"
+#ifdef AOCL_ENABLE_THREADS
+#include <vector>
+#include "threads/threads.h"
+#endif /* AOCL_ENABLE_THREADS */
 
 #ifdef AOCL_TEST_FUZZER
 #include "fuzztest/fuzztest.h"
@@ -1604,6 +1608,48 @@ TEST(LZMA_encCreate, AOCL_Compression_lzma_LzmaEnc_Destroy_null_common_1) //Dest
 /*********************************************
 * End of LZMA_encCreate
 *********************************************/
+
+#ifdef AOCL_ENABLE_THREADS
+// The LZMA stream carries no RAP frame, so a destination that fits the stream
+// but is smaller than the multithreaded RAP frame must still compress (single
+// threaded fallback) instead of being rejected.
+TEST(LZMA_encodeMT, AOCL_Compression_lzma_LzmaEncode_mt_dst_smaller_than_rap_frame_common_1)
+{
+    const ISzAlloc g_Alloc = { SzAlloc, SzFree };
+    const SizeT srcLen = 4 << 20;
+    std::vector<Byte> src(srcLen, 0); // highly compressible
+    CLzmaEncProps props;
+    LzmaEncProps_Init(&props);
+    props.dictSize = 1 << 12; // small window: many partitions
+    Byte propsEnc[LZMA_PROPS_SIZE];
+    SizeT propsSize = LZMA_PROPS_SIZE;
+
+    // Reference: single-threaded output size.
+    test_omp_max_threads_set(1);
+    std::vector<Byte> ref(srcLen);
+    SizeT refLen = ref.size();
+    SRes res = LzmaEncode(ref.data(), &refLen, src.data(), srcLen, &props, propsEnc,
+                          &propsSize, 0, NULL, &g_Alloc, &g_Alloc);
+    test_omp_max_threads_reset();
+    ASSERT_EQ(res, SZ_OK);
+
+    AOCL_UINT32 partitions = (AOCL_UINT32)(srcLen / props.dictSize);
+    AOCL_UINT32 max_threads = (AOCL_UINT32)test_omp_max_threads_get();
+    AOCL_UINT32 n = partitions < max_threads ? partitions : max_threads;
+    if (n < 2 || refLen >= (SizeT)RAP_FRAME_LEN_WITH_DECOMP_LENGTH(n, 0))
+        GTEST_SKIP() << "Destination cannot be made smaller than the RAP frame here";
+
+    // Destination exactly fits the stream but not the RAP frame.
+    std::vector<Byte> dst(refLen);
+    SizeT dstLen = refLen;
+    propsSize = LZMA_PROPS_SIZE;
+    res = LzmaEncode(dst.data(), &dstLen, src.data(), srcLen, &props, propsEnc,
+                     &propsSize, 0, NULL, &g_Alloc, &g_Alloc);
+    EXPECT_EQ(res, SZ_OK);
+    EXPECT_EQ(dstLen, refLen);
+    EXPECT_EQ(0, memcmp(dst.data(), ref.data(), refLen));
+}
+#endif /* AOCL_ENABLE_THREADS */
 
 /*********************************************
 * Begin of LZMA_encSetProps
