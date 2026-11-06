@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -41,10 +41,87 @@
 #include <string>
 #include <tuple>
 #include <functional>
+#include <utility>
 #include <stdexcept>
 #include "aocl_compression.h"
 
 using namespace std;
+
+/* Size-unit token-hack macros shared across the gtest suites. Usage: `4 KB`,
+ * `2 MB`, `1 GB`. The spelling is kept byte-for-byte identical to the existing
+ * definitions elsewhere in the tree (suite-local ones and the library-internal
+ * zstd_internal.h). A TU such as zstd_gtest pulls in zstd_internal.h *after*
+ * this header and redefines these unconditionally; an identical replacement
+ * list makes that a benign redefinition, whereas any whitespace/token
+ * difference would be promoted to a hard error under -Werror. */
+#ifndef KB
+#define KB *(1 <<10)
+#endif
+#ifndef MB
+#define MB *(1 <<20)
+#endif
+#ifndef GB
+#define GB *(1U<<30)
+#endif
+
+/* Scope guard: invokes a cleanup callback when it goes out of scope, so library
+ * handles are released on every path, including gtest ASSERT_* early-returns.
+ * Usage: ScopeGuard g([&]{ ZSTD_freeCCtx(cctx); });
+ *
+ * This is a concrete (non-template) type with a templated constructor, so a
+ * lambda binds directly without class-template argument deduction. That keeps
+ * it usable under C++11/14 as well as C++17 (the gtest build does not pin a
+ * -std flag, and some toolchains -- notably MSVC -- default below C++17, where
+ * CTAD on a class template would fail to compile). The callable is type-erased
+ * into std::function, which costs one small allocation; acceptable for test
+ * teardown. */
+class ScopeGuard {
+public:
+    template <typename Fn>
+    explicit ScopeGuard(Fn fn) : fn_(std::move(fn)) {}
+    ~ScopeGuard() { if (fn_) fn_(); }
+    ScopeGuard(const ScopeGuard&) = delete;
+    ScopeGuard& operator=(const ScopeGuard&) = delete;
+private:
+    std::function<void()> fn_;
+};
+
+#ifdef AOCL_ENABLE_THREADS
+#include <thread>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+/* Backend-agnostic parallel test harness.
+ *
+ * Runs body(thread_id) on `num_threads` threads, each with a unique id in
+ * [0, num_threads). Under OpenMP it uses an `omp parallel` region so the
+ * OpenMP build keeps coverage of the library being driven from within an
+ * OpenMP team; for any other library backend (e.g. TBB, where the test binary
+ * is built without OpenMP) it falls back to std::thread. This keeps the gtest
+ * suite free of a hard OpenMP dependency while preserving OpenMP-region
+ * coverage where OpenMP is present.
+ *
+ * Note: use only EXPECT_* (non-fatal) assertions inside body(); ASSERT_*
+ * (fatal) from a non-main thread does not terminate the test correctly. */
+template <typename Fn>
+static inline void aocl_test_parallel_run(int num_threads, Fn body) {
+    if (num_threads <= 0)
+        return;
+#ifdef _OPENMP
+    #pragma omp parallel num_threads(num_threads)
+    {
+        body((unsigned)omp_get_thread_num());
+    }
+#else
+    std::vector<std::thread> workers;
+    workers.reserve((size_t)num_threads);
+    for (int i = 0; i < num_threads; ++i)
+        workers.emplace_back([&body, i]() { body((unsigned)i); });
+    for (std::thread &w : workers)
+        w.join();
+#endif
+}
+#endif /* AOCL_ENABLE_THREADS */
 
 // Struct for generating input parameters for parameterized tests which change the optimization level(code path) dynamically.
 typedef struct

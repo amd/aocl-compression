@@ -1,4 +1,4 @@
-# Copyright (C) 2025, Advanced Micro Devices. All rights reserved.
+# Copyright (C) 2025-2026, Advanced Micro Devices. All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -32,6 +32,11 @@
 set(AOCL_LZ4_DECOMPRESS_GENERIC_COMMENT "")
 set(AOCL_LZ4_DECOMPRESS_GENERIC_FUNC "AOCL_LZ4_decompress_generic")
 set(AOCL_LZ4_DGV_ADDITIONAL_PARAMS "/* none */")
+# Single-threaded decoder handles standard LZ4 frames, so the final-literal-run
+# detection must use the format-defined tail guard (12), not the widened
+# encoder-side MFLIMIT. This keeps interop with stock/native LZ4 frames while
+# leaving all wildcopy widths unchanged.
+set(AOCL_LZ4_DGV_LIT_TAIL_LIMIT "LZ4_DEC_LIT_TAIL")
 set(AOCL_LZ4_DGV_LONG_MATCH [[size_t const addl = read_variable_length(&ip, iend - LASTLITERALS + 1, 0);
                 if (addl == rvl_error) {
                     LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional match length.");
@@ -79,10 +84,24 @@ configure_file(
 set(AOCL_LZ4_DECOMPRESS_GENERIC_COMMENT "/* Same as AOCL_LZ4_decompress_generic, but with multi-threaded support */")
 set(AOCL_LZ4_DECOMPRESS_GENERIC_FUNC "AOCL_LZ4_decompress_generic_mt")
 set(AOCL_LZ4_DGV_ADDITIONAL_PARAMS ",int is_last_thread")
+# Multi-threaded decoder keeps MFLIMIT (not LZ4_DEC_LIT_TAIL) because it never
+# decodes standard stock frames: AOCL_LZ4_decompress_safe_mt() (in lz4.c) routes
+# RAP-less / non-partitioned frames to LZ4_decompress_safe_ST() and only feeds
+# _mt genuine AOCL-produced partitioned chunks, whose last-thread tail is always
+# AOCL-encoded. So the widened MFLIMIT tail window cannot reject a valid input
+# here today. HAZARD/FOLLOW-UP: if MT decode is ever pointed at a stock-encoded
+# last-thread chunk (mixed-version RAP, future streaming), or via the
+# Test_AOCL_LZ4_decompress_generic_mt unit hook fed a stock frame, the same
+# tail-window rejection (-3) would reappear in MT only. Track as a follow-up:
+# gate the last-thread tail on is_last_thread (LZ4_DEC_LIT_TAIL) vs MFLIMIT.
+# Note: because this expands to MFLIMIT, the generated tail-guard asserts become
+# LZ4_STATIC_ASSERT(MFLIMIT >= 8) and LZ4_STATIC_ASSERT(MFLIMIT <= MFLIMIT); the
+# latter is a tautology here and only carries meaning in the ST instantiation.
+set(AOCL_LZ4_DGV_LIT_TAIL_LIMIT "MFLIMIT")
 set(AOCL_LZ4_DGV_LONG_MATCH [[if (is_last_thread) {
                     size_t const addl = read_variable_length(&ip, iend - LASTLITERALS + 1, 0);
                     if (addl == rvl_error) { 
-                        LOG_FORMATTED(ERR, logCtx, AOCL_LZ4_DGV_LOG_PREFIX"Encountered variable_length_error while decoding additional match length.", omp_get_thread_num());
+                        AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional match length.");
                         DEBUGLOG(5, "error reading long match length");
                         goto _output_error; 
                     }
@@ -90,7 +109,7 @@ set(AOCL_LZ4_DGV_LONG_MATCH [[if (is_last_thread) {
                 } else {
                     size_t const addl = read_variable_length(&ip, iend + 1, 0);
                     if (addl == rvl_error) {
-                        LOG_FORMATTED(ERR, logCtx, AOCL_LZ4_DGV_LOG_PREFIX"Encountered variable_length_error while decoding additional match length.", omp_get_thread_num());
+                        AOCL_LZ4_DGV_LOG_UNFORMATTED(ERR, logCtx, "Encountered variable_length_error while decoding additional match length.");
                         DEBUGLOG(5, "error reading long match length");
                         goto _output_error; 
                     }
@@ -98,8 +117,8 @@ set(AOCL_LZ4_DGV_LONG_MATCH [[if (is_last_thread) {
                 }
 ]])
 set(AOCL_LZ4_DGV_LAST_SEQ_CHECK [[if ((is_last_thread && (ip + length != iend)) || (cpy > oend)) {
-                        LOG_FORMATTED(ERR, logCtx, AOCL_LZ4_DGV_LOG_PREFIX" Must be the last (or invalid) sequence because of the parsing limitations. Error, %s.",
-                        omp_get_thread_num(), (is_last_thread && (ip + length != iend)) ? "exact input not consumed" : "output buffer overflow");
+                        AOCL_LZ4_DGV_LOG_FORMATTED(ERR, logCtx, "Must be the last (or invalid) sequence because of the parsing limitations. Error, %s.",
+                        (is_last_thread && (ip + length != iend)) ? "exact input not consumed" : "output buffer overflow");
 ]])
 set(AOCL_LZ4_DGV_EOF_CHECK "(is_last_thread && !partialDecoding) || (cpy == oend) || (is_last_thread && (ip >= (iend - 2)))")
 set(AOCL_LZ4_DGV_COPY_MATCH [[if (is_last_thread) {

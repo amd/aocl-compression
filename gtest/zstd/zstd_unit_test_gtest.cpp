@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024-2025, Advanced Micro Devices. All rights reserved.
+ * Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -134,7 +134,7 @@ public:
 TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_allMatch_common_1) {
     BYTE tag = 'a';
     const int head = 0;
-    setup_tag_row(tag, { 0 }, 0, MATCH_TYPE_ALL);
+    setup_tag_row(tag, nullptr, 0, MATCH_TYPE_ALL);
     U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
     validate_mask(tag, mask, head);
 }
@@ -153,7 +153,7 @@ TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getM
 TEST_P(ZSTD_AOCL_ZSTD_row_getMatchMask, AOCL_Compression_zstd_AOCL_ZSTD_row_getMatchMask_nonematch_common_1) {
     BYTE tag = 'a';
     const int head = 0;
-    setup_tag_row(tag, { 0 }, 0, MATCH_TYPE_NONE);
+    setup_tag_row(tag, nullptr, 0, MATCH_TYPE_NONE);
     U64 mask = Test_AOCL_ZSTD_row_getMatchMask(tagRow, tag, head, rowEntries);
     validate_mask(tag, mask, head);
 }
@@ -817,6 +817,16 @@ TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_
     EXPECT_TRUE(write_skippable_RAP_frame((AOCL_CHAR*)dst, dstCapacity, srcSize, mainThreads));
 
     CHECK_PASS_ZSTD(Test_AOCL_ZSTD_readSkippableRAPFrameHeader(dst, dstCapacity));
+}
+
+// dstCapacity smaller than the 8-byte header must be rejected instead of writing
+// out of bounds (CPUPL-8869). Prior to the guard this wrote past dst.
+TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_writeSkippableFrameHeader_fail_dstTooSmall_1)
+{
+    dstCapacity = ZSTD_SKIPPABLEHEADERSIZE - 1;
+    dst = calloc(dstCapacity, 1);
+    EXPECT_EQ(Test_AOCL_ZSTD_writeSkippableFrameHeader(dst, dstCapacity, srcSize, 0),
+              ERROR(dstSize_tooSmall));
 }
 
 TEST_F(ZSTD_AOCL_ZSTD_readSkippableFrameHeader, AOCL_Compression_zstd_AOCL_ZSTD_readSkippableFrameHeader_fail_common_2) // no skippable frame

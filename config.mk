@@ -74,6 +74,15 @@ AOCL_EXCLUDE_ZSTD ?= 0
 # Enable LZ4 backward prefetching optimizations
 AOCL_LZ4_OPT_PREFETCH_BACKWARDS ?= 0
 
+# Enable LZ4 decode software prefetch hints (1=on default, 0=off)
+AOCL_LZ4_DEC_PREFETCH ?= 1
+# Enable the deeper (second) LZ4 decode input read-ahead prefetch (1=on, 0=off)
+AOCL_LZ4_DEC_PREFETCH_DEEPER ?= 1
+# LZ4 decode prefetch distances in bytes (input read-ahead / output write-intent / deeper read-ahead)
+AOCL_LZ4_DEC_PREFETCH_IN_DIST ?= 96
+AOCL_LZ4_DEC_PREFETCH_OUT_DIST ?= 128
+AOCL_LZ4_DEC_PREFETCH_DEEPER_DIST ?= 192
+
 # Enable LZ4 match skipping optimization strategy 1
 AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1 ?= 0
 
@@ -165,8 +174,13 @@ AOCL_COMPRESS_FAST ?= OFF
 # Enable logging support (controlled by AOCL_ENABLE_LOG environment variable)
 AOCL_ENABLE_LOG_FEATURE ?= 0
 
-# Enable multi-threaded compression using OpenMP
+# Enable multi-threaded compression and decompression
 AOCL_ENABLE_THREADS ?= 0
+
+# Threading backend when AOCL_ENABLE_THREADS is enabled: OPENMP (default) or TBB
+# (TBB links no OpenMP runtime and defines AOCL_USE_TBB).
+# CMake equivalent: AOCL_THREADING_BACKEND
+AOCL_THREADING_BACKEND ?= OPENMP
 
 # Enable native multi-threading for supported methods (pthread)
 NATIVE_ENABLE_THREADS ?= 0
@@ -184,6 +198,13 @@ AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL ?= 0
 
 # Enable GTest, AOCL test bench, and third-party test suites
 AOCL_TEST_COVERAGE ?= 0
+
+# Enable extended GTest coverage that broadens the tested surface of
+# non-deprecated zstd and lz4 APIs. Implies AOCL_TEST_COVERAGE.
+AOCL_TEST_COVERAGE_EXT ?= 0
+ifeq ($(AOCL_TEST_COVERAGE_EXT),1)
+    override AOCL_TEST_COVERAGE := 1
+endif
 
 # TODO: Future implementation
 # # Enable code coverage (gcov for GCC, llvm-cov for Clang)
@@ -304,6 +325,31 @@ ifeq ($(AOCL_ENABLE_THREADS),1)
     endif
 endif
 
+# Uppercase the backend for case-insensitive matching. Pure-Make $(subst) (not
+# $(shell)) avoids passing the value to a shell; 'override' also normalizes a
+# command-line value.
+override AOCL_THREADING_BACKEND := $(subst a,A,$(subst b,B,$(subst c,C,$(subst d,D,$(subst e,E,$(subst f,F,$(subst g,G,$(subst h,H,$(subst i,I,$(subst j,J,$(subst k,K,$(subst l,L,$(subst m,M,$(subst n,N,$(subst o,O,$(subst p,P,$(subst q,Q,$(subst r,R,$(subst s,S,$(subst t,T,$(subst u,U,$(subst v,V,$(subst w,W,$(subst x,X,$(subst y,Y,$(subst z,Z,$(AOCL_THREADING_BACKEND)))))))))))))))))))))))))))
+ifeq ($(AOCL_ENABLE_THREADS),1)
+    # Empty $(filter ...) rejects both empty and unknown values.
+    ifeq ($(filter OPENMP TBB,$(AOCL_THREADING_BACKEND)),)
+        $(error Invalid AOCL_THREADING_BACKEND='$(AOCL_THREADING_BACKEND)'. Use OPENMP or TBB)
+    endif
+endif
+
+# Single source of truth for the threading backend compile definitions.
+# Consumers of the library (benchmark, gtests) must compile the shared public
+# headers (threads.h, utils.h) with the same backend macros the library was
+# built with; otherwise a TBB-backed library would still expose OpenMP-only
+# header paths. CMake propagates this through the library's INTERFACE compile
+# definitions; the Make build references THREAD_BACKEND_DEFS at each site.
+THREAD_BACKEND_DEFS :=
+ifeq ($(AOCL_ENABLE_THREADS),1)
+    THREAD_BACKEND_DEFS := -DAOCL_ENABLE_THREADS
+    ifeq ($(AOCL_THREADING_BACKEND),TBB)
+        THREAD_BACKEND_DEFS += -DAOCL_USE_TBB
+    endif
+endif
+
 # Force static build when BUILD_UTILITY is enabled
 # ifeq ($(BUILD_UTILITY),1)
 #     ifneq ($(BUILD_STATIC_LIBS),1)
@@ -366,6 +412,8 @@ endif
 export BUILD_STATIC_LIBS BUILD_TYPE VERBOSE
 export AOCL_EXCLUDE_BZIP2 AOCL_EXCLUDE_LZ4 AOCL_EXCLUDE_LZ4HC AOCL_EXCLUDE_LZMA
 export AOCL_EXCLUDE_SNAPPY AOCL_EXCLUDE_ZLIB AOCL_EXCLUDE_ZSTD
+export AOCL_LZ4_DEC_PREFETCH AOCL_LZ4_DEC_PREFETCH_DEEPER
+export AOCL_LZ4_DEC_PREFETCH_IN_DIST AOCL_LZ4_DEC_PREFETCH_OUT_DIST AOCL_LZ4_DEC_PREFETCH_DEEPER_DIST
 export AOCL_LZ4_OPT_PREFETCH_BACKWARDS AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT1
 export AOCL_LZ4_MATCH_SKIP_OPT_LDS_STRAT2 AOCL_LZ4_NEW_PRIME_NUMBER
 export AOCL_LZ4_EXTRA_HASH_TABLE_UPDATES AOCL_LZ4_HASH_BITS_USED
@@ -375,8 +423,10 @@ export AOCL_ZSTD_SEARCH_SKIP_OPT AOCL_ZSTD_DYN_BLOCK_SIZE
 export AOCL_BZIP2_HUFFMAN_ITERATIONS
 export AOCL_DECOMPRESS_FAST AOCL_COMPRESS_FAST
 export AOCL_ENABLE_LOG_FEATURE AOCL_ENABLE_THREADS NATIVE_ENABLE_THREADS
+export AOCL_THREADING_BACKEND
+export THREAD_BACKEND_DEFS
 export AOCL_LLC_PREFIX AOCL_XZ_UTILS_LZMA_API_EXPERIMENTAL
-export AOCL_TEST_COVERAGE
+export AOCL_TEST_COVERAGE AOCL_TEST_COVERAGE_EXT
 # TODO: Future implementation
 # export CODE_COVERAGE TEST_COVERAGE_THIRD_PARTY
 # export ASAN VALGRIND AOCL_TEST_FUZZER AOCL_TEST_FUZZER_WITH_CORPUS

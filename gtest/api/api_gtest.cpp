@@ -438,9 +438,47 @@ TEST(API_setup, AOCL_Compression_api_aocl_llc_setup_invalidAlgo_common_1) //inva
     EXPECT_EQ(aocl_llc_setup(&desc, algo), ERR_UNSUPPORTED_METHOD);
 }
 
+// Out-of-range codec_type must be rejected by every dispatch entry point before
+// indexing the fixed-size aocl_codec[] table (CPUPL-8847). Prior to the guards
+// these calls performed an out-of-bounds table read and crashed.
+TEST(API_setup, AOCL_Compression_api_aocl_llc_invalidAlgo_common_2) //invalid algo on compress/decompress/compressBound/destroy
+{
+    ACD desc;
+    reset_ACD(&desc, 0);
+    ACT algo = AOCL_COMPRESSOR_ALGOS_NUM; // one past the last valid method
+
+    EXPECT_EQ(aocl_llc_compressBound(algo, 1024), ERR_UNSUPPORTED_METHOD);
+    EXPECT_EQ(aocl_llc_compress(&desc, algo), ERR_UNSUPPORTED_METHOD);
+    EXPECT_EQ(aocl_llc_decompress(&desc, algo), ERR_UNSUPPORTED_METHOD);
+    // Returns void; must not dereference the out-of-range table slot.
+    EXPECT_NO_THROW(aocl_llc_destroy(&desc, algo));
+}
+
 static void test_excluded_algo(ACD* desc, ACT algo){
     reset_ACD(desc, 1);
     EXPECT_EQ(aocl_llc_setup(desc, algo), ERR_EXCLUDED_METHOD);
+    // A codec compiled out of the build must be rejected by every dispatch
+    // entry point whose slot is NULL, not just setup (CPUPL-8847). Without the
+    // guard, calling through a NULL slot would crash.
+    EXPECT_EQ(aocl_llc_compressBound(algo, 1024), ERR_EXCLUDED_METHOD);
+    EXPECT_EQ(aocl_llc_compress(desc, algo), ERR_EXCLUDED_METHOD);
+    // Returns void; must not dereference the NULL destroy slot.
+    EXPECT_NO_THROW(aocl_llc_destroy(desc, algo));
+
+    // Exclusion is per-operation. LZ4HC decodes LZ4-compatible frames, so its
+    // decompress slot intentionally reuses aocl_lz4_decompress. When only LZ4HC
+    // is excluded (LZ4 still built), that slot stays non-NULL and decompress
+    // dispatches normally instead of returning ERR_EXCLUDED_METHOD; it must
+    // simply not crash. Every other excluded codec has a NULL decompress slot.
+    bool decompress_excluded = true;
+#if !defined(AOCL_EXCLUDE_LZ4)
+    if (algo == LZ4HC)
+        decompress_excluded = false;
+#endif
+    if (decompress_excluded)
+        EXPECT_EQ(aocl_llc_decompress(desc, algo), ERR_EXCLUDED_METHOD);
+    else
+        EXPECT_NO_THROW(aocl_llc_decompress(desc, algo));
 }
 
 TEST(API_setup, AOCL_Compression_api_aocl_llc_setup_excludedMethod_common_1) //excluded method
@@ -1064,7 +1102,7 @@ AOCL_INT32 Test_aocl_get_rap_frame_bound_mt() {
 *********************************************/
 TEST(API_get_rap_frame_bound_MT, AOCL_Compression_api_aocl_get_rap_frame_bound_mt_common_1) {
     AOCL_UINT32 max_threads = Test_aocl_get_rap_frame_bound_mt();
-    EXPECT_EQ(max_threads, RAP_FRAME_LEN_WITH_DECOMP_LENGTH(omp_get_max_threads(), 0));
+    EXPECT_EQ(max_threads, RAP_FRAME_LEN_WITH_DECOMP_LENGTH(test_omp_max_threads_get(), 0));
 }
 /*********************************************
 * End rap frame bound Tests
@@ -1078,7 +1116,7 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_1
 }
 
 TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_2) {
-    const AOCL_INT32 runtime_max = omp_get_max_threads();
+    const AOCL_INT32 runtime_max = test_omp_max_threads_get();
     EXPECT_EQ(aocl_llc_set_max_threads(1), 0);
     EXPECT_EQ(aocl_llc_set_max_threads(runtime_max), 0);
 }
@@ -1091,7 +1129,7 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_4
     // Each thread should keep and use its own limit, without affecting the other.
 
     // Ask OpenMP how many threads this machine/runtime can provide right now.
-    const AOCL_UINT32 runtime_max_threads = omp_get_max_threads();
+    const AOCL_UINT32 runtime_max_threads = test_omp_max_threads_get();
 
     // Worker 1 always requests a limit of 1 thread.
     const AOCL_INT32 requested_thread_limit_worker_one = 1;
@@ -1102,10 +1140,10 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_4
 
     // Input size chosen to be large enough so partitioning logic is exercised
     // like in realistic workloads (avoids tiny-input corner behavior).
-    const AOCL_UINTP input_size_bytes = 4096 * 64; // Keeps partitioning away from tiny-input edge cases.
+    constexpr AOCL_UINTP input_size_bytes = 4096 * 64; // Keeps partitioning away from tiny-input edge cases.
 
     // Window size used by partition-stat calculation.
-    const AOCL_INT32 window_length = 1024;
+    constexpr AOCL_INT32 window_length = 1024;
 
     // Shared result holders (atomics are used because two std::thread workers
     // write values concurrently).
@@ -1118,10 +1156,10 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_4
     // 1) Set thread-local maximum thread cap.
     // 2) Read RAP frame bound derived from that cap.
     // 3) Build partition stats and verify selected worker-count path.
-    auto worker = [input_size_bytes, window_length](AOCL_INT32 requested_thread_limit,
-                                                    std::atomic<AOCL_INT32>& set_max_threads_result,
-                                                    std::atomic<AOCL_INT32>& rap_frame_bound,
-                                                    std::atomic<AOCL_UINT32>& partition_threads) {
+    auto worker = [](AOCL_INT32 requested_thread_limit,
+                     std::atomic<AOCL_INT32>& set_max_threads_result,
+                     std::atomic<AOCL_INT32>& rap_frame_bound,
+                     std::atomic<AOCL_UINT32>& partition_threads) {
         // Apply this worker's requested max-thread cap.
         set_max_threads_result.store(aocl_llc_set_max_threads(requested_thread_limit));
 
@@ -1175,7 +1213,7 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_5
     // We then verify every thread observes and uses that same limit correctly.
 
     // Use 2 app threads when possible, otherwise 1 (portable on small systems).
-    const AOCL_INT32 application_thread_count = (omp_get_max_threads() >= 2) ? 2 : 1;
+    const AOCL_INT32 application_thread_count = (test_omp_max_threads_get() >= 2) ? 2 : 1;
 
     // Every OpenMP worker requests a max limit of 1.
     const AOCL_INT32 requested_thread_limit = 1;
@@ -1191,11 +1229,11 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_5
     std::vector<AOCL_INT32> partition_stats_result_per_thread(application_thread_count, -1);
     std::vector<AOCL_UINT32> partition_thread_count_per_thread(application_thread_count, 0);
 
-    // Each OpenMP thread performs the same sequence independently.
-#pragma omp parallel num_threads(application_thread_count)
-    {
-        // Unique index of this OpenMP worker inside the parallel block.
-        AOCL_INT32 thread_index = omp_get_thread_num();
+    // Each application thread performs the same sequence independently. Under
+    // OpenMP this runs inside an omp parallel region; otherwise it runs on
+    // std::thread workers (see aocl_test_parallel_run).
+    aocl_test_parallel_run(application_thread_count, [&](AOCL_UINT32 tid) {
+        AOCL_INT32 thread_index = (AOCL_INT32)tid;
 
         // 1) Set thread-local max-thread limit.
         set_max_threads_result_per_thread[thread_index] = aocl_llc_set_max_threads(requested_thread_limit);
@@ -1209,7 +1247,7 @@ TEST(API_set_max_threads, AOCL_Compression_api_aocl_llc_set_max_threads_common_5
             aocl_set_partition_stats_mt(&partition_thread_group, input_size_bytes, window_length, WINDOW_FACTOR);
         if (partition_stats_result_per_thread[thread_index] == 0)
             partition_thread_count_per_thread[thread_index] = partition_thread_group.num_threads;
-    }
+    });
 
     // Validate outcomes for each OpenMP app thread.
     for (AOCL_INT32 thread_index = 0; thread_index < application_thread_count; ++thread_index)
