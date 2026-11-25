@@ -195,6 +195,9 @@ typedef struct thread_info
 
 //Thread group data structure held by the master thread that spawns all the threads
 // Holds a list of thread info related to all the spawned threads and actual input and output stream buffer pointer
+// ABI note: this is an internal type (threads.h is not an installed header) and its layout may
+// change between releases; rap_num_partitions and rap_metadata_len were appended, changing
+// sizeof(aocl_thread_group_t). Code that allocates it must be built against the matching header.
 typedef struct thread_group
 {
     aocl_thread_info_t *threads_info_list;  //List of thread info related to all the spawned threads 
@@ -206,6 +209,8 @@ typedef struct thread_group
     AOCL_UINTP leftover_part_src_bytes;           //Leftover src length after partitioning
     AOCL_UINT32 num_threads;                     //Dynamically determined threads to be used for processing
     AOCL_UINT32 search_window_length;            //Search window (dictionary) size used by the partitioning scheme
+    AOCL_UINT32 rap_num_partitions;              //Decompression: partition entries in the validated RAP frame (0 if no RAP frame)
+    AOCL_UINT32 rap_metadata_len;                //Decompression: length in bytes of the validated RAP frame (0 if no RAP frame)
 } aocl_thread_group_t;
 
 #ifndef EXPORT_SYM_THREADS
@@ -257,6 +262,7 @@ typedef struct thread_group
  * | Success    | RAP frame length (RAP header + RAP metadata) |
  * | Fail       | `ERR_INVALID_INPUT`                          |
  * | ^          | `ERR_MEMORY_ALLOC`                           |
+ * | ^          | `ERR_COMPRESSION_INVALID_OUTPUT` when out_size cannot hold the RAP frame (nothing written) |
  *
  */
 EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_compress_mt(aocl_thread_group_t* thread_grp,
@@ -357,14 +363,19 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_setup_parallel_decompress_mt(aocl_thread_grou
  * |:-----------------------|:-----------:|:------------|
  * | \b thread_grp          | in          | Holds list of thread info, pointers to input and output streams and other information needed for multi-threaded decompression. |
  * | \b cur_thread_info     | out         | Current thread info. |
- * | \b thread_id           | in          | Current thread id. |
+ * | \b thread_id           | in          | Serial partition id. Must be less than the number of partitions in the RAP frame validated by aocl_setup_parallel_decompress_mt(). |
+ *
+ * @note thread_grp must have been set up by aocl_setup_parallel_decompress_mt() on a RAP framed
+ *       stream. The partition id is validated against the partition count and RAP frame length
+ *       recorded at setup before any partition metadata is read.
  *
  * return
  * | Result     | Description |
  * |:-----------|:------------|
  * | Success    | 0           |
  * | Success    | 1 when partition source size for this thread_id is 0 |
- * | Fail       | `ERR_MEMORY_ALLOC`                                   |
+ * | Fail       | `AOCL_MT_DECOMP_PARTITION_ERR_INSUFFICIENT_DST_SPACE` (-1) when the partition does not fit in the destination |
+ * | Fail       | `AOCL_MT_DECOMP_PARTITION_ERR_INVALID_RAP_FRAME` (-2) when thread_id is out of range or partition metadata is invalid |
  *
  */
 EXPORT_SYM_THREADS AOCL_INT32 aocl_do_partition_decompress_mt(const aocl_thread_group_t* thread_grp,
@@ -419,7 +430,7 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_get_rap_frame_bound_mt(void);
  * |:-----------|:------------|
  * | RAP_frame_length | Length of RAP frame bytes in src |
  * | 0                | If RAP frame does not exist      |
- * | Fail             | `ERR_INVALID_INPUT`              |
+ * | Fail             | `ERR_INVALID_INPUT` if src is NULL; negative value if the RAP frame header is invalid |
  *
  */
 EXPORT_SYM_THREADS AOCL_INT32 aocl_skip_rap_frame_mt(AOCL_CHAR* src, AOCL_UINTP src_size);
@@ -491,6 +502,8 @@ EXPORT_SYM_THREADS AOCL_INT32 aocl_set_partition_stats_mt(aocl_thread_group_t *t
 EXPORT_SYM_THREADS int test_omp_max_threads_get(void);
 EXPORT_SYM_THREADS int test_omp_max_threads_set(int max_threads);
 EXPORT_SYM_THREADS void test_omp_max_threads_reset(void);
+/* Non-zero: aocl_setup_parallel_compress_mt() fails with ERR_MEMORY_ALLOC. */
+EXPORT_SYM_THREADS void test_setup_parallel_compress_mt_fail_set(AOCL_INT32 fail);
 #endif
 #ifdef __cplusplus
 }

@@ -34,6 +34,7 @@
  */
 
 #include "threads/threads.h"
+#include "api/aocl_compression.h" /* ERR_COMPRESSION_INVALID_OUTPUT */
 #include <string.h>
 #include "bzlib_private.h"
 

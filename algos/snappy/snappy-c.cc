@@ -1,5 +1,5 @@
 // Copyright 2011 Martin Gieseking <martin.gieseking@uos.de>.
-// Modifications Copyright (C) 2024, Advanced Micro Devices. All rights reserved.
+// Modifications Copyright (C) 2024-2026, Advanced Micro Devices. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -29,6 +29,9 @@
 
 #include "snappy.h"
 #include "snappy-c.h"
+#ifdef AOCL_ENABLE_THREADS
+#include "snappy-internal.h"
+#endif
 
 extern "C" {
 
@@ -45,6 +48,10 @@ snappy_status snappy_compress(const char* input,
     return SNAPPY_BUFFER_TOO_SMALL;
   }
   snappy::RawCompress(input, input_length, compressed, compressed_length);
+  // A valid Snappy stream is never empty; 0 reports a compression failure.
+  if (*compressed_length == 0) {
+    return SNAPPY_INVALID_INPUT;
+  }
   return SNAPPY_OK;
 }
 
@@ -53,6 +60,23 @@ snappy_status snappy_uncompress(const char* compressed,
                                 char* uncompressed,
                                 size_t* uncompressed_length) {
   size_t real_uncompressed_length;
+#ifdef AOCL_ENABLE_THREADS
+  // AOCL multithreaded decompression is limited to the C API. Streams produced
+  // by the multithreaded compressor carry a RAP frame before the length varint.
+  if (uncompressed_length == NULL ||
+      !snappy::GetUncompressedLengthFromMTCompressedBuffer(compressed,
+                                     compressed_length,
+                                     &real_uncompressed_length)) {
+    return SNAPPY_INVALID_INPUT;
+  }
+  if (*uncompressed_length < real_uncompressed_length) {
+    return SNAPPY_BUFFER_TOO_SMALL;
+  }
+  if (!snappy::internal::RawUncompressMT(compressed, compressed_length,
+                                         uncompressed)) {
+    return SNAPPY_INVALID_INPUT;
+  }
+#else
   if (uncompressed_length == NULL || !snappy::GetUncompressedLength(compressed,
                                      compressed_length,
                                      &real_uncompressed_length)) {
@@ -64,6 +88,7 @@ snappy_status snappy_uncompress(const char* compressed,
   if (!snappy::RawUncompress(compressed, compressed_length, uncompressed)) {
     return SNAPPY_INVALID_INPUT;
   }
+#endif /* AOCL_ENABLE_THREADS */
   *uncompressed_length = real_uncompressed_length;
   return SNAPPY_OK;
 }
@@ -75,9 +100,15 @@ size_t snappy_max_compressed_length(size_t source_length) {
 snappy_status snappy_uncompressed_length(const char *compressed,
                                          size_t compressed_length,
                                          size_t *result) {
+#ifdef AOCL_ENABLE_THREADS
+  if (snappy::GetUncompressedLengthFromMTCompressedBuffer(compressed,
+                                    compressed_length,
+                                    result)) {
+#else
   if (snappy::GetUncompressedLength(compressed,
                                     compressed_length,
                                     result)) {
+#endif /* AOCL_ENABLE_THREADS */
     return SNAPPY_OK;
   } else {
     return SNAPPY_INVALID_INPUT;
@@ -86,7 +117,12 @@ snappy_status snappy_uncompressed_length(const char *compressed,
 
 snappy_status snappy_validate_compressed_buffer(const char *compressed,
                                                 size_t compressed_length) {
+#ifdef AOCL_ENABLE_THREADS
+  // Accept the same RAP framed streams that snappy_uncompress decodes.
+  if (snappy::internal::IsValidCompressedBufferMT(compressed, compressed_length)) {
+#else
   if (snappy::IsValidCompressedBuffer(compressed, compressed_length)) {
+#endif /* AOCL_ENABLE_THREADS */
     return SNAPPY_OK;
   } else {
     return SNAPPY_INVALID_INPUT;

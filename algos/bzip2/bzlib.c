@@ -2391,6 +2391,10 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
                                                (AOCL_UINTP)(*destLen),
                                                (AOCL_UINTP)(INPUT_BLOCK_SIZE-19), blockSize100k);
 
+   /* Destination cannot even hold the RAP frame: report output exhaustion so
+    * callers can retry with a larger buffer. */
+   if(rap_frame_length == ERR_COMPRESSION_INVALID_OUTPUT)
+      return BZ_OUTBUFF_FULL;
    if(rap_frame_length < 0)
       return rap_frame_length;
 

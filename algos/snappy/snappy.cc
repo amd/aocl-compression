@@ -137,6 +137,30 @@ static int setup_ok_snappy = 0; // flag to indicate status of dynamic dispatcher
 static std::atomic_flag setup_snappy = ATOMIC_FLAG_INIT;
 #endif
 
+/* RAP frame handling for the single-threaded C++ uncompress APIs.
+ * Streams produced by the AOCL multithreaded compressor begin with a RAP frame,
+ * followed by the total uncompressed length varint and the partitions' tag
+ * streams laid out contiguously. Partitions never reference data outside
+ * themselves, so after skipping the RAP frame the remainder is a valid
+ * single Snappy stream that can be decoded in single-threaded mode.
+ * Returns false if a RAP frame is present but its header is invalid. */
+#ifdef AOCL_ENABLE_THREADS
+static bool AOCL_SkipRapFrame(const char** compressed, size_t* compressed_length) {
+  if (*compressed == NULL) return true;
+  AOCL_INT32 rap_frame_len = aocl_skip_rap_frame_mt((AOCL_CHAR*)*compressed,
+                                                    *compressed_length);
+  if (rap_frame_len < 0 || (size_t)rap_frame_len > *compressed_length) {
+    LOG_UNFORMATTED(ERR, logCtx, "Invalid RAP frame");
+    return false;
+  }
+  *compressed += rap_frame_len;
+  *compressed_length -= (size_t)rap_frame_len;
+  return true;
+}
+#else
+static inline bool AOCL_SkipRapFrame(const char**, size_t*) { return true; }
+#endif /* AOCL_ENABLE_THREADS */
+
 /* --------- Forward declarations for dynamic ISA selection - start ---------*/
 
 class with_bmi_avx;
@@ -1988,6 +2012,7 @@ bool RawUncompressToIOVec(const char* compressed, size_t compressed_length,
                           const struct iovec* iov, size_t iov_cnt) {
   AOCL_SETUP_NATIVE();
   if (compressed == NULL || iov == NULL) return false;
+  if (!AOCL_SkipRapFrame(&compressed, &compressed_length)) return false;
   ByteArraySource reader(compressed, compressed_length);
   return RawUncompressToIOVec(&reader, iov, iov_cnt);
 }
@@ -2098,38 +2123,39 @@ bool SAW_RawUncompress_c(const char* compressed, size_t compressed_length, char*
 }
 
 #ifdef AOCL_SNAPPY_OPT
-bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
-  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
-  AOCL_SETUP_NATIVE();
-#ifdef AOCL_ENABLE_THREADS // Threaded
-  return AOCL_RawUncompress_mt(compressed, compressed_length, uncompressed);
-#else // Non-threaded
+// Flat-buffer decode of a plain Snappy stream. Does not skip a RAP frame:
+// callers strip at most one RAP frame before calling this, so a stream holding
+// another RAP frame is decoded (and rejected) as Snappy data.
+static bool RawUncompressNoRapSkip(const char* compressed, size_t compressed_length,
+                                   char* uncompressed) {
   // sanity checks ------------------------------------------------------------
      size_t ulength;
      if (!GetUncompressedLength(compressed, compressed_length, &ulength))
-     {
-        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return false;
-     }
      if (ulength != 0 && uncompressed == NULL)
-     {
-        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
         return false;
-     }
   // sanity checks ------------------------------------------------------------
-  bool ret = false;
-  ret = SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
-  LOG_UNFORMATTED(TRACE, logCtx, "Exit");
-  return ret;
-#endif
+  return SNAPPY_SAW_raw_uncompress_fp(compressed, compressed_length, uncompressed);
 }
 #else
-bool RawUncompress(const char* compressed, size_t compressed_length,
-                   char* uncompressed) {
+static bool RawUncompressNoRapSkip(const char* compressed, size_t compressed_length,
+                                   char* uncompressed) {
   ByteArraySource reader(compressed, compressed_length);
   return RawUncompress(&reader, uncompressed);
 }
 #endif /* AOCL_SNAPPY_OPT */
+
+bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed) {
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+  AOCL_SETUP_NATIVE();
+  // Single-threaded only. AOCL multithreaded decompression is exposed only
+  // through the Snappy C API (snappy_uncompress). A RAP frame, if present,
+  // is skipped and the stream is decoded in single-threaded mode.
+  bool ret = AOCL_SkipRapFrame(&compressed, &compressed_length) &&
+             RawUncompressNoRapSkip(compressed, compressed_length, uncompressed);
+  LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+  return ret;
+}
 
 bool RawUncompress(Source* compressed, char* uncompressed) {
   // sanity checks ------------------------------------------------------------
@@ -2148,6 +2174,7 @@ bool RawUncompress(Source* compressed, char* uncompressed) {
 bool Uncompress(const char* compressed, size_t compressed_length,
                 std::string* uncompressed) {
   AOCL_SETUP_NATIVE();
+  if (!AOCL_SkipRapFrame(&compressed, &compressed_length)) return false;
   size_t ulength;
   if (!GetUncompressedLength(compressed, compressed_length, &ulength)) {
     return false;
@@ -2158,8 +2185,10 @@ bool Uncompress(const char* compressed, size_t compressed_length,
     return false;
   }
   STLStringResizeUninitialized(uncompressed, ulength);
-  return RawUncompress(compressed, compressed_length,
-                       string_as_array(uncompressed));
+  // The RAP frame (if any) is already stripped and the output sized for this
+  // stream: decode it without skipping again.
+  return RawUncompressNoRapSkip(compressed, compressed_length,
+                                string_as_array(uncompressed));
 }
 
 // A Writer that drops everything on the floor and just does validation
@@ -5046,11 +5075,17 @@ aocl_thread_group_t thread_group_handle;
   AOCL_INT32 ret_status = -1;
   AOCL_INT32 maxCompressedLength = (AOCL_INT32)MaxCompressedLength(input_length);
 
+  // Report failure explicitly: a valid Snappy stream is never empty (it holds
+  // at least the length varint), so 0 is left in place on every error return.
+  *compressed_length = 0;
+
   ret_status = aocl_setup_parallel_compress_mt(&thread_group_handle, (char *)input, compressed,
                                               (AOCL_INT32)input_length, maxCompressedLength,
                                               (AOCL_INT32)kBlockSize, WINDOW_FACTOR);
-  if (ret_status < 0)
+  if (ret_status < 0) {
+    LOG_UNFORMATTED(ERR, logCtx, "Multi-threaded compress setup failed");
     return;
+  }
 
   if (thread_group_handle.num_threads == 1) {
     ByteArraySource reader(input, input_length);
@@ -5248,6 +5283,40 @@ extern "C" void AoclSnappyUncompressMtWork(AOCL_UINT32 thread_id, void *context)
 
 }  // namespace
 
+// One-worker decode of a RAP framed stream: decode the partitions in order,
+// each with its declared decompressed length, exactly as the multithreaded
+// workers do, so the result does not depend on the number of threads.
+// Precondition: GetUncompressedLengthFromMTCompressedBuffer() accepted the
+// stream (entries in bounds, contiguous, empty partitions declare no output,
+// declared lengths sum to the outer length) and 'uncompressed' holds that many
+// bytes.
+static bool AOCL_RawUncompressRapPartitionsSerial(const char* compressed,
+                                                  char* uncompressed) {
+  uint32_t num_main_threads;
+  std::memcpy(&num_main_threads,
+              compressed + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES,
+              sizeof(num_main_threads));
+  const char* entry = compressed + RAP_START_OF_PARTITIONS;
+  size_t out_offset = 0;
+  for (uint32_t i = 0; i < num_main_threads; ++i) {
+    uint32_t part_offset, part_len, part_decomp_len;
+    std::memcpy(&part_offset, entry, sizeof(part_offset));
+    std::memcpy(&part_len, entry + RAP_OFFSET_BYTES, sizeof(part_len));
+    std::memcpy(&part_decomp_len, entry + RAP_OFFSET_BYTES + RAP_LEN_BYTES,
+                sizeof(part_decomp_len));
+    entry += RAP_DATA_BYTES_WITH_DECOMP_LEN;
+    if (part_len == 0) continue;  // empty partition, declared length is 0
+    // As in aocl_do_partition_decompress_mt: no non-empty partition into NULL.
+    if (uncompressed == NULL) return false;
+    if (!SNAPPY_SAW_raw_uncompress_direct_fp(compressed + part_offset, part_len,
+                                             uncompressed + out_offset,
+                                             part_decomp_len))
+      return false;
+    out_offset += part_decomp_len;
+  }
+  return true;
+}
+
 bool AOCL_RawUncompress_mt(const char* compressed, size_t compressed_length, char* uncompressed) {
 aocl_thread_group_t thread_group_handle;
   AOCL_INT32 ret_status = -1;
@@ -5286,6 +5355,12 @@ aocl_thread_group_t thread_group_handle;
     ret_status = 0;
   }
 
+  if (ret_status > 0 && AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle)) {
+    // RAP framed stream with a single worker available: honour the declared
+    // partition lengths instead of decoding the payload as one stream.
+    LOG_UNFORMATTED(INFO, logCtx, "Running single threaded decompression of RAP partitions");
+    return AOCL_RawUncompressRapPartitionsSerial(compressed, uncompressed);
+  }
   if (ret_status == 0 /* for when compressed is NULL*/ || AOCL_MT_PARTITIONS_NOT_FOUND(thread_group_handle)) {
     LOG_UNFORMATTED(INFO, logCtx, "Running single threaded decompression");
     size_t ulength;
@@ -5342,6 +5417,21 @@ aocl_thread_group_t thread_group_handle;
   }
 }
 
+namespace internal {
+// Multithreaded decompression entry point used by the Snappy C API
+// (snappy_uncompress). Handles both RAP framed (AOCL multithreaded) streams
+// and plain single-threaded streams. The C++ RawUncompress/Uncompress APIs
+// are always single-threaded.
+bool RawUncompressMT(const char* compressed, size_t compressed_length,
+                     char* uncompressed) {
+  LOG_UNFORMATTED(TRACE, logCtx, "Enter");
+  AOCL_SETUP_NATIVE();
+  bool ret = AOCL_RawUncompress_mt(compressed, compressed_length, uncompressed);
+  LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+  return ret;
+}
+}  // namespace internal
+
 // since multithreaded decompression happens using externally available uncompressed
 // lengths rather than reading the lengths from the stream, we need a decompression
 // function that takes the uncompressed length as a parameter and which does not read
@@ -5353,6 +5443,68 @@ static bool InternalUncompressDirect(Source* r, Writer* writer, uint32_t uncompr
         uncompressed_len);
 }
 
+namespace {
+// Validates the RAP partition table of a Snappy multithreaded stream against
+// the outer uncompressed length varint. Called by
+// GetUncompressedLengthFromMTCompressedBuffer.
+//   start            : beginning of the buffer (RAP magic word)
+//   n                : buffer length
+//   rap_frame_len    : RAP frame length, already validated by
+//                      aocl_skip_rap_frame_mt (RAP_START_OF_PARTITIONS +
+//                      num_main_threads * RAP_DATA_BYTES_WITH_DECOMP_LEN
+//                      <= rap_frame_len <= n)
+//   data_start       : offset of the first byte after the outer varint
+//   total_len        : value of the outer varint
+// Partitions must be laid out in order and back to back: the first starts at
+// data_start, each later one where the previous one ends, and the last one ends
+// exactly at n (no trailing data). The partition decompressed lengths must add
+// up to total_len.
+bool AOCL_ValidateRapPartitions(const char* start, size_t n, size_t rap_frame_len,
+                                size_t data_start, uint32_t total_len) {
+  uint32_t num_main_threads;
+  std::memcpy(&num_main_threads,
+              start + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES,
+              sizeof(num_main_threads));
+  // Redundant with the RAP header validation; keeps entry reads below in bounds
+  // independently of it.
+  if (num_main_threads == 0 ||
+      rap_frame_len < RAP_START_OF_PARTITIONS ||
+      num_main_threads > (rap_frame_len - RAP_START_OF_PARTITIONS) /
+                         RAP_DATA_BYTES_WITH_DECOMP_LEN) {
+    return false;
+  }
+
+  const char* entry = start + RAP_START_OF_PARTITIONS;
+  uint64_t decomp_sum = 0;
+  size_t expected_offset = data_start;
+  for (uint32_t i = 0; i < num_main_threads; ++i) {
+    uint32_t part_offset;
+    int32_t part_len, part_decomp_len;
+    std::memcpy(&part_offset, entry, sizeof(part_offset));
+    std::memcpy(&part_len, entry + RAP_OFFSET_BYTES, sizeof(part_len));
+    std::memcpy(&part_decomp_len, entry + RAP_OFFSET_BYTES + RAP_LEN_BYTES,
+                sizeof(part_decomp_len));
+    entry += RAP_DATA_BYTES_WITH_DECOMP_LEN;
+
+    if (part_len < 0 || part_decomp_len < 0) return false;
+    // An empty partition cannot produce output. The multithreaded decoder
+    // treats it as a successful no-op, so a nonzero declared length would leave
+    // that part of the output unwritten while reporting success.
+    if (part_len == 0 && part_decomp_len != 0) return false;
+    // No overlap, gap or reordering: multithreaded and single-threaded
+    // decoding then read exactly the same bytes.
+    if ((size_t)part_offset != expected_offset || (size_t)part_offset > n) return false;
+    if ((uint64_t)(uint32_t)part_len > (uint64_t)(n - part_offset)) return false;
+    expected_offset = (size_t)part_offset + (size_t)(uint32_t)part_len;
+    decomp_sum += (uint64_t)(uint32_t)part_decomp_len;
+    if (decomp_sum > total_len) return false;
+  }
+  // The whole input is accounted for: trailing bytes after the last partition
+  // would otherwise be ignored by the multithreaded decoder.
+  return decomp_sum == total_len && expected_offset == n;
+}
+}  // namespace
+
 // By default, the snappy API doesn't return the length of the uncompressed
 // file. To get that information, the caller has to make a call to
 // 'GetUncompressedLength'. Files compressed using the AOCL multithreaded
@@ -5362,32 +5514,76 @@ static bool InternalUncompressDirect(Source* r, Writer* writer, uint32_t uncompr
 // stream; where for the single theaded compressor's output it is located in the
 // first few bytes of the stream and for the the multithreaded compressor's
 // output it is located in the bytes immediately after the RAP frame header.
-// Currently, the only way to get the width of the RAP frame header is to make a
-// call to 'aocl_setup_parallel_decompress_mt' and so we need to make a call to
-// this function to figure out the offset for the location of the varint.
+// The RAP frame length is obtained via aocl_skip_rap_frame_mt.
 bool GetUncompressedLengthFromMTCompressedBuffer(const char* start, size_t n, size_t* result) {
   if (start == NULL || result == NULL) return false;
-  aocl_thread_group_t thread_group_handle;
-  AOCL_INT32 offset = aocl_setup_parallel_decompress_mt(&thread_group_handle, 
-                                                  (char *)start,
-                                                  NULL, /* 'outbuf', safe, since the setup function does not do any operation on it */
-                                                  n,
-                                                  0 /* maxDecompressedSize (not required by snappy, hence 0) */, 
-                                                  1 /* use_ST_decompressor (get only the RAP metadata length, no allocations done) */);
-  /* offset is the RAP frame length, or negative on setup error. Reject negative
-   * or out-of-range offset before the pointer/length arithmetic. */
-  if (offset < 0 || (size_t)offset > n) return false;
-  const char* start_of_stream = start + offset;
-  size_t size_of_stream = n - (size_t)offset;
+  // RAP frame length: 0 if no RAP frame, negative if the RAP header is invalid.
+  // aocl_skip_rap_frame_mt only reads the header after checking n covers it,
+  // and guarantees the returned length does not exceed n.
+  AOCL_INT32 rap_frame_len = aocl_skip_rap_frame_mt((AOCL_CHAR*)start, n);
+  if (rap_frame_len < 0 || (size_t)rap_frame_len > n) return false;
+
+  const char* start_of_stream = start + rap_frame_len;
+  const char* limit = start + n;
   uint32_t v = 0;
-  const char* limit = start_of_stream + size_of_stream;
-  if (Varint::Parse32WithLimit(start_of_stream, limit, &v) != NULL) {
-    *result = v;
-    return true;
-  } else {
+  const char* end_of_varint = Varint::Parse32WithLimit(start_of_stream, limit, &v);
+  if (end_of_varint == NULL) return false;
+
+  if (rap_frame_len > 0 &&
+      !AOCL_ValidateRapPartitions(start, n, (size_t)rap_frame_len,
+                                  (size_t)(end_of_varint - start), v)) {
+    LOG_UNFORMATTED(ERR, logCtx, "RAP partition table inconsistent with stream");
     return false;
   }
+  *result = v;
+  return true;
 }
+
+namespace internal {
+// RAP-aware validation used by the Snappy C API
+// (snappy_validate_compressed_buffer). A plain stream is validated as before.
+// A RAP framed stream is valid when its partition table is consistent
+// (GetUncompressedLengthFromMTCompressedBuffer) and every partition decodes on
+// its own to exactly its declared length, as the multithreaded decoder
+// requires.
+bool IsValidCompressedBufferMT(const char* compressed, size_t compressed_length) {
+  AOCL_SETUP_NATIVE();
+  if (compressed == NULL) return false;
+  AOCL_INT32 rap_frame_len = aocl_skip_rap_frame_mt((AOCL_CHAR*)compressed,
+                                                    compressed_length);
+  if (rap_frame_len < 0) return false;
+  if (rap_frame_len == 0)
+    return IsValidCompressedBuffer(compressed, compressed_length);
+
+  size_t total_len = 0;
+  if (!GetUncompressedLengthFromMTCompressedBuffer(compressed, compressed_length,
+                                                   &total_len))
+    return false;
+
+  // Entries are in bounds and describe in-buffer ranges (validated above).
+  uint32_t num_main_threads;
+  std::memcpy(&num_main_threads,
+              compressed + RAP_MAGIC_WORD_BYTES + RAP_METADATA_LEN_BYTES,
+              sizeof(num_main_threads));
+  const char* entry = compressed + RAP_START_OF_PARTITIONS;
+  for (uint32_t i = 0; i < num_main_threads; ++i) {
+    uint32_t part_offset, part_len, part_decomp_len;
+    std::memcpy(&part_offset, entry, sizeof(part_offset));
+    std::memcpy(&part_len, entry + RAP_OFFSET_BYTES, sizeof(part_len));
+    std::memcpy(&part_decomp_len, entry + RAP_OFFSET_BYTES + RAP_LEN_BYTES,
+                sizeof(part_decomp_len));
+    entry += RAP_DATA_BYTES_WITH_DECOMP_LEN;
+    if (part_len == 0) continue;  // empty partition, declared length is 0
+
+    ByteArraySource reader(compressed + part_offset, part_len);
+    SnappyDecompressionValidator writer;
+    if (!InternalUncompressDirect<SnappyDecompressionValidator, with_c>(
+            &reader, &writer, part_decomp_len))
+      return false;
+  }
+  return true;
+}
+}  // namespace internal
 
 // similar to GetUncompressedLength; difference being that in addition to setting the 
 // value encoded within the varint in `result`, it returns a non-zero value signifying

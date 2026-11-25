@@ -83,7 +83,7 @@ extern "C" {
 #endif
 #endif
 
-#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 6.0.0"
+#define AOCL_COMPRESSION_LIBRARY_VERSION "AOCL-Compression 6.0.1"
 #define INTERNAL_LIBRARY_VERSION "AOCL LOSSLESS DATA COMPRESSION 4.0"
 /// @endcond /* DOXYGEN_SHOULD_SKIP_THIS */
 
@@ -278,7 +278,7 @@ EXPORT_SYM_DYN const char *aocl_llc_version(void);
  * |:-----------|:------------|
  * | RAP_frame_length | Length of RAP frame bytes in src |
  * | 0                | If RAP frame does not exist      |
- * | Fail             | `ERR_INVALID_INPUT`              |
+ * | Fail             | `ERR_INVALID_INPUT` if src is NULL or src_size is negative; negative value if the RAP frame header is invalid |
  *
  */
 EXPORT_SYM_DYN int32_t aocl_llc_skip_rap_frame(char* src, int32_t src_size);
@@ -297,7 +297,9 @@ EXPORT_SYM_DYN int32_t aocl_llc_skip_rap_frame(char* src, int32_t src_size);
  * the `AOCL_NUM_THREADS` environment variable if set to a positive integer,
  * otherwise `omp_get_max_threads()` for the OpenMP backend (which honors
  * `OMP_NUM_THREADS`) or the hardware concurrency (honoring `OMP_NUM_THREADS`)
- * for the TBB backend.
+ * for the TBB backend. Invalid `AOCL_NUM_THREADS` values (non-numeric, trailing
+ * characters, zero or negative) are ignored, and the thread count is capped at
+ * `AOCL_MAX_NUM_THREADS` (1024).
  *
  * | Parameters      | Direction   | Description |
  * |:----------------|:-----------:|:------------|

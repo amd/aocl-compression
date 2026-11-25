@@ -288,8 +288,18 @@ AOCL_INT32 aocl_llc_skip_rap_frame(AOCL_CHAR* src, AOCL_INT32 src_size)
     LOG_UNFORMATTED(TRACE, logCtx, "Enter");
     AOCL_INT32 ret = 0;
 
+    /* Validate arguments the same way in every build. A negative size would
+     * convert to a huge unsigned size and defeat the RAP header bounds checks,
+     * allowing reads beyond the caller's buffer. */
+    if (src == NULL || src_size < 0)
+    {
+        LOG_UNFORMATTED(ERR, logCtx, "Invalid input");
+        LOG_UNFORMATTED(TRACE, logCtx, "Exit");
+        return ERR_INVALID_INPUT;
+    }
+
 #ifdef AOCL_ENABLE_THREADS
-    ret = aocl_skip_rap_frame_mt(src, src_size);
+    ret = aocl_skip_rap_frame_mt(src, (AOCL_UINTP)src_size);
 #endif
 
     LOG_UNFORMATTED(TRACE, logCtx, "Exit");

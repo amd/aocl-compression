@@ -1,5 +1,5 @@
 // Copyright 2005 and onwards Google Inc.
-// Modifications Copyright (C) 2022-2025, Advanced Micro Devices. All rights reserved.
+// Modifications Copyright (C) 2022-2026, Advanced Micro Devices. All rights reserved.
 // 
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -549,9 +549,11 @@ namespace snappy {
    * stores the uncompressed data to
    *    uncompressed[0..GetUncompressedLength(compressed)-1] .
    * 
-   *  @note When decompressing data that was compressed using multi-threaded APIs, you should call 
-   *  `GetUncompressedLengthFromMTCompressedBuffer` instead of `GetUncompressedLength` to correctly 
-   *  allocate memory for the `uncompressed` buffer.
+   *  @note This API always decompresses in single-threaded mode. When the library is built
+   *  with AOCL_ENABLE_THREADS and the input carries the AOCL multithreaded RAP frame, the
+   *  frame is skipped and the remaining stream is decoded in a single thread. Use
+   *  `GetUncompressedLengthFromMTCompressedBuffer` instead of `GetUncompressedLength` to
+   *  size the `uncompressed` buffer for such input.
    *
    *  |Parameters            |Direction| Description                                      |
    *  |:---------------------|:-------:|:-------------------------------------------------|
@@ -724,7 +726,7 @@ namespace snappy {
   *  |Parameters            |Direction| Description                                                                 |
   *  |:---------------------|:-------:|:----------------------------------------------------------------------------|
   *  | \b compressed        |  in     | This is a buffer which contains compressed data. (along with the RAP frame) |
-  *  | \b compressed_length |  in     | This is the length of the compressed buffer (including the RAP frame).      |
+  *  | \b compressed_length |  in     | Exact length of the compressed stream, including the RAP frame (trailing bytes after the last RAP partition are rejected). |
   *  | \b result            |  out    | This is the pointer to type size_t where the uncompressed length is stored. |
   *
   *  @return

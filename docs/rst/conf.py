@@ -32,10 +32,10 @@
 import os
 # -- Project information -----------------------------------------------------
 project = 'AOCL-Compression'
-copyright = '2020-2024, Advanced Micro Devices, Inc'
+copyright = '2020-2026, Advanced Micro Devices, Inc'
 author = 'Advanced Micro Devices, Inc'
-version = '6.0.0'
-release = '6.0.0'
+version = '6.0.1'
+release = '6.0.1'
 
 extensions = ['breathe', 'myst_parser']
 pwd = os.path.dirname(os.path.abspath(__file__))

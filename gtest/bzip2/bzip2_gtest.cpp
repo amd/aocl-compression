@@ -636,6 +636,22 @@ bool verify_uncompressed_equal_original(char * compressed, unsigned int compress
 #endif /* AOCL_ENABLE_THREADS */
 }
 
+#ifdef AOCL_ENABLE_THREADS
+// Multithreaded compress into a destination smaller than the RAP frame reports
+// output exhaustion (BZ_OUTBUFF_FULL) so callers can retry with a larger buffer.
+TEST(BZIP2_MT, AOCL_Compression_bzip2_BuffToBuffCompress_mt_dst_smaller_than_rap_frame_common_1)
+{
+    if (test_omp_max_threads_get() < 2)
+        GTEST_SKIP() << "Single thread available: no RAP frame";
+    const unsigned int sourceLen = 1 << 20; // ~10 partitions at blockSize100k = 1
+    vector<char> source(sourceLen, 'a');
+    vector<char> dest(RAP_START_OF_PARTITIONS); // smaller than any multi-partition RAP frame
+    unsigned int destLen = (unsigned int)dest.size();
+    EXPECT_EQ(BZ2_bzBuffToBuffCompress(dest.data(), &destLen, source.data(), sourceLen, 1, 0, 0),
+              BZ_OUTBUFF_FULL);
+}
+#endif /* AOCL_ENABLE_THREADS */
+
 /*
     Custom memory allocation function.
 */
